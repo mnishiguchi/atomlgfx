@@ -1,0 +1,96 @@
+// src/lgfx_device_text.cpp
+// Text configuration and text drawing APIs (LCD or sprite target).
+
+#include "lgfx_device.h"
+#include "lgfx_device_internal.hpp"
+
+#include <string.h>
+
+// -----------------------------------------------------------------------------
+// Text size helper (supports both setTextSize(sx, sy) and setTextSize(sx))
+// -----------------------------------------------------------------------------
+
+template <typename G>
+static auto set_text_size_xy_impl(G *gfx, uint8_t sx, uint8_t sy, int)
+    -> decltype(gfx->setTextSize(sx, sy), void())
+{
+    gfx->setTextSize(sx, sy);
+}
+
+template <typename G>
+static void set_text_size_xy_impl(G *gfx, uint8_t sx, uint8_t sy, long)
+{
+    (void) sy;
+    gfx->setTextSize(sx);
+}
+
+template <typename G>
+static void set_text_size_xy(G *gfx, uint8_t sx, uint8_t sy)
+{
+    set_text_size_xy_impl(gfx, sx, sy, 0);
+}
+
+extern "C" esp_err_t lgfx_device_set_text_size(uint8_t target, uint8_t size)
+{
+    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextSize(size); });
+}
+
+extern "C" esp_err_t lgfx_device_set_text_size_xy(uint8_t target, uint8_t sx, uint8_t sy)
+{
+    if (sx == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (sy == 0) {
+        sy = sx;
+    }
+
+    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { set_text_size_xy(gfx, sx, sy); });
+}
+
+extern "C" esp_err_t lgfx_device_set_text_datum(uint8_t target, uint8_t datum)
+{
+    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextDatum((textdatum_t) datum); });
+}
+
+extern "C" esp_err_t lgfx_device_set_text_wrap(uint8_t target, bool wrap_x, bool wrap_y)
+{
+    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextWrap(wrap_x, wrap_y); });
+}
+
+extern "C" esp_err_t lgfx_device_set_text_font(uint8_t target, uint8_t font)
+{
+    (void) font;
+
+    // Validate target/init state consistently with other text APIs.
+    esp_err_t err = lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { (void) gfx; });
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    // Numeric font selection is not implemented in this ABI yet.
+    return ESP_ERR_NOT_SUPPORTED;
+}
+
+extern "C" esp_err_t lgfx_device_set_text_color(uint8_t target, uint16_t fg_rgb565, bool has_bg, uint16_t bg_rgb565)
+{
+    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) {
+        if (has_bg) {
+            gfx->setTextColor(fg_rgb565, bg_rgb565);
+        } else {
+            gfx->setTextColor(fg_rgb565);
+        }
+    });
+}
+
+extern "C" esp_err_t lgfx_device_draw_string(uint8_t target, int16_t x, int16_t y, const uint8_t *text, uint16_t text_len)
+{
+    if (!text || text_len == 0 || text_len > 255) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char buf[256];
+    memcpy(buf, text, (size_t) text_len);
+    buf[text_len] = '\0';
+
+    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->drawString(buf, x, y); });
+}

@@ -1,301 +1,307 @@
-// AtomVM port driver: lgfx_port (LovyanGFX bridge, MVP)
+// ports/lgfx_port.c
 //
-// Protocol
-// - Request: <<opcode:u8, payload:binary>>
-// - Reply OK:    <<0x00, payload:binary>>
-// - Reply Error: <<0x01, code:u8>>
-
-#include "lgfx_port.h"
-#include "lgfx_device.h"
+// AtomVM port driver entry point for the LovyanGFX port.
+//
+// Responsibilities in this file:
+// - Per-context port creation and teardown
+// - Mailbox message handling on the port thread
+// - Request decode -> metadata validation -> dispatch -> reply flow
+//
+// Non-responsibilities:
+// - Device calls (handled by lgfx_worker.c / lgfx_device.*)
+// - AtomVM term decoding details (handled by term_decode.*)
+// - Reply encoding helpers (handled by term_encode.*)
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <string.h>
+#include <stdlib.h>
 
-#include <context.h>
-#include <globalcontext.h>
-#include <mailbox.h>
-#include <port.h>
-#include <portnifloader.h>
-#include <term.h>
+#include "context.h"
+#include "globalcontext.h"
+#include "memory.h" // memory_ensure_free / MEMORY_GC_OK
+#include "port.h" // port_parse_gen_message / port_send_reply
+#include "portnifloader.h"
 
-#include <trace.h>
+#include "lgfx_port/dispatch_table.h"
+#include "lgfx_port/lgfx_port.h"
+#include "lgfx_port/op_meta.h"
+#include "lgfx_port/term_decode.h"
+#include "lgfx_port/term_encode.h"
+#include "lgfx_port/validate.h"
+#include "lgfx_port/worker.h"
 
-#include "esp_err.h"
-#include "esp_heap_caps.h"
-#include "esp_log.h"
-
-#define TAG "lgfx_port"
-
-#ifndef LGFX_PORT_DEBUG
-#define LGFX_PORT_DEBUG 1
-#endif
-
-#if LGFX_PORT_DEBUG
-#define DLOGI(...) ESP_LOGI(TAG, __VA_ARGS__)
-#define DLOGW(...) ESP_LOGW(TAG, __VA_ARGS__)
-#define DLOGE(...) ESP_LOGE(TAG, __VA_ARGS__)
-#else
-#define DLOGI(...) ((void) 0)
-#define DLOGW(...) ((void) 0)
-#define DLOGE(...) ((void) 0)
-#endif
-
-enum
+/*
+ * Ensure the reply term is valid.
+ *
+ * If a handler/validator returns an invalid term (typically due to OOM while
+ * constructing a reply), try to replace it with {error, no_memory}.
+ * If that allocation also fails, return invalid_term() and the caller will
+ * skip sending a reply.
+ */
+static term ensure_valid_reply(Context *ctx, lgfx_port_t *port, term reply)
 {
-    OPCODE_PING = 0x01,
-    OPCODE_INIT = 0x10,
-    OPCODE_FILL_SCREEN = 0x11,
-    OPCODE_DRAW_TEXT = 0x12
-};
-
-static term make_error(Context *ctx, uint8_t code)
-{
-    const size_t out_len = 2;
-
-    port_ensure_available(ctx, term_binary_heap_size(out_len));
-
-    term bin = term_create_uninitialized_binary(out_len, &ctx->heap, ctx->global);
-    uint8_t *out = (uint8_t *) term_binary_data(bin);
-
-    out[0] = 0x01;
-    out[1] = code;
-
-    return bin;
-}
-
-static term make_ok_with_payload(Context *ctx, const uint8_t *payload, size_t payload_len)
-{
-    const size_t out_len = 1 + payload_len;
-
-    port_ensure_available(ctx, term_binary_heap_size(out_len));
-
-    term bin = term_create_uninitialized_binary(out_len, &ctx->heap, ctx->global);
-    uint8_t *out = (uint8_t *) term_binary_data(bin);
-
-    out[0] = 0x00;
-    if (payload_len > 0 && payload) {
-        memcpy(out + 1, payload, payload_len);
+    if (!term_is_invalid_term(reply)) {
+        return reply;
     }
 
-    return bin;
-}
-
-static bool read_u16be(const uint8_t *p, size_t len, size_t off, uint16_t *out)
-{
-    if (off + 2 > len) {
-        return false;
-    }
-    *out = ((uint16_t) p[off] << 8) | (uint16_t) p[off + 1];
-    return true;
-}
-
-static bool read_i16be(const uint8_t *p, size_t len, size_t off, int16_t *out)
-{
-    uint16_t tmp;
-    if (!read_u16be(p, len, off, &tmp)) {
-        return false;
-    }
-    *out = (int16_t) tmp;
-    return true;
-}
-
-static void log_heap_stats(const char *label)
-{
-#if LGFX_PORT_DEBUG
-    uint32_t internal = (uint32_t) heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
-    uint32_t psram = (uint32_t) heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
-    DLOGI("%s heap: free internal=%u psram=%u", label, (unsigned) internal, (unsigned) psram);
-#else
-    (void) label;
-#endif
-}
-
-static term handle_call(Context *ctx, term req)
-{
-    if (!term_is_binary(req)) {
-        DLOGW("handle_call: req is not a binary");
-        return make_error(ctx, 0x10);
+    // Best effort: allocate {error, no_memory}.
+    if (memory_ensure_free(ctx, /* tuple2 */ 3) != MEMORY_GC_OK) {
+        return term_invalid_term();
     }
 
-    const uint8_t *data = (const uint8_t *) term_binary_data(req);
-    size_t len = term_binary_size(req);
+    return lgfx_reply_error(ctx, port, port->atoms.no_memory);
+}
 
-    if (len < 1) {
-        DLOGW("handle_call: req binary too short (len=%u)", (unsigned) len);
-        return make_error(ctx, 0x11);
+/*
+ * Per-port-instance teardown.
+ *
+ * Important:
+ * - REGISTER_PORT_DRIVER init/destroy callbacks are driver-global lifecycle hooks.
+ * - lgfx_port_t is per AtomVM Context and is owned via ctx->platform_data.
+ * - Therefore, per-port cleanup must happen from the native handler when the
+ *   context is marked Killed.
+ *
+ * Teardown order:
+ * 1) Detach ctx->platform_data first (double-teardown guard)
+ * 2) Best-effort device close while worker is still running
+ * 3) Reset local lifecycle/cache state
+ * 4) Stop worker task/queue
+ * 5) Free lgfx_port_t
+ */
+static void lgfx_port_teardown(Context *ctx)
+{
+    if (ctx == NULL) {
+        return;
     }
 
-    const uint8_t opcode = data[0];
-    DLOGI("handle_call: opcode=0x%02x len=%u", (unsigned) opcode, (unsigned) len);
+    lgfx_port_t *port = (lgfx_port_t *) ctx->platform_data;
+    if (port == NULL) {
+        return;
+    }
 
-    switch (opcode) {
-        case OPCODE_PING: {
-            static const uint8_t pong[] = { 'P', 'O', 'N', 'G' };
-            return make_ok_with_payload(ctx, pong, sizeof(pong));
+    // Guard against accidental double teardown.
+    ctx->platform_data = NULL;
+
+    /*
+     * Best-effort device close before stopping the worker.
+     *
+     * lgfx_worker_device_close() runs through the worker queue, so the worker must
+     * still be alive here. Ignore the return value during teardown: cleanup should
+     * continue even if device close fails.
+     */
+    if (port->initialized) {
+        (void) lgfx_worker_device_close(port);
+    }
+
+    // Final local state reset (defensive; port is freed immediately after).
+    port->initialized = false;
+    port->width = 0;
+    port->height = 0;
+    lgfx_last_error_clear(port);
+
+    // Stop/free worker resources, then free the port state.
+    lgfx_worker_stop(port);
+
+    // Break back-reference before free (debug hygiene).
+    port->ctx = NULL;
+
+    free(port);
+}
+
+/*
+ * Process one mailbox message term on the port thread.
+ *
+ * Ownership:
+ * - The mailbox drainer owns MailboxMessage* and disposes it.
+ * - This function only consumes the message term and must not retain it.
+ * - This function must not dispose mailbox messages.
+ */
+void lgfx_port_handle_mailbox_message(Context *ctx, lgfx_port_t *port, term msg)
+{
+    GenMessage gen;
+    enum GenMessageParseResult parse_res = port_parse_gen_message(msg, &gen);
+    if (parse_res != GenCallMessage) {
+        return;
+    }
+
+    lgfx_request_t req;
+    term decode_error = term_invalid_term();
+
+    if (!lgfx_term_decode_request(ctx, port, gen.req, &req, &decode_error)) {
+
+        /*
+         * Decode failed before dispatch.
+         *
+         * If decode_error is invalid, we likely failed to allocate an error reply,
+         * so treat it as no_memory. Otherwise default to bad_proto, but prefer the
+         * explicit reason if decode_error is already a structured {error, Reason}.
+         */
+        term reason = term_is_invalid_term(decode_error) ? port->atoms.no_memory : port->atoms.bad_proto;
+
+        term decoded_reason = term_invalid_term();
+        if (!term_is_invalid_term(decode_error)
+            && lgfx_is_error_reply(ctx, port, decode_error, &decoded_reason)
+            && term_is_atom(decoded_reason)) {
+            reason = decoded_reason;
         }
 
-        case OPCODE_INIT: {
-            if (len < 2) {
-                DLOGW("INIT: missing rotation byte (len=%u)", (unsigned) len);
-                return make_error(ctx, 0x20);
-            }
+        lgfx_last_error_set(port, port->atoms.none, reason, 0, 0, 0);
 
-            const uint8_t rotation = data[1];
-            DLOGI("INIT: rotation=%u", (unsigned) rotation);
-
-            esp_err_t err = lgfx_device_init(rotation);
-            if (err != ESP_OK) {
-                DLOGE("lgfx_device_init failed: %d", (int) err);
-                return make_error(ctx, 0x21);
-            }
-
-            const uint8_t ok = 0x01;
-            return make_ok_with_payload(ctx, &ok, 1);
+        term safe = ensure_valid_reply(ctx, port, decode_error);
+        if (!term_is_invalid_term(safe)) {
+            port_send_reply(ctx, gen.pid, gen.ref, safe);
         }
 
-        case OPCODE_FILL_SCREEN: {
-            uint16_t color;
-            if (!read_u16be(data, len, 1, &color)) {
-                DLOGW("FILL_SCREEN: missing rgb565 (len=%u)", (unsigned) len);
-                return make_error(ctx, 0x30);
-            }
+        return;
+    }
 
-            DLOGI("FILL_SCREEN: rgb565=0x%04x", (unsigned) color);
+    term reply = term_invalid_term();
 
-            esp_err_t err = lgfx_device_fill_screen(color);
-            if (err != ESP_OK) {
-                DLOGE("fill_screen failed: %d", (int) err);
-                return make_error(ctx, 0x31);
-            }
+    // 1) Metadata lookup from the generated op registry (unknown op => bad_op).
+    const lgfx_op_meta_t *meta = lgfx_op_meta_lookup(port, req.op);
+    if (meta == NULL) {
+        lgfx_last_error_set(port, req.op, port->atoms.bad_op, req.flags, req.target, 0);
+        reply = lgfx_reply_error(ctx, port, port->atoms.bad_op);
+        goto send_reply;
+    }
 
-            const uint8_t ok = 0x01;
-            return make_ok_with_payload(ctx, &ok, 1);
+    // 2) Shared validation driven by ops.def metadata.
+    term pre = term_invalid_term();
+
+    pre = lgfx_require_arity_range(ctx, port, &req, meta->min_arity, meta->max_arity);
+    if (!term_is_invalid_term(pre)) {
+        reply = pre;
+        goto send_reply;
+    }
+
+    pre = lgfx_require_flags_allowed_mask(ctx, port, &req, meta->allowed_flags_mask);
+    if (!term_is_invalid_term(pre)) {
+        reply = pre;
+        goto send_reply;
+    }
+
+    pre = lgfx_require_target_policy(ctx, port, &req, (lgfx_op_target_policy_t) meta->target_policy);
+    if (!term_is_invalid_term(pre)) {
+        reply = pre;
+        goto send_reply;
+    }
+
+    pre = lgfx_require_state_policy(ctx, port, &req, (lgfx_op_state_policy_t) meta->state_policy);
+    if (!term_is_invalid_term(pre)) {
+        reply = pre;
+        goto send_reply;
+    }
+
+    /*
+     * 3) Dispatch lookup.
+     *
+     * This should always exist if ops.def metadata and the dispatch table stay in
+     * sync. A miss here indicates an internal wiring mismatch.
+     */
+    lgfx_handler_fn handler = lgfx_dispatch_lookup(port, req.op);
+    if (handler == NULL) {
+        lgfx_last_error_set(port, req.op, port->atoms.internal, req.flags, req.target, 0);
+        reply = lgfx_reply_error(ctx, port, port->atoms.internal);
+        goto send_reply;
+    }
+
+    // 4) Execute handler (handlers may still perform op-specific validation/body).
+    reply = handler(ctx, port, &req);
+
+send_reply:
+    /*
+     * Normalize invalid replies to {error, no_memory} when possible.
+     *
+     * Handlers/validators may have already recorded a richer last_error (for example
+     * an esp_err value). Keep that context where possible, but force reason=no_memory
+     * if reply construction failed.
+     */
+    if (term_is_invalid_term(reply)) {
+        if (port->last_error.last_op != req.op) {
+            lgfx_last_error_set(port, req.op, port->atoms.no_memory, req.flags, req.target, 0);
+        } else if (port->last_error.reason != port->atoms.no_memory) {
+            lgfx_last_error_set(port, req.op, port->atoms.no_memory, req.flags, req.target, port->last_error.esp_err);
         }
+        reply = ensure_valid_reply(ctx, port, reply);
+    }
 
-        case OPCODE_DRAW_TEXT: {
-            int16_t x, y;
-            uint16_t color;
-            uint8_t size;
-            uint16_t text_len;
-
-            // opcode(1)
-            // x(i16be) y(i16be) color(u16be) size(u8) len(u16be) text(bytes)
-            if (!read_i16be(data, len, 1, &x)) {
-                DLOGW("DRAW_TEXT: missing x");
-                return make_error(ctx, 0x40);
-            }
-            if (!read_i16be(data, len, 3, &y)) {
-                DLOGW("DRAW_TEXT: missing y");
-                return make_error(ctx, 0x41);
-            }
-            if (!read_u16be(data, len, 5, &color)) {
-                DLOGW("DRAW_TEXT: missing color");
-                return make_error(ctx, 0x42);
-            }
-
-            if (len < 10) {
-                DLOGW("DRAW_TEXT: header too short (len=%u)", (unsigned) len);
-                return make_error(ctx, 0x43);
-            }
-
-            size = data[7];
-
-            if (!read_u16be(data, len, 8, &text_len)) {
-                DLOGW("DRAW_TEXT: missing text_len");
-                return make_error(ctx, 0x44);
-            }
-
-            const size_t text_off = 10;
-            if (text_off + (size_t) text_len > len) {
-                DLOGW("DRAW_TEXT: text_len=%u exceeds payload (len=%u)",
-                    (unsigned) text_len, (unsigned) len);
-                return make_error(ctx, 0x45);
-            }
-
-            const uint8_t *text = data + text_off;
-
-            DLOGI("DRAW_TEXT: x=%d y=%d color=0x%04x size=%u text_len=%u",
-                (int) x, (int) y, (unsigned) color, (unsigned) size, (unsigned) text_len);
-
-            esp_err_t err = lgfx_device_draw_text(x, y, color, size, text, text_len);
-            if (err != ESP_OK) {
-                DLOGE("draw_text failed: %d", (int) err);
-                return make_error(ctx, 0x46);
-            }
-
-            const uint8_t ok = 0x01;
-            return make_ok_with_payload(ctx, &ok, 1);
-        }
-
-        default:
-            DLOGW("unknown opcode: 0x%02x", (unsigned) opcode);
-            return make_error(ctx, 0x12);
+    if (!term_is_invalid_term(reply)) {
+        port_send_reply(ctx, gen.pid, gen.ref, reply);
     }
 }
 
 static NativeHandlerResult lgfx_port_native_handler(Context *ctx)
 {
-    for (int i = 0; i < 4; i++) {
-        term msg;
-
-        if (!mailbox_peek(ctx, &msg)) {
-            break;
-        }
-
-        GenMessage gen_message;
-        enum GenMessageParseResult parse_result = port_parse_gen_message(msg, &gen_message);
-
-        if (parse_result == GenCallMessage) {
-            term reply = handle_call(ctx, gen_message.req);
-            port_send_reply(ctx, gen_message.pid, gen_message.ref, reply);
-        } else {
-            DLOGW("native_handler: ignoring non-GenCall message (parse_result=%d)", (int) parse_result);
-        }
-
-        mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+    lgfx_port_t *port = (lgfx_port_t *) ctx->platform_data;
+    if (port == NULL) {
+        return NativeContinue;
     }
+
+    /*
+     * Per-context teardown path.
+     *
+     * AtomVM marks the Context as Killed before final destruction. Clean up the
+     * worker task/queue and per-port state here, because REGISTER_PORT_DRIVER
+     * destroy is driver-global and not called once per port instance.
+     */
+    if (ctx->flags & Killed) {
+        lgfx_port_teardown(ctx);
+        return NativeContinue;
+    }
+
+    // Normal path: port thread drains mailbox and processes messages.
+    lgfx_worker_drain_mailbox(port);
 
     return NativeContinue;
 }
 
-void lgfx_port_init(GlobalContext *global)
+static void lgfx_port_init(GlobalContext *global)
 {
     (void) global;
-    ESP_LOGI(TAG, "init");
-    TRACE("lgfx_port_init\n");
-    log_heap_stats("init");
 }
 
-void lgfx_port_destroy(GlobalContext *global)
+static void lgfx_port_destroy(GlobalContext *global)
 {
+    /*
+     * Driver-global teardown only.
+     *
+     * There is no per-port lgfx_port_t to free here. Per-context teardown is
+     * handled in lgfx_port_native_handler() when the Context is marked Killed.
+     */
     (void) global;
-    ESP_LOGI(TAG, "destroy");
-    TRACE("lgfx_port_destroy\n");
-    log_heap_stats("destroy");
 }
 
-Context *lgfx_port_create_port(GlobalContext *global, term opts)
+static Context *lgfx_port_create_port(GlobalContext *global, term opts)
 {
     (void) opts;
 
-    ESP_LOGI(TAG, "create_port");
-    log_heap_stats("create_port(before)");
-
     Context *ctx = context_new(global);
-    if (!ctx) {
-        ESP_LOGE(TAG, "create_port: context_new failed");
+    if (ctx == NULL) {
         return NULL;
     }
 
+    lgfx_port_t *port = (lgfx_port_t *) calloc(1, sizeof(lgfx_port_t));
+    if (port == NULL) {
+        context_destroy(ctx);
+        return NULL;
+    }
+
+    port->global = global;
+    port->ctx = ctx;
+
+    lgfx_atoms_init(global, &port->atoms);
+    lgfx_last_error_clear(port);
+
+    if (!lgfx_worker_start(port)) {
+        free(port);
+        context_destroy(ctx);
+        return NULL;
+    }
+
+    ctx->platform_data = port;
     ctx->native_handler = lgfx_port_native_handler;
 
-    log_heap_stats("create_port(after)");
     return ctx;
 }
 
-REGISTER_PORT_DRIVER(
-    lgfx_port,
-    lgfx_port_init,
-    lgfx_port_destroy,
-    lgfx_port_create_port);
+REGISTER_PORT_DRIVER(lgfx_port, lgfx_port_init, lgfx_port_destroy, lgfx_port_create_port);

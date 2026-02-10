@@ -1,0 +1,141 @@
+// ports/include/lgfx_port/worker.h
+#pragma once
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include "esp_err.h"
+
+#include "lgfx_port/lgfx_port.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+bool lgfx_worker_start(lgfx_port_t *port);
+void lgfx_worker_stop(lgfx_port_t *port);
+
+/*
+ * Port-thread mailbox drain:
+ * - Pull messages from the AtomVM mailbox
+ * - Forward NormalMessage payloads to the port handler
+ * - Dispose mailbox messages on the port thread
+ *
+ * The worker task itself remains term-free.
+ */
+void lgfx_worker_drain_mailbox(lgfx_port_t *port);
+
+/*
+ * Worker wrappers (called on the port thread by command handlers).
+ *
+ * These wrappers do not decode AtomVM terms and do not touch the AtomVM mailbox.
+ * They build plain C arguments, enqueue a job, and block until the worker task
+ * completes the lgfx_device_* call.
+ *
+ * Payload ownership / lifetime (variable-length buffers such as draw_string / push_image):
+ * - Wrappers deep-copy caller-provided bytes into job-owned memory before enqueueing
+ * - The worker executes the device call using the copied buffer
+ * - The worker frees the copied buffer before notifying the caller
+ *
+ * Synchronous completion is still required because jobs are currently stack-allocated
+ * in the wrappers and queued by pointer. If timeouts or async completion are added
+ * later, switch to heap/pool-owned jobs or queue-by-value and define explicit
+ * ownership rules for both the job object and any payload buffers.
+ */
+
+esp_err_t lgfx_worker_device_init(lgfx_port_t *port);
+esp_err_t lgfx_worker_device_close(lgfx_port_t *port);
+esp_err_t lgfx_worker_device_get_dims(lgfx_port_t *port, uint16_t *out_w, uint16_t *out_h);
+esp_err_t lgfx_worker_device_set_rotation(lgfx_port_t *port, uint8_t rot);
+esp_err_t lgfx_worker_device_set_brightness(lgfx_port_t *port, uint8_t b);
+esp_err_t lgfx_worker_device_set_color_depth(lgfx_port_t *port, uint8_t target, uint8_t depth);
+esp_err_t lgfx_worker_device_display(lgfx_port_t *port);
+
+esp_err_t lgfx_worker_device_fill_screen(lgfx_port_t *port, uint8_t target, uint16_t color565);
+esp_err_t lgfx_worker_device_clear(lgfx_port_t *port, uint8_t target, uint16_t color565);
+esp_err_t lgfx_worker_device_draw_pixel(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t color565);
+
+// Primitives (used by ports/handlers/primitives.c)
+esp_err_t lgfx_worker_device_draw_fast_vline(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t h, uint16_t color565);
+esp_err_t lgfx_worker_device_draw_fast_hline(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t color565);
+esp_err_t lgfx_worker_device_draw_line(lgfx_port_t *port, uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color565);
+esp_err_t lgfx_worker_device_draw_rect(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t color565);
+esp_err_t lgfx_worker_device_fill_rect(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t color565);
+esp_err_t lgfx_worker_device_draw_circle(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t r, uint16_t color565);
+esp_err_t lgfx_worker_device_fill_circle(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t r, uint16_t color565);
+esp_err_t lgfx_worker_device_draw_triangle(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    uint16_t color565);
+esp_err_t lgfx_worker_device_fill_triangle(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    uint16_t color565);
+
+// Text (used by ports/handlers/text.c)
+esp_err_t lgfx_worker_device_set_text_size(lgfx_port_t *port, uint8_t target, uint8_t size);
+esp_err_t lgfx_worker_device_set_text_datum(lgfx_port_t *port, uint8_t target, uint8_t datum);
+esp_err_t lgfx_worker_device_set_text_wrap(lgfx_port_t *port, uint8_t target, bool wrap);
+esp_err_t lgfx_worker_device_set_text_font(lgfx_port_t *port, uint8_t target, uint8_t font);
+esp_err_t lgfx_worker_device_set_text_color(lgfx_port_t *port, uint8_t target, uint16_t fg565, bool has_bg, uint16_t bg565);
+
+/*
+ * Payload ownership contract (draw_string):
+ * - bytes may point to caller-owned memory (including Erlang binary memory)
+ * - This wrapper deep-copies len bytes into job-owned memory before enqueueing
+ * - The worker executes the device call using the copied buffer
+ * - The worker frees the copied buffer before notifying the caller
+ *
+ * This wrapper blocks until the worker completes the device call.
+ */
+esp_err_t lgfx_worker_device_draw_string(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    const uint8_t *bytes,
+    uint16_t len);
+
+/*
+ * Payload ownership contract (push_image RGB565 strided):
+ * - bytes may point to caller-owned memory (including Erlang binary memory)
+ * - This wrapper deep-copies len bytes into job-owned memory before enqueueing
+ * - The worker executes the device call using the copied buffer
+ * - The worker frees the copied buffer before notifying the caller
+ *
+ * This wrapper blocks until the worker completes the device call.
+ *
+ * DMA note:
+ * - Current cleanup assumes the device path fully consumes the payload before the
+ *   device call returns
+ * - If a future backend starts DMA/asynchronous transfer that outlives the device
+ *   call, move to an explicit DMA-safe ownership model and free only after the
+ *   DMA completion barrier
+ */
+esp_err_t lgfx_worker_device_push_image_rgb565_strided(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t stride_pixels, // 0 => tightly packed
+    const uint8_t *bytes,
+    size_t len);
+
+#ifdef __cplusplus
+}
+#endif

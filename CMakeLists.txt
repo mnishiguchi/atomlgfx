@@ -9,24 +9,51 @@ set(LGFX_SRC_ROOT "${LGFX_ROOT}/src")
 # -----------------------------------------------------------------------------
 idf_component_register(
   SRCS
+    # Port entrypoint / lifecycle
     "ports/lgfx_port.c"
-    "src/lgfx_device.cpp"
+    "ports/lgfx_worker.c"
 
+    # Port protocol / dispatch / metadata
+    "ports/lgfx_atoms.c"
+    "ports/proto_term_decode.c"
+    "ports/proto_term_encode.c"
+    "ports/op_meta.c"
+    "ports/proto_caps.c"
+    "ports/dispatch_table.c"
+
+    # Port handlers (match protocol grouping)
+    "ports/handlers/control.c"
+    "ports/handlers/setup.c"
+    "ports/handlers/primitives.c"
+    "ports/handlers/text.c"
+    "ports/handlers/images.c"
+
+    # Device adapter core
+    "src/lgfx_device_state.cpp"
+    "src/lgfx_device_caps.cpp"
+    "src/lgfx_device_control.cpp"
+    "src/lgfx_device_size.cpp"
+    "src/lgfx_device_transactions.cpp"
+
+    # Device adapter feature groups
+    "src/lgfx_device_primitives.cpp"
+    "src/lgfx_device_text.cpp"
+    "src/lgfx_device_images.cpp"
+    "src/lgfx_device_sprites.cpp"
   INCLUDE_DIRS
     "ports/include"
     "src"
     "${LGFX_SRC_ROOT}"
-
   REQUIRES
     efuse
-
   PRIV_REQUIRES
     libatomvm
     avm_sys
     freertos
     esp_timer
     driver
-
+    fatfs
+    sdmmc
   WHOLE_ARCHIVE
 )
 
@@ -76,6 +103,13 @@ set(LGFX_SRCS
 )
 
 # -----------------------------------------------------------------------------
+# JPEG decoder support (TJpgDec wrapper)
+# -----------------------------------------------------------------------------
+list(APPEND LGFX_SRCS
+  "${LGFX_SRC_ROOT}/lgfx/utility/lgfx_tjpgd.c"
+)
+
+# -----------------------------------------------------------------------------
 # MVP exclusions (reduce build surface area)
 # -----------------------------------------------------------------------------
 list(FILTER LGFX_SRCS EXCLUDE REGEX ".*/Bus_EPD\\.(c|cpp)$")
@@ -104,4 +138,3 @@ target_compile_definitions(${COMPONENT_LIB} PRIVATE
 )
 
 target_compile_features(${COMPONENT_LIB} PRIVATE cxx_std_17)
-

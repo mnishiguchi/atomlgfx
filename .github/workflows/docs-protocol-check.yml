@@ -1,0 +1,22 @@
+name: Docs protocol check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  docs-protocol-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.17"
+      - name: List scripts
+        run: ls -la scripts
+      - name: Check protocol docs are up to date
+        run: elixir scripts/sync_lgfx_protocol_doc.exs --check
