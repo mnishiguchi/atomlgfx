@@ -1,3 +1,4 @@
+# /examples/elixir/lib/sample_app.ex
 defmodule SampleApp do
   @moduledoc false
 
@@ -6,9 +7,13 @@ defmodule SampleApp do
   alias SampleApp.SpriteProtocolSmoke
   alias SampleApp.PushImageStress
   alias SampleApp.DrawStringStress
+  alias SampleApp.TextSmoke
+  alias SampleApp.FontProbe
   alias SampleApp.MovingIcons
+  alias SampleApp.TouchProbe
+  alias SampleApp.TouchCalibrate
 
-  @default_mode :full_demo
+  @default_mode :all
 
   @push_rounds 300
   @text_rounds 500
@@ -25,13 +30,17 @@ defmodule SampleApp do
   # Common modes:
   # - :smoke  -> protocol + display boot + sprite smoke
   # - :stress -> push_image + draw_string stress
+  # - :text   -> deterministic text rendering smoke
+  # - :fonts  -> font probe matrix
   # - :demo   -> moving_icons only
+  # - :touch  -> touch probe (poll + draw markers)
   # - :all    -> full_demo (stress + sprite smoke + moving_icons)
   #
   # Canonical modes also supported:
   # :protocol_smoke, :display_boot, :sprite_protocol_smoke,
   # :push_image_stress, :draw_string_stress, :stress_suite,
-  # :unicode_probe, :moving_icons, :full_demo
+  # :unicode_probe, :text_smoke, :font_probe, :moving_icons, :full_demo,
+  # :touch_probe, :touch_calibrate
   def start do
     start(@default_mode)
   end
@@ -61,8 +70,11 @@ defmodule SampleApp do
   # Friendly aliases
   defp run_mode(port, :smoke), do: run_mode(port, :smoke_suite)
   defp run_mode(port, :stress), do: run_mode(port, :stress_suite)
+  defp run_mode(port, :text), do: run_mode(port, :text_smoke)
+  defp run_mode(port, :fonts), do: run_mode(port, :font_probe)
   defp run_mode(port, :demo), do: run_mode(port, :moving_icons)
   defp run_mode(port, :all), do: run_mode(port, :full_demo)
+  defp run_mode(port, :touch), do: run_mode(port, :touch_probe)
 
   # Bring-up only (protocol smoke + init/display/rotation/text baseline)
   defp run_mode(port, :display_boot) do
@@ -122,6 +134,36 @@ defmodule SampleApp do
     end
   end
 
+  defp run_mode(port, :text_smoke) do
+    with {:ok, w, h} <- boot_for_display_with_dims(port),
+         :ok <- step("text_smoke", TextSmoke.run(port, w, h)) do
+      :ok
+    end
+  end
+
+  defp run_mode(port, :font_probe) do
+    with {:ok, w, h} <- boot_for_display_with_dims(port),
+         :ok <- step("font_probe", FontProbe.run(port, w, h)) do
+      :ok
+    end
+  end
+
+  # Touch probe (poll + marker drawing)
+  defp run_mode(port, :touch_probe) do
+    with {:ok, w, h} <- boot_for_display_with_dims(port),
+         :ok <- step("touch_probe", TouchProbe.run(port, w, h)) do
+      :ok
+    end
+  end
+
+  # Interactive calibration (blocking on device) + apply params
+  defp run_mode(port, :touch_calibrate) do
+    with {:ok, w, h} <- boot_for_display_with_dims(port),
+         :ok <- step("touch_calibrate", TouchCalibrate.run(port, w, h)) do
+      :ok
+    end
+  end
+
   # Run stress tests first, then enter the moving demo loop
   defp run_mode(port, :full_demo) do
     with {:ok, w, h} <- boot_for_display_with_dims(port),
@@ -147,7 +189,8 @@ defmodule SampleApp do
     IO.puts(
       "valid modes: :protocol_smoke, :display_boot, :sprite_protocol_smoke, :smoke_suite (:smoke), " <>
         ":push_image_stress, :draw_string_stress, :stress_suite (:stress), :unicode_probe, " <>
-        ":moving_icons (:demo), :full_demo (:all)"
+        ":text_smoke (:text), :font_probe (:fonts), :moving_icons (:demo), :full_demo (:all), " <>
+        ":touch_probe (:touch), :touch_calibrate"
     )
 
     {:error, {:unknown_mode, mode}}
@@ -184,23 +227,56 @@ defmodule SampleApp do
   end
 
   # -----------------------------------------------------------------------------
-  # Unicode probe (UTF-8 transport + font support check)
+  # Unicode probe (UTF-8 transport + JP font preset check)
   # -----------------------------------------------------------------------------
 
   defp unicode_probe(port) do
-    _ = Port.fill_screen(port, @bg)
-    _ = Port.reset_text_state(port, 0)
-    _ = Port.set_text_wrap(port, false, 0)
-    _ = Port.set_text_size(port, 2, 0)
-    _ = Port.set_text_color(port, @fg, nil, 0)
+    with :ok <- Port.fill_screen(port, @bg),
+         :ok <- Port.reset_text_state(port, 0),
+         :ok <- Port.set_text_wrap(port, false, 0),
+         :ok <- Port.set_text_color(port, @fg, nil, 0),
+         :ok <- Port.set_text_font(port, 1, 0),
+         :ok <- Port.set_text_size(port, 1, 0),
+         :ok <- Port.draw_string(port, 4, 4, "ASCII: ABC 123 !?", 0),
+         :ok <- maybe_use_japanese_font_preset(port),
+         # Do not call set_text_size here: presets intentionally set size on the device.
+         :ok <- Port.draw_string(port, 4, 40, "日本語: 設定 戻る 次へ", 0),
+         :ok <- Port.draw_string(port, 4, 72, "確認 更新 取消 決定", 0),
+         :ok <- Port.draw_string(port, 4, 104, "状態 接続 切断 電池 充電", 0),
+         :ok <- Port.draw_string(port, 4, 136, "通知 警報 異常 正常", 0),
+         :ok <- Port.draw_string(port, 4, 168, "ひらがな カタカナ 漢字", 0),
+         :ok <- Port.draw_string(port, 4, 200, "。、！？「」（）ー・", 0) do
+      IO.puts(
+        "unicode_probe bytes jp1=#{byte_size("日本語: 設定 戻る 次へ")} jp2=#{byte_size("ひらがな カタカナ 漢字")}"
+      )
 
-    _ = Port.draw_string(port, 4, 4, "ASCII: ABC 123", 0)
-    _ = Port.draw_string(port, 4, 28, "日本語テスト", 0)
-    _ = Port.draw_string(port, 4, 52, "ひらがな カタカナ 漢字", 0)
+      :ok
+    end
+  end
 
-    IO.puts("unicode_probe bytes jp1=#{byte_size("日本語テスト")} jp2=#{byte_size("ひらがな カタカナ 漢字")}")
+  defp maybe_use_japanese_font_preset(port) do
+    # Prefer small first for UI legibility; fall back to the others.
+    try_japanese_font_presets(port, [:jp_small, :jp_medium, :jp_large, :jp])
+  end
 
+  defp try_japanese_font_presets(_port, []) do
+    IO.puts("unicode_probe warning: no Japanese font preset available, tofu is expected")
     :ok
+  end
+
+  defp try_japanese_font_presets(port, [preset | rest]) do
+    case Port.set_font_preset(port, preset, 0) do
+      :ok ->
+        IO.puts("unicode_probe using font preset #{inspect(preset)}")
+        :ok
+
+      {:error, reason} ->
+        IO.puts(
+          "unicode_probe preset #{inspect(preset)} unavailable: #{Port.format_error(reason)}"
+        )
+
+        try_japanese_font_presets(port, rest)
+    end
   end
 
   # -----------------------------------------------------------------------------

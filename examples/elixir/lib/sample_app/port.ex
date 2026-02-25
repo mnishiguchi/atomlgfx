@@ -1,3 +1,4 @@
+# /examples/elixir/lib/sample_app/port.ex
 defmodule SampleApp.Port do
   @moduledoc false
   @compile {:no_warn_undefined, :port}
@@ -10,6 +11,7 @@ defmodule SampleApp.Port do
   # Timeouts
   @t_short 5_000
   @t_long 10_000
+  @t_touch_calibrate 60_000
 
   # Protocol flags
   @f_text_has_bg 1 <<< 0
@@ -18,6 +20,13 @@ defmodule SampleApp.Port do
   @cap_sprite 1 <<< 0
   @cap_pushimage 1 <<< 1
   @cap_last_error 1 <<< 4
+  @cap_touch 1 <<< 6
+
+  # Font preset wire IDs (setFontPreset)
+  @font_preset_ascii 0
+  @font_preset_jp_small 1
+  @font_preset_jp_medium 2
+  @font_preset_jp_large 3
 
   # -----------------------------------------------------------------------------
   # Port lifecycle
@@ -89,6 +98,12 @@ defmodule SampleApp.Port do
     end
   end
 
+  def supports_touch?(port) do
+    with {:ok, %{feature_bits: feature_bits}} <- get_caps(port) do
+      {:ok, (feature_bits &&& @cap_touch) != 0}
+    end
+  end
+
   # Cache helper for MaxBinaryBytes (AtomVM-friendly)
   def max_binary_bytes(port) do
     key = {:lgfx_max_binary_bytes, port}
@@ -139,7 +154,6 @@ defmodule SampleApp.Port do
   # -----------------------------------------------------------------------------
   # Sprite operations (LGFX_Sprite)
   # -----------------------------------------------------------------------------
-  # createSprite(width, height) on sprite target
   def create_sprite(port, width, height, target)
       when is_integer(width) and width >= 1 and
              is_integer(height) and height >= 1 and
@@ -147,7 +161,6 @@ defmodule SampleApp.Port do
     call_ok(port, :createSprite, target, 0, [width, height], @t_long)
   end
 
-  # createSprite(width, height, color_depth) on sprite target (optional form)
   def create_sprite(port, width, height, color_depth, target)
       when is_integer(width) and width >= 1 and
              is_integer(height) and height >= 1 and
@@ -165,13 +178,11 @@ defmodule SampleApp.Port do
     call_ok(port, :setPivot, target, 0, [x, y], @t_long)
   end
 
-  # pushSprite(DstX, DstY) on sprite target (sprite -> LCD)
   def push_sprite(port, src_target, x, y)
       when is_integer(src_target) and src_target in 1..254 and is_integer(x) and is_integer(y) do
     call_ok(port, :pushSprite, src_target, 0, [x, y], @t_long)
   end
 
-  # pushSprite(DstX, DstY, TransparentColor888)
   def push_sprite(port, src_target, x, y, transparent_color_888)
       when is_integer(src_target) and src_target in 1..254 and
              is_integer(x) and is_integer(y) and
@@ -179,7 +190,6 @@ defmodule SampleApp.Port do
     call_ok(port, :pushSprite, src_target, 0, [x, y, transparent_color_888], @t_long)
   end
 
-  # pushSpriteRegion(DstX, DstY, SrcX, SrcY, W, H)
   def push_sprite_region(port, src_target, dst_x, dst_y, src_x, src_y, width, height)
       when is_integer(src_target) and src_target in 1..254 and
              is_integer(dst_x) and is_integer(dst_y) and
@@ -196,7 +206,6 @@ defmodule SampleApp.Port do
     )
   end
 
-  # pushSpriteRegion(DstX, DstY, SrcX, SrcY, W, H, TransparentColor888)
   def push_sprite_region(
         port,
         src_target,
@@ -227,12 +236,6 @@ defmodule SampleApp.Port do
   # -----------------------------------------------------------------------------
   # Sprite rotate/zoom
   # -----------------------------------------------------------------------------
-  # Host-friendly API used by demo code:
-  # - angle_tenths: 900 == 90.0 degrees (rounded to integer degrees for protocol)
-  # - zx_q8 / zy_q8: 256 == 1.0x
-  #
-  # Source sprite is selected by tuple header target (src_target).
-  # Destination is LCD (protocol does not take a dst_target arg).
   def push_rotate_zoom(port, src_target, x, y, angle_tenths, zx_q8, zy_q8)
       when is_integer(src_target) and src_target in 1..254 and
              is_integer(x) and is_integer(y) and
@@ -243,7 +246,6 @@ defmodule SampleApp.Port do
     call_ok(port, :pushRotateZoom, src_target, 0, [x, y, angle_deg, zx_q8, zy_q8], @t_long)
   end
 
-  # pushRotateZoom(..., TransparentColor888)
   def push_rotate_zoom(port, src_target, x, y, angle_tenths, zx_q8, zy_q8, transparent_color_888)
       when is_integer(src_target) and src_target in 1..254 and
              is_integer(x) and is_integer(y) and
@@ -263,14 +265,11 @@ defmodule SampleApp.Port do
     )
   end
 
-  # Convenience for uniform scale (Q8)
   def push_rotate_zoom(port, src_target, x, y, angle_tenths, z_q8)
       when is_integer(z_q8) and z_q8 >= 0 do
     push_rotate_zoom(port, src_target, x, y, angle_tenths, z_q8, z_q8)
   end
 
-  # Optional helper using integer/float degrees and integer/float zoom values.
-  # Still emits the same protocol shape (angle as integer degrees; zoom as q8 integers).
   def push_rotate_zoom_deg(port, src_target, x, y, angle_deg, zoom_x, zoom_y)
       when is_integer(src_target) and src_target in 1..254 and
              is_integer(x) and is_integer(y) and
@@ -387,6 +386,40 @@ defmodule SampleApp.Port do
   end
 
   # -----------------------------------------------------------------------------
+  # Touch (LCD-only)
+  # -----------------------------------------------------------------------------
+  #
+  # getTouch/getTouchRaw reply:
+  # - {:ok, :none} or {:ok, {x, y, size}}
+  #
+  # calibrateTouch reply:
+  # - {:ok, {p0, p1, p2, p3, p4, p5, p6, p7}}
+  #
+  def get_touch(port) do
+    with {:ok, payload} <- call(port, :getTouch, 0, 0, [], @t_short) do
+      decode_touch_payload(:getTouch, payload)
+    end
+  end
+
+  def get_touch_raw(port) do
+    with {:ok, payload} <- call(port, :getTouchRaw, 0, 0, [], @t_short) do
+      decode_touch_payload(:getTouchRaw, payload)
+    end
+  end
+
+  def set_touch_calibrate(port, params8) do
+    with {:ok, params_list} <- normalize_u16_8(params8) do
+      call_ok(port, :setTouchCalibrate, 0, 0, params_list, @t_long)
+    end
+  end
+
+  def calibrate_touch(port) do
+    with {:ok, payload} <- call(port, :calibrateTouch, 0, 0, [], @t_touch_calibrate) do
+      decode_calibrate_payload(payload)
+    end
+  end
+
+  # -----------------------------------------------------------------------------
   # Text (with simple caching for AtomVM)
   # -----------------------------------------------------------------------------
   def set_text_size(port, size, target \\ 0)
@@ -412,7 +445,38 @@ defmodule SampleApp.Port do
 
   def set_text_font(port, font_id, target \\ 0)
       when is_integer(font_id) and font_id in 0..255 and is_integer(target) and target in 0..254 do
-    call_ok(port, :setTextFont, target, 0, [font_id], @t_long)
+    result = call_ok(port, :setTextFont, target, 0, [font_id], @t_long)
+
+    if result == :ok do
+      :erlang.put({:lgfx_text_font_selection, port, target}, {:font_id, font_id})
+      # setTextFont does not change size on device, so do not touch cached text_size here.
+    end
+
+    result
+  end
+
+  # Font preset helper (driver-defined names mapped to wire preset IDs).
+  # Note: preset selection may also change text size on the device (single-font strategy).
+  def set_font_preset(port, preset, target \\ 0)
+      when is_integer(target) and target in 0..254 do
+    case font_preset_to_wire(preset) do
+      {:ok, preset_id, canonical_preset} ->
+        result = call_ok(port, :setFontPreset, target, 0, [preset_id], @t_long)
+
+        if result == :ok do
+          :erlang.put({:lgfx_text_font_selection, port, target}, {:preset, canonical_preset})
+
+          :erlang.put(
+            {:lgfx_text_size, port, target},
+            implied_text_size_for_preset(canonical_preset)
+          )
+        end
+
+        result
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   def set_text_color(port, fg888, bg888 \\ nil, target \\ 0)
@@ -467,14 +531,13 @@ defmodule SampleApp.Port do
   def reset_text_state(port, target \\ 0) when is_integer(target) and target in 0..254 do
     :erlang.erase({:lgfx_text_color, port, target})
     :erlang.erase({:lgfx_text_size, port, target})
+    :erlang.erase({:lgfx_text_font_selection, port, target})
     :ok
   end
 
   # -----------------------------------------------------------------------------
   # Pixel/image transfer (RGB565)
   # -----------------------------------------------------------------------------
-  # pushImage(X, Y, W, H, StridePixels, Data)
-  # - chunks automatically if needed based on getCaps().max_binary_bytes
   def push_image_rgb565(port, x, y, width, height, pixels, stride_pixels \\ 0, target \\ 0)
       when is_integer(x) and is_integer(y) and
              is_integer(width) and width >= 0 and
@@ -635,6 +698,53 @@ defmodule SampleApp.Port do
     end
   end
 
+  defp decode_touch_payload(_op, :none), do: {:ok, nil}
+
+  defp decode_touch_payload(_op, {x, y, size})
+       when is_integer(x) and is_integer(y) and is_integer(size) do
+    {:ok, {x, y, size}}
+  end
+
+  defp decode_touch_payload(op, other), do: {:error, {:bad_touch_payload, op, other}}
+
+  defp decode_calibrate_payload({p0, p1, p2, p3, p4, p5, p6, p7} = tuple)
+       when is_integer(p0) and is_integer(p1) and is_integer(p2) and is_integer(p3) and
+              is_integer(p4) and is_integer(p5) and is_integer(p6) and is_integer(p7) do
+    {:ok, tuple}
+  end
+
+  defp decode_calibrate_payload(other), do: {:error, {:bad_touch_calibrate_payload, other}}
+
+  defp normalize_u16_8({p0, p1, p2, p3, p4, p5, p6, p7}) do
+    normalize_u16_8([p0, p1, p2, p3, p4, p5, p6, p7])
+  end
+
+  defp normalize_u16_8(list) when is_list(list) and length(list) == 8 do
+    if Enum.all?(list, &u16?/1) do
+      {:ok, list}
+    else
+      {:error, {:bad_touch_calibrate_params, list}}
+    end
+  end
+
+  defp normalize_u16_8(other), do: {:error, {:bad_touch_calibrate_params, other}}
+
+  defp u16?(v) when is_integer(v) and v >= 0 and v <= 0xFFFF, do: true
+  defp u16?(_), do: false
+
+  defp font_preset_to_wire(:ascii), do: {:ok, @font_preset_ascii, :ascii}
+  defp font_preset_to_wire(:jp_small), do: {:ok, @font_preset_jp_small, :jp_small}
+  defp font_preset_to_wire(:jp_medium), do: {:ok, @font_preset_jp_medium, :jp_medium}
+  defp font_preset_to_wire(:jp_large), do: {:ok, @font_preset_jp_large, :jp_large}
+  defp font_preset_to_wire(:jp), do: {:ok, @font_preset_jp_medium, :jp_medium}
+  defp font_preset_to_wire(other), do: {:error, {:bad_font_preset, other}}
+
+  # Single-font strategy mapping (host cache only; device is source of truth).
+  defp implied_text_size_for_preset(:ascii), do: 1
+  defp implied_text_size_for_preset(:jp_small), do: 1
+  defp implied_text_size_for_preset(:jp_medium), do: 2
+  defp implied_text_size_for_preset(:jp_large), do: 3
+
   defp maybe_set_text_color(port, fg888, bg888, target) do
     key = {:lgfx_text_color, port, target}
     desired = {fg888, bg888}
@@ -683,8 +793,6 @@ defmodule SampleApp.Port do
             rows -> rows
           end
 
-        # Send packed strips with stride=0:
-        #   pushImage(x, y + row, width, chunk_h, 0, packed_chunk)
         do_push_chunks(port, x, y, width, height, pixels, stride_bytes, rows_per_chunk, target, 0)
     end
   end
@@ -762,6 +870,7 @@ defmodule SampleApp.Port do
     for target <- 0..254 do
       :erlang.erase({:lgfx_text_color, port, target})
       :erlang.erase({:lgfx_text_size, port, target})
+      :erlang.erase({:lgfx_text_font_selection, port, target})
     end
 
     :ok
@@ -784,27 +893,28 @@ defmodule SampleApp.Port do
   def format_error({:bad_caps_proto_ver, expected, got}),
     do: "caps proto_ver mismatch expected=#{expected} got=#{got}"
 
-  def format_error({:bad_caps_payload, payload}),
-    do: "bad caps payload #{inspect(payload)}"
+  def format_error({:bad_caps_payload, payload}), do: "bad caps payload #{inspect(payload)}"
 
   def format_error({:bad_last_error_payload, payload}),
     do: "bad last_error payload #{inspect(payload)}"
 
-  def format_error({:bad_reply_value, name}),
-    do: "bad reply value for #{inspect(name)}"
+  def format_error({:bad_reply_value, name}), do: "bad reply value for #{inspect(name)}"
+  def format_error({:bad_text_color, value}), do: "bad text bg color #{inspect(value)}"
+  def format_error({:bad_font_preset, preset}), do: "bad font preset #{inspect(preset)}"
 
-  def format_error({:bad_text_color, value}),
-    do: "bad text bg color #{inspect(value)}"
+  def format_error({:bad_touch_payload, op, payload}),
+    do: "bad touch payload op=#{inspect(op)} payload=#{inspect(payload)}"
+
+  def format_error({:bad_touch_calibrate_payload, payload}),
+    do: "bad touch calibrate payload #{inspect(payload)}"
+
+  def format_error({:bad_touch_calibrate_params, params}),
+    do: "bad touch calibrate params #{inspect(params)}"
 
   def format_error(:empty_text), do: "text must not be empty"
   def format_error(:text_contains_nul), do: "text contains NUL byte"
-
-  def format_error({:port_call_exit, reason}),
-    do: "port.call exited #{inspect(reason)}"
-
-  def format_error({:unexpected_reply, reply}),
-    do: "unexpected reply #{inspect(reply)}"
-
+  def format_error({:port_call_exit, reason}), do: "port.call exited #{inspect(reason)}"
+  def format_error({:unexpected_reply, reply}), do: "unexpected reply #{inspect(reply)}"
   def format_error(reason) when is_atom(reason), do: Atom.to_string(reason)
   def format_error(reason), do: inspect(reason)
 end

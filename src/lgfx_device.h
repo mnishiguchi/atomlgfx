@@ -1,3 +1,4 @@
+// src/lgfx_device.h
 #ifndef __LGFX_DEVICE_H__
 #define __LGFX_DEVICE_H__
 
@@ -11,9 +12,23 @@
 extern "C" {
 #endif
 
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// Build options (set via CMake target_compile_definitions)
+// ----------------------------------------------------------------------------
+//
+// - LGFX_PORT_ENABLE_JP_FONTS=1
+//     JP presets are supported (device maps jp_* to LovyanGFX JapanGothic font).
+// - LGFX_PORT_ENABLE_JP_FONTS=0
+//     JP presets are compiled out. Device must return ESP_ERR_NOT_SUPPORTED for jp_*.
+//     ASCII preset remains available.
+//
+#ifndef LGFX_PORT_ENABLE_JP_FONTS
+#define LGFX_PORT_ENABLE_JP_FONTS 1
+#endif
+
+// ----------------------------------------------------------------------------
 // Targets (shared by most APIs)
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 //
 // This is a thin C ABI around LovyanGFX:
 // - target == 0       : LCD device (singleton)
@@ -27,16 +42,16 @@ extern "C" {
 // - Most APIs return ESP_ERR_INVALID_STATE if lgfx_device_init() was not called.
 bool lgfx_device_is_valid_target(uint8_t target);
 
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // Caps / feature discovery (LCD-only)
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // Used by ports/handlers/control.c
 uint32_t lgfx_device_feature_bits(void);
 uint32_t lgfx_device_max_sprites(void);
 
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // Lifecycle / LCD-only controls
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 //
 // init(): allocates the device lazily (no C++ global ctors) and calls lcd->begin().
 //
@@ -53,25 +68,47 @@ esp_err_t lgfx_device_set_rotation(uint8_t rotation);
 esp_err_t lgfx_device_set_brightness(uint8_t brightness);
 esp_err_t lgfx_device_display(void);
 
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // Common ops (LCD or sprite target)
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 esp_err_t lgfx_device_set_color_depth(uint8_t target, uint8_t depth);
 esp_err_t lgfx_device_set_color(uint8_t target, uint16_t rgb565);
 esp_err_t lgfx_device_set_base_color(uint8_t target, uint16_t rgb565);
 
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // Text config (LCD or sprite target)
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+//
+// Font preset IDs (stable protocol enum -> device-side mapping).
+// Keep these in sync with ports/handlers/text.c decoding + worker mapping.
+enum
+{
+    LGFX_FONT_PRESET_ASCII = 0,
+    LGFX_FONT_PRESET_JP_SMALL = 1,
+    LGFX_FONT_PRESET_JP_MEDIUM = 2,
+    LGFX_FONT_PRESET_JP_LARGE = 3,
+};
+
 esp_err_t lgfx_device_set_text_size(uint8_t target, uint8_t size);
 esp_err_t lgfx_device_set_text_size_xy(uint8_t target, uint8_t sx, uint8_t sy);
 esp_err_t lgfx_device_set_text_datum(uint8_t target, uint8_t datum);
 esp_err_t lgfx_device_set_text_wrap(uint8_t target, bool wrap_x, bool wrap_y);
 esp_err_t lgfx_device_set_text_font(uint8_t target, uint8_t font);
 
-// -----------------------------------------------------------------------------
+// setFontPreset(preset_id): selects a driver-defined font preset.
+//
+// Behavior contract:
+// - Unknown preset IDs return ESP_ERR_INVALID_ARG
+// - Optional presets that are compiled out return ESP_ERR_NOT_SUPPORTED
+//
+// Mapping strategy (current):
+// - ASCII preset uses setTextFont(1) and normalizes size=1
+// - JP presets may use a single JP font object and scale it with setTextSize()
+esp_err_t lgfx_device_set_font_preset(uint8_t target, uint8_t preset);
+
+// ----------------------------------------------------------------------------
 // Size queries (LCD or sprite target)
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 uint16_t lgfx_device_width(uint8_t target);
 uint16_t lgfx_device_height(uint8_t target);
 
@@ -79,9 +116,29 @@ uint16_t lgfx_device_height(uint8_t target);
 // Returns PANEL_W/H before init, or the current lcd->width/height after init/rotation.
 esp_err_t lgfx_device_get_dims(uint16_t *out_w, uint16_t *out_h);
 
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// Touch (LCD-only by protocol semantics)
+// ----------------------------------------------------------------------------
+//
+// Returned coordinates follow the device implementation:
+// - get_touch: screen-space coordinates (after calibration mapping if configured)
+// - get_touch_raw: raw coordinates (controller space)
+//
+// If not touched:
+// - out_touched=false, other outputs set to 0 (best-effort convenience)
+esp_err_t lgfx_device_get_touch(bool *out_touched, int16_t *out_x, int16_t *out_y, uint16_t *out_size);
+esp_err_t lgfx_device_get_touch_raw(bool *out_touched, int16_t *out_x, int16_t *out_y, uint16_t *out_size);
+esp_err_t lgfx_device_set_touch_calibrate(const uint16_t params[8]);
+
+// Runs LovyanGFX interactive touch calibration and returns the resulting 8x u16 blob.
+// Notes:
+// - This call is blocking/interactive (user taps on-screen markers).
+// - Returns ESP_ERR_NOT_SUPPORTED if no touch device is attached.
+esp_err_t lgfx_device_calibrate_touch(uint16_t out_params[8]);
+
+// ----------------------------------------------------------------------------
 // Basic drawing (LCD or sprite target)
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 esp_err_t lgfx_device_fill_screen(uint8_t target, uint16_t rgb565);
 esp_err_t lgfx_device_clear(uint8_t target, uint16_t rgb565);
 
@@ -92,9 +149,9 @@ esp_err_t lgfx_device_draw_line(uint8_t target, int16_t x0, int16_t y0, int16_t 
 esp_err_t lgfx_device_draw_rect(uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t rgb565);
 esp_err_t lgfx_device_fill_rect(uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t rgb565);
 
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // Primitives (LCD or sprite target)
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 esp_err_t lgfx_device_draw_round_rect(uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t r, uint16_t rgb565);
 esp_err_t lgfx_device_fill_round_rect(uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t r, uint16_t rgb565);
 esp_err_t lgfx_device_draw_circle(uint8_t target, int16_t x, int16_t y, uint16_t r, uint16_t rgb565);
@@ -109,15 +166,15 @@ esp_err_t lgfx_device_draw_arc(uint8_t target, int16_t x, int16_t y, uint16_t r0
 esp_err_t lgfx_device_fill_arc(uint8_t target, int16_t x, int16_t y, uint16_t r0, uint16_t r1, int16_t a0, int16_t a1, uint16_t rgb565);
 esp_err_t lgfx_device_draw_gradient_line(uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t c0, uint16_t c1);
 
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // Text drawing (LCD or sprite target)
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 esp_err_t lgfx_device_set_text_color(uint8_t target, uint16_t fg_rgb565, bool has_bg, uint16_t bg_rgb565);
 esp_err_t lgfx_device_draw_string(uint8_t target, int16_t x, int16_t y, const uint8_t *text, uint16_t text_len);
 
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // Image transfer (LCD or sprite target)
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 esp_err_t lgfx_device_push_image_rgb565_strided(
     uint8_t target,
     int16_t x,
@@ -128,9 +185,9 @@ esp_err_t lgfx_device_push_image_rgb565_strided(
     const uint8_t *pixels_be, // RGB565 big-endian per pixel (hi, lo)
     size_t pixels_len);
 
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // LCD write-path helpers (LCD-only by protocol semantics)
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 //
 // These APIs are intended to be used in the "in_write" state managed by the
 // protocol validator/handler layer.
@@ -153,9 +210,9 @@ esp_err_t lgfx_device_write_fast_vline(int16_t x, int16_t y, uint16_t h, uint16_
 esp_err_t lgfx_device_write_fast_hline(int16_t x, int16_t y, uint16_t w, uint16_t rgb565);
 esp_err_t lgfx_device_write_fill_rect(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t rgb565);
 
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // Sprite subsystem
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 esp_err_t lgfx_device_sprite_create(uint16_t w, uint16_t h, uint8_t color_depth, uint8_t *out_handle);
 esp_err_t lgfx_device_sprite_create_at(uint8_t handle, uint16_t w, uint16_t h, uint8_t color_depth);
 esp_err_t lgfx_device_sprite_delete(uint8_t handle);

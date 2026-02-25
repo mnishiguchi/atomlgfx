@@ -7,18 +7,42 @@
 #include "context.h"
 #include "term.h"
 
+// Device-side preset IDs live in the device ABI header.
+// This keeps the preset enum stable across:
+// - ports/handlers/text.c (decode/range checks)
+// - ports/lgfx_worker.c (job payload)
+// - src/lgfx_device_text.cpp (mapping to LovyanGFX fonts)
+#include "lgfx_device.h"
+
 // Device calls go through worker wrappers.
 #include "lgfx_port/worker.h"
 
 #include "lgfx_port/color.h"
-#include "lgfx_port/reply_common.h"
 #include "lgfx_port/lgfx_port.h"
+#include "lgfx_port/reply_common.h"
 #include "lgfx_port/term_conv.h"
 #include "lgfx_port/term_decode.h"
 #include "lgfx_port/term_encode.h"
 
 // Request envelope validation (version/arity/flags/target/init-state) is
 // centralized in lgfx_port.c via ops.def metadata. Handlers only decode payload fields.
+
+static bool decode_font_preset(term preset_t, uint8_t *out_preset)
+{
+    if (!out_preset) {
+        return false;
+    }
+
+    // MVP wire form: integer only
+    // 0=ascii, 1=jp_small, 2=jp_medium, 3=jp_large
+    uint32_t v = 0;
+    if (!lgfx_term_to_u32(preset_t, &v) || v > (uint32_t) LGFX_FONT_PRESET_JP_LARGE) {
+        return false;
+    }
+
+    *out_preset = (uint8_t) v;
+    return true;
+}
 
 static term do_set_text_size(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
@@ -30,7 +54,10 @@ static term do_set_text_size(Context *ctx, lgfx_port_t *port, const lgfx_request
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
         lgfx_worker_device_set_text_size(port, (uint8_t) req->target, (uint8_t) size));
 
     return reply_ok(ctx, port, req, port->atoms.ok); // {ok, ok}
@@ -46,7 +73,10 @@ static term do_set_text_datum(Context *ctx, lgfx_port_t *port, const lgfx_reques
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
         lgfx_worker_device_set_text_datum(port, (uint8_t) req->target, (uint8_t) datum));
 
     return reply_ok(ctx, port, req, port->atoms.ok); // {ok, ok}
@@ -76,7 +106,11 @@ static term do_set_text_wrap(Context *ctx, lgfx_port_t *port, const lgfx_request
         wrap = (v == 1);
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
+    // Protocol currently carries one wrap flag; worker applies it to both axes.
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
         lgfx_worker_device_set_text_wrap(port, (uint8_t) req->target, wrap));
 
     return reply_ok(ctx, port, req, port->atoms.ok); // {ok, ok}
@@ -92,8 +126,37 @@ static term do_set_text_font(Context *ctx, lgfx_port_t *port, const lgfx_request
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
         lgfx_worker_device_set_text_font(port, (uint8_t) req->target, (uint8_t) font));
+
+    return reply_ok(ctx, port, req, port->atoms.ok); // {ok, ok}
+}
+
+static term do_set_font_preset(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    // {lgfx, ver, setFontPreset, target, flags, PresetId}
+    // Wire form (integer):
+    //   0=ascii, 1=jp_small, 2=jp_medium, 3=jp_large
+    term preset_t = term_get_tuple_element(req->request_tuple, 5);
+
+    uint8_t preset = 0;
+    if (!decode_font_preset(preset_t, &preset)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+
+    // Worker/device layer mapping:
+    // - ascii: built-in ASCII fallback (e.g. setTextFont(1))
+    // - jp_*:  build-dependent (may be NOT_SUPPORTED if compiled out)
+    //
+    // reply_common normalizes ESP_ERR_NOT_SUPPORTED to {error, unsupported}.
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
+        lgfx_worker_device_set_font_preset(port, (uint8_t) req->target, preset));
 
     return reply_ok(ctx, port, req, port->atoms.ok); // {ok, ok}
 }
@@ -120,7 +183,10 @@ static term do_set_text_color(Context *ctx, lgfx_port_t *port, const lgfx_reques
         }
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
         lgfx_worker_device_set_text_color(
             port,
             (uint8_t) req->target,
@@ -167,7 +233,10 @@ static term do_draw_string(Context *ctx, lgfx_port_t *port, const lgfx_request_t
         }
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
         lgfx_worker_device_draw_string(
             port,
             (uint8_t) req->target,
@@ -197,6 +266,11 @@ term lgfx_handle_setTextWrap(Context *ctx, lgfx_port_t *port, const lgfx_request
 term lgfx_handle_setTextFont(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     return do_set_text_font(ctx, port, req);
+}
+
+term lgfx_handle_setFontPreset(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    return do_set_font_preset(ctx, port, req);
 }
 
 term lgfx_handle_setTextColor(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)

@@ -14,7 +14,6 @@
 #endif
 
 // Upper bound the BE side should assume for a single binary payload (bytes).
-// If you change this, update docs/LGFX_PORT_PROTOCOL.md.
 #ifndef LGFX_PORT_MAX_BINARY_BYTES
 #define LGFX_PORT_MAX_BINARY_BYTES (256u * 1024u)
 #endif
@@ -25,9 +24,6 @@
 #endif
 
 // Default sprite color depth used by createSprite when Depth is omitted.
-// (Dual-arity createSprite supports:
-//   - {.., W, H}
-//   - {.., W, H, Depth})
 #ifndef LGFX_PORT_SPRITE_DEFAULT_DEPTH
 #define LGFX_PORT_SPRITE_DEFAULT_DEPTH 16u
 #endif
@@ -42,8 +38,6 @@
 #endif
 
 // Build-time protocol advertisement gate for sprite capability.
-// Default is enabled now that sprite support exists.
-// Set to 0 to force-disable advertisement for testing/compat.
 #ifndef LGFX_PORT_SUPPORTS_SPRITE
 #define LGFX_PORT_SUPPORTS_SPRITE 1
 #endif
@@ -53,58 +47,80 @@
 #endif
 
 // Build-time protocol advertisement gate for last_error capability.
-// Default is enabled.
-// Set to 0 to force-disable advertisement/handler behavior for testing/compat.
 #ifndef LGFX_PORT_SUPPORTS_LAST_ERROR
 #define LGFX_PORT_SUPPORTS_LAST_ERROR 1
 #endif
 
-#if (LGFX_PORT_SUPPORTS_LAST_ERROR != 0) && \
-    (LGFX_PORT_SUPPORTS_LAST_ERROR != 1)
+#if (LGFX_PORT_SUPPORTS_LAST_ERROR != 0) && (LGFX_PORT_SUPPORTS_LAST_ERROR != 1)
 #error "LGFX_PORT_SUPPORTS_LAST_ERROR must be 0 or 1"
 #endif
 
 // Build-time protocol advertisement gate for pushImage capability.
-// Default is enabled because pushImage is implemented.
 #ifndef LGFX_PORT_SUPPORTS_PUSHIMAGE
 #define LGFX_PORT_SUPPORTS_PUSHIMAGE 1
 #endif
 
-#if (LGFX_PORT_SUPPORTS_PUSHIMAGE != 0) && \
-    (LGFX_PORT_SUPPORTS_PUSHIMAGE != 1)
+#if (LGFX_PORT_SUPPORTS_PUSHIMAGE != 0) && (LGFX_PORT_SUPPORTS_PUSHIMAGE != 1)
 #error "LGFX_PORT_SUPPORTS_PUSHIMAGE must be 0 or 1"
 #endif
 
+// -----------------------------------------------------------------------------
+// Touch advertisement gate
+// -----------------------------------------------------------------------------
+//
+// Contract:
+// - CAP_TOUCH is advertised only when touch is enabled AND a real CS GPIO is configured.
+// - If touch is compiled but unattached (CS == -1), CAP_TOUCH is NOT advertised.
+//
+// Inputs (compile definitions):
+// - LGFX_PORT_ENABLE_TOUCH (0/1)
+// - LGFX_PORT_TOUCH_CS_GPIO (>=0 means attached, -1 means unattached)
+//
+#ifndef LGFX_PORT_ENABLE_TOUCH
+#define LGFX_PORT_ENABLE_TOUCH 0
+#endif
+
+#ifndef LGFX_PORT_TOUCH_CS_GPIO
+#define LGFX_PORT_TOUCH_CS_GPIO (-1)
+#endif
+
+// Optional explicit override for testing/compat.
+#ifndef LGFX_PORT_SUPPORTS_TOUCH
+#if (LGFX_PORT_ENABLE_TOUCH == 1) && (LGFX_PORT_TOUCH_CS_GPIO >= 0)
+#define LGFX_PORT_SUPPORTS_TOUCH 1
+#else
+#define LGFX_PORT_SUPPORTS_TOUCH 0
+#endif
+#endif
+
+#if (LGFX_PORT_SUPPORTS_TOUCH != 0) && (LGFX_PORT_SUPPORTS_TOUCH != 1)
+#error "LGFX_PORT_SUPPORTS_TOUCH must be 0 or 1"
+#endif
+
 // Build-time protocol advertisement gate for JPG file decoding capability.
-// Default is disabled until file-based JPG path is implemented/exposed.
 #ifndef LGFX_PORT_SUPPORTS_JPG_FILE
 #define LGFX_PORT_SUPPORTS_JPG_FILE 0
 #endif
 
-#if (LGFX_PORT_SUPPORTS_JPG_FILE != 0) && \
-    (LGFX_PORT_SUPPORTS_JPG_FILE != 1)
+#if (LGFX_PORT_SUPPORTS_JPG_FILE != 0) && (LGFX_PORT_SUPPORTS_JPG_FILE != 1)
 #error "LGFX_PORT_SUPPORTS_JPG_FILE must be 0 or 1"
 #endif
 
 // Build-time protocol advertisement gate for PNG file decoding capability.
-// Default is disabled until file-based PNG path is implemented/exposed.
 #ifndef LGFX_PORT_SUPPORTS_PNG_FILE
 #define LGFX_PORT_SUPPORTS_PNG_FILE 0
 #endif
 
-#if (LGFX_PORT_SUPPORTS_PNG_FILE != 0) && \
-    (LGFX_PORT_SUPPORTS_PNG_FILE != 1)
+#if (LGFX_PORT_SUPPORTS_PNG_FILE != 0) && (LGFX_PORT_SUPPORTS_PNG_FILE != 1)
 #error "LGFX_PORT_SUPPORTS_PNG_FILE must be 0 or 1"
 #endif
 
 // Build-time protocol advertisement gate for batchVoid capability.
-// Default is disabled until batch op is implemented/exposed.
 #ifndef LGFX_PORT_SUPPORTS_BATCH_VOID
 #define LGFX_PORT_SUPPORTS_BATCH_VOID 0
 #endif
 
-#if (LGFX_PORT_SUPPORTS_BATCH_VOID != 0) && \
-    (LGFX_PORT_SUPPORTS_BATCH_VOID != 1)
+#if (LGFX_PORT_SUPPORTS_BATCH_VOID != 0) && (LGFX_PORT_SUPPORTS_BATCH_VOID != 1)
 #error "LGFX_PORT_SUPPORTS_BATCH_VOID must be 0 or 1"
 #endif
 
@@ -120,16 +136,17 @@
 #define LGFX_CAP_PNG_FILE   (1u << 3)
 #define LGFX_CAP_LAST_ERROR (1u << 4)
 #define LGFX_CAP_BATCH_VOID (1u << 5)
+#define LGFX_CAP_TOUCH      (1u << 6)
 
 // Safe-yield behavior (set at most one)
 #define LGFX_CAP_SAFE_YIELD_FORGIVING (1u << 8)
 #define LGFX_CAP_SAFE_YIELD_STRICT    (1u << 9)
 
 // All protocol-facing FeatureBits that may appear on the wire.
-// Keep in sync with docs/LGFX_PORT_PROTOCOL.md.
 #define LGFX_CAP_KNOWN_MASK ( \
     LGFX_CAP_SPRITE | \
     LGFX_CAP_PUSHIMAGE | \
+    LGFX_CAP_TOUCH | \
     LGFX_CAP_JPG_FILE | \
     LGFX_CAP_PNG_FILE | \
     LGFX_CAP_LAST_ERROR | \

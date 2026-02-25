@@ -9,6 +9,10 @@
 
 #include <LovyanGFX.hpp>
 
+#if defined(LGFX_PORT_ENABLE_TOUCH) && (LGFX_PORT_ENABLE_TOUCH == 1)
+#include <lgfx/v1/touch/Touch_XPT2046.hpp>
+#endif
+
 #include "esp_err.h"
 #include "esp_log.h"
 
@@ -27,14 +31,102 @@ namespace
 
 static constexpr const char *TAG = "lgfx_device";
 
-// piyopiyo-pcb v1.5 GPIO mapping
-static constexpr int PIN_SCLK = 7;
-static constexpr int PIN_MOSI = 9;
-static constexpr int PIN_MISO = 8;
+// -----------------------------------------------------------------------------
+// LCD/SPI wiring knobs (override via compile definitions)
+// -----------------------------------------------------------------------------
+// Defaults match current piyopiyo-pcb v1.5 mapping.
+// Override examples:
+// -DLGFX_PORT_SPI_SCLK_GPIO=7
+// -DLGFX_PORT_SPI_MOSI_GPIO=9
+// -DLGFX_PORT_SPI_MISO_GPIO=8
+// -DLGFX_PORT_LCD_CS_GPIO=43
+// -DLGFX_PORT_LCD_DC_GPIO=3
+// -DLGFX_PORT_LCD_RST_GPIO=2
+// -DLGFX_PORT_LCD_SPI_HOST=SPI2_HOST
+//
 
-static constexpr int PIN_LCD_CS = 43;
-static constexpr int PIN_LCD_DC = 3;
-static constexpr int PIN_LCD_RST = 2;
+#ifndef LGFX_PORT_SPI_SCLK_GPIO
+#define LGFX_PORT_SPI_SCLK_GPIO 7
+#endif
+
+#ifndef LGFX_PORT_SPI_MOSI_GPIO
+#define LGFX_PORT_SPI_MOSI_GPIO 9
+#endif
+
+#ifndef LGFX_PORT_SPI_MISO_GPIO
+#define LGFX_PORT_SPI_MISO_GPIO 8
+#endif
+
+#ifndef LGFX_PORT_LCD_CS_GPIO
+#define LGFX_PORT_LCD_CS_GPIO 43
+#endif
+
+#ifndef LGFX_PORT_LCD_DC_GPIO
+#define LGFX_PORT_LCD_DC_GPIO 3
+#endif
+
+#ifndef LGFX_PORT_LCD_RST_GPIO
+#define LGFX_PORT_LCD_RST_GPIO 2
+#endif
+
+#ifndef LGFX_PORT_LCD_SPI_HOST
+#define LGFX_PORT_LCD_SPI_HOST SPI2_HOST
+#endif
+
+// piyopiyo-pcb v1.5 GPIO mapping (now backed by compile defs)
+static constexpr int PIN_SCLK = LGFX_PORT_SPI_SCLK_GPIO;
+static constexpr int PIN_MOSI = LGFX_PORT_SPI_MOSI_GPIO;
+static constexpr int PIN_MISO = LGFX_PORT_SPI_MISO_GPIO;
+
+static constexpr int PIN_LCD_CS = LGFX_PORT_LCD_CS_GPIO;
+static constexpr int PIN_LCD_DC = LGFX_PORT_LCD_DC_GPIO;
+static constexpr int PIN_LCD_RST = LGFX_PORT_LCD_RST_GPIO;
+
+#if defined(LGFX_PORT_ENABLE_TOUCH) && (LGFX_PORT_ENABLE_TOUCH == 1)
+//
+// Touch wiring knobs (override via compile definitions)
+//
+// Examples:
+// -DLGFX_PORT_TOUCH_CS_GPIO=44
+// -DLGFX_PORT_TOUCH_IRQ_GPIO=1
+// -DLGFX_PORT_TOUCH_OFFSET_ROTATION=3
+//
+// Leave CS as -1 to compile touch but keep it unattached.
+//
+#ifndef LGFX_PORT_TOUCH_CS_GPIO
+#define LGFX_PORT_TOUCH_CS_GPIO (-1)
+#endif
+
+#ifndef LGFX_PORT_TOUCH_IRQ_GPIO
+#define LGFX_PORT_TOUCH_IRQ_GPIO (-1)
+#endif
+
+// Default touch host to the LCD host (so overriding LCD host also updates touch).
+#ifndef LGFX_PORT_TOUCH_SPI_HOST
+#define LGFX_PORT_TOUCH_SPI_HOST LGFX_PORT_LCD_SPI_HOST
+#endif
+
+#ifndef LGFX_PORT_TOUCH_SPI_FREQ_HZ
+#define LGFX_PORT_TOUCH_SPI_FREQ_HZ (1000000u) // conservative start for stability
+#endif
+
+// Touch coordinate alignment knob.
+// If touch feels rotated/mirrored relative to the display, adjust this (0..7).
+// (Calibration via setTouchCalibrate/calibrateTouch is still the best long-term fix.)
+#ifndef LGFX_PORT_TOUCH_OFFSET_ROTATION
+#define LGFX_PORT_TOUCH_OFFSET_ROTATION 0
+#endif
+
+// XPT2046 touch (SPI).
+// - requires a dedicated CS pin for touch
+// - optional IRQ pin reduces unnecessary reads when not touched
+static constexpr int PIN_TOUCH_CS = LGFX_PORT_TOUCH_CS_GPIO;
+static constexpr int PIN_TOUCH_IRQ = LGFX_PORT_TOUCH_IRQ_GPIO;
+
+static constexpr int TOUCH_SPI_HOST = LGFX_PORT_TOUCH_SPI_HOST;
+static constexpr uint32_t TOUCH_SPI_FREQ_HZ = (uint32_t) LGFX_PORT_TOUCH_SPI_FREQ_HZ;
+static constexpr uint8_t TOUCH_OFFSET_ROTATION = (uint8_t) LGFX_PORT_TOUCH_OFFSET_ROTATION;
+#endif
 
 static constexpr uint16_t PANEL_W = 320;
 static constexpr uint16_t PANEL_H = 480;
@@ -57,6 +149,10 @@ class PiyopiyoLGFX : public lgfx::LGFX_Device
     lgfx::Panel_ILI9488 panel_;
     lgfx::Bus_SPI bus_;
 
+#if defined(LGFX_PORT_ENABLE_TOUCH) && (LGFX_PORT_ENABLE_TOUCH == 1)
+    lgfx::Touch_XPT2046 touch_;
+#endif
+
 public:
     PiyopiyoLGFX()
     {
@@ -64,7 +160,7 @@ public:
         {
             auto cfg = bus_.config();
 
-            cfg.spi_host = SPI2_HOST;
+            cfg.spi_host = LGFX_PORT_LCD_SPI_HOST;
             cfg.spi_mode = 0;
 
             // Conservative clocks for stability (tune later)
@@ -111,6 +207,48 @@ public:
 
             panel_.config(cfg);
         }
+
+#if defined(LGFX_PORT_ENABLE_TOUCH) && (LGFX_PORT_ENABLE_TOUCH == 1)
+        // Touch config (XPT2046)
+        // - shares SPI host + SCLK/MOSI/MISO with the LCD bus
+        // - requires a dedicated CS pin for touch
+        // - optional IRQ pin reduces unnecessary reads when not touched
+        if constexpr (PIN_TOUCH_CS >= 0) {
+            auto cfg = touch_.config();
+
+            cfg.spi_host = TOUCH_SPI_HOST; // should match the LCD bus host
+            cfg.freq = TOUCH_SPI_FREQ_HZ; // conservative start for stability
+
+            cfg.pin_sclk = PIN_SCLK;
+            cfg.pin_mosi = PIN_MOSI;
+            cfg.pin_miso = PIN_MISO;
+
+            cfg.pin_cs = PIN_TOUCH_CS;
+            cfg.pin_int = PIN_TOUCH_IRQ; // -1 if not wired
+
+            cfg.bus_shared = true;
+
+            // Touch coordinate alignment relative to the panel orientation.
+            // If left/right is swapped or rotation feels off, try:
+            //   -DLGFX_PORT_TOUCH_OFFSET_ROTATION=1/2/3/... (0..7)
+            // Then run SampleApp :touch_calibrate for best results.
+            cfg.offset_rotation = TOUCH_OFFSET_ROTATION;
+
+            touch_.config(cfg);
+            panel_.setTouch(&touch_);
+
+            ESP_LOGI(
+                TAG,
+                "touch attached: cs=%d irq=%d host=%d freq=%u offset_rotation=%u",
+                PIN_TOUCH_CS,
+                PIN_TOUCH_IRQ,
+                (int) TOUCH_SPI_HOST,
+                (unsigned) TOUCH_SPI_FREQ_HZ,
+                (unsigned) TOUCH_OFFSET_ROTATION);
+        } else {
+            ESP_LOGI(TAG, "touch compiled but unattached (LGFX_PORT_TOUCH_CS_GPIO=-1)");
+        }
+#endif
 
         setPanel(&panel_);
     }
@@ -437,6 +575,12 @@ extern "C" esp_err_t lgfx_device_init(void)
     }
 
     if (!is_initialized) {
+#if defined(LGFX_PORT_ENABLE_TOUCH) && (LGFX_PORT_ENABLE_TOUCH == 1)
+        if constexpr (PIN_TOUCH_CS < 0) {
+            ESP_LOGW(TAG, "touch enabled (LGFX_PORT_ENABLE_TOUCH=1) but not attached (LGFX_PORT_TOUCH_CS_GPIO=-1)");
+        }
+#endif
+
         ESP_LOGI(TAG, "init/begin");
         lcd->begin();
         is_initialized = true;

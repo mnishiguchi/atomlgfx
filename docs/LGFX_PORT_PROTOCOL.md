@@ -255,6 +255,53 @@ This applies to:
 
 ---
 
+## Fonts
+
+The protocol exposes two ways to select fonts:
+
+- `setTextFont(FontIdU8)`
+  - Direct LovyanGFX numeric font selection.
+  - Intended for ASCII-oriented UI and lightweight labels.
+  - Does not imply a text size change.
+
+- `setFontPreset(PresetIdU8)`
+  - A driver-defined stable preset enum intended for higher-level font choices.
+  - Presets may also normalize or change text size on the device.
+
+### `setFontPreset`
+
+#### Request
+
+- `setFontPreset(PresetIdU8)`
+
+#### Preset IDs (v1)
+
+`PresetIdU8` is an integer:
+
+- `0` = `ascii`
+  - Device behavior: select ASCII fallback (typically `setTextFont(1)`) and normalize text size to `1`.
+
+- `1` = `jp_small`
+  - Japanese-capable font preset, scaled to size `1`.
+
+- `2` = `jp_medium`
+  - Japanese-capable font preset, scaled to size `2`.
+
+- `3` = `jp_large`
+  - Japanese-capable font preset, scaled to size `3`.
+
+#### Errors
+
+- Unknown preset ID => `{error, bad_args}`
+- Preset compiled out (build option) => `{error, unsupported}`
+
+#### Notes
+
+- JP preset availability is build-dependent (see `LGFX_PORT_ENABLE_JP_FONTS`).
+- Host wrappers may cache an implied size for presets as an optimization, but the device remains the source of truth for actual text state.
+
+---
+
 ## Flags
 
 `Flags` is operation-specific unless explicitly marked common.
@@ -352,6 +399,7 @@ If this table and `ops.def` disagree, `ops.def` (and the built driver) wins.
 | `setTextDatum` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `setTextWrap` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `setTextFont` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
+| `setFontPreset` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `setTextColor` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_TEXT_HAS_BG)` | `6/7` | `requires_init` | - |
 | `drawString` | `LGFX_OP_TARGET_ANY` | `F0` | `8` | `requires_init` | - |
 | `pushImage` | `LGFX_OP_TARGET_ANY` | `F0` | `11` | `requires_init` | `LGFX_CAP_PUSHIMAGE` |
@@ -361,6 +409,10 @@ If this table and `ops.def` disagree, `ops.def` (and the built driver) wins.
 | `pushSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7/8` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `pushSpriteRegion` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `11/12` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `pushRotateZoom` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `10/11` | `requires_init` | `LGFX_CAP_SPRITE` |
+| `getTouch` | `T0/bad_target` | `F0` | `5` | `requires_init` | `LGFX_CAP_TOUCH` |
+| `getTouchRaw` | `T0/bad_target` | `F0` | `5` | `requires_init` | `LGFX_CAP_TOUCH` |
+| `setTouchCalibrate` | `T0/bad_target` | `F0` | `13` | `requires_init` | `LGFX_CAP_TOUCH` |
+| `calibrateTouch` | `T0/bad_target` | `F0` | `5` | `requires_init` | `LGFX_CAP_TOUCH` |
 <!-- END:generated_ops_matrix -->
 
 If an operation is not listed here, it is not implemented and must return `{error, bad_op}`.
@@ -423,6 +475,7 @@ Fields:
 | `LGFX_CAP_PNG_FILE` | `CAP_PNG_FILE` | `3` | `0x0008` | reserved / not currently op-linked |
 | `LGFX_CAP_LAST_ERROR` | `CAP_LAST_ERROR` | `4` | `0x0010` | `ops.def` feature_cap_bit |
 | `LGFX_CAP_BATCH_VOID` | `CAP_BATCH_VOID` | `5` | `0x0020` | reserved / not currently op-linked |
+| `LGFX_CAP_TOUCH` | `CAP_TOUCH` | `6` | `0x0040` | `ops.def` feature_cap_bit |
 | `LGFX_CAP_SAFE_YIELD_FORGIVING` | `CAP_SAFE_YIELD_FORGIVING` | `8` | `0x0100` | build option (`LGFX_PORT_SAFE_YIELD_CAP`) |
 | `LGFX_CAP_SAFE_YIELD_STRICT` | `CAP_SAFE_YIELD_STRICT` | `9` | `0x0200` | build option (`LGFX_PORT_SAFE_YIELD_CAP`) |
 <!-- END:generated_caps_table -->
@@ -584,9 +637,13 @@ This operation draws a rectangular region from an existing sprite (named by `Tar
 ### Rules
 
 - `DstXi16`, `DstYi16` are destination coordinates on the LCD
+
 - `SrcXi16`, `SrcYi16` are source coordinates inside the sprite
+
 - `Wu16`, `Hu16` are source region size
+
 - `Wu16` and `Hu16` must be non-zero
+
 - Source rectangle validation is **strict**:
   - `SrcXi16 >= 0`
   - `SrcYi16 >= 0`
@@ -595,8 +652,11 @@ This operation draws a rectangular region from an existing sprite (named by `Tar
   - otherwise `{error, bad_args}`
 
 - LCD edge clipping is allowed (off-screen destination pixels may be clipped by the device/LovyanGFX path)
+
 - Optional `TransparentRgb565U16` is an RGB565 color key (`u16`)
+
 - When `TransparentRgb565U16` is provided, pixels matching that color are skipped during compositing
+
 - Requires the sprite handle in `Target` to be currently allocated, else `{error, bad_target}` (or `{error, bad_args}` if your handler chooses that error shape consistently)
 
 ### Response
@@ -642,8 +702,11 @@ This operation draws an existing sprite (named by `Target`) onto the LCD with ro
   - `zoom_y = ZoomYX1024I32 / 1024.0`
 
 - Optional `TransparentRgb565U16` is an RGB565 color key (`u16`)
+
 - When `TransparentRgb565U16` is provided, pixels matching that color are skipped during compositing
+
 - Requires the sprite handle in `Target` to be currently allocated, else `{error, bad_target}` (or `{error, bad_args}` if your handler chooses that error shape consistently)
+
 - LCD edge clipping is allowed (off-screen destination pixels may be clipped by the device/LovyanGFX path)
 
 ### Response

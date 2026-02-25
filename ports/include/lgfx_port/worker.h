@@ -90,7 +90,59 @@ esp_err_t lgfx_worker_device_set_text_size(lgfx_port_t *port, uint8_t target, ui
 esp_err_t lgfx_worker_device_set_text_datum(lgfx_port_t *port, uint8_t target, uint8_t datum);
 esp_err_t lgfx_worker_device_set_text_wrap(lgfx_port_t *port, uint8_t target, bool wrap);
 esp_err_t lgfx_worker_device_set_text_font(lgfx_port_t *port, uint8_t target, uint8_t font);
+
+/*
+ * Font preset wrapper:
+ * - `preset` is a small stable protocol enum (e.g. ascii / jp_small / jp_medium)
+ * - The device layer maps preset IDs to actual LovyanGFX font objects / fallbacks
+ * - Unknown preset IDs return ESP_ERR_INVALID_ARG
+ * - Unconfigured optional presets return ESP_ERR_NOT_SUPPORTED
+ */
+esp_err_t lgfx_worker_device_set_font_preset(lgfx_port_t *port, uint8_t target, uint8_t preset);
+
 esp_err_t lgfx_worker_device_set_text_color(lgfx_port_t *port, uint8_t target, uint16_t fg565, bool has_bg, uint16_t bg565);
+
+/*
+ * Touch (LCD-only by protocol semantics)
+ *
+ * Returned coordinates follow the device implementation:
+ * - get_touch: screen-space coordinates (after calibration mapping if configured)
+ * - get_touch_raw: raw coordinates (controller space)
+ *
+ * If not touched:
+ * - out_touched=false, other outputs set to 0 (best-effort convenience)
+ */
+esp_err_t lgfx_worker_device_get_touch(
+    lgfx_port_t *port,
+    bool *out_touched,
+    int16_t *out_x,
+    int16_t *out_y,
+    uint16_t *out_size);
+
+esp_err_t lgfx_worker_device_get_touch_raw(
+    lgfx_port_t *port,
+    bool *out_touched,
+    int16_t *out_x,
+    int16_t *out_y,
+    uint16_t *out_size);
+
+esp_err_t lgfx_worker_device_set_touch_calibrate(
+    lgfx_port_t *port,
+    const uint16_t params[8]);
+
+/*
+ * Touch calibration (LCD-only)
+ *
+ * Runs the interactive device calibration flow (LovyanGFX calibrateTouch) and
+ * returns the resulting 8x u16 calibration blob.
+ *
+ * Notes:
+ * - This is blocking and user-interactive (tapping corner markers).
+ * - If touch is not attached/configured, device layer should return ESP_ERR_NOT_SUPPORTED.
+ */
+esp_err_t lgfx_worker_device_calibrate_touch(
+    lgfx_port_t *port,
+    uint16_t out_params[8]);
 
 /*
  * Payload ownership contract (draw_string):

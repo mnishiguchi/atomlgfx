@@ -48,6 +48,7 @@ X(setTextSize, lgfx_handle_setTextSize, ATOM_STR("\x0B", "setTextSize"), 6, 6, 0
 X(setTextDatum, lgfx_handle_setTextDatum, ATOM_STR("\x0C", "setTextDatum"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(setTextWrap, lgfx_handle_setTextWrap, ATOM_STR("\x0B", "setTextWrap"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(setTextFont, lgfx_handle_setTextFont, ATOM_STR("\x0B", "setTextFont"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(setFontPreset, lgfx_handle_setFontPreset, ATOM_STR("\x0D", "setFontPreset"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(setTextColor, lgfx_handle_setTextColor, ATOM_STR("\x0C", "setTextColor"), 6, 7, LGFX_F_TEXT_HAS_BG, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(drawString, lgfx_handle_drawString, ATOM_STR("\x0A", "drawString"), 8, 8, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 
@@ -64,6 +65,28 @@ X(deleteSprite, lgfx_handle_deleteSprite, ATOM_STR("\x0C", "deleteSprite"), 5, 5
 X(setPivot, lgfx_handle_setPivot, ATOM_STR("\x08", "setPivot"), 7, 7, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
 X(pushSprite, lgfx_handle_pushSprite, ATOM_STR("\x0A", "pushSprite"), 7, 8, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
 X(pushSpriteRegion, lgfx_handle_pushSpriteRegion, ATOM_STR("\x0E", "pushSpriteRegion"), 11, 12, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
+
 // pushRotateZoom payload semantics:
 // X, Y, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32 [, Transparent565]
 X(pushRotateZoom, lgfx_handle_pushRotateZoom, ATOM_STR("\x0E", "pushRotateZoom"), 10, 11, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
+
+//
+// Touch (LCD-only)
+//
+// - getTouch / getTouchRaw:
+//   - arity 5: {lgfx, ver, Op, 0, 0}
+//   - reply: {ok, none} or {ok, {X, Y, Size}}
+//
+// - setTouchCalibrate:
+//   - arity 13: {lgfx, ver, setTouchCalibrate, 0, 0, P0..P7}
+//   - reply: {ok, ok}
+//
+// - calibrateTouch:
+//   - arity 5: {lgfx, ver, calibrateTouch, 0, 0}
+//   - reply: {ok, {P0..P7}}
+//   - runs interactive calibration on the device (blocking)
+//
+X(getTouch, lgfx_handle_getTouch, ATOM_STR("\x08", "getTouch"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_TOUCH)
+X(getTouchRaw, lgfx_handle_getTouchRaw, ATOM_STR("\x0B", "getTouchRaw"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_TOUCH)
+X(setTouchCalibrate, lgfx_handle_setTouchCalibrate, ATOM_STR("\x11", "setTouchCalibrate"), 13, 13, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_TOUCH)
+X(calibrateTouch, lgfx_handle_calibrateTouch, ATOM_STR("\x0E", "calibrateTouch"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_TOUCH)

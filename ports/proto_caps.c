@@ -27,6 +27,10 @@ uint32_t lgfx_proto_feature_bits(void)
     bits |= LGFX_CAP_PUSHIMAGE;
 #endif
 
+#if LGFX_PORT_SUPPORTS_TOUCH
+    bits |= LGFX_CAP_TOUCH;
+#endif
+
 #if LGFX_PORT_SUPPORTS_JPG_FILE
     bits |= LGFX_CAP_JPG_FILE;
 #endif

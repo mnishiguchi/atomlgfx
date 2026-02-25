@@ -15,11 +15,11 @@
 // wrappers into job-owned memory before enqueueing. The worker frees that memory
 // after the device call returns and before notifying the caller.
 
+#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -66,6 +66,12 @@ typedef enum
     LGFX_JOB_SET_COLOR_DEPTH,
     LGFX_JOB_DISPLAY,
 
+    // Touch (LCD-only)
+    LGFX_JOB_GET_TOUCH,
+    LGFX_JOB_GET_TOUCH_RAW,
+    LGFX_JOB_SET_TOUCH_CALIBRATE,
+    LGFX_JOB_CALIBRATE_TOUCH,
+
     LGFX_JOB_FILL_SCREEN,
     LGFX_JOB_CLEAR,
     LGFX_JOB_DRAW_PIXEL,
@@ -83,6 +89,7 @@ typedef enum
     LGFX_JOB_SET_TEXT_DATUM,
     LGFX_JOB_SET_TEXT_WRAP,
     LGFX_JOB_SET_TEXT_FONT,
+    LGFX_JOB_SET_FONT_PRESET,
     LGFX_JOB_SET_TEXT_COLOR,
     LGFX_JOB_DRAW_STRING,
 
@@ -130,6 +137,31 @@ typedef struct
             uint8_t target;
             uint8_t depth;
         } set_color_depth;
+
+        // Touch (LCD-only)
+        struct
+        {
+            bool touched;
+            int16_t x;
+            int16_t y;
+            uint16_t size;
+        } get_touch;
+        struct
+        {
+            bool touched;
+            int16_t x;
+            int16_t y;
+            uint16_t size;
+        } get_touch_raw;
+        struct
+        {
+            uint16_t params[8];
+        } set_touch_calibrate;
+        struct
+        {
+            uint16_t params[8];
+        } calibrate_touch;
+
         struct
         {
             uint8_t target;
@@ -147,7 +179,6 @@ typedef struct
             int16_t y;
             uint16_t color565;
         } draw_pixel;
-
         struct
         {
             uint8_t target;
@@ -250,6 +281,11 @@ typedef struct
             uint8_t target;
             uint8_t font;
         } set_text_font;
+        struct
+        {
+            uint8_t target;
+            uint8_t preset;
+        } set_font_preset;
 
         struct
         {
@@ -599,6 +635,30 @@ static void lgfx_worker_task_main(void *arg)
                 job->err = lgfx_device_display();
                 break;
 
+            case LGFX_JOB_GET_TOUCH:
+                job->err = lgfx_device_get_touch(
+                    &job->a.get_touch.touched,
+                    &job->a.get_touch.x,
+                    &job->a.get_touch.y,
+                    &job->a.get_touch.size);
+                break;
+
+            case LGFX_JOB_GET_TOUCH_RAW:
+                job->err = lgfx_device_get_touch_raw(
+                    &job->a.get_touch_raw.touched,
+                    &job->a.get_touch_raw.x,
+                    &job->a.get_touch_raw.y,
+                    &job->a.get_touch_raw.size);
+                break;
+
+            case LGFX_JOB_SET_TOUCH_CALIBRATE:
+                job->err = lgfx_device_set_touch_calibrate(job->a.set_touch_calibrate.params);
+                break;
+
+            case LGFX_JOB_CALIBRATE_TOUCH:
+                job->err = lgfx_device_calibrate_touch(job->a.calibrate_touch.params);
+                break;
+
             case LGFX_JOB_FILL_SCREEN:
                 job->err = lgfx_device_fill_screen(
                     job->a.fill_screen.target,
@@ -727,6 +787,12 @@ static void lgfx_worker_task_main(void *arg)
                 job->err = lgfx_device_set_text_font(
                     job->a.set_text_font.target,
                     job->a.set_text_font.font);
+                break;
+
+            case LGFX_JOB_SET_FONT_PRESET:
+                job->err = lgfx_device_set_font_preset(
+                    job->a.set_font_preset.target,
+                    job->a.set_font_preset.preset);
                 break;
 
             case LGFX_JOB_SET_TEXT_COLOR:
@@ -914,6 +980,75 @@ esp_err_t lgfx_worker_device_display(lgfx_port_t *port)
     return lgfx_worker_call(port, &job);
 }
 
+esp_err_t lgfx_worker_device_get_touch(
+    lgfx_port_t *port,
+    bool *out_touched,
+    int16_t *out_x,
+    int16_t *out_y,
+    uint16_t *out_size)
+{
+    if (!out_touched || !out_x || !out_y || !out_size) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    lgfx_job_t job = { .kind = LGFX_JOB_GET_TOUCH };
+    esp_err_t err = lgfx_worker_call(port, &job);
+    if (err == ESP_OK) {
+        *out_touched = job.a.get_touch.touched;
+        *out_x = job.a.get_touch.x;
+        *out_y = job.a.get_touch.y;
+        *out_size = job.a.get_touch.size;
+    }
+    return err;
+}
+
+esp_err_t lgfx_worker_device_get_touch_raw(
+    lgfx_port_t *port,
+    bool *out_touched,
+    int16_t *out_x,
+    int16_t *out_y,
+    uint16_t *out_size)
+{
+    if (!out_touched || !out_x || !out_y || !out_size) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    lgfx_job_t job = { .kind = LGFX_JOB_GET_TOUCH_RAW };
+    esp_err_t err = lgfx_worker_call(port, &job);
+    if (err == ESP_OK) {
+        *out_touched = job.a.get_touch_raw.touched;
+        *out_x = job.a.get_touch_raw.x;
+        *out_y = job.a.get_touch_raw.y;
+        *out_size = job.a.get_touch_raw.size;
+    }
+    return err;
+}
+
+esp_err_t lgfx_worker_device_set_touch_calibrate(lgfx_port_t *port, const uint16_t params[8])
+{
+    if (!params) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    lgfx_job_t job = { .kind = LGFX_JOB_SET_TOUCH_CALIBRATE };
+    memcpy(job.a.set_touch_calibrate.params, params, sizeof(job.a.set_touch_calibrate.params));
+    return lgfx_worker_call(port, &job);
+}
+
+esp_err_t lgfx_worker_device_calibrate_touch(lgfx_port_t *port, uint16_t out_params[8])
+{
+    if (!out_params) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    lgfx_job_t job = { .kind = LGFX_JOB_CALIBRATE_TOUCH };
+    esp_err_t err = lgfx_worker_call(port, &job);
+    if (err == ESP_OK) {
+        memcpy(out_params, job.a.calibrate_touch.params, sizeof(job.a.calibrate_touch.params));
+    }
+    return err;
+}
+
 esp_err_t lgfx_worker_device_fill_screen(lgfx_port_t *port, uint8_t target, uint16_t color565)
 {
     lgfx_job_t job = {
@@ -1078,6 +1213,15 @@ esp_err_t lgfx_worker_device_set_text_font(lgfx_port_t *port, uint8_t target, ui
     return lgfx_worker_call(port, &job);
 }
 
+esp_err_t lgfx_worker_device_set_font_preset(lgfx_port_t *port, uint8_t target, uint8_t preset)
+{
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_SET_FONT_PRESET,
+        .a.set_font_preset = { .target = target, .preset = preset }
+    };
+    return lgfx_worker_call(port, &job);
+}
+
 esp_err_t lgfx_worker_device_set_text_color(lgfx_port_t *port, uint8_t target, uint16_t fg565, bool has_bg, uint16_t bg565)
 {
     lgfx_job_t job = {
@@ -1178,8 +1322,7 @@ esp_err_t lgfx_worker_device_create_sprite(
             .target = target,
             .w = w,
             .h = h,
-            .color_depth = color_depth
-        }
+            .color_depth = color_depth }
     };
     return lgfx_worker_call(port, &job);
 }
@@ -1204,8 +1347,7 @@ esp_err_t lgfx_worker_device_set_pivot(
         .a.set_pivot = {
             .target = target,
             .x = x,
-            .y = y
-        }
+            .y = y }
     };
     return lgfx_worker_call(port, &job);
 }
@@ -1225,8 +1367,7 @@ esp_err_t lgfx_worker_device_push_sprite(
             .x = x,
             .y = y,
             .has_transparent = has_transparent,
-            .transparent565 = transparent565
-        }
+            .transparent565 = transparent565 }
     };
     return lgfx_worker_call(port, &job);
 }
@@ -1254,8 +1395,7 @@ esp_err_t lgfx_worker_device_push_sprite_region(
             .w = w,
             .h = h,
             .has_transparent = has_transparent,
-            .transparent565 = transparent565
-        }
+            .transparent565 = transparent565 }
     };
     return lgfx_worker_call(port, &job);
 }
@@ -1281,8 +1421,7 @@ esp_err_t lgfx_worker_device_push_rotate_zoom(
             .zoom_x = zoom_x,
             .zoom_y = zoom_y,
             .has_transparent = has_transparent,
-            .transparent565 = transparent565
-        }
+            .transparent565 = transparent565 }
     };
     return lgfx_worker_call(port, &job);
 }

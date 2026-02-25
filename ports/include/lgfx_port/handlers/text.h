@@ -15,6 +15,7 @@ term lgfx_handle_setTextSize(Context *ctx, lgfx_port_t *port, const lgfx_request
 term lgfx_handle_setTextDatum(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req);
 term lgfx_handle_setTextWrap(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req);
 term lgfx_handle_setTextFont(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req);
+term lgfx_handle_setFontPreset(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req);
 term lgfx_handle_setTextColor(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req);
 term lgfx_handle_drawString(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req);
 
