@@ -7,34 +7,33 @@
 #include "context.h"
 #include "term.h"
 
-// NOTE: device calls now go through the worker wrappers.
+// Device calls go through worker wrappers.
 #include "lgfx_port/worker.h"
 
 #include "lgfx_port/color.h"
-#include "lgfx_port/handler_common.h"
+#include "lgfx_port/reply_common.h"
 #include "lgfx_port/lgfx_port.h"
 #include "lgfx_port/term_conv.h"
 #include "lgfx_port/term_decode.h"
 #include "lgfx_port/term_encode.h"
-#include "lgfx_port/validate.h"
 
-// Envelope checks (version/arity/flags/target/init-state) are centralized in
-// lgfx_port.c via ops.def metadata. Handlers here only decode payload fields.
+// Request envelope validation (version/arity/flags/target/init-state) is
+// centralized in lgfx_port.c via ops.def metadata. Handlers only decode payload fields.
 
 static term do_set_text_size(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     // {lgfx, ver, setTextSize, target, flags, Size}
-    term size_t = term_get_tuple_element(req->request_tuple, 5);
+    term size_term = term_get_tuple_element(req->request_tuple, 5);
 
     uint32_t size = 0;
-    if (!lgfx_term_to_u32(size_t, &size) || size == 0 || size > 255) {
+    if (!lgfx_term_to_u32(size_term, &size) || size == 0 || size > 255) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_set_text_size(port, (uint8_t) req->target, (uint8_t) size));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok); // {ok, ok}
+    return reply_ok(ctx, port, req, port->atoms.ok); // {ok, ok}
 }
 
 static term do_set_text_datum(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -50,7 +49,7 @@ static term do_set_text_datum(Context *ctx, lgfx_port_t *port, const lgfx_reques
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_set_text_datum(port, (uint8_t) req->target, (uint8_t) datum));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok); // {ok, ok}
+    return reply_ok(ctx, port, req, port->atoms.ok); // {ok, ok}
 }
 
 static term do_set_text_wrap(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -80,7 +79,7 @@ static term do_set_text_wrap(Context *ctx, lgfx_port_t *port, const lgfx_request
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_set_text_wrap(port, (uint8_t) req->target, wrap));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok); // {ok, ok}
+    return reply_ok(ctx, port, req, port->atoms.ok); // {ok, ok}
 }
 
 static term do_set_text_font(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -96,7 +95,7 @@ static term do_set_text_font(Context *ctx, lgfx_port_t *port, const lgfx_request
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_set_text_font(port, (uint8_t) req->target, (uint8_t) font));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok); // {ok, ok}
+    return reply_ok(ctx, port, req, port->atoms.ok); // {ok, ok}
 }
 
 static term do_set_text_color(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -107,22 +106,19 @@ static term do_set_text_color(Context *ctx, lgfx_port_t *port, const lgfx_reques
     bool has_bg = ((req->flags & LGFX_F_TEXT_HAS_BG) != 0);
 
     term fg_t = term_get_tuple_element(req->request_tuple, 5);
-    uint32_t fg888 = 0;
+    uint16_t fg565 = 0;
 
-    if (!lgfx_term_to_u32(fg_t, &fg888) || !lgfx_validate_color888(fg888)) {
+    if (!lgfx_term_to_color565(fg_t, &fg565)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    uint32_t bg888 = 0;
+    uint16_t bg565 = 0;
     if (has_bg) {
         term bg_t = term_get_tuple_element(req->request_tuple, 6);
-        if (!lgfx_term_to_u32(bg_t, &bg888) || !lgfx_validate_color888(bg888)) {
+        if (!lgfx_term_to_color565(bg_t, &bg565)) {
             return reply_error(ctx, port, req, port->atoms.bad_args, 0);
         }
     }
-
-    uint16_t fg565 = lgfx_color888_to_rgb565(fg888);
-    uint16_t bg565 = lgfx_color888_to_rgb565(bg888);
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_set_text_color(
@@ -132,7 +128,7 @@ static term do_set_text_color(Context *ctx, lgfx_port_t *port, const lgfx_reques
             has_bg,
             bg565));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok); // {ok, ok}
+    return reply_ok(ctx, port, req, port->atoms.ok); // {ok, ok}
 }
 
 static term do_draw_string(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -142,13 +138,13 @@ static term do_draw_string(Context *ctx, lgfx_port_t *port, const lgfx_request_t
     term y_t = term_get_tuple_element(req->request_tuple, 6);
     term text_t = term_get_tuple_element(req->request_tuple, 7);
 
-    int32_t x = 0;
-    int32_t y = 0;
+    int16_t x = 0;
+    int16_t y = 0;
 
-    if (!lgfx_term_to_i32(x_t, &x) || !lgfx_validate_i16(x)) {
+    if (!lgfx_term_to_i16(x_t, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_term_to_i32(y_t, &y) || !lgfx_validate_i16(y)) {
+    if (!lgfx_term_to_i16(y_t, &y)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
     if (!term_is_binary(text_t)) {
@@ -175,12 +171,12 @@ static term do_draw_string(Context *ctx, lgfx_port_t *port, const lgfx_request_t
         lgfx_worker_device_draw_string(
             port,
             (uint8_t) req->target,
-            (int16_t) x,
-            (int16_t) y,
+            x,
+            y,
             bytes,
             (uint16_t) len32));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok); // {ok, ok}
+    return reply_ok(ctx, port, req, port->atoms.ok); // {ok, ok}
 }
 
 term lgfx_handle_setTextSize(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)

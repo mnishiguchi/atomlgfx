@@ -3,6 +3,7 @@ defmodule SampleApp do
 
   alias SampleApp.Port
   alias SampleApp.ProtocolSmoke
+  alias SampleApp.SpriteProtocolSmoke
   alias SampleApp.PushImageStress
   alias SampleApp.DrawStringStress
   alias SampleApp.MovingIcons
@@ -20,29 +21,36 @@ defmodule SampleApp do
   # -----------------------------------------------------------------------------
 
   # AtomVM app entrypoint uses this.
+  #
+  # Common modes:
+  # - :smoke  -> protocol + display boot + sprite smoke
+  # - :stress -> push_image + draw_string stress
+  # - :demo   -> moving_icons only
+  # - :all    -> full_demo (stress + sprite smoke + moving_icons)
+  #
+  # Canonical modes also supported:
+  # :protocol_smoke, :display_boot, :sprite_protocol_smoke,
+  # :push_image_stress, :draw_string_stress, :stress_suite,
+  # :unicode_probe, :moving_icons, :full_demo
   def start do
     start(@default_mode)
   end
 
-  # Manual mode selection if you want:
-  #   SampleApp.start(:protocol_smoke)
-  #   SampleApp.start(:push_image_stress)
-  #   SampleApp.start(:draw_string_stress)
-  #   SampleApp.start(:stress_suite)
-  #   SampleApp.start(:unicode_probe)
-  #   SampleApp.start(:full_demo)
-  #   SampleApp.start(:moving_icons)
   def start(mode) when is_atom(mode) do
     port = Port.open()
     IO.puts("Port opened")
 
-    case run_mode(port, mode) do
-      :ok ->
-        :ok
+    try do
+      case run_mode(port, mode) do
+        :ok ->
+          :ok
 
-      {:error, reason} = err ->
-        IO.puts("sample_app failed mode=#{inspect(mode)} reason=#{Port.format_error(reason)}")
-        err
+        {:error, reason} = err ->
+          IO.puts("sample_app failed mode=#{inspect(mode)} reason=#{Port.format_error(reason)}")
+          err
+      end
+    after
+      safe_close_port(port)
     end
   end
 
@@ -50,9 +58,37 @@ defmodule SampleApp do
   # Mode dispatch
   # -----------------------------------------------------------------------------
 
+  # Friendly aliases
+  defp run_mode(port, :smoke), do: run_mode(port, :smoke_suite)
+  defp run_mode(port, :stress), do: run_mode(port, :stress_suite)
+  defp run_mode(port, :demo), do: run_mode(port, :moving_icons)
+  defp run_mode(port, :all), do: run_mode(port, :full_demo)
+
+  # Bring-up only (protocol smoke + init/display/rotation/text baseline)
+  defp run_mode(port, :display_boot) do
+    boot_for_display(port)
+  end
+
+  # Protocol-only checks (no display init required)
   defp run_mode(port, :protocol_smoke) do
     with :ok <- step("ping", Port.ping(port)),
          :ok <- step("protocol_smoke", ProtocolSmoke.run(port)) do
+      :ok
+    end
+  end
+
+  # Display bring-up + sprite protocol checks
+  defp run_mode(port, :sprite_protocol_smoke) do
+    with :ok <- boot_for_display(port),
+         :ok <- step("sprite_protocol_smoke", SpriteProtocolSmoke.run(port)) do
+      :ok
+    end
+  end
+
+  # Daily smoke path (boot_for_display already includes protocol_smoke)
+  defp run_mode(port, :smoke_suite) do
+    with :ok <- boot_for_display(port),
+         :ok <- step("sprite_protocol_smoke", SpriteProtocolSmoke.run(port)) do
       :ok
     end
   end
@@ -91,12 +127,13 @@ defmodule SampleApp do
     with {:ok, w, h} <- boot_for_display_with_dims(port),
          :ok <- step("push_image_stress", PushImageStress.run(port, @push_rounds)),
          :ok <- step("draw_string_stress", DrawStringStress.run(port, @text_rounds)),
+         :ok <- step("sprite_protocol_smoke", SpriteProtocolSmoke.run(port)),
          :ok <- MovingIcons.run(port, w, h) do
       :ok
     end
   end
 
-  # Default interactive mode: moving icons only
+  # Interactive demo only
   defp run_mode(port, :moving_icons) do
     with {:ok, w, h} <- boot_for_display_with_dims(port),
          :ok <- MovingIcons.run(port, w, h) do
@@ -108,7 +145,9 @@ defmodule SampleApp do
     IO.puts("unknown mode=#{inspect(mode)}")
 
     IO.puts(
-      "valid modes: :protocol_smoke, :push_image_stress, :draw_string_stress, :stress_suite, :unicode_probe, :full_demo, :moving_icons"
+      "valid modes: :protocol_smoke, :display_boot, :sprite_protocol_smoke, :smoke_suite (:smoke), " <>
+        ":push_image_stress, :draw_string_stress, :stress_suite (:stress), :unicode_probe, " <>
+        ":moving_icons (:demo), :full_demo (:all)"
     )
 
     {:error, {:unknown_mode, mode}}
@@ -230,6 +269,18 @@ defmodule SampleApp do
       {h, w}
     else
       {w, h}
+    end
+  end
+
+  defp safe_close_port(port) do
+    case Port.close(port) do
+      :ok ->
+        IO.puts("Port closed")
+        :ok
+
+      {:error, reason} ->
+        IO.puts("Port close failed: #{Port.format_error(reason)}")
+        :ok
     end
   end
 end

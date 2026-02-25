@@ -6,52 +6,47 @@
 #include "context.h"
 #include "term.h"
 
-// NOTE: device calls now go through the worker wrappers.
+// Device calls go through worker wrappers.
 #include "lgfx_port/worker.h"
 
 #include "lgfx_port/color.h"
-#include "lgfx_port/handler_common.h"
+#include "lgfx_port/reply_common.h"
 #include "lgfx_port/lgfx_port.h"
 #include "lgfx_port/term_conv.h"
 #include "lgfx_port/term_decode.h"
 #include "lgfx_port/term_encode.h"
-#include "lgfx_port/validate.h"
 
-// Envelope checks (version/arity/flags/target/init-state) are centralized in
-// lgfx_port.c via ops.def metadata. Handlers here only decode payload fields.
+// Request envelope validation (version/arity/flags/target/init-state) is
+// centralized in lgfx_port.c via ops.def metadata. Handlers only decode payload fields.
 
 static term do_fill_screen(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     term color_t = term_get_tuple_element(req->request_tuple, 5);
 
-    uint32_t color888 = 0;
-    if (!lgfx_term_to_u32(color_t, &color888) || !lgfx_validate_color888(color888)) {
+    uint16_t color565 = 0;
+    if (!lgfx_term_to_color565(color_t, &color565)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-
-    uint16_t color565 = lgfx_color888_to_rgb565(color888);
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_fill_screen(port, (uint8_t) req->target, color565));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 static term do_clear(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     term color_t = term_get_tuple_element(req->request_tuple, 5);
 
-    uint32_t color888 = 0;
-    if (!lgfx_term_to_u32(color_t, &color888) || !lgfx_validate_color888(color888)) {
+    uint16_t color565 = 0;
+    if (!lgfx_term_to_color565(color_t, &color565)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-
-    uint16_t color565 = lgfx_color888_to_rgb565(color888);
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_clear(port, (uint8_t) req->target, color565));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 static term do_draw_pixel(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -62,7 +57,7 @@ static term do_draw_pixel(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
 
     int16_t x = 0;
     int16_t y = 0;
-    uint32_t color888 = 0;
+    uint16_t color565 = 0;
 
     if (!lgfx_term_to_i16(x_t, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -70,11 +65,9 @@ static term do_draw_pixel(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     if (!lgfx_term_to_i16(y_t, &y)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_term_to_u32(color_t, &color888) || !lgfx_validate_color888(color888)) {
+    if (!lgfx_term_to_color565(color_t, &color565)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-
-    uint16_t color565 = lgfx_color888_to_rgb565(color888);
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_draw_pixel(
@@ -84,7 +77,7 @@ static term do_draw_pixel(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
             y,
             color565));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 static term do_draw_fast_vline(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -97,7 +90,7 @@ static term do_draw_fast_vline(Context *ctx, lgfx_port_t *port, const lgfx_reque
     int16_t x = 0;
     int16_t y = 0;
     uint16_t h = 0;
-    uint32_t color888 = 0;
+    uint16_t color565 = 0;
 
     if (!lgfx_term_to_i16(x_t, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -108,11 +101,9 @@ static term do_draw_fast_vline(Context *ctx, lgfx_port_t *port, const lgfx_reque
     if (!lgfx_term_to_u16(h_t, &h) || h == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_term_to_u32(color_t, &color888) || !lgfx_validate_color888(color888)) {
+    if (!lgfx_term_to_color565(color_t, &color565)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-
-    uint16_t color565 = lgfx_color888_to_rgb565(color888);
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_draw_fast_vline(
@@ -123,7 +114,7 @@ static term do_draw_fast_vline(Context *ctx, lgfx_port_t *port, const lgfx_reque
             h,
             color565));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 static term do_draw_fast_hline(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -136,7 +127,7 @@ static term do_draw_fast_hline(Context *ctx, lgfx_port_t *port, const lgfx_reque
     int16_t x = 0;
     int16_t y = 0;
     uint16_t w = 0;
-    uint32_t color888 = 0;
+    uint16_t color565 = 0;
 
     if (!lgfx_term_to_i16(x_t, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -147,11 +138,9 @@ static term do_draw_fast_hline(Context *ctx, lgfx_port_t *port, const lgfx_reque
     if (!lgfx_term_to_u16(w_t, &w) || w == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_term_to_u32(color_t, &color888) || !lgfx_validate_color888(color888)) {
+    if (!lgfx_term_to_color565(color_t, &color565)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-
-    uint16_t color565 = lgfx_color888_to_rgb565(color888);
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_draw_fast_hline(
@@ -162,7 +151,7 @@ static term do_draw_fast_hline(Context *ctx, lgfx_port_t *port, const lgfx_reque
             w,
             color565));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 static term do_draw_line(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -177,7 +166,7 @@ static term do_draw_line(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
     int16_t y0 = 0;
     int16_t x1 = 0;
     int16_t y1 = 0;
-    uint32_t color888 = 0;
+    uint16_t color565 = 0;
 
     if (!lgfx_term_to_i16(x0_t, &x0)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -191,11 +180,9 @@ static term do_draw_line(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
     if (!lgfx_term_to_i16(y1_t, &y1)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_term_to_u32(color_t, &color888) || !lgfx_validate_color888(color888)) {
+    if (!lgfx_term_to_color565(color_t, &color565)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-
-    uint16_t color565 = lgfx_color888_to_rgb565(color888);
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_draw_line(
@@ -207,7 +194,7 @@ static term do_draw_line(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
             y1,
             color565));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 static term do_draw_rect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -222,7 +209,7 @@ static term do_draw_rect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
     int16_t y = 0;
     uint16_t w = 0;
     uint16_t h = 0;
-    uint32_t color888 = 0;
+    uint16_t color565 = 0;
 
     if (!lgfx_term_to_i16(x_t, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -236,11 +223,9 @@ static term do_draw_rect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
     if (!lgfx_term_to_u16(h_t, &h) || h == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_term_to_u32(color_t, &color888) || !lgfx_validate_color888(color888)) {
+    if (!lgfx_term_to_color565(color_t, &color565)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-
-    uint16_t color565 = lgfx_color888_to_rgb565(color888);
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_draw_rect(
@@ -252,7 +237,7 @@ static term do_draw_rect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
             h,
             color565));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 static term do_fill_rect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -267,7 +252,7 @@ static term do_fill_rect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
     int16_t y = 0;
     uint16_t w = 0;
     uint16_t h = 0;
-    uint32_t color888 = 0;
+    uint16_t color565 = 0;
 
     if (!lgfx_term_to_i16(x_t, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -281,11 +266,9 @@ static term do_fill_rect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
     if (!lgfx_term_to_u16(h_t, &h) || h == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_term_to_u32(color_t, &color888) || !lgfx_validate_color888(color888)) {
+    if (!lgfx_term_to_color565(color_t, &color565)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-
-    uint16_t color565 = lgfx_color888_to_rgb565(color888);
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_fill_rect(
@@ -297,7 +280,7 @@ static term do_fill_rect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
             h,
             color565));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 static term do_draw_circle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -310,7 +293,7 @@ static term do_draw_circle(Context *ctx, lgfx_port_t *port, const lgfx_request_t
     int16_t x = 0;
     int16_t y = 0;
     uint16_t r = 0;
-    uint32_t color888 = 0;
+    uint16_t color565 = 0;
 
     if (!lgfx_term_to_i16(x_t, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -321,11 +304,9 @@ static term do_draw_circle(Context *ctx, lgfx_port_t *port, const lgfx_request_t
     if (!lgfx_term_to_u16(r_t, &r) || r == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_term_to_u32(color_t, &color888) || !lgfx_validate_color888(color888)) {
+    if (!lgfx_term_to_color565(color_t, &color565)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-
-    uint16_t color565 = lgfx_color888_to_rgb565(color888);
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_draw_circle(
@@ -336,7 +317,7 @@ static term do_draw_circle(Context *ctx, lgfx_port_t *port, const lgfx_request_t
             r,
             color565));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 static term do_fill_circle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -349,7 +330,7 @@ static term do_fill_circle(Context *ctx, lgfx_port_t *port, const lgfx_request_t
     int16_t x = 0;
     int16_t y = 0;
     uint16_t r = 0;
-    uint32_t color888 = 0;
+    uint16_t color565 = 0;
 
     if (!lgfx_term_to_i16(x_t, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -360,11 +341,9 @@ static term do_fill_circle(Context *ctx, lgfx_port_t *port, const lgfx_request_t
     if (!lgfx_term_to_u16(r_t, &r) || r == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_term_to_u32(color_t, &color888) || !lgfx_validate_color888(color888)) {
+    if (!lgfx_term_to_color565(color_t, &color565)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-
-    uint16_t color565 = lgfx_color888_to_rgb565(color888);
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_fill_circle(
@@ -375,7 +354,7 @@ static term do_fill_circle(Context *ctx, lgfx_port_t *port, const lgfx_request_t
             r,
             color565));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 typedef struct
@@ -410,17 +389,15 @@ static term do_draw_triangle(Context *ctx, lgfx_port_t *port, const lgfx_request
     term color_t = term_get_tuple_element(req->request_tuple, 11);
 
     lgfx_triangle_i16_t tri = { 0 };
-    uint32_t color888 = 0;
+    uint16_t color565 = 0;
 
     if (!decode_triangle_i16(req, &tri)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    if (!lgfx_term_to_u32(color_t, &color888) || !lgfx_validate_color888(color888)) {
+    if (!lgfx_term_to_color565(color_t, &color565)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-
-    uint16_t color565 = lgfx_color888_to_rgb565(color888);
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_draw_triangle(
@@ -431,7 +408,7 @@ static term do_draw_triangle(Context *ctx, lgfx_port_t *port, const lgfx_request
             tri.x2, tri.y2,
             color565));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 static term do_fill_triangle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -439,17 +416,15 @@ static term do_fill_triangle(Context *ctx, lgfx_port_t *port, const lgfx_request
     term color_t = term_get_tuple_element(req->request_tuple, 11);
 
     lgfx_triangle_i16_t tri = { 0 };
-    uint32_t color888 = 0;
+    uint16_t color565 = 0;
 
     if (!decode_triangle_i16(req, &tri)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    if (!lgfx_term_to_u32(color_t, &color888) || !lgfx_validate_color888(color888)) {
+    if (!lgfx_term_to_color565(color_t, &color565)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-
-    uint16_t color565 = lgfx_color888_to_rgb565(color888);
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_fill_triangle(
@@ -460,7 +435,7 @@ static term do_fill_triangle(Context *ctx, lgfx_port_t *port, const lgfx_request
             tri.x2, tri.y2,
             color565));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 term lgfx_handle_fillScreen(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)

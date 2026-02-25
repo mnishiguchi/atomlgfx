@@ -5,22 +5,25 @@
 #include <stddef.h>
 
 #include "lgfx_port/caps.h"
+#include "lgfx_port/ops_enum.h"
 
 // Protocol enum values are part of wire-level behavior. Guard against accidental drift.
 _Static_assert(CHAR_BIT == 8, "This code assumes 8-bit bytes");
 _Static_assert(LGFX_OP_TARGET_BAD_TARGET == 0, "LGFX_OP_TARGET_BAD_TARGET must be 0");
 _Static_assert(LGFX_OP_TARGET_UNSUPPORTED == 1, "LGFX_OP_TARGET_UNSUPPORTED must be 1");
 _Static_assert(LGFX_OP_TARGET_ANY == 2, "LGFX_OP_TARGET_ANY must be 2");
+_Static_assert(LGFX_OP_TARGET_SPRITE_ONLY == 3, "LGFX_OP_TARGET_SPRITE_ONLY must be 3");
 _Static_assert(LGFX_OP_STATE_ANY == 0, "LGFX_OP_STATE_ANY must be 0");
 _Static_assert(LGFX_OP_STATE_REQUIRES_INIT == 1, "LGFX_OP_STATE_REQUIRES_INIT must be 1");
 
 // Keep layout deterministic and compact.
-_Static_assert(sizeof(lgfx_op_meta_t) == 8, "lgfx_op_meta_t must stay 8 bytes");
+_Static_assert(sizeof(lgfx_op_meta_t) == 12, "lgfx_op_meta_t must stay 12 bytes");
 _Static_assert(offsetof(lgfx_op_meta_t, allowed_flags_mask) == 0, "allowed_flags_mask offset drift");
-_Static_assert(offsetof(lgfx_op_meta_t, min_arity) == 4, "min_arity offset drift");
-_Static_assert(offsetof(lgfx_op_meta_t, max_arity) == 5, "max_arity offset drift");
-_Static_assert(offsetof(lgfx_op_meta_t, target_policy) == 6, "target_policy offset drift");
-_Static_assert(offsetof(lgfx_op_meta_t, state_policy) == 7, "state_policy offset drift");
+_Static_assert(offsetof(lgfx_op_meta_t, feature_cap_bit) == 4, "feature_cap_bit offset drift");
+_Static_assert(offsetof(lgfx_op_meta_t, min_arity) == 8, "min_arity offset drift");
+_Static_assert(offsetof(lgfx_op_meta_t, max_arity) == 9, "max_arity offset drift");
+_Static_assert(offsetof(lgfx_op_meta_t, target_policy) == 10, "target_policy offset drift");
+_Static_assert(offsetof(lgfx_op_meta_t, state_policy) == 11, "state_policy offset drift");
 
 // Validate ops.def values at compile time.
 #define X(op_name, _handler_fn, _atom_str, min_arity_v, max_arity_v, allowed_flags_mask_v, target_policy_v, state_policy_v, feature_cap_bit_v) \
@@ -31,10 +34,11 @@ _Static_assert(offsetof(lgfx_op_meta_t, state_policy) == 7, "state_policy offset
     _Static_assert((target_policy_v) >= 0 && (target_policy_v) <= UINT8_MAX, #op_name " target_policy out of uint8_t range");                   \
     _Static_assert(((target_policy_v) == LGFX_OP_TARGET_BAD_TARGET) ||                                                                           \
                        ((target_policy_v) == LGFX_OP_TARGET_UNSUPPORTED) ||                                                                      \
-                       ((target_policy_v) == LGFX_OP_TARGET_ANY),                                                                                \
+                       ((target_policy_v) == LGFX_OP_TARGET_ANY) ||                                                                              \
+                       ((target_policy_v) == LGFX_OP_TARGET_SPRITE_ONLY),                                                                        \
                    #op_name " invalid target_policy value");                                                                                      \
     _Static_assert((state_policy_v) >= 0 && (state_policy_v) <= UINT8_MAX, #op_name " state_policy out of uint8_t range");                      \
-    _Static_assert(((state_policy_v) == LGFX_OP_STATE_ANY) ||                                                                                     \
+    _Static_assert(((state_policy_v) == LGFX_OP_STATE_ANY) ||                                                                                    \
                        ((state_policy_v) == LGFX_OP_STATE_REQUIRES_INIT),                                                                        \
                    #op_name " invalid state_policy value");                                                                                       \
     _Static_assert(((uint32_t) (feature_cap_bit_v)) == (feature_cap_bit_v), #op_name " feature_cap_bit out of uint32_t range");                 \
@@ -43,35 +47,60 @@ _Static_assert(offsetof(lgfx_op_meta_t, state_policy) == 7, "state_policy offset
 #include "lgfx_port/ops.def"
 #undef X
 
-const lgfx_op_meta_t *lgfx_op_meta_lookup(const lgfx_port_t *port, term op_atom)
-{
 #define X(op_name, _handler_fn, _atom_str, min_arity_v, max_arity_v, allowed_flags_mask_v, target_policy_v, state_policy_v, feature_cap_bit_v) \
-    if (op_atom == port->atoms.op_name) {                                                                                                         \
-        static const lgfx_op_meta_t meta = {                                                                                                      \
-            .allowed_flags_mask = (uint32_t) (allowed_flags_mask_v),                                                                              \
-            .min_arity = (uint8_t) (min_arity_v),                                                                                                 \
-            .max_arity = (uint8_t) (max_arity_v),                                                                                                 \
-            .target_policy = (uint8_t) (target_policy_v),                                                                                         \
-            .state_policy = (uint8_t) (state_policy_v),                                                                                           \
-        };                                                                                                                                        \
-        return &meta;                                                                                                                             \
+    [LGFX_OP_##op_name] = {                                                                                                                      \
+        .allowed_flags_mask = (uint32_t) (allowed_flags_mask_v),                                                                                \
+        .feature_cap_bit = (uint32_t) (feature_cap_bit_v),                                                                                      \
+        .min_arity = (uint8_t) (min_arity_v),                                                                                                   \
+        .max_arity = (uint8_t) (max_arity_v),                                                                                                   \
+        .target_policy = (uint8_t) (target_policy_v),                                                                                           \
+        .state_policy = (uint8_t) (state_policy_v),                                                                                             \
+    },
+
+static const lgfx_op_meta_t s_op_meta[LGFX_OP_COUNT] = {
+#include "lgfx_port/ops.def"
+};
+#undef X
+
+#define X(op_name, _handler_fn, _atom_str, ...) [LGFX_OP_##op_name] = #op_name,
+
+static const char *const s_op_names[LGFX_OP_COUNT] = {
+#include "lgfx_port/ops.def"
+};
+#undef X
+
+_Static_assert((sizeof(s_op_meta) / sizeof(s_op_meta[0])) == LGFX_OP_COUNT, "s_op_meta size mismatch");
+_Static_assert((sizeof(s_op_names) / sizeof(s_op_names[0])) == LGFX_OP_COUNT, "s_op_names size mismatch");
+
+static int lgfx_op_index_from_atom(const lgfx_port_t *port, term op_atom)
+{
+#define X(op_name, _handler_fn, _atom_str, ...) \
+    if (op_atom == port->atoms.op_name) {       \
+        return LGFX_OP_##op_name;               \
     }
 
 #include "lgfx_port/ops.def"
 #undef X
 
-    return NULL;
+    return -1;
+}
+
+const lgfx_op_meta_t *lgfx_op_meta_lookup(const lgfx_port_t *port, term op_atom)
+{
+    int op_index = lgfx_op_index_from_atom(port, op_atom);
+    if (op_index < 0) {
+        return NULL;
+    }
+
+    return &s_op_meta[op_index];
 }
 
 const char *lgfx_op_name_from_atom(const lgfx_port_t *port, term op_atom)
 {
-#define X(op_name, _handler_fn, _atom_str, ...) \
-    if (op_atom == port->atoms.op_name) {       \
-        return #op_name;                        \
+    int op_index = lgfx_op_index_from_atom(port, op_atom);
+    if (op_index < 0) {
+        return "unknown_op";
     }
 
-#include "lgfx_port/ops.def"
-#undef X
-
-    return "unknown_op";
+    return s_op_names[op_index];
 }

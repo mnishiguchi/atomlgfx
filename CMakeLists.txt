@@ -1,3 +1,5 @@
+# CMakeLists.txt
+
 # -----------------------------------------------------------------------------
 # Paths
 # -----------------------------------------------------------------------------
@@ -27,6 +29,7 @@ idf_component_register(
     "ports/handlers/primitives.c"
     "ports/handlers/text.c"
     "ports/handlers/images.c"
+    "ports/handlers/sprites.c"
 
     # Device adapter core
     "src/lgfx_device_state.cpp"

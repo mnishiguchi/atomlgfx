@@ -4,23 +4,18 @@
 #include <stdint.h>
 
 #include "lgfx_port/caps.h"
-#include "lgfx_port/handler_common.h"
+#include "lgfx_port/reply_common.h"
 #include "lgfx_port/proto_caps.h"
 #include "lgfx_port/term_encode.h"
 #include "term.h"
 
-#ifndef LGFX_PORT_SUPPORTS_LAST_ERROR
-#define LGFX_PORT_SUPPORTS_LAST_ERROR 1
-#endif
-
-// Envelope checks (version/arity/flags/target/init-state) are centralized in
-// lgfx_port.c via ops.def metadata. Handlers here only decode payload fields.
+// Request envelope validation (version/arity/flags/target/init-state) is
+// centralized in lgfx_port.c via ops.def metadata. Handlers only decode payload fields.
 
 static term do_get_caps(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     uint32_t feature_bits = lgfx_proto_feature_bits();
-
-    uint32_t max_sprites = (feature_bits & (uint32_t) LGFX_CAP_SPRITE) ? (uint32_t) LGFX_PORT_MAX_SPRITES : 0u;
+    uint32_t max_sprites = (uint32_t) lgfx_proto_max_sprites();
 
     term elems[5] = {
         port->atoms.caps,
@@ -32,17 +27,16 @@ static term do_get_caps(Context *ctx, lgfx_port_t *port, const lgfx_request_t *r
 
     term payload = lgfx_make_tuple(ctx, 5, elems);
     if (term_is_invalid_term(payload)) {
-        // Important: this must set last_error too.
-        return reply_error(ctx, port, req, port->atoms.no_memory, 0);
+        return reply_error(ctx, port, req, port->atoms.no_memory, (int32_t) ESP_ERR_NO_MEM);
     }
 
-    return lgfx_reply_ok(ctx, port, payload);
+    return reply_ok(ctx, port, req, payload);
 }
 
 static term do_get_last_error(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
 #if LGFX_PORT_SUPPORTS_LAST_ERROR
-    // Snapshot first; clear only after we successfully encode + return the payload.
+    // Snapshot first. Clear only after the final {ok, Payload} reply is encoded.
     lgfx_last_error_t e = port->last_error;
 
     term elems[6] = {
@@ -56,12 +50,18 @@ static term do_get_last_error(Context *ctx, lgfx_port_t *port, const lgfx_reques
 
     term payload = lgfx_make_tuple(ctx, 6, elems);
     if (term_is_invalid_term(payload)) {
-        // Important: this must set last_error too.
-        return reply_error(ctx, port, req, port->atoms.no_memory, 0);
+        // Payload encoding failed; record no_memory as the latest error.
+        return reply_error(ctx, port, req, port->atoms.no_memory, (int32_t) ESP_ERR_NO_MEM);
+    }
+
+    term reply = reply_ok(ctx, port, req, payload);
+    if (term_is_invalid_term(reply)) {
+        // reply_ok already recorded last_error = no_memory.
+        return reply;
     }
 
     lgfx_last_error_clear(port);
-    return lgfx_reply_ok(ctx, port, payload);
+    return reply;
 #else
     return reply_error(ctx, port, req, port->atoms.unsupported, 0);
 #endif
@@ -69,8 +69,7 @@ static term do_get_last_error(Context *ctx, lgfx_port_t *port, const lgfx_reques
 
 term lgfx_handle_ping(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    (void) req;
-    return lgfx_reply_ok(ctx, port, port->atoms.pong);
+    return reply_ok(ctx, port, req, port->atoms.pong);
 }
 
 term lgfx_handle_getCaps(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -83,15 +82,13 @@ term lgfx_handle_getLastError(Context *ctx, lgfx_port_t *port, const lgfx_reques
     return do_get_last_error(ctx, port, req);
 }
 
-// Envelope (arity/flags/target/init-state) is validated centrally in lgfx_port.c from ops.def metadata.
+// Request envelope validation is centralized in lgfx_port.c via ops.def metadata.
 term lgfx_handle_width(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    (void) req;
-    return lgfx_reply_ok(ctx, port, term_from_int32((int32_t) port->width));
+    return reply_ok(ctx, port, req, term_from_int32((int32_t) port->width));
 }
 
 term lgfx_handle_height(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    (void) req;
-    return lgfx_reply_ok(ctx, port, term_from_int32((int32_t) port->height));
+    return reply_ok(ctx, port, req, term_from_int32((int32_t) port->height));
 }

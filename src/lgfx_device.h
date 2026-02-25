@@ -18,16 +18,19 @@ extern "C" {
 // This is a thin C ABI around LovyanGFX:
 // - target == 0       : LCD device (singleton)
 // - target in 1..254  : sprite handle allocated by lgfx_device_sprite_create()
+//                       or lgfx_device_sprite_create_at()
 //
 // Note:
-// - A handle is considered valid only while the corresponding sprite exists.
+// - "Valid target" means protocol-valid target range (0 for LCD, 1..254 for sprite slots).
+// - Whether a sprite slot is currently allocated is checked by sprite operations and
+//   typically returns ESP_ERR_NOT_FOUND when the slot is empty.
 // - Most APIs return ESP_ERR_INVALID_STATE if lgfx_device_init() was not called.
 bool lgfx_device_is_valid_target(uint8_t target);
 
 // -----------------------------------------------------------------------------
 // Caps / feature discovery (LCD-only)
 // -----------------------------------------------------------------------------
-// Callable before init(). Used for protocol capability discovery.
+// Used by ports/handlers/control.c
 uint32_t lgfx_device_feature_bits(void);
 uint32_t lgfx_device_max_sprites(void);
 
@@ -72,8 +75,8 @@ esp_err_t lgfx_device_set_text_font(uint8_t target, uint8_t font);
 uint16_t lgfx_device_width(uint8_t target);
 uint16_t lgfx_device_height(uint8_t target);
 
-// Convenience: get LCD dimensions in one call.
-// Returns panel constants before init, or current LCD dimensions after init/rotation.
+// Convenience: get LCD dimensions in one call (used by worker to populate port cache)
+// Returns PANEL_W/H before init, or the current lcd->width/height after init/rotation.
 esp_err_t lgfx_device_get_dims(uint16_t *out_w, uint16_t *out_h);
 
 // -----------------------------------------------------------------------------
@@ -154,20 +157,40 @@ esp_err_t lgfx_device_write_fill_rect(int16_t x, int16_t y, uint16_t w, uint16_t
 // Sprite subsystem
 // -----------------------------------------------------------------------------
 esp_err_t lgfx_device_sprite_create(uint16_t w, uint16_t h, uint8_t color_depth, uint8_t *out_handle);
+esp_err_t lgfx_device_sprite_create_at(uint8_t handle, uint16_t w, uint16_t h, uint8_t color_depth);
 esp_err_t lgfx_device_sprite_delete(uint8_t handle);
 esp_err_t lgfx_device_sprite_set_color_depth(uint8_t handle, uint8_t depth);
 esp_err_t lgfx_device_sprite_create_palette(uint8_t handle);
 esp_err_t lgfx_device_sprite_set_palette_color(uint8_t handle, uint8_t index, uint16_t rgb565);
 esp_err_t lgfx_device_sprite_set_pivot(uint8_t handle, int16_t px, int16_t py);
-esp_err_t lgfx_device_sprite_push_sprite(uint8_t handle, int16_t x, int16_t y, bool has_transparent, uint16_t transparent_rgb565);
+esp_err_t lgfx_device_sprite_push_sprite(
+    uint8_t handle,
+    int16_t x,
+    int16_t y,
+    bool has_transparent,
+    uint16_t transparent_rgb565);
+
+/*
+ * Rotate + zoom sprite push.
+ *
+ * Worker/handler layers convert protocol wire values to float before calling here:
+ * - angle_deg: degrees as float
+ * - zoom_x / zoom_y: scale factors as float (must be > 0)
+ *
+ * Transparent-color overload is optional in some LovyanGFX/M5GFX variants.
+ * This API uses best-effort dispatch and returns ESP_ERR_NOT_SUPPORTED if no
+ * compatible pushRotateZoom overload is available.
+ */
 esp_err_t lgfx_device_sprite_push_rotate_zoom(
     uint8_t handle,
     int16_t x,
     int16_t y,
-    int16_t angle_deg,
-    uint16_t zoomx_q8_8,
-    bool has_zoomy,
-    uint16_t zoomy_q8_8);
+    float angle_deg,
+    float zoom_x,
+    float zoom_y,
+    bool has_transparent,
+    uint16_t transparent565);
+
 esp_err_t lgfx_device_sprite_push_sprite_region(
     uint8_t sprite_handle,
     int16_t dst_x,

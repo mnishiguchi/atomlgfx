@@ -28,7 +28,7 @@ uint16_t panel_height_const();
 uint8_t max_handle_const();
 uint16_t max_sprites_const();
 
-// Feature bits source of truth lives in lgfx_device_state.cpp.
+// Optional: centralize feature bits truth in state file so caps file does not duplicate it.
 uint32_t feature_bits_const();
 
 // -----------------------------------------------------------------------------
@@ -83,6 +83,10 @@ void clear_sprite_locked(uint8_t handle);
 
 void increment_sprite_count_locked();
 void decrement_sprite_count_locked();
+uint32_t sprite_count_locked();
+
+// Teardown helper: deletes all sprite buffers + objects and resets registry.
+void destroy_all_sprites_locked();
 
 // -----------------------------------------------------------------------------
 // Shared wrappers (inline templates)

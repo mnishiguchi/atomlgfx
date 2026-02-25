@@ -16,6 +16,8 @@
 #include "freertos/portmacro.h"
 #include "freertos/semphr.h"
 
+#include "lgfx_port/caps.h"
+
 namespace
 {
 
@@ -37,14 +39,14 @@ static constexpr int PIN_LCD_RST = 2;
 static constexpr uint16_t PANEL_W = 320;
 static constexpr uint16_t PANEL_H = 480;
 
-// Device object is allocated lazily; this flag tracks whether begin() completed.
+// Lazily created to avoid C++ global ctors at boot
 static bool is_initialized = false;
 
-static constexpr uint16_t MAX_SPRITES = 8; // reported via getCaps
+static constexpr uint16_t MAX_SPRITES = static_cast<uint16_t>(LGFX_PORT_MAX_SPRITES);
 static constexpr uint8_t MAX_HANDLE = 254;
 
-// Feature bits are component-local. Keep this bit layout aligned with the
-// protocol capability definitions.
+// NOTE: Feature bits are intentionally kept local to this component.
+// If your protocol expects a specific bit layout, align these with protocol caps.
 static constexpr uint32_t FEATURE_STRIDED_PUSH_IMAGE = 1u << 0;
 static constexpr uint32_t FEATURE_SPRITES = 1u << 1;
 static constexpr uint32_t FEATURE_SPRITE_REGION = 1u << 2;
@@ -375,6 +377,29 @@ void decrement_sprite_count_locked()
     }
 }
 
+uint32_t sprite_count_locked()
+{
+    return static_cast<uint32_t>(sprite_count);
+}
+
+void destroy_all_sprites_locked()
+{
+    for (uint16_t handle = 1; handle <= MAX_HANDLE; handle++) {
+        lgfx::LGFX_Sprite *spr = sprites[handle];
+        if (!spr) {
+            continue;
+        }
+
+        // Explicitly release sprite buffers before deleting the object.
+        spr->deleteSprite();
+        delete spr;
+
+        sprites[handle] = nullptr;
+    }
+
+    sprite_count = 0;
+}
+
 } // namespace lgfx_dev
 
 // ----------------------------------------------------------------------------
@@ -387,13 +412,7 @@ extern "C" bool lgfx_device_is_valid_target(uint8_t target)
         return true;
     }
 
-    if (!lock_lcd()) {
-        return false;
-    }
-    const bool ok = (target <= MAX_HANDLE) && (sprites[target] != nullptr);
-    unlock_lcd();
-
-    return ok;
+    return target <= MAX_HANDLE;
 }
 
 // ----------------------------------------------------------------------------
@@ -447,18 +466,11 @@ extern "C" esp_err_t lgfx_device_deinit(void)
     // Keep the held mutex handle so we can delete it at the end.
     SemaphoreHandle_t lock_to_delete = lcd_lock;
 
-    // 1) Delete all sprites
-    for (int i = 1; i <= MAX_HANDLE; i++) {
-        if (sprites[i]) {
-            sprites[i]->deleteSprite(); // release internal buffers explicitly
-            delete sprites[i];
-            sprites[i] = nullptr;
-        }
-    }
-    sprite_count = 0;
+    lgfx_dev::destroy_all_sprites_locked();
 
-    // 2) Tear down LCD device (swap pointers under init mux to avoid init/deinit races)
+    // Tear down LCD device (swap pointers under init mux to avoid init/deinit races)
     PiyopiyoLGFX *to_delete = nullptr;
+
     portENTER_CRITICAL(&g_init_mux);
     to_delete = lcd;
     lcd = nullptr;
@@ -469,7 +481,7 @@ extern "C" esp_err_t lgfx_device_deinit(void)
     portEXIT_CRITICAL(&g_init_mux);
 
     if (to_delete) {
-        // Best-effort shutdown before destroying the device instance.
+        // Best-effort cleanup. If you distrust these calls, remove them.
         to_delete->endWrite();
         to_delete->endTransaction();
         delete to_delete;

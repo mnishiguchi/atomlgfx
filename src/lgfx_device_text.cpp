@@ -59,16 +59,7 @@ extern "C" esp_err_t lgfx_device_set_text_wrap(uint8_t target, bool wrap_x, bool
 
 extern "C" esp_err_t lgfx_device_set_text_font(uint8_t target, uint8_t font)
 {
-    (void) font;
-
-    // Validate target/init state consistently with other text APIs.
-    esp_err_t err = lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { (void) gfx; });
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    // Numeric font selection is not implemented in this ABI yet.
-    return ESP_ERR_NOT_SUPPORTED;
+    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextFont(font); });
 }
 
 extern "C" esp_err_t lgfx_device_set_text_color(uint8_t target, uint16_t fg_rgb565, bool has_bg, uint16_t bg_rgb565)

@@ -7,9 +7,10 @@ defmodule SampleApp.ProtocolSmoke do
   @proto_ver 1
 
   # Protocol FeatureBits (LGFX_PORT_PROTOCOL.md)
+  @cap_sprite 1 <<< 0
   @cap_pushimage 1 <<< 1
   @cap_last_error 1 <<< 4
-  @known_caps_mask @cap_pushimage ||| @cap_last_error
+  @known_caps_mask @cap_sprite ||| @cap_pushimage ||| @cap_last_error
 
   def run(port), do: run(port, &SampleApp.Port.raw_call/6)
 

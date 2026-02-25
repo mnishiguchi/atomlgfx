@@ -1,6 +1,7 @@
 // ports/include/lgfx_port/validate.h
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "context.h"
@@ -10,6 +11,21 @@
 #include "lgfx_port/op_meta.h"
 #include "lgfx_port/term_decode.h"
 #include "lgfx_port/term_encode.h"
+
+static inline bool lgfx_validate_color_depth(uint32_t d)
+{
+    switch (d) {
+        case 1:
+        case 2:
+        case 4:
+        case 8:
+        case 16:
+        case 24:
+            return true;
+        default:
+            return false;
+    }
+}
 
 static inline term lgfx_require_arity_exact(
     Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, int expected_arity)
@@ -64,6 +80,18 @@ static inline term lgfx_require_target_zero_unsupported(
     return lgfx_require_target_zero_reason(ctx, port, req, port->atoms.unsupported);
 }
 
+static inline term lgfx_require_target_sprite_only(
+    Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    // Valid sprite handles are 1..254 (255 is reserved invalid).
+    if (req->target >= 1 && req->target <= 254) {
+        return term_invalid_term();
+    }
+
+    lgfx_last_error_set(port, req->op, port->atoms.bad_target, req->flags, req->target, 0);
+    return lgfx_reply_error(ctx, port, port->atoms.bad_target);
+}
+
 static inline term lgfx_require_arity_range(
     Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, int min_arity, int max_arity)
 {
@@ -83,11 +111,6 @@ static inline term lgfx_require_arity_range(
 static inline term lgfx_require_target_policy(
     Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, lgfx_op_target_policy_t policy)
 {
-    // Fast path: target=0 is valid for all current target policies.
-    if (req->target == 0) {
-        return term_invalid_term();
-    }
-
     switch (policy) {
         case LGFX_OP_TARGET_ANY:
             return term_invalid_term();
@@ -97,6 +120,9 @@ static inline term lgfx_require_target_policy(
 
         case LGFX_OP_TARGET_UNSUPPORTED:
             return lgfx_require_target_zero_unsupported(ctx, port, req);
+
+        case LGFX_OP_TARGET_SPRITE_ONLY:
+            return lgfx_require_target_sprite_only(ctx, port, req);
 
         default:
             lgfx_last_error_set(port, req->op, port->atoms.internal, req->flags, req->target, 0);

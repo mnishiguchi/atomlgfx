@@ -7,23 +7,24 @@
 #include "context.h"
 #include "term.h"
 
-// NOTE: device calls now go through the worker wrappers.
+// Device calls go through worker wrappers.
 #include "lgfx_port/worker.h"
 
-#include "lgfx_port/handler_common.h"
+#include "lgfx_port/reply_common.h"
 #include "lgfx_port/lgfx_port.h"
 #include "lgfx_port/term_conv.h"
 #include "lgfx_port/term_encode.h"
+#include "lgfx_port/validate.h"
 
-// Envelope checks (version/arity/flags/target/init-state) are centralized in
-// lgfx_port.c via ops.def metadata. Handlers here only decode payload fields.
+// Request envelope validation (version/arity/flags/target/init-state) is
+// centralized in lgfx_port.c via ops.def metadata. Handlers only decode payload fields.
 
 static term do_init(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     // Idempotent init: if already initialized, do nothing and return ok.
     // Re-init is supported via close() + init() cycle.
     if (port->initialized) {
-        return lgfx_reply_ok(ctx, port, port->atoms.ok);
+        return reply_ok(ctx, port, req, port->atoms.ok);
     }
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_init(port));
@@ -32,7 +33,7 @@ static term do_init(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
     lgfx_last_error_clear(port);
 
     // Cache dimensions for width/height ops.
-    // If this fails, keep 0/0; width/height will reflect that.
+    // If this fails, cached values remain 0/0.
     uint16_t w = 0;
     uint16_t h = 0;
     if (lgfx_worker_device_get_dims(port, &w, &h) == ESP_OK) {
@@ -40,7 +41,7 @@ static term do_init(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
         port->height = (uint32_t) h;
     }
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 static term do_close(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -48,7 +49,7 @@ static term do_close(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
     // close() is always safe to call (even if not initialized).
     if (!port->initialized) {
         lgfx_last_error_clear(port);
-        return lgfx_reply_ok(ctx, port, port->atoms.ok);
+        return reply_ok(ctx, port, req, port->atoms.ok);
     }
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_close(port));
@@ -60,7 +61,7 @@ static term do_close(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
     port->height = 0;
 
     lgfx_last_error_clear(port);
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 static term do_set_rotation(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -82,7 +83,7 @@ static term do_set_rotation(Context *ctx, lgfx_port_t *port, const lgfx_request_
         port->height = (uint32_t) h;
     }
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 static term do_set_brightness(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -97,7 +98,7 @@ static term do_set_brightness(Context *ctx, lgfx_port_t *port, const lgfx_reques
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_set_brightness(port, (uint8_t) b));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 static term do_set_color_depth(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -110,30 +111,22 @@ static term do_set_color_depth(Context *ctx, lgfx_port_t *port, const lgfx_reque
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    switch (d) {
-        case 1:
-        case 2:
-        case 4:
-        case 8:
-        case 16:
-        case 24:
-            break;
-        default:
-            return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    if (!lgfx_validate_color_depth(d)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
     // Device ABI: (target, depth)
-    // Protocol v1 currently validates target via ops.def metadata (T0/unsupported).
+    // Protocol v1 validates target via ops.def metadata (T0/unsupported).
     LGFX_RETURN_IF_ESP_ERR(
         ctx, port, req, lgfx_worker_device_set_color_depth(port, (uint8_t) req->target, (uint8_t) d));
 
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 static term do_display(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_display(port));
-    return lgfx_reply_ok(ctx, port, port->atoms.ok);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 term lgfx_handle_init(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)

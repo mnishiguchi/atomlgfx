@@ -19,6 +19,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -86,6 +87,14 @@ typedef enum
     LGFX_JOB_DRAW_STRING,
 
     LGFX_JOB_PUSH_IMAGE_RGB565_STRIDED,
+
+    // Sprite ops
+    LGFX_JOB_CREATE_SPRITE,
+    LGFX_JOB_DELETE_SPRITE,
+    LGFX_JOB_SET_PIVOT,
+    LGFX_JOB_PUSH_SPRITE,
+    LGFX_JOB_PUSH_SPRITE_REGION,
+    LGFX_JOB_PUSH_ROTATE_ZOOM,
 } lgfx_job_kind_t;
 
 typedef struct
@@ -269,6 +278,61 @@ typedef struct
             const uint8_t *bytes;
             size_t len;
         } push_image;
+
+        // Sprite ops
+        struct
+        {
+            uint8_t target;
+            uint16_t w;
+            uint16_t h;
+            uint8_t color_depth;
+        } create_sprite;
+
+        struct
+        {
+            uint8_t target;
+        } delete_sprite;
+
+        struct
+        {
+            uint8_t target;
+            int16_t x;
+            int16_t y;
+        } set_pivot;
+
+        struct
+        {
+            uint8_t target;
+            int16_t x;
+            int16_t y;
+            bool has_transparent;
+            uint16_t transparent565;
+        } push_sprite;
+
+        struct
+        {
+            uint8_t target;
+            int16_t dst_x;
+            int16_t dst_y;
+            int16_t src_x;
+            int16_t src_y;
+            uint16_t w;
+            uint16_t h;
+            bool has_transparent;
+            uint16_t transparent565;
+        } push_sprite_region;
+
+        struct
+        {
+            uint8_t target;
+            int16_t x;
+            int16_t y;
+            float angle_deg;
+            float zoom_x;
+            float zoom_y;
+            bool has_transparent;
+            uint16_t transparent565;
+        } push_rotate_zoom;
     } a;
 } lgfx_job_t;
 
@@ -694,6 +758,78 @@ static void lgfx_worker_task_main(void *arg)
                     job->a.push_image.len);
                 break;
 
+            case LGFX_JOB_CREATE_SPRITE:
+                job->err = lgfx_device_sprite_create_at(
+                    job->a.create_sprite.target,
+                    job->a.create_sprite.w,
+                    job->a.create_sprite.h,
+                    job->a.create_sprite.color_depth);
+                break;
+
+            case LGFX_JOB_DELETE_SPRITE:
+                job->err = lgfx_device_sprite_delete(
+                    job->a.delete_sprite.target);
+                break;
+
+            case LGFX_JOB_SET_PIVOT:
+                job->err = lgfx_device_sprite_set_pivot(
+                    job->a.set_pivot.target,
+                    job->a.set_pivot.x,
+                    job->a.set_pivot.y);
+                break;
+
+            case LGFX_JOB_PUSH_SPRITE:
+                job->err = lgfx_device_sprite_push_sprite(
+                    job->a.push_sprite.target,
+                    job->a.push_sprite.x,
+                    job->a.push_sprite.y,
+                    job->a.push_sprite.has_transparent,
+                    job->a.push_sprite.transparent565);
+                break;
+
+            case LGFX_JOB_PUSH_SPRITE_REGION:
+                job->err = lgfx_device_sprite_push_sprite_region(
+                    job->a.push_sprite_region.target,
+                    job->a.push_sprite_region.dst_x,
+                    job->a.push_sprite_region.dst_y,
+                    job->a.push_sprite_region.src_x,
+                    job->a.push_sprite_region.src_y,
+                    job->a.push_sprite_region.w,
+                    job->a.push_sprite_region.h,
+                    job->a.push_sprite_region.has_transparent,
+                    job->a.push_sprite_region.transparent565,
+                    NULL);
+                break;
+
+            case LGFX_JOB_PUSH_ROTATE_ZOOM: {
+                const float angle_deg = job->a.push_rotate_zoom.angle_deg;
+                const float zoom_x = job->a.push_rotate_zoom.zoom_x;
+                const float zoom_y = job->a.push_rotate_zoom.zoom_y;
+
+                // Basic worker-side validation. Device layer will also validate and perform
+                // backend compatibility dispatch.
+                if (!isfinite(angle_deg) || !isfinite(zoom_x) || !isfinite(zoom_y)) {
+                    job->err = ESP_ERR_INVALID_ARG;
+                    break;
+                }
+
+                if (zoom_x <= 0.0f || zoom_y <= 0.0f) {
+                    job->err = ESP_ERR_INVALID_ARG;
+                    break;
+                }
+
+                job->err = lgfx_device_sprite_push_rotate_zoom(
+                    job->a.push_rotate_zoom.target,
+                    job->a.push_rotate_zoom.x,
+                    job->a.push_rotate_zoom.y,
+                    angle_deg,
+                    zoom_x,
+                    zoom_y,
+                    job->a.push_rotate_zoom.has_transparent,
+                    job->a.push_rotate_zoom.transparent565);
+                break;
+            }
+
             default:
                 job->err = ESP_ERR_INVALID_ARG;
                 break;
@@ -1026,5 +1162,127 @@ esp_err_t lgfx_worker_device_push_image_rgb565_strided(
         job.a.push_image.bytes = job.owned_payload;
     }
 
+    return lgfx_worker_call(port, &job);
+}
+
+esp_err_t lgfx_worker_device_create_sprite(
+    lgfx_port_t *port,
+    uint8_t target,
+    uint16_t w,
+    uint16_t h,
+    uint8_t color_depth)
+{
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_CREATE_SPRITE,
+        .a.create_sprite = {
+            .target = target,
+            .w = w,
+            .h = h,
+            .color_depth = color_depth
+        }
+    };
+    return lgfx_worker_call(port, &job);
+}
+
+esp_err_t lgfx_worker_device_delete_sprite(lgfx_port_t *port, uint8_t target)
+{
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_DELETE_SPRITE,
+        .a.delete_sprite = { .target = target }
+    };
+    return lgfx_worker_call(port, &job);
+}
+
+esp_err_t lgfx_worker_device_set_pivot(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y)
+{
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_SET_PIVOT,
+        .a.set_pivot = {
+            .target = target,
+            .x = x,
+            .y = y
+        }
+    };
+    return lgfx_worker_call(port, &job);
+}
+
+esp_err_t lgfx_worker_device_push_sprite(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    bool has_transparent,
+    uint16_t transparent565)
+{
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_PUSH_SPRITE,
+        .a.push_sprite = {
+            .target = target,
+            .x = x,
+            .y = y,
+            .has_transparent = has_transparent,
+            .transparent565 = transparent565
+        }
+    };
+    return lgfx_worker_call(port, &job);
+}
+
+esp_err_t lgfx_worker_device_push_sprite_region(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t dst_x,
+    int16_t dst_y,
+    int16_t src_x,
+    int16_t src_y,
+    uint16_t w,
+    uint16_t h,
+    bool has_transparent,
+    uint16_t transparent565)
+{
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_PUSH_SPRITE_REGION,
+        .a.push_sprite_region = {
+            .target = target,
+            .dst_x = dst_x,
+            .dst_y = dst_y,
+            .src_x = src_x,
+            .src_y = src_y,
+            .w = w,
+            .h = h,
+            .has_transparent = has_transparent,
+            .transparent565 = transparent565
+        }
+    };
+    return lgfx_worker_call(port, &job);
+}
+
+esp_err_t lgfx_worker_device_push_rotate_zoom(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    float angle_deg,
+    float zoom_x,
+    float zoom_y,
+    bool has_transparent,
+    uint16_t transparent565)
+{
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_PUSH_ROTATE_ZOOM,
+        .a.push_rotate_zoom = {
+            .target = target,
+            .x = x,
+            .y = y,
+            .angle_deg = angle_deg,
+            .zoom_x = zoom_x,
+            .zoom_y = zoom_y,
+            .has_transparent = has_transparent,
+            .transparent565 = transparent565
+        }
+    };
     return lgfx_worker_call(port, &job);
 }

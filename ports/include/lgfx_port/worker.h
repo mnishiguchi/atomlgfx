@@ -136,6 +136,72 @@ esp_err_t lgfx_worker_device_push_image_rgb565_strided(
     const uint8_t *bytes,
     size_t len);
 
+// Sprite ops (used by ports/handlers/sprites.c)
+//
+// create_sprite:
+// - `target` is sprite handle (1..254)
+// - `color_depth` is the LovyanGFX sprite color depth
+// - When protocol omits color depth, the handler should pass the configured default
+//   (for example LGFX_PORT_SPRITE_DEFAULT_DEPTH)
+esp_err_t lgfx_worker_device_create_sprite(
+    lgfx_port_t *port,
+    uint8_t target,
+    uint16_t w,
+    uint16_t h,
+    uint8_t color_depth);
+
+esp_err_t lgfx_worker_device_delete_sprite(lgfx_port_t *port, uint8_t target);
+
+esp_err_t lgfx_worker_device_set_pivot(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y);
+
+esp_err_t lgfx_worker_device_push_sprite(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    bool has_transparent,
+    uint16_t transparent565);
+
+esp_err_t lgfx_worker_device_push_sprite_region(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t dst_x,
+    int16_t dst_y,
+    int16_t src_x,
+    int16_t src_y,
+    uint16_t w,
+    uint16_t h,
+    bool has_transparent,
+    uint16_t transparent565);
+
+/*
+ * Rotate/zoom wrapper contract:
+ * - angle_deg / zoom_x / zoom_y are worker-friendly float values
+ * - Worker validates and converts them to the device ABI before calling
+ *   lgfx_device_sprite_push_rotate_zoom():
+ *   - angle_deg -> int16_t integer degrees (rounded)
+ *   - zoom_x / zoom_y -> Q8.8 fixed-point (256 == 1.0x)
+ *   - has_zoomy is derived from the converted zoom values
+ * - has_transparent / transparent565 are kept in the wrapper signature for
+ *   protocol compatibility, but the current device ABI does not support
+ *   transparent-color rotate/zoom
+ * - If has_transparent is true, the worker returns ESP_ERR_NOT_SUPPORTED
+ */
+esp_err_t lgfx_worker_device_push_rotate_zoom(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    float angle_deg,
+    float zoom_x,
+    float zoom_y,
+    bool has_transparent,
+    uint16_t transparent565);
+
 #ifdef __cplusplus
 }
 #endif

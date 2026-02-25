@@ -1,0 +1,302 @@
+defmodule SampleApp.SpriteProtocolSmoke do
+  @moduledoc false
+
+  import Bitwise
+
+  @t_short 5_000
+  @sprite_target 1
+  @sprite_w 8
+  @sprite_h 8
+
+  @cap_sprite 1 <<< 0
+
+  # This smoke test assumes the port is already initialized (Port.init/1 + Port.display/1).
+  # In SampleApp, run it after boot_for_display_with_dims/1.
+  def run(port), do: run(port, &SampleApp.Port.raw_call/6)
+
+  def run(port, raw_call) when is_function(raw_call, 6) do
+    reset_note_once_flags()
+
+    with :ok <- check_get_caps_sprite_capacity(port, raw_call),
+         :ok <- check_create_sprite_target_zero_bad_target(port, raw_call),
+         :ok <- check_push_sprite_region_target_zero_policy(port, raw_call),
+         :ok <- check_push_rotate_zoom_target_zero_bad_target(port, raw_call),
+         :ok <- check_sprite_lifecycle_and_blits(port, raw_call) do
+      IO.puts("sprite protocol smoke ok")
+      :ok
+    else
+      {:error, reason} = err ->
+        IO.puts("sprite protocol smoke failed: #{inspect(reason)}")
+        err
+    end
+  end
+
+  # -----------------------------------------------------------------------------
+  # 0) Basic capability sanity (no hardcoded sprite feature bit needed)
+  # -----------------------------------------------------------------------------
+  defp check_get_caps_sprite_capacity(port, raw_call) do
+    case raw_call.(port, :getCaps, 0, 0, [], @t_short) do
+      {:ok, {:caps, _proto_ver, _max_binary_bytes, max_sprites, feature_bits}}
+      when is_integer(max_sprites) and is_integer(feature_bits) ->
+        cond do
+          (feature_bits &&& @cap_sprite) == 0 ->
+            {:error, {:cap_sprite_missing, feature_bits}}
+
+          max_sprites <= 0 ->
+            {:error, {:sprite_capacity_not_available, max_sprites}}
+
+          true ->
+            :ok
+        end
+
+      {:ok, payload} ->
+        {:error, {:bad_caps_payload, payload}}
+
+      {:error, reason} ->
+        {:error, {:get_caps_failed, reason}}
+    end
+  end
+
+  # -----------------------------------------------------------------------------
+  # 1) Sprite-only ops must reject target=0 (LCD target)
+  # -----------------------------------------------------------------------------
+  defp check_create_sprite_target_zero_bad_target(port, raw_call) do
+    case raw_call.(port, :createSprite, 0, 0, [@sprite_w, @sprite_h], @t_short) do
+      {:error, :bad_target} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, {:createSprite_target0_expected_bad_target, reason}}
+
+      {:ok, result} ->
+        {:error, {:createSprite_target0_unexpected_ok, result}}
+    end
+  end
+
+  defp check_push_sprite_region_target_zero_policy(port, raw_call) do
+    case raw_call.(port, :pushSpriteRegion, 0, 0, [0, 0, 0, 0, 1, 1], @t_short) do
+      {:error, :bad_op} ->
+        note_once(
+          :push_sprite_region_unavailable,
+          "sprite protocol smoke note: pushSpriteRegion not available; skipping pushSpriteRegion checks"
+        )
+
+        :ok
+
+      {:error, :bad_target} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, {:pushSpriteRegion_target0_expected_bad_target, reason}}
+
+      {:ok, result} ->
+        {:error, {:pushSpriteRegion_target0_unexpected_ok, result}}
+    end
+  end
+
+  defp check_push_rotate_zoom_target_zero_bad_target(port, raw_call) do
+    # Non-transparent form: [x, y, angle_deg, zx_q8, zy_q8]
+    case raw_call.(port, :pushRotateZoom, 0, 0, [0, 0, 0, 256, 256], @t_short) do
+      {:error, :bad_target} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, {:pushRotateZoom_target0_expected_bad_target, reason}}
+
+      {:ok, result} ->
+        {:error, {:pushRotateZoom_target0_unexpected_ok, result}}
+    end
+  end
+
+  # -----------------------------------------------------------------------------
+  # 2) Create -> draw -> blit -> partial blit -> rotate/zoom -> delete
+  # -----------------------------------------------------------------------------
+  defp check_sprite_lifecycle_and_blits(port, raw_call) do
+    with :ok <- check_create_sprite(port, raw_call, @sprite_target),
+         :ok <- check_sprite_dimensions(port, raw_call, @sprite_target),
+         :ok <- check_draw_into_sprite(port, raw_call, @sprite_target),
+         :ok <- check_set_pivot(port, raw_call, @sprite_target),
+         :ok <- check_push_sprite(port, raw_call, @sprite_target),
+         :ok <- check_push_sprite_region(port, raw_call, @sprite_target),
+         :ok <- check_push_rotate_zoom(port, raw_call, @sprite_target),
+         :ok <- check_delete_sprite(port, raw_call, @sprite_target) do
+      :ok
+    else
+      {:error, _reason} = err ->
+        _ = maybe_cleanup_sprite(port, raw_call, @sprite_target)
+        err
+    end
+  end
+
+  defp check_create_sprite(port, raw_call, sprite_target) do
+    case raw_call.(port, :createSprite, sprite_target, 0, [@sprite_w, @sprite_h], @t_short) do
+      {:ok, _result} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, {:createSprite_failed, reason}}
+    end
+  end
+
+  defp check_sprite_dimensions(port, raw_call, sprite_target) do
+    # Some driver builds do not expose width/height for sprite targets yet.
+    # If unsupported, do not fail the smoke.
+    case raw_call.(port, :width, sprite_target, 0, [], @t_short) do
+      {:error, :unsupported} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, {:sprite_dimensions_failed, reason}}
+
+      {:ok, w} when is_integer(w) and w > 0 ->
+        case raw_call.(port, :height, sprite_target, 0, [], @t_short) do
+          {:error, :unsupported} ->
+            :ok
+
+          {:error, reason} ->
+            {:error, {:sprite_dimensions_failed, reason}}
+
+          {:ok, h} when is_integer(h) and h > 0 ->
+            :ok
+
+          {:ok, payload} ->
+            {:error, {:sprite_dimensions_bad_payload, payload}}
+        end
+
+      {:ok, payload} ->
+        {:error, {:sprite_dimensions_bad_payload, payload}}
+    end
+  end
+
+  defp check_draw_into_sprite(port, raw_call, sprite_target) do
+    # Use a few target-aware primitives to ensure the sprite accepts drawing.
+    with {:ok, _} <- raw_call.(port, :clear, sprite_target, 0, [0x000000], @t_short),
+         {:ok, _} <-
+           raw_call.(
+             port,
+             :fillRect,
+             sprite_target,
+             0,
+             [0, 0, @sprite_w, @sprite_h, 0x002244],
+             @t_short
+           ),
+         {:ok, _} <-
+           raw_call.(
+             port,
+             :drawRect,
+             sprite_target,
+             0,
+             [0, 0, @sprite_w, @sprite_h, 0xFFFFFF],
+             @t_short
+           ),
+         {:ok, _} <- raw_call.(port, :drawPixel, sprite_target, 0, [1, 1, 0xFF0000], @t_short) do
+      :ok
+    else
+      {:error, reason} ->
+        {:error, {:draw_into_sprite_failed, reason}}
+
+      {:ok, payload} ->
+        {:error, {:draw_into_sprite_bad_payload, payload}}
+    end
+  end
+
+  defp check_set_pivot(port, raw_call, sprite_target) do
+    case raw_call.(
+           port,
+           :setPivot,
+           sprite_target,
+           0,
+           [div(@sprite_w, 2), div(@sprite_h, 2)],
+           @t_short
+         ) do
+      {:ok, _result} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, {:setPivot_failed, reason}}
+    end
+  end
+
+  defp check_push_sprite(port, raw_call, sprite_target) do
+    # Sprite -> LCD blit at a small on-screen position
+    case raw_call.(port, :pushSprite, sprite_target, 0, [4, 4], @t_short) do
+      {:ok, _result} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, {:pushSprite_failed, reason}}
+    end
+  end
+
+  defp check_push_sprite_region(port, raw_call, sprite_target) do
+    # Partial blit sprite -> LCD
+    # [dst_x, dst_y, src_x, src_y, width, height]
+    case raw_call.(port, :pushSpriteRegion, sprite_target, 0, [16, 4, 1, 1, 4, 4], @t_short) do
+      {:error, :bad_op} ->
+        note_once(
+          :push_sprite_region_unavailable,
+          "sprite protocol smoke note: pushSpriteRegion not available; skipping pushSpriteRegion checks"
+        )
+
+        :ok
+
+      {:ok, _result} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, {:pushSpriteRegion_failed, reason}}
+    end
+  end
+
+  defp check_push_rotate_zoom(port, raw_call, sprite_target) do
+    # Non-transparent form:
+    # [x, y, angle_deg, zx_q8, zy_q8]
+    # 0 deg, 1.0x scale (Q8 = 256)
+    case raw_call.(port, :pushRotateZoom, sprite_target, 0, [28, 4, 0, 256, 256], @t_short) do
+      {:ok, _result} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, {:pushRotateZoom_failed, reason}}
+    end
+  end
+
+  defp check_delete_sprite(port, raw_call, sprite_target) do
+    case raw_call.(port, :deleteSprite, sprite_target, 0, [], @t_short) do
+      {:ok, _result} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, {:deleteSprite_failed, reason}}
+    end
+  end
+
+  defp maybe_cleanup_sprite(port, raw_call, sprite_target) do
+    case raw_call.(port, :deleteSprite, sprite_target, 0, [], @t_short) do
+      {:ok, _} -> :ok
+      {:error, _} -> :ok
+    end
+  end
+
+  # -----------------------------------------------------------------------------
+  # One-time notes (avoid duplicate log lines in a single smoke run)
+  # -----------------------------------------------------------------------------
+  defp reset_note_once_flags do
+    :erlang.erase({__MODULE__, :note_once, :push_sprite_region_unavailable})
+    :ok
+  end
+
+  defp note_once(tag, message) when is_atom(tag) and is_binary(message) do
+    key = {__MODULE__, :note_once, tag}
+
+    case :erlang.get(key) do
+      true ->
+        :ok
+
+      _ ->
+        IO.puts(message)
+        :erlang.put(key, true)
+        :ok
+    end
+  end
+end

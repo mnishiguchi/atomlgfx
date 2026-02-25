@@ -254,6 +254,8 @@ The protocol surface is metadata-driven.
 
 - `ports/handlers/*.c`
   - Operation handlers grouped by feature area (control / setup / primitives / text / images)
+  - Decode per-op payload fields and perform op-specific argument checks
+  - Shared scalar color decode/conversion is centralized via `lgfx_port/color.h`
 
 - `ports/proto_term_encode.c`
   - Reply tuple constructors:
@@ -266,6 +268,11 @@ The protocol surface is metadata-driven.
   - Worker job execution
   - Bridge from handlers to device-facing calls
 
+- `ports/include/lgfx_port/reply_common.h`
+  - Shared handler reply helpers (`reply_ok`, `reply_error`, `reply_error_detail`, `reply_from_esp_err`)
+  - Centralizes last-error recording and reply-encoding OOM handling
+  - Provides `LGFX_RETURN_IF_ESP_ERR(...)` for consistent `esp_err_t` -> protocol reply flow
+
 ### Header namespace
 
 All public headers for the port driver live under `lgfx_port/`:
@@ -276,10 +283,22 @@ All public headers for the port driver live under `lgfx_port/`:
 - `ports/include/lgfx_port/term_encode.h`
 - `ports/include/lgfx_port/dispatch_table.h`
 - `ports/include/lgfx_port/op_meta.h`
+- `ports/include/lgfx_port/color.h`
 - `ports/include/lgfx_port/validate.h`
 - `ports/include/lgfx_port/errors.h`
 - `ports/include/lgfx_port/caps.h`
 - `ports/include/lgfx_port/handlers/*.h`
+- `ports/include/lgfx_port/reply_common.h`
+
+### Color helper convention (handlers)
+
+- Protocol scalar colors (for primitives/text/etc.) use RGB888 packed as `0x00RRGGBB`
+- Handlers should decode scalar color args via `lgfx_term_to_color565(...)` from `ports/include/lgfx_port/color.h`
+- This helper performs:
+  - term → `u32` decode
+  - RGB888 validation
+  - RGB565 conversion
+- Pixel payload binaries (for example `pushImage`) remain RGB565 data and are validated by the image handler path (not via scalar color helpers)
 
 ---
 
@@ -320,6 +339,22 @@ Responses are always protocol terms:
 
 - `{ok, Result}`
 - `{error, Reason}`
+
+### Handler reply helpers
+
+Handlers use shared reply helpers from `ports/include/lgfx_port/reply_common.h` to keep reply behavior consistent:
+
+- `reply_ok(...)`
+- `reply_error(...)`
+- `reply_error_detail(...)`
+- `reply_from_esp_err(...)`
+- `LGFX_RETURN_IF_ESP_ERR(...)`
+
+These helpers centralize:
+
+- protocol reply construction
+- `last_error` updates on error paths
+- reply-encoding OOM behavior (`no_memory` as latest error)
 
 ### OOM-safe reply fallback
 

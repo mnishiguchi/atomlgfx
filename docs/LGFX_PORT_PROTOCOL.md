@@ -115,14 +115,18 @@ All requests use a single uniform tuple shape:
 Where:
 
 - `lgfx` is a tag atom.
+
 - `ProtoVer` is an integer (must equal `LGFX_PORT_PROTO_VER`).
+
 - `Op` is an atom identifying the operation (typically a LovyanGFX method name).
+
 - `Target` is an integer:
   - `0` => LCD (`lgfx::LGFX_Device`)
-  - `1..254` => sprite handle (reserved for future sprite ops)
+  - `1..254` => sprite handle (used by sprite operations when `CAP_SPRITE` is advertised)
   - `255` reserved (invalid)
 
 - `Flags` is an integer bitset (operation-specific; `0` if unused).
+
 - `ArgN` are operation-specific arguments.
 
 ### Validation rules
@@ -194,6 +198,7 @@ Client guidance:
 Driver-enforced ranges:
 
 - `i16`: `-32768..32767`
+- `i32`: `-2147483648..2147483647`
 - `u16`: `0..65535`
 - `u32`: `0..4294967295`
 
@@ -201,7 +206,9 @@ Coordinates and sizes:
 
 - `x`, `y`: `i16`
 - `w`, `h`: `u16`
-- angles: `i16` degrees
+- angle/zoom encodings are operation-specific (for example `pushRotateZoom`
+  uses centi-degree `i32` and x1024 zoom i32 fixed-point fields; see that
+  section)
 
 ---
 
@@ -234,6 +241,18 @@ RGB565 only:
 
 - RGB565 binary is big-endian per pixel (`hi lo`), 2 bytes per pixel.
 
+### Sprite transparent-key colors (`pushSprite*`, `pushRotateZoom`)
+
+The optional transparent color argument for sprite compositing ops uses **RGB565 as `u16`** (native sprite path), not `0x00RRGGBB`:
+
+- `transparent565 = 0x0000..0xFFFF` (RGB565)
+
+This applies to:
+
+- `pushSprite`
+- `pushSpriteRegion`
+- `pushRotateZoom`
+
 ---
 
 ## Flags
@@ -261,6 +280,16 @@ This notation is used in the operation matrix and mirrors the validation metadat
 - `T0/unsupported`
   - Require `Target == 0`, else `{error, unsupported}`
   - Used when the operation is target-aware in principle, but only LCD target `0` is supported today (sprite target support may be added later)
+
+- `LGFX_OP_TARGET_ANY`
+  - Accept `Target == 0` (LCD) or `Target in 1..254` (sprite handle)
+  - `255` remains invalid
+  - Used by target-aware drawing/text/image ops that can operate on either LCD or sprite
+
+- `LGFX_OP_TARGET_SPRITE_ONLY`
+  - Require `Target in 1..254` (sprite handle), else `{error, bad_target}`
+  - Used by sprite lifecycle / sprite compositing operations where `Target` names the source sprite object
+  - `Target == 0` (LCD) is invalid for these ops
 
 ### Flags rule
 
@@ -307,25 +336,31 @@ If this table and `ops.def` disagree, `ops.def` (and the built driver) wins.
 | `setBrightness` | `T0/bad_target` | `F0` | `6` | `requires_init` | - |
 | `setColorDepth` | `T0/unsupported` | `F0` | `6` | `requires_init` | - |
 | `display` | `T0/bad_target` | `F0` | `5` | `requires_init` | - |
-| `fillScreen` | `T0/unsupported` | `F0` | `6` | `requires_init` | - |
-| `clear` | `T0/unsupported` | `F0` | `6` | `requires_init` | - |
-| `drawPixel` | `T0/unsupported` | `F0` | `8` | `requires_init` | - |
-| `drawFastVLine` | `T0/unsupported` | `F0` | `9` | `requires_init` | - |
-| `drawFastHLine` | `T0/unsupported` | `F0` | `9` | `requires_init` | - |
-| `drawLine` | `T0/unsupported` | `F0` | `10` | `requires_init` | - |
-| `drawRect` | `T0/unsupported` | `F0` | `10` | `requires_init` | - |
-| `fillRect` | `T0/unsupported` | `F0` | `10` | `requires_init` | - |
-| `drawCircle` | `T0/unsupported` | `F0` | `9` | `requires_init` | - |
-| `fillCircle` | `T0/unsupported` | `F0` | `9` | `requires_init` | - |
-| `drawTriangle` | `T0/unsupported` | `F0` | `12` | `requires_init` | - |
-| `fillTriangle` | `T0/unsupported` | `F0` | `12` | `requires_init` | - |
-| `setTextSize` | `T0/unsupported` | `F0` | `6` | `requires_init` | - |
-| `setTextDatum` | `T0/unsupported` | `F0` | `6` | `requires_init` | - |
-| `setTextWrap` | `T0/unsupported` | `F0` | `6` | `requires_init` | - |
-| `setTextFont` | `T0/unsupported` | `F0` | `6` | `requires_init` | - |
-| `setTextColor` | `T0/unsupported` | `Fmask(LGFX_F_TEXT_HAS_BG)` | `6/7` | `requires_init` | - |
-| `drawString` | `T0/unsupported` | `F0` | `8` | `requires_init` | - |
-| `pushImage` | `T0/unsupported` | `F0` | `11` | `requires_init` | `LGFX_CAP_PUSHIMAGE` |
+| `fillScreen` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
+| `clear` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
+| `drawPixel` | `LGFX_OP_TARGET_ANY` | `F0` | `8` | `requires_init` | - |
+| `drawFastVLine` | `LGFX_OP_TARGET_ANY` | `F0` | `9` | `requires_init` | - |
+| `drawFastHLine` | `LGFX_OP_TARGET_ANY` | `F0` | `9` | `requires_init` | - |
+| `drawLine` | `LGFX_OP_TARGET_ANY` | `F0` | `10` | `requires_init` | - |
+| `drawRect` | `LGFX_OP_TARGET_ANY` | `F0` | `10` | `requires_init` | - |
+| `fillRect` | `LGFX_OP_TARGET_ANY` | `F0` | `10` | `requires_init` | - |
+| `drawCircle` | `LGFX_OP_TARGET_ANY` | `F0` | `9` | `requires_init` | - |
+| `fillCircle` | `LGFX_OP_TARGET_ANY` | `F0` | `9` | `requires_init` | - |
+| `drawTriangle` | `LGFX_OP_TARGET_ANY` | `F0` | `12` | `requires_init` | - |
+| `fillTriangle` | `LGFX_OP_TARGET_ANY` | `F0` | `12` | `requires_init` | - |
+| `setTextSize` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
+| `setTextDatum` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
+| `setTextWrap` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
+| `setTextFont` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
+| `setTextColor` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_TEXT_HAS_BG)` | `6/7` | `requires_init` | - |
+| `drawString` | `LGFX_OP_TARGET_ANY` | `F0` | `8` | `requires_init` | - |
+| `pushImage` | `LGFX_OP_TARGET_ANY` | `F0` | `11` | `requires_init` | `LGFX_CAP_PUSHIMAGE` |
+| `createSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7/8` | `requires_init` | `LGFX_CAP_SPRITE` |
+| `deleteSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `5` | `requires_init` | `LGFX_CAP_SPRITE` |
+| `setPivot` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7` | `requires_init` | `LGFX_CAP_SPRITE` |
+| `pushSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7/8` | `requires_init` | `LGFX_CAP_SPRITE` |
+| `pushSpriteRegion` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `11/12` | `requires_init` | `LGFX_CAP_SPRITE` |
+| `pushRotateZoom` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `10/11` | `requires_init` | `LGFX_CAP_SPRITE` |
 <!-- END:generated_ops_matrix -->
 
 If an operation is not listed here, it is not implemented and must return `{error, bad_op}`.
@@ -364,12 +399,15 @@ Fields:
 `FeatureBits` is derived from the operation metadata and active dispatch table:
 
 - Start with `0`
+
 - For each implemented operation in `ops.def`:
   - Read its `feature_cap_bit`
   - If non-zero and the op is present in dispatch, OR it into `FeatureBits`
 
 - Apply compile-time gates (for example `getLastError` support)
+
 - Optionally add a safe-yield capability bit only when transaction-style ops are advertised
+
 - Mask to known protocol bits before returning
 
 ### Feature bits
@@ -379,7 +417,7 @@ Fields:
 
 | C macro | Protocol bit | Shift | Value | Source |
 | --- | --- | --- | --- | --- |
-| `LGFX_CAP_SPRITE` | `CAP_SPRITE` | `0` | `0x0001` | reserved / not currently op-linked |
+| `LGFX_CAP_SPRITE` | `CAP_SPRITE` | `0` | `0x0001` | `ops.def` feature_cap_bit |
 | `LGFX_CAP_PUSHIMAGE` | `CAP_PUSHIMAGE` | `1` | `0x0002` | `ops.def` feature_cap_bit |
 | `LGFX_CAP_JPG_FILE` | `CAP_JPG_FILE` | `2` | `0x0004` | reserved / not currently op-linked |
 | `LGFX_CAP_PNG_FILE` | `CAP_PNG_FILE` | `3` | `0x0008` | reserved / not currently op-linked |
@@ -392,7 +430,7 @@ Fields:
 Semantics and usage notes:
 
 - `CAP_SPRITE        = 1 bsl 0`
-  - Reserved for sprite support (not currently advertised)
+  - Advertised when sprite operations are available (for example `createSprite`, `pushSprite`, `pushRotateZoom`)
 
 - `CAP_PUSHIMAGE     = 1 bsl 1`
   - Advertised when `pushImage` is available
@@ -425,7 +463,7 @@ Given the current `ops.def` surface:
 
 - `CAP_PUSHIMAGE` is **set** (because `pushImage` exists)
 - `CAP_LAST_ERROR` is **set** when `getLastError` support is enabled
-- `CAP_SPRITE` is **unset** (no sprite ops yet)
+- `CAP_SPRITE` is **set** (because sprite ops exist in the current surface)
 - `CAP_BATCH_VOID` is **unset** (no batch ops yet)
 - `CAP_SAFE_YIELD_FORGIVING` is **unset** (no transaction ops)
 - `CAP_SAFE_YIELD_STRICT` is **unset** (no transaction ops)
@@ -486,7 +524,9 @@ Behavior:
   - else `StrideEff = StridePixelsU16`
 
 - `StrideEff >= W`
+
 - `byte_size(Data)` is even (2 bytes per pixel)
+
 - Required minimum:
   - `byte_size(Data) >= StrideEff * H * 2`
 
@@ -498,6 +538,123 @@ Behavior:
 - Acceptable implementations are:
   - copy `Data` into a driver-owned DMA-safe buffer, or
   - block until the transfer completes
+
+---
+
+## `pushSprite` (sprite -> LCD blit)
+
+This operation draws an existing sprite (named by `Target`) onto the LCD at a destination position.
+
+- `Target` is the **source sprite handle** (`1..254`)
+- `Target == 0` is invalid (`LGFX_OP_TARGET_SPRITE_ONLY`)
+- Destination is the LCD (not another sprite)
+
+### Request args
+
+- `pushSprite(DstXi16, DstYi16)`
+- `pushSprite(DstXi16, DstYi16, TransparentRgb565U16)` (optional transparent-key blit)
+
+### Rules
+
+- `DstXi16`, `DstYi16` are destination coordinates on the LCD
+- Optional `TransparentRgb565U16` is an RGB565 color key (`u16`)
+- When `TransparentRgb565U16` is provided, pixels matching that color are skipped
+- Requires the sprite handle in `Target` to be currently allocated, else `{error, bad_target}` (or `{error, bad_args}` if your handler chooses that error shape consistently)
+
+### Response
+
+- Success: `{ok, ok}`
+- Failure: `{error, Reason}`
+
+---
+
+## `pushSpriteRegion` (sprite region -> LCD blit)
+
+This operation draws a rectangular region from an existing sprite (named by `Target`) onto the LCD at a destination position.
+
+- `Target` is the **source sprite handle** (`1..254`)
+- `Target == 0` is invalid (`LGFX_OP_TARGET_SPRITE_ONLY`)
+- Destination is the LCD (not another sprite)
+
+### Request args
+
+- `pushSpriteRegion(DstXi16, DstYi16, SrcXi16, SrcYi16, Wu16, Hu16)`
+- `pushSpriteRegion(DstXi16, DstYi16, SrcXi16, SrcYi16, Wu16, Hu16, TransparentRgb565U16)` (optional transparent-key blit)
+
+### Rules
+
+- `DstXi16`, `DstYi16` are destination coordinates on the LCD
+- `SrcXi16`, `SrcYi16` are source coordinates inside the sprite
+- `Wu16`, `Hu16` are source region size
+- `Wu16` and `Hu16` must be non-zero
+- Source rectangle validation is **strict**:
+  - `SrcXi16 >= 0`
+  - `SrcYi16 >= 0`
+  - `SrcXi16 + Wu16 <= sprite_width(Target)`
+  - `SrcYi16 + Hu16 <= sprite_height(Target)`
+  - otherwise `{error, bad_args}`
+
+- LCD edge clipping is allowed (off-screen destination pixels may be clipped by the device/LovyanGFX path)
+- Optional `TransparentRgb565U16` is an RGB565 color key (`u16`)
+- When `TransparentRgb565U16` is provided, pixels matching that color are skipped during compositing
+- Requires the sprite handle in `Target` to be currently allocated, else `{error, bad_target}` (or `{error, bad_args}` if your handler chooses that error shape consistently)
+
+### Response
+
+- Success: `{ok, ok}`
+- Failure: `{error, Reason}`
+
+---
+
+## `pushRotateZoom` (sprite -> LCD rotated/scaled blit)
+
+This operation draws an existing sprite (named by `Target`) onto the LCD with rotation and scaling.
+
+- `Target` is the **source sprite handle** (`1..254`)
+- `Target == 0` is invalid (`LGFX_OP_TARGET_SPRITE_ONLY`)
+- Destination is the LCD (not another sprite)
+- Rotation uses the sprite pivot set by `setPivot`
+
+### Request args
+
+- `pushRotateZoom(DstXi16, DstYi16, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32)`
+- `pushRotateZoom(DstXi16, DstYi16, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32, TransparentRgb565U16)` (optional transparent-key blit)
+
+### Rules
+
+- `DstXi16`, `DstYi16` are destination coordinates on the LCD
+
+- `AngleCentiDegI32` is a fixed-point angle in **centi-degrees** (`i32`)
+  - `100` = `1.00°`
+  - `9000` = `90.00°`
+  - `-4500` = `-45.00°`
+
+- `ZoomXX1024I32` and `ZoomYX1024I32` are fixed-point zoom values in **x1024 units** (`i32`)
+  - `1024` = `1.0x`
+  - `512` = `0.5x`
+  - `2048` = `2.0x`
+
+- `ZoomXX1024I32 > 0` and `ZoomYX1024I32 > 0`, else `{error, bad_args}`
+
+- The driver converts fixed-point values to the LovyanGFX/native representation using:
+  - `angle_deg = AngleCentiDegI32 / 100.0`
+  - `zoom_x = ZoomXX1024I32 / 1024.0`
+  - `zoom_y = ZoomYX1024I32 / 1024.0`
+
+- Optional `TransparentRgb565U16` is an RGB565 color key (`u16`)
+- When `TransparentRgb565U16` is provided, pixels matching that color are skipped during compositing
+- Requires the sprite handle in `Target` to be currently allocated, else `{error, bad_target}` (or `{error, bad_args}` if your handler chooses that error shape consistently)
+- LCD edge clipping is allowed (off-screen destination pixels may be clipped by the device/LovyanGFX path)
+
+### Response
+
+- Success: `{ok, ok}`
+- Failure: `{error, Reason}`
+
+### Host guidance
+
+- Set sprite pivot via `setPivot` before calling `pushRotateZoom` if you need stable rotation behavior (for example center rotation used by demo-style motion)
+- Host wrappers should expose helpers for centi-degree / x1024 fixed-point conversion
 
 ---
 
@@ -556,6 +713,12 @@ This catches protocol/implementation drift at the integration boundary (host ↔
     - bit clear + `{error, unsupported}` => valid
     - all other combinations => drift
 
+- **Sprite region path check**
+  - `pushSpriteRegion` valid call succeeds; out-of-bounds source rect returns `{error, bad_args}`
+
+- **Rotate/zoom path check**
+  - `pushRotateZoom` valid fixed-point args (centi-deg + x1024 zoom) succeed; zero zoom returns `{error, bad_args}`
+
 ### Tiny protocol metadata self-test (future-proof)
 
 A small metadata sanity check is recommended after `getCaps`:
@@ -596,6 +759,7 @@ Typical host wrappers may add convenience behavior on top of the wire protocol, 
 - caching `getCaps().max_binary_bytes`
 - caching text state (`setTextColor`, `setTextSize`) to reduce repeated port calls
 - chunking `pushImage` automatically when a pixel blob exceeds `MaxBinaryBytes`
+- caching sprite capability / max sprite count and refusing sprite calls early when `CAP_SPRITE` is absent
 
 These are host-side optimizations only.
 
@@ -604,6 +768,7 @@ They must not change the wire contract defined in this document.
 In particular:
 
 - `pushImage` still remains the protocol operation on the wire
+- `pushSprite` / `pushRotateZoom` still remain the protocol operations on the wire
 - chunking is a host implementation detail (multiple valid `pushImage` calls)
 
 ---
@@ -622,12 +787,16 @@ When you add or change an operation:
   - `feature_cap_bit`
 
 - Implement or update the handler
+
 - If adding/changing protocol capability bits, update `ports/include/lgfx_port/caps.h`
+
 - If adding/changing protocol error atoms or detail tags, update `ports/include/lgfx_port/errors.h`
+
 - Regenerate/sync protocol doc tables:
   - `elixir scripts/sync_lgfx_protocol_doc.exs`
 
 - Verify `getCaps` advertisement matches the new `feature_cap_bit`
+
 - If the change introduces a new public capability or behavior, update:
   - **Capabilities**
   - **Planned / reserved features** (if relevant)
