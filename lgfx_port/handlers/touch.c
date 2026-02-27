@@ -1,21 +1,22 @@
-// ports/handlers/touch.c
-
-#include "lgfx_port/handlers/touch.h"
-
+// lgfx_port/handlers/touch.c
 #include <stdbool.h>
 #include <stdint.h>
 
 #include "esp_err.h"
 
-#include "lgfx_port/reply_common.h"
-#include "lgfx_port/term_conv.h"
-#include "lgfx_port/term_encode.h"
+#include "lgfx_port/ops.h"
 #include "lgfx_port/worker.h"
 
 // Request envelope validation (version/arity/flags/target/init-state) is
 // centralized in lgfx_port.c via ops.def metadata. Handlers only decode payload fields.
 
-static term make_touch_tuple_or_none(Context *ctx, lgfx_port_t *port, bool touched, int16_t x, int16_t y, uint16_t size)
+static term make_touch_tuple_or_none(
+    Context *ctx,
+    lgfx_port_t *port,
+    bool touched,
+    int16_t x,
+    int16_t y,
+    uint16_t size)
 {
     if (!touched) {
         return port->atoms.none;

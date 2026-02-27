@@ -80,7 +80,11 @@ esp_err_t lgfx_device_set_base_color(uint8_t target, uint16_t rgb565);
 // ----------------------------------------------------------------------------
 //
 // Font preset IDs (stable protocol enum -> device-side mapping).
-// Keep these in sync with ports/handlers/text.c decoding + worker mapping.
+// Keep these in sync with:
+// - ports/handlers/text.c (decode/range checks)
+// - ports/lgfx_worker.c (job payload)
+// - src/lgfx_device_text.cpp (mapping to LovyanGFX fonts)
+// - host-side mapping in examples/elixir/lib/sample_app/port.ex
 enum
 {
     LGFX_FONT_PRESET_ASCII = 0,

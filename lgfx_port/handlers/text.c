@@ -1,6 +1,4 @@
-// ports/handlers/text.c
-#include "lgfx_port/handlers/text.h"
-
+// lgfx_port/handlers/text.c
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -14,15 +12,8 @@
 // - src/lgfx_device_text.cpp (mapping to LovyanGFX fonts)
 #include "lgfx_device.h"
 
-// Device calls go through worker wrappers.
+#include "lgfx_port/ops.h"
 #include "lgfx_port/worker.h"
-
-#include "lgfx_port/color.h"
-#include "lgfx_port/lgfx_port.h"
-#include "lgfx_port/reply_common.h"
-#include "lgfx_port/term_conv.h"
-#include "lgfx_port/term_decode.h"
-#include "lgfx_port/term_encode.h"
 
 // Request envelope validation (version/arity/flags/target/init-state) is
 // centralized in lgfx_port.c via ops.def metadata. Handlers only decode payload fields.
@@ -151,7 +142,7 @@ static term do_set_font_preset(Context *ctx, lgfx_port_t *port, const lgfx_reque
     // - ascii: built-in ASCII fallback (e.g. setTextFont(1))
     // - jp_*:  build-dependent (may be NOT_SUPPORTED if compiled out)
     //
-    // reply_common normalizes ESP_ERR_NOT_SUPPORTED to {error, unsupported}.
+    // reply normalizes ESP_ERR_NOT_SUPPORTED to {error, unsupported}.
     LGFX_RETURN_IF_ESP_ERR(
         ctx,
         port,

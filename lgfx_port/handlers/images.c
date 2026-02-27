@@ -1,21 +1,12 @@
-// ports/handlers/images.c
-#include "lgfx_port/handlers/images.h"
-
+// lgfx_port/handlers/images.c
 #include <stddef.h>
 #include <stdint.h>
 
 #include "context.h"
 #include "term.h"
 
-// Device calls go through worker wrappers.
+#include "lgfx_port/ops.h"
 #include "lgfx_port/worker.h"
-
-#include "lgfx_port/reply_common.h"
-#include "lgfx_port/lgfx_port.h"
-#include "lgfx_port/term_conv.h"
-#include "lgfx_port/term_decode.h"
-#include "lgfx_port/term_encode.h"
-#include "lgfx_port/validate.h"
 
 // Request envelope validation (version/arity/flags/target/init-state) is
 // centralized in lgfx_port.c via ops.def metadata. Handlers only decode payload fields.

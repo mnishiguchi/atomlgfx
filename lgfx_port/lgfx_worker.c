@@ -1,4 +1,4 @@
-// ports/lgfx_worker.c
+// lgfx_port/lgfx_worker.c
 //
 // Concurrency model
 // -----------------

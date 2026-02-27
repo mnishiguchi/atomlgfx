@@ -5,9 +5,11 @@ defmodule Main do
   Generate and inject LGFX protocol doc tables from C metadata files.
   """
 
-  @ops_def_path "ports/include/lgfx_port/ops.def"
-  @caps_h_path "ports/include/lgfx_port/caps.h"
-  @errors_h_path "ports/include/lgfx_port/errors.h"
+  @ops_def_path "include/lgfx_port/ops.def"
+
+  # Capabilities + error vocabulary are currently defined in this header.
+  @port_h_path "include/lgfx_port/lgfx_port.h"
+
   @protocol_doc_path "docs/LGFX_PORT_PROTOCOL.md"
 
   @script_path "scripts/#{Path.basename(__ENV__.file)}"
@@ -62,8 +64,8 @@ defmodule Main do
 
     Generates/injects:
       - ops matrix (from #{@ops_def_path})
-      - capabilities table (from #{@caps_h_path})
-      - error reasons table (from #{@errors_h_path})
+      - capabilities table (from #{@port_h_path})
+      - error reasons table (from #{@port_h_path})
 
     into:
       - #{@protocol_doc_path}
@@ -74,13 +76,12 @@ defmodule Main do
     self_test!()
 
     ops_def_content = File.read!(@ops_def_path)
-    caps_h_content = File.read!(@caps_h_path)
-    errors_h_content = File.read!(@errors_h_path)
+    port_h_content = File.read!(@port_h_path)
     protocol_doc_content = File.read!(@protocol_doc_path)
 
     operations = parse_operations(ops_def_content)
-    capabilities = parse_capabilities(caps_h_content)
-    error_reasons = parse_error_reasons(errors_h_content)
+    capabilities = parse_capabilities(port_h_content)
+    error_reasons = parse_error_reasons(port_h_content)
 
     protocol_feature_cap_bits =
       operations
@@ -173,7 +174,7 @@ defmodule Main do
     assert!(Enum.at(parsed_caps, 1).shift == 9, "cap shift parse failed")
 
     errors_sample = """
-    // Canonical error atoms (protocol-level)
+    // Optional: protocol-level error atom string constants (doc/debug)
     #define LGFX_ERR_BAD_PROTO "bad_proto"
     #define LGFX_ERR_UNSUPPORTED "unsupported"
 
@@ -486,7 +487,12 @@ defmodule Main do
       trimmed_line = String.trim(line)
 
       cond do
+        # Old wording
         String.contains?(trimmed_line, "Canonical error atoms") ->
+          {acc, :canonical}
+
+        # New wording (matches your current header comment)
+        String.contains?(trimmed_line, "protocol-level error atom") ->
           {acc, :canonical}
 
         String.contains?(trimmed_line, "Optional detail tuple reason tags") ->

@@ -1,16 +1,11 @@
-// ports/handlers/sprites.c
-#include "lgfx_port/handlers/sprites.h"
-
+// lgfx_port/handlers/sprites.c
 #include <stdbool.h>
 #include <stdint.h>
 
 #include "context.h"
 #include "term.h"
 
-#include "lgfx_port/reply_common.h"
-#include "lgfx_port/lgfx_port.h"
-#include "lgfx_port/term_conv.h"
-#include "lgfx_port/validate.h"
+#include "lgfx_port/ops.h"
 #include "lgfx_port/worker.h"
 
 // Request envelope validation (version/arity/flags/target/init-state) is

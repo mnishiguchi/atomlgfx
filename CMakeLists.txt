@@ -51,29 +51,23 @@ set(LGFX_PORT_JP_FONT_CPP "${CMAKE_CURRENT_LIST_DIR}/src/fonts/ui_font_ja_16_min
 idf_component_register(
   SRCS
     # Port entrypoint / lifecycle
-    "ports/lgfx_port.c"
-    "ports/lgfx_worker.c"
+    "lgfx_port/lgfx_port.c"
+    "lgfx_port/lgfx_worker.c"
 
     # Port protocol / dispatch / metadata
-    "ports/lgfx_atoms.c"
-    "ports/proto_term_decode.c"
-    "ports/proto_term_encode.c"
-    "ports/op_meta.c"
-    "ports/proto_caps.c"
-    "ports/dispatch_table.c"
+    "lgfx_port/proto_term.c"
 
     # Port handlers (match protocol grouping)
-    "ports/handlers/control.c"
-    "ports/handlers/setup.c"
-    "ports/handlers/primitives.c"
-    "ports/handlers/text.c"
-    "ports/handlers/images.c"
-    "ports/handlers/sprites.c"
-    "ports/handlers/touch.c"
+    "lgfx_port/handlers/setup.c"
+    "lgfx_port/handlers/primitives.c"
+    "lgfx_port/handlers/text.c"
+    "lgfx_port/handlers/images.c"
+    "lgfx_port/handlers/sprites.c"
+    "lgfx_port/handlers/touch.c"
 
     # Device adapter core
     "src/lgfx_device_state.cpp"
-    "src/lgfx_device_caps.cpp"
+    "src/lgfx_device_capabilities.cpp"
     "src/lgfx_device_control.cpp"
     "src/lgfx_device_size.cpp"
     "src/lgfx_device_transactions.cpp"
@@ -85,7 +79,7 @@ idf_component_register(
     "src/lgfx_device_sprites.cpp"
     "src/lgfx_device_touch.cpp"
   INCLUDE_DIRS
-    "ports/include"
+    "include"
     "src"
     "${LGFX_SRC_ROOT}"
   REQUIRES

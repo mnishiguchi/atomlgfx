@@ -1,4 +1,4 @@
-// ports/include/lgfx_port/ops.def
+// lgfx_port/include/lgfx_port/ops.def
 //
 // Canonical op list + protocol metadata.
 // Intentionally included multiple times with different X(...) definitions.

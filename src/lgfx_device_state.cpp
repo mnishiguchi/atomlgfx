@@ -1,8 +1,4 @@
 // src/lgfx_device_state.cpp
-
-#include "lgfx_device.h"
-#include "lgfx_device_internal.hpp"
-
 #include <new>
 #include <stddef.h>
 #include <stdint.h>
@@ -20,7 +16,9 @@
 #include "freertos/portmacro.h"
 #include "freertos/semphr.h"
 
-#include "lgfx_port/caps.h"
+#include "lgfx_device.h"
+#include "lgfx_device_internal.hpp"
+#include "lgfx_port/lgfx_port.h"
 
 namespace
 {
