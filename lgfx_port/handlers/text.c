@@ -9,9 +9,8 @@
 // This keeps the preset enum stable across:
 // - ports/handlers/text.c (decode/range checks)
 // - ports/lgfx_worker.c (job payload)
-// - src/lgfx_device_text.cpp (mapping to LovyanGFX fonts)
+// - src/lgfx_device_api.cpp (mapping to LovyanGFX fonts)
 #include "lgfx_device.h"
-
 #include "lgfx_port/ops.h"
 #include "lgfx_port/worker.h"
 

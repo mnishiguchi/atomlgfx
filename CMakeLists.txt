@@ -42,7 +42,7 @@ set(LGFX_PORT_TOUCH_SPI_FREQ_HZ  "1000000u"  CACHE STRING "Touch SPI frequency (
 # Custom minimal JP font subset (generated .cpp)
 # - Keep this in-repo to avoid pulling the huge IPA font blob.
 # - You can rename/move the file as you like; update this path accordingly.
-set(LGFX_PORT_JP_FONT_CPP "${CMAKE_CURRENT_LIST_DIR}/src/fonts/ui_font_ja_16_min.cpp"
+set(LGFX_PORT_JP_FONT_CPP "${CMAKE_CURRENT_LIST_DIR}/src/fonts/generated/ui_font_ja_16_min.cpp"
     CACHE STRING "Path to custom JP font subset .cpp (compiled when LGFX_PORT_ENABLE_JP_FONTS=ON)")
 
 # -----------------------------------------------------------------------------
@@ -67,19 +67,12 @@ idf_component_register(
 
     # Device adapter core
     "src/lgfx_device_state.cpp"
-    "src/lgfx_device_capabilities.cpp"
-    "src/lgfx_device_control.cpp"
-    "src/lgfx_device_size.cpp"
-    "src/lgfx_device_transactions.cpp"
-
-    # Device adapter feature groups
-    "src/lgfx_device_primitives.cpp"
-    "src/lgfx_device_text.cpp"
-    "src/lgfx_device_images.cpp"
+    "src/lgfx_device_api.cpp"
+    "src/lgfx_device_draw.cpp"
     "src/lgfx_device_sprites.cpp"
-    "src/lgfx_device_touch.cpp"
   INCLUDE_DIRS
     "include"
+  PRIV_INCLUDE_DIRS
     "src"
     "${LGFX_SRC_ROOT}"
   REQUIRES

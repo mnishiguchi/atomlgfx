@@ -8,7 +8,8 @@
 #include <new>
 #include <type_traits>
 
-namespace {
+namespace
+{
 
 // -----------------------------------------------------------------------------
 // Sprite create helpers (normalize LovyanGFX / M5GFX return-type differences)
