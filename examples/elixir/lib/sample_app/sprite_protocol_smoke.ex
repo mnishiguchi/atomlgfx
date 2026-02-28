@@ -1,6 +1,7 @@
 defmodule SampleApp.SpriteProtocolSmoke do
   @moduledoc false
 
+  alias LGFXPort, as: Port
   import Bitwise
 
   @t_short 5_000
@@ -10,9 +11,17 @@ defmodule SampleApp.SpriteProtocolSmoke do
 
   @cap_sprite 1 <<< 0
 
+  # pushRotateZoom wire format (protocol v1+):
+  # - Non-transparent: [x, y, angle_cdeg, zoom_x1024, zoom_y1024]
+  #
+  # Where:
+  # - angle_cdeg: centi-degrees (0.01 deg). Example: 90deg => 9000.
+  # - zoom_x1024: 1024 = 1.0x scale
+  @zoom_1x 1024
+
   # This smoke test assumes the port is already initialized (Port.init/1 + Port.display/1).
   # In SampleApp, run it after boot_for_display_with_dims/1.
-  def run(port), do: run(port, &SampleApp.Port.raw_call/6)
+  def run(port), do: run(port, &Port.raw_call/6)
 
   def run(port, raw_call) when is_function(raw_call, 6) do
     reset_note_once_flags()
@@ -32,7 +41,7 @@ defmodule SampleApp.SpriteProtocolSmoke do
   end
 
   # -----------------------------------------------------------------------------
-  # 0) Basic capability sanity (no hardcoded sprite feature bit needed)
+  # 0) Basic capability sanity
   # -----------------------------------------------------------------------------
   defp check_get_caps_sprite_capacity(port, raw_call) do
     case raw_call.(port, :getCaps, 0, 0, [], @t_short) do
@@ -95,8 +104,26 @@ defmodule SampleApp.SpriteProtocolSmoke do
   end
 
   defp check_push_rotate_zoom_target_zero_bad_target(port, raw_call) do
-    # Non-transparent form: [x, y, angle_deg, zx_q8, zy_q8]
-    case raw_call.(port, :pushRotateZoom, 0, 0, [0, 0, 0, 256, 256], @t_short) do
+    # Non-transparent form: [x, y, angle_cdeg, zoom_x1024, zoom_y1024]
+    args = [0, 0, 0, @zoom_1x, @zoom_1x]
+
+    case raw_call.(port, :pushRotateZoom, 0, 0, args, @t_short) do
+      {:error, :bad_op} ->
+        note_once(
+          :push_rotate_zoom_unavailable,
+          "sprite protocol smoke note: pushRotateZoom not available; skipping pushRotateZoom checks"
+        )
+
+        :ok
+
+      {:error, :unsupported} ->
+        note_once(
+          :push_rotate_zoom_unavailable,
+          "sprite protocol smoke note: pushRotateZoom unsupported; skipping pushRotateZoom checks"
+        )
+
+        :ok
+
       {:error, :bad_target} ->
         :ok
 
@@ -249,10 +276,27 @@ defmodule SampleApp.SpriteProtocolSmoke do
   end
 
   defp check_push_rotate_zoom(port, raw_call, sprite_target) do
-    # Non-transparent form:
-    # [x, y, angle_deg, zx_q8, zy_q8]
-    # 0 deg, 1.0x scale (Q8 = 256)
-    case raw_call.(port, :pushRotateZoom, sprite_target, 0, [28, 4, 0, 256, 256], @t_short) do
+    # Non-transparent form: [x, y, angle_cdeg, zoom_x1024, zoom_y1024]
+    # 0 deg, 1.0x scale
+    args = [28, 4, 0, @zoom_1x, @zoom_1x]
+
+    case raw_call.(port, :pushRotateZoom, sprite_target, 0, args, @t_short) do
+      {:error, :bad_op} ->
+        note_once(
+          :push_rotate_zoom_unavailable,
+          "sprite protocol smoke note: pushRotateZoom not available; skipping pushRotateZoom checks"
+        )
+
+        :ok
+
+      {:error, :unsupported} ->
+        note_once(
+          :push_rotate_zoom_unavailable,
+          "sprite protocol smoke note: pushRotateZoom unsupported; skipping pushRotateZoom checks"
+        )
+
+        :ok
+
       {:ok, _result} ->
         :ok
 
@@ -283,6 +327,7 @@ defmodule SampleApp.SpriteProtocolSmoke do
   # -----------------------------------------------------------------------------
   defp reset_note_once_flags do
     :erlang.erase({__MODULE__, :note_once, :push_sprite_region_unavailable})
+    :erlang.erase({__MODULE__, :note_once, :push_rotate_zoom_unavailable})
     :ok
   end
 

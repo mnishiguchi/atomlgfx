@@ -1,7 +1,7 @@
 defmodule SampleApp.TouchProbe do
   @moduledoc false
 
-  alias SampleApp.Port
+  alias LGFXPort, as: Port
   import SampleApp.AtomVMCompat, only: [yield: 0]
 
   @bg 0x000000
@@ -43,7 +43,7 @@ defmodule SampleApp.TouchProbe do
     end
   end
 
-  defp draw_static_ui(port, w, h) do
+  defp draw_static_ui(port, w, _h) do
     with :ok <- Port.fill_screen(port, @bg),
          :ok <- Port.fill_rect(port, 0, 0, w, @hud_h, @hud_bg),
          :ok <- Port.draw_fast_hline(port, 0, @hud_h - 1, w, 0x303030),
@@ -69,14 +69,14 @@ defmodule SampleApp.TouchProbe do
 
     touch =
       case Port.get_touch(port) do
-        {:ok, nil} -> nil
+        {:ok, :none} -> nil
         {:ok, {x, y, size}} -> normalize_touch({x, y, size}, w, h)
         {:error, reason} -> {:error, {:get_touch_failed, reason}}
       end
 
     raw =
       case Port.get_touch_raw(port) do
-        {:ok, nil} -> nil
+        {:ok, :none} -> nil
         {:ok, {x, y, size}} -> normalize_touch({x, y, size}, w, h)
         {:error, reason} -> {:error, {:get_touch_raw_failed, reason}}
       end

@@ -1,7 +1,7 @@
 defmodule SampleApp.TouchCalibrate do
   @moduledoc false
 
-  alias SampleApp.Port
+  alias LGFXPort, as: Port
 
   def run(port, _w, _h) do
     with {:ok, true} <- Port.supports_touch?(port),

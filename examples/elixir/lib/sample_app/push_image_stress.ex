@@ -1,7 +1,7 @@
 defmodule SampleApp.PushImageStress do
   @moduledoc false
 
-  alias SampleApp.Port
+  alias LGFXPort, as: Port
   import SampleApp.AtomVMCompat, only: [yield: 0]
 
   @bg 0x0B1020

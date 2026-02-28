@@ -1,6 +1,7 @@
 defmodule SampleApp.ProtocolSmoke do
   @moduledoc false
 
+  alias LGFXPort, as: Port
   import Bitwise
 
   @t_short 5_000
@@ -12,7 +13,7 @@ defmodule SampleApp.ProtocolSmoke do
   @cap_last_error 1 <<< 4
   @known_caps_mask @cap_sprite ||| @cap_pushimage ||| @cap_last_error
 
-  def run(port), do: run(port, &SampleApp.Port.raw_call/6)
+  def run(port), do: run(port, &Port.raw_call/6)
 
   def run(port, raw_call) when is_function(raw_call, 6) do
     with :ok <- check_local_cap_constants(),

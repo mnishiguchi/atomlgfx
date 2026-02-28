@@ -1,6 +1,26 @@
-# /examples/elixir/lib/sample_app/port.ex
-defmodule SampleApp.Port do
-  @moduledoc false
+defmodule LGFXPort do
+  @moduledoc """
+  Minimal Elixir client for the `lgfx_port` AtomVM port driver.
+
+  This module wraps the Erlang-term protocol documented in `docs/LGFX_PORT_PROTOCOL.md`
+  and provides small conveniences (timeouts, chunking for RGB565 pushes, and a bit of caching).
+
+  Typical bring-up:
+
+      port = LGFXPort.open()
+      :ok = LGFXPort.ping(port)
+      :ok = LGFXPort.init(port)
+      :ok = LGFXPort.display(port)
+
+  Notes:
+
+  - `getTouch/getTouchRaw` returns `{:ok, :none}` or `{:ok, {x, y, size}}`.
+  - Sprite compositing transparent keys for `pushSprite*` / `pushRotateZoom` are RGB565 `u16`
+    (0x0000..0xFFFF), not RGB888 (0x00RRGGBB).
+  - `pushRotateZoom` uses protocol units:
+    - angle: centi-degrees (1.00° = 100)
+    - zoom: x1024 fixed-point (1.0x = 1024)
+  """
   @compile {:no_warn_undefined, :port}
 
   import Bitwise
@@ -183,19 +203,20 @@ defmodule SampleApp.Port do
     call_ok(port, :pushSprite, src_target, 0, [x, y], @t_long)
   end
 
-  def push_sprite(port, src_target, x, y, transparent_color_888)
+  # Transparent key is RGB565 u16 (protocol)
+  def push_sprite(port, src_target, x, y, transparent565)
       when is_integer(src_target) and src_target in 1..254 and
              is_integer(x) and is_integer(y) and
-             is_integer(transparent_color_888) and transparent_color_888 in 0..0xFFFFFF do
-    call_ok(port, :pushSprite, src_target, 0, [x, y, transparent_color_888], @t_long)
+             is_integer(transparent565) and transparent565 in 0..0xFFFF do
+    call_ok(port, :pushSprite, src_target, 0, [x, y, transparent565], @t_long)
   end
 
   def push_sprite_region(port, src_target, dst_x, dst_y, src_x, src_y, width, height)
       when is_integer(src_target) and src_target in 1..254 and
              is_integer(dst_x) and is_integer(dst_y) and
              is_integer(src_x) and is_integer(src_y) and
-             is_integer(width) and width >= 0 and
-             is_integer(height) and height >= 0 do
+             is_integer(width) and width >= 1 and
+             is_integer(height) and height >= 1 do
     call_ok(
       port,
       :pushSpriteRegion,
@@ -206,6 +227,7 @@ defmodule SampleApp.Port do
     )
   end
 
+  # Transparent key is RGB565 u16 (protocol)
   def push_sprite_region(
         port,
         src_target,
@@ -215,76 +237,92 @@ defmodule SampleApp.Port do
         src_y,
         width,
         height,
-        transparent_color_888
+        transparent565
       )
       when is_integer(src_target) and src_target in 1..254 and
              is_integer(dst_x) and is_integer(dst_y) and
              is_integer(src_x) and is_integer(src_y) and
-             is_integer(width) and width >= 0 and
-             is_integer(height) and height >= 0 and
-             is_integer(transparent_color_888) and transparent_color_888 in 0..0xFFFFFF do
+             is_integer(width) and width >= 1 and
+             is_integer(height) and height >= 1 and
+             is_integer(transparent565) and transparent565 in 0..0xFFFF do
     call_ok(
       port,
       :pushSpriteRegion,
       src_target,
       0,
-      [dst_x, dst_y, src_x, src_y, width, height, transparent_color_888],
+      [dst_x, dst_y, src_x, src_y, width, height, transparent565],
       @t_long
     )
   end
 
   # -----------------------------------------------------------------------------
-  # Sprite rotate/zoom
+  # Sprite rotate/zoom (protocol units)
   # -----------------------------------------------------------------------------
-  def push_rotate_zoom(port, src_target, x, y, angle_tenths, zx_q8, zy_q8)
+  # - AngleCentiDegI32: 100 = 1.00°
+  # - ZoomX1024I32:     1024 = 1.0x
+  def push_rotate_zoom(port, src_target, x, y, angle_centi_deg, zoom_x1024, zoom_y1024)
       when is_integer(src_target) and src_target in 1..254 and
              is_integer(x) and is_integer(y) and
-             is_integer(angle_tenths) and
-             is_integer(zx_q8) and zx_q8 >= 0 and
-             is_integer(zy_q8) and zy_q8 >= 0 do
-    angle_deg = round(angle_tenths / 10)
-    call_ok(port, :pushRotateZoom, src_target, 0, [x, y, angle_deg, zx_q8, zy_q8], @t_long)
-  end
-
-  def push_rotate_zoom(port, src_target, x, y, angle_tenths, zx_q8, zy_q8, transparent_color_888)
-      when is_integer(src_target) and src_target in 1..254 and
-             is_integer(x) and is_integer(y) and
-             is_integer(angle_tenths) and
-             is_integer(zx_q8) and zx_q8 >= 0 and
-             is_integer(zy_q8) and zy_q8 >= 0 and
-             is_integer(transparent_color_888) and transparent_color_888 in 0..0xFFFFFF do
-    angle_deg = round(angle_tenths / 10)
-
+             is_integer(angle_centi_deg) and
+             is_integer(zoom_x1024) and zoom_x1024 > 0 and
+             is_integer(zoom_y1024) and zoom_y1024 > 0 do
     call_ok(
       port,
       :pushRotateZoom,
       src_target,
       0,
-      [x, y, angle_deg, zx_q8, zy_q8, transparent_color_888],
+      [x, y, angle_centi_deg, zoom_x1024, zoom_y1024],
       @t_long
     )
   end
 
-  def push_rotate_zoom(port, src_target, x, y, angle_tenths, z_q8)
-      when is_integer(z_q8) and z_q8 >= 0 do
-    push_rotate_zoom(port, src_target, x, y, angle_tenths, z_q8, z_q8)
+  # Transparent key is RGB565 u16 (protocol)
+  def push_rotate_zoom(
+        port,
+        src_target,
+        x,
+        y,
+        angle_centi_deg,
+        zoom_x1024,
+        zoom_y1024,
+        transparent565
+      )
+      when is_integer(src_target) and src_target in 1..254 and
+             is_integer(x) and is_integer(y) and
+             is_integer(angle_centi_deg) and
+             is_integer(zoom_x1024) and zoom_x1024 > 0 and
+             is_integer(zoom_y1024) and zoom_y1024 > 0 and
+             is_integer(transparent565) and transparent565 in 0..0xFFFF do
+    call_ok(
+      port,
+      :pushRotateZoom,
+      src_target,
+      0,
+      [x, y, angle_centi_deg, zoom_x1024, zoom_y1024, transparent565],
+      @t_long
+    )
   end
 
+  def push_rotate_zoom(port, src_target, x, y, angle_centi_deg, zoom_x1024)
+      when is_integer(zoom_x1024) and zoom_x1024 > 0 do
+    push_rotate_zoom(port, src_target, x, y, angle_centi_deg, zoom_x1024, zoom_x1024)
+  end
+
+  # Convenience: accept degrees + float zoom; convert to protocol units (centi-deg / x1024)
   def push_rotate_zoom_deg(port, src_target, x, y, angle_deg, zoom_x, zoom_y)
       when is_integer(src_target) and src_target in 1..254 and
              is_integer(x) and is_integer(y) and
              is_number(angle_deg) and
-             is_number(zoom_x) and zoom_x >= 0 and
-             is_number(zoom_y) and zoom_y >= 0 do
-    angle_tenths = round(angle_deg * 10)
-    zx_q8 = round(zoom_x * 256)
-    zy_q8 = round(zoom_y * 256)
-
-    push_rotate_zoom(port, src_target, x, y, angle_tenths, zx_q8, zy_q8)
+             is_number(zoom_x) and zoom_x > 0 and
+             is_number(zoom_y) and zoom_y > 0 do
+    angle_centi_deg = round(angle_deg * 100)
+    zx1024 = round(zoom_x * 1024)
+    zy1024 = round(zoom_y * 1024)
+    push_rotate_zoom(port, src_target, x, y, angle_centi_deg, zx1024, zy1024)
   end
 
   def push_rotate_zoom_deg(port, src_target, x, y, angle_deg, zoom)
-      when is_number(angle_deg) and is_number(zoom) and zoom >= 0 do
+      when is_number(angle_deg) and is_number(zoom) and zoom > 0 do
     push_rotate_zoom_deg(port, src_target, x, y, angle_deg, zoom, zoom)
   end
 
@@ -514,6 +552,7 @@ defmodule SampleApp.Port do
     end
   end
 
+  # Minimal convenience helper used heavily by SampleApp.
   def draw_string_bg(port, x, y, fg888, bg888, size, text, target \\ 0)
       when is_integer(fg888) and fg888 in 0..0xFFFFFF and
              is_integer(bg888) and bg888 in 0..0xFFFFFF and
@@ -528,6 +567,7 @@ defmodule SampleApp.Port do
     end
   end
 
+  # Minimal convenience: clears host-side cached text state.
   def reset_text_state(port, target \\ 0) when is_integer(target) and target in 0..254 do
     :erlang.erase({:lgfx_text_color, port, target})
     :erlang.erase({:lgfx_text_size, port, target})
@@ -682,23 +722,7 @@ defmodule SampleApp.Port do
 
   defp decode_last_error(other), do: {:error, {:bad_last_error_payload, other}}
 
-  # -----------------------------------------------------------------------------
-  # Internal helpers
-  # -----------------------------------------------------------------------------
-  defp validate_text_binary(text) when is_binary(text) do
-    cond do
-      byte_size(text) == 0 ->
-        {:error, :empty_text}
-
-      :binary.match(text, <<0>>) != :nomatch ->
-        {:error, :text_contains_nul}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp decode_touch_payload(_op, :none), do: {:ok, nil}
+  defp decode_touch_payload(_op, :none), do: {:ok, :none}
 
   defp decode_touch_payload(_op, {x, y, size})
        when is_integer(x) and is_integer(y) and is_integer(size) do
@@ -714,6 +738,32 @@ defmodule SampleApp.Port do
   end
 
   defp decode_calibrate_payload(other), do: {:error, {:bad_touch_calibrate_payload, other}}
+
+  # -----------------------------------------------------------------------------
+  # Internal helpers
+  # -----------------------------------------------------------------------------
+  defp validate_text_binary(text) when is_binary(text) do
+    cond do
+      byte_size(text) == 0 ->
+        {:error, :empty_text}
+
+      contains_nul?(text) ->
+        {:error, :text_contains_nul}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp contains_nul?(<<>>), do: false
+  defp contains_nul?(<<0, _::binary>>), do: true
+
+  defp contains_nul?(<<a, b, c, d, e, f, g, h, rest::binary>>) do
+    a == 0 or b == 0 or c == 0 or d == 0 or e == 0 or f == 0 or g == 0 or h == 0 or
+      contains_nul?(rest)
+  end
+
+  defp contains_nul?(<<_byte, rest::binary>>), do: contains_nul?(rest)
 
   defp normalize_u16_8({p0, p1, p2, p3, p4, p5, p6, p7}) do
     normalize_u16_8([p0, p1, p2, p3, p4, p5, p6, p7])
@@ -860,7 +910,7 @@ defmodule SampleApp.Port do
 
   defp pack_rows_iolist(pixels, stride_bytes, row_bytes, row, row_end, acc) do
     offset = row * stride_bytes
-    part = :erlang.binary_part(pixels, offset, row_bytes)
+    part = :binary.part(pixels, offset, row_bytes)
     pack_rows_iolist(pixels, stride_bytes, row_bytes, row + 1, row_end, [part | acc])
   end
 

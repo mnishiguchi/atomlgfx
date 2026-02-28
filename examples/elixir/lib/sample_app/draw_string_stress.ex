@@ -1,7 +1,7 @@
 defmodule SampleApp.DrawStringStress do
   @moduledoc false
 
-  alias SampleApp.Port
+  alias LGFXPort, as: Port
   import SampleApp.AtomVMCompat, only: [yield: 0]
 
   @bg 0x0B1020
@@ -24,38 +24,86 @@ defmodule SampleApp.DrawStringStress do
   @progress_every 25
   @gc_every 32
 
+  # Periodically emit a UTF-8 line to stress multi-byte transport under churn.
+  @utf8_every 17
+
+  # Try enabling JP glyphs once so UTF-8 lines are not guaranteed tofu.
+  # If presets are not compiled in, this will simply log and continue.
+  @jp_presets [:jp_medium, :jp_small, :jp, :jp_large]
+
   def run(port, rounds \\ 500) when is_integer(rounds) and rounds > 0 do
-    {:ok, w} = Port.width(port, 0)
-    {:ok, h} = Port.height(port, 0)
+    :erlang.erase({__MODULE__, :jp_preset})
 
-    hud_h = min_i(@hud_h, h)
-    text_y0 = hud_h
-    text_h = max_i(1, h - hud_h)
-    rows = rows_for_height(text_h)
+    with {:ok, w} <- Port.width(port, 0),
+         {:ok, h} <- Port.height(port, 0) do
+      hud_h = min_i(@hud_h, h)
+      text_y0 = hud_h
+      text_h = max_i(1, h - hud_h)
+      rows = rows_for_height(text_h)
 
-    IO.puts("draw_string_stress start w=#{w} h=#{h} rows=#{rows} rounds=#{rounds}")
+      IO.puts("draw_string_stress start w=#{w} h=#{h} rows=#{rows} rounds=#{rounds}")
 
-    draw_chrome(port, w, h, text_y0)
-    draw_status(port, w, rounds, -1, 0, 0, rows)
+      _ = draw_chrome(port, w, h, text_y0)
+      _ = draw_status(port, w, rounds, -1, 0, 0, rows)
 
-    _ = Port.reset_text_state(port, 0)
-    _ = Port.set_text_wrap(port, false, 0)
-    _ = Port.set_text_size(port, 2, 0)
-    _ = Port.set_text_color(port, 0xFFFFFF, nil, 0)
+      # Keep state deterministic from this module's point of view.
+      # Note: reset_text_state resets host cache only; device state remains whatever it was.
+      _ = Port.reset_text_state(port, 0)
+      _ = Port.set_text_wrap(port, false, 0)
+      _ = Port.set_text_size(port, 2, 0)
+      _ = Port.set_text_color(port, 0xFFFFFF, nil, 0)
 
-    # Client-side validation probe: Port.draw_string/5 rejects empty binary by guard.
-    probe_invalid_text_guard(port)
+      _ = maybe_use_japanese_font_preset(port)
 
-    do_run(port, w, rows, rounds, text_y0, 0, 0, 0)
+      probe_invalid_text_guard(port)
+
+      do_run(port, w, rows, rounds, text_y0, 0, 0, 0)
+    else
+      {:error, reason} = err ->
+        IO.puts("draw_string_stress failed to start: #{Port.format_error(reason)}")
+        err
+    end
+  end
+
+  defp maybe_use_japanese_font_preset(port) do
+    try_japanese_font_presets(port, @jp_presets)
+  end
+
+  defp try_japanese_font_presets(_port, []) do
+    IO.puts("draw_string_stress jp preset: none (tofu is expected)")
+    :ok
+  end
+
+  defp try_japanese_font_presets(port, [preset | rest]) do
+    case Port.set_font_preset(port, preset, 0) do
+      :ok ->
+        :erlang.put({__MODULE__, :jp_preset}, preset)
+        IO.puts("draw_string_stress jp preset: #{inspect(preset)}")
+        :ok
+
+      {:error, reason} ->
+        IO.puts(
+          "draw_string_stress jp preset #{inspect(preset)} unavailable: #{Port.format_error(reason)}"
+        )
+
+        try_japanese_font_presets(port, rest)
+    end
   end
 
   defp probe_invalid_text_guard(port) do
-    try do
-      _ = Port.draw_string(port, @x, 0, <<>>, 0)
-      IO.puts("invalid_text_probe unexpected: empty binary accepted")
-    catch
-      :error, :function_clause ->
-        IO.puts("invalid_text_probe ok (client guard)")
+    # Client-side validation probe: empty binaries must be rejected.
+    case Port.draw_string(port, @x, 0, <<>>, 0) do
+      {:error, :empty_text} ->
+        IO.puts("invalid_text_probe ok (empty_text)")
+
+      {:error, reason} ->
+        IO.puts("invalid_text_probe ok (got #{Port.format_error(reason)})")
+
+      :ok ->
+        IO.puts("invalid_text_probe unexpected_ok")
+
+      other ->
+        IO.puts("invalid_text_probe unexpected_reply=#{inspect(other)}")
     end
 
     :ok
@@ -78,12 +126,12 @@ defmodule SampleApp.DrawStringStress do
     row_bg = row_bg_color(row)
     fg = row_fg_color(i)
 
-    # Clear row and draw a small marker strip
+    # Clear row and draw a small marker strip.
     _ = Port.fill_rect(port, 0, y, w, @line_h, row_bg)
     _ = Port.fill_rect(port, 0, y, 2, @line_h, @row_marker)
     _ = Port.set_text_color(port, fg, nil, 0)
 
-    # Fresh runtime binary each iteration (important for lifetime testing)
+    # Fresh runtime binary each iteration (important for lifetime testing).
     text = make_line(i)
 
     {ok_count2, err_count2} =
@@ -96,12 +144,12 @@ defmodule SampleApp.DrawStringStress do
           {ok_count, err_count + 1}
       end
 
-    # Churn another fresh binary after draw to help expose lifetime bugs
+    # Churn another fresh binary after draw to help expose lifetime bugs.
     _trash = make_line(i + 10_000)
 
     if should_log_progress?(i, rounds) do
       IO.puts("draw_string_stress progress i=#{i}/#{rounds} ok=#{ok_count2} err=#{err_count2}")
-      draw_status(port, w, rounds, i, ok_count2, err_count2, rows)
+      _ = draw_status(port, w, rounds, i, ok_count2, err_count2, rows)
     end
 
     if rem(i, @gc_every) == 0 do
@@ -144,12 +192,12 @@ defmodule SampleApp.DrawStringStress do
     _ = Port.fill_rect(port, 0, 0, screen_w, @hud_h, @hud_bg)
 
     line1 =
-      <<"TXT stress  ", progress_label(i, rounds)::binary, "  ", "ok:", i2b(ok_count)::binary,
+      <<"TXT stress  ", progress_label(i, rounds)::binary, "  ok:", i2b(ok_count)::binary,
         "  err:", i2b(err_count)::binary>>
 
     line2 =
-      <<"rows:", i2b(rows)::binary, "  line_h:", i2b(@line_h)::binary,
-        "  mode:drawString fresh-binary">>
+      <<"rows:", i2b(rows)::binary, "  line_h:", i2b(@line_h)::binary, "  ", jp_label()::binary,
+        "  utf8_every:", i2b(@utf8_every)::binary>>
 
     _ = Port.draw_string_bg(port, 4, 0, @hud_fg, @hud_bg, 2, line1)
     _ = Port.draw_string_bg(port, 4, 12, @hud_dim, @hud_bg, 1, line2)
@@ -175,6 +223,16 @@ defmodule SampleApp.DrawStringStress do
     end
 
     :ok
+  end
+
+  defp jp_label do
+    case :erlang.get({__MODULE__, :jp_preset}) do
+      preset when is_atom(preset) ->
+        <<"jp:", :erlang.atom_to_binary(preset, :utf8)::binary>>
+
+      _ ->
+        "jp:none"
+    end
   end
 
   defp progress_label(i, rounds) do
@@ -205,20 +263,29 @@ defmodule SampleApp.DrawStringStress do
   end
 
   # ---------------------------------------------------------------------------
-  # Text generation (fresh runtime binaries, but more readable)
+  # Text generation (fresh runtime binaries; periodic UTF-8)
   # ---------------------------------------------------------------------------
 
   defp rows_for_height(h) when is_integer(h) and h > 0 do
     r = div(h, @line_h)
-
-    if r > 0 do
-      r
-    else
-      1
-    end
+    if r > 0, do: r, else: 1
   end
 
   defp make_line(i) when is_integer(i) do
+    if rem(i, @utf8_every) == 0 do
+      make_line_utf8(i)
+    else
+      make_line_ascii(i)
+    end
+  end
+
+  defp make_line_utf8(i) do
+    # Short but representative: common UI words + punctuation.
+    # This primarily exercises UTF-8 transport + lifetime under churn.
+    <<"[utf8 i:", i2b(i)::binary, "] 日本語テスト 設定 戻る 次へ 。、！？">>
+  end
+
+  defp make_line_ascii(i) do
     prefix = make_prefix(i)
     prefix_len = byte_size(prefix)
     max_payload_len = max_i(1, 96 - prefix_len)

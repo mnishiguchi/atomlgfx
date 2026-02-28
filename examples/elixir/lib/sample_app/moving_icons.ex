@@ -3,13 +3,14 @@ defmodule SampleApp.MovingIcons do
 
   import Bitwise
 
+  alias LGFXPort, as: Port
   alias SampleApp.Assets
-  alias SampleApp.Port
   import SampleApp.AtomVMCompat, only: [yield: 0]
 
   # -----------------------------------------------------------------------------
   # Tuning knobs
   # -----------------------------------------------------------------------------
+
   # Toggle this for quick fps testing.
   # - true  => fewer objects, slower HUD refresh, transform throttling
   # - false => normal demo feel
@@ -42,11 +43,15 @@ defmodule SampleApp.MovingIcons do
   @hud_fg 0xFFFFFF
   @hud_dim 0xA0A0A0
 
-  # Playfield background
+  # Playfield background (RGB888)
   @bg 0x000000
 
-  # Transparent key used for sprite atlas background (matches playfield)
-  @transparent_key 0x000000
+  # Sprite atlas background and transparent key.
+  #
+  # - For fill/clear operations we use RGB888.
+  # - For sprite transparent-key APIs the protocol expects RGB565 u16.
+  @transparent_key_rgb888 0x000000
+  @transparent_key_rgb565 0x0000
 
   # Capability bits (LGFX_PORT_PROTOCOL.md)
   @cap_sprite 1 <<< 0
@@ -56,7 +61,8 @@ defmodule SampleApp.MovingIcons do
   @sprite_alert 2
   @sprite_close 3
 
-  # Zoom animation (Q8)
+  # Zoom animation (Q8, demo-side)
+  # - Q8 = 256 means 1.0x
   @zoom_min_q8 256
   @zoom_max_q8 512
 
@@ -88,8 +94,7 @@ defmodule SampleApp.MovingIcons do
               :ok ->
                 :ok
 
-              {:error, reason} ->
-                _ = reason
+              {:error, _reason} ->
                 IO.puts("moving_icons hud init failed; continuing")
                 :ok
             end
@@ -157,7 +162,7 @@ defmodule SampleApp.MovingIcons do
     pivot_y = div(icon_h, 2)
 
     with :ok <- Port.create_sprite(port, icon_w, icon_h, sprite_target),
-         :ok <- Port.clear(port, @transparent_key, sprite_target),
+         :ok <- Port.clear(port, @transparent_key_rgb888, sprite_target),
          :ok <- Port.push_image_rgb565(port, 0, 0, icon_w, icon_h, pixels, 0, sprite_target),
          :ok <- Port.set_pivot(port, sprite_target, pivot_x, pivot_y) do
       :ok
@@ -285,9 +290,7 @@ defmodule SampleApp.MovingIcons do
               :ok ->
                 sec
 
-              {:error, reason} ->
-                # Avoid throw/catch in the hot loop on AtomVM to reduce pressure from exception stacktraces.
-                _ = reason
+              {:error, _reason} ->
                 IO.puts("moving_icons hud update failed; continuing")
                 sec
             end
@@ -650,16 +653,19 @@ defmodule SampleApp.MovingIcons do
       center_x = x + div(icon_w, 2)
       center_y = y + div(icon_h, 2)
 
-      scaled_w = max_i(icon_w, div(icon_w * zoom_q8, 256))
-      scaled_h = max_i(icon_h, div(icon_h * zoom_q8, 256))
+      # Round up scaling to avoid leaving un-erased edge pixels.
+      scaled_w = max_i(icon_w, div(icon_w * zoom_q8 + 255, 256))
+      scaled_h = max_i(icon_h, div(icon_h * zoom_q8 + 255, 256))
 
       # Generous padding so rotated corners are erased cleanly.
-      half = div(max_i(scaled_w, scaled_h), 2) + @clear_pad_px
+      half = div(max_i(scaled_w, scaled_h), 2) + @clear_pad_px + 1
 
       rect_x0 = center_x - half
       rect_y0 = center_y - half
-      rect_x1 = center_x + half
-      rect_y1 = center_y + half
+
+      # rect_x1/rect_y1 are treated as exclusive bounds.
+      rect_x1 = center_x + half + 1
+      rect_y1 = center_y + half + 1
 
       fill_clipped_rect(port, rect_x0, rect_y0, rect_x1, rect_y1, screen_w, screen_h, min_y)
     else
@@ -744,6 +750,12 @@ defmodule SampleApp.MovingIcons do
       center_x = x + div(icon_w, 2)
       center_y = y + div(icon_h, 2)
 
+      # Demo units -> protocol units
+      # - angle: tenths of a degree -> centi-degrees
+      # - zoom:  Q8 (256 = 1.0x)    -> x1024 (1024 = 1.0x)
+      angle_cdeg = angle_tenths * 10
+      zoom_x1024 = zoom_q8 * 4
+
       # Fast path: non-transparent rotate/zoom.
       # Background is already black, so transparent-key blending is usually unnecessary.
       case Port.push_rotate_zoom(
@@ -751,14 +763,14 @@ defmodule SampleApp.MovingIcons do
              sprite_target,
              center_x,
              center_y,
-             angle_tenths,
-             zoom_q8,
-             zoom_q8
+             angle_cdeg,
+             zoom_x1024,
+             zoom_x1024
            ) do
         :ok ->
           {:ok, true}
 
-        # If the driver build does not support rotate/zoom yet, gracefully fall back.
+        # If the driver build does not support rotate/zoom yet, fall back to pushSprite.
         {:error, :unsupported} ->
           draw_object_fallback_push_sprite(port, sprite_target, x, y)
 
@@ -775,7 +787,7 @@ defmodule SampleApp.MovingIcons do
 
   defp draw_object_fallback_push_sprite(port, sprite_target, x, y) do
     if @use_transparent_push_sprite do
-      case Port.push_sprite(port, sprite_target, x, y, @transparent_key) do
+      case Port.push_sprite(port, sprite_target, x, y, @transparent_key_rgb565) do
         :ok -> {:ok, false}
         {:error, reason} -> {:error, reason}
       end
