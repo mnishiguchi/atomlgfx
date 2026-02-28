@@ -8,6 +8,9 @@
 
 #include "esp_err.h"
 
+// Build-time configuration (generated from include/lgfx_port/lgfx_port_config.h.in)
+#include "lgfx_port/lgfx_port_config.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

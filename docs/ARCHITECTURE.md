@@ -6,6 +6,7 @@ This repository is an **ESP-IDF component** that exposes **LovyanGFX** to **Atom
 - Large payloads are carried as binaries for throughput.
 - The protocol contract is documented in `docs/LGFX_PORT_PROTOCOL.md`.
 - Protocol-visible behavior is driven from metadata (`include/lgfx_port/ops.def`) to reduce drift.
+- Hardware wiring and LovyanGFX tuning are configured at build time via a generated config header.
 
 ## Scope
 
@@ -13,6 +14,8 @@ This repository focuses on the **port driver** and its protocol boundary.
 
 - `include/lgfx_port/`
   - Public headers for the ESP-IDF component (what other components include)
+- `include/lgfx_port/lgfx_port_config.h.in`
+  - Build-time config template (CMake `configure_file` input)
 - `lgfx_port/`
   - Protocol-facing port driver implementation (AtomVM mailbox, term decode, validation, dispatch, replies)
 - `src/`
@@ -30,6 +33,7 @@ This repository focuses on the **port driver** and its protocol boundary.
 ├── include/
 │   └── lgfx_port/
 │       ├── lgfx_port.h
+│       ├── lgfx_port_config.h.in
 │       ├── ops.def
 │       ├── ops.h
 │       ├── proto_term.h
@@ -58,6 +62,34 @@ Notes:
   - `<component_root>/include/<component_name>/*.h`
 
 - Port implementation C sources live under `lgfx_port/`.
+
+## Build-time configuration
+
+This component uses a generated config header to keep **wiring**, **panel geometry**, and **LovyanGFX Bus/Panel knobs**
+consistent across the protocol layer (`lgfx_port/*`) and the device layer (`src/*`).
+
+- Template (committed)
+  - `include/lgfx_port/lgfx_port_config.h.in`
+
+- Generated output (build directory; not committed)
+  - `<build>/esp-idf/atomlgfx/generated/lgfx_port/lgfx_port_config.h`
+
+How it works:
+
+- `CMakeLists.txt` exposes cache variables / options (set by the parent project or via `idf.py -D...`).
+- During configure, CMake runs `configure_file(... @ONLY)` to substitute `@VARS@` into the generated header.
+- The component adds the generated include directory as a **PUBLIC** include path so consumers that include
+  `lgfx_port/lgfx_port.h` also see the config macros.
+
+Key properties:
+
+- Deterministic capability gating
+  - `CAP_TOUCH` advertisement is computed in CMake (`LGFX_PORT_SUPPORTS_TOUCH`) so protocol behavior does not depend on
+    ad-hoc compile definitions.
+
+- Formatter hazard (real-world footgun)
+  - The `@VAR@` tokens in `lgfx_port_config.h.in` must remain intact. If a formatter rewrites them (e.g. `@VAR @`),
+    CMake substitution breaks and you get stray `@` in the generated header.
 
 ## High-level execution model
 

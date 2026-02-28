@@ -8,6 +8,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// Build-time configuration (generated from include/lgfx_port/lgfx_port_config.h.in)
+#include "lgfx_port/lgfx_port_config.h"
+
 #include "context.h"
 #include "globalcontext.h"
 #include "term.h"
