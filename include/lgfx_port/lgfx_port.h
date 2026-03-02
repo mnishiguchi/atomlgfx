@@ -50,11 +50,16 @@
 #define LGFX_PORT_SPRITE_DEFAULT_DEPTH 16u
 #endif
 
-#if (LGFX_PORT_SPRITE_DEFAULT_DEPTH != 1u) && (LGFX_PORT_SPRITE_DEFAULT_DEPTH != 2u) && (LGFX_PORT_SPRITE_DEFAULT_DEPTH != 4u) && (LGFX_PORT_SPRITE_DEFAULT_DEPTH != 8u) && (LGFX_PORT_SPRITE_DEFAULT_DEPTH != 16u) && (LGFX_PORT_SPRITE_DEFAULT_DEPTH != 24u)
+#if (LGFX_PORT_SPRITE_DEFAULT_DEPTH != 1u) && (LGFX_PORT_SPRITE_DEFAULT_DEPTH != 2u) && (LGFX_PORT_SPRITE_DEFAULT_DEPTH != 4u) \
+    && (LGFX_PORT_SPRITE_DEFAULT_DEPTH != 8u) && (LGFX_PORT_SPRITE_DEFAULT_DEPTH != 16u) && (LGFX_PORT_SPRITE_DEFAULT_DEPTH != 24u)
 #error "LGFX_PORT_SPRITE_DEFAULT_DEPTH must be one of: 1,2,4,8,16,24"
 #endif
 
-// Advertisement gates
+// Advertisement / enable gates (0/1).
+// These gates must stay consistent with:
+// - ops.def feature_cap_bit usage
+// - getCaps FeatureBits derivation
+// - runtime behavior (disabled ops => {error, unsupported})
 #ifndef LGFX_PORT_SUPPORTS_SPRITE
 #define LGFX_PORT_SUPPORTS_SPRITE 1
 #endif
@@ -132,8 +137,9 @@ static inline bool lgfx_validate_color_depth(uint32_t d)
 #define LGFX_CAP_SAFE_YIELD_FORGIVING (1u << 8)
 #define LGFX_CAP_SAFE_YIELD_STRICT (1u << 9)
 
-#define LGFX_CAP_KNOWN_MASK ( \
-    LGFX_CAP_SPRITE | LGFX_CAP_PUSHIMAGE | LGFX_CAP_TOUCH | LGFX_CAP_JPG_FILE | LGFX_CAP_PNG_FILE | LGFX_CAP_LAST_ERROR | LGFX_CAP_BATCH_VOID | LGFX_CAP_SAFE_YIELD_FORGIVING | LGFX_CAP_SAFE_YIELD_STRICT)
+#define LGFX_CAP_KNOWN_MASK                                                                                                                      \
+    (LGFX_CAP_SPRITE | LGFX_CAP_PUSHIMAGE | LGFX_CAP_TOUCH | LGFX_CAP_JPG_FILE | LGFX_CAP_PNG_FILE | LGFX_CAP_LAST_ERROR | LGFX_CAP_BATCH_VOID   \
+        | LGFX_CAP_SAFE_YIELD_FORGIVING | LGFX_CAP_SAFE_YIELD_STRICT)
 
 #ifndef LGFX_PORT_SAFE_YIELD_CAP
 #define LGFX_PORT_SAFE_YIELD_CAP 0u
@@ -142,58 +148,6 @@ static inline bool lgfx_validate_color_depth(uint32_t d)
 #if (LGFX_PORT_SAFE_YIELD_CAP != 0u) && (LGFX_PORT_SAFE_YIELD_CAP != LGFX_CAP_SAFE_YIELD_FORGIVING) && (LGFX_PORT_SAFE_YIELD_CAP != LGFX_CAP_SAFE_YIELD_STRICT)
 #error "LGFX_PORT_SAFE_YIELD_CAP must be 0, LGFX_CAP_SAFE_YIELD_FORGIVING, or LGFX_CAP_SAFE_YIELD_STRICT"
 #endif
-
-// -----------------------------------------------------------------------------
-// getCaps helpers
-// -----------------------------------------------------------------------------
-static inline uint32_t lgfx_proto_feature_bits(void)
-{
-    uint32_t bits = 0;
-
-#if LGFX_PORT_SUPPORTS_SPRITE
-    bits |= LGFX_CAP_SPRITE;
-#endif
-
-#if LGFX_PORT_SUPPORTS_PUSHIMAGE
-    bits |= LGFX_CAP_PUSHIMAGE;
-#endif
-
-#if LGFX_PORT_SUPPORTS_TOUCH
-    bits |= LGFX_CAP_TOUCH;
-#endif
-
-#if LGFX_PORT_SUPPORTS_JPG_FILE
-    bits |= LGFX_CAP_JPG_FILE;
-#endif
-
-#if LGFX_PORT_SUPPORTS_PNG_FILE
-    bits |= LGFX_CAP_PNG_FILE;
-#endif
-
-#if LGFX_PORT_SUPPORTS_LAST_ERROR
-    bits |= LGFX_CAP_LAST_ERROR;
-#endif
-
-#if LGFX_PORT_SUPPORTS_BATCH_VOID
-    bits |= LGFX_CAP_BATCH_VOID;
-#endif
-
-    // 0 or exactly one safe-yield bit is validated above.
-    bits |= (uint32_t) LGFX_PORT_SAFE_YIELD_CAP;
-
-    // Never expose unknown bits on the wire.
-    return bits & (uint32_t) LGFX_CAP_KNOWN_MASK;
-}
-
-static inline uint8_t lgfx_proto_max_sprites(void)
-{
-#if LGFX_PORT_SUPPORTS_SPRITE
-    return (uint8_t) LGFX_PORT_MAX_SPRITES;
-#else
-    // Contract: MaxSprites must be 0 when CAP_SPRITE is not advertised.
-    return 0;
-#endif
-}
 
 /*
  * Op-specific request flags (req->flags)
@@ -272,6 +226,14 @@ typedef struct
 } lgfx_port_t;
 
 void lgfx_atoms_init(GlobalContext *global, lgfx_atoms_t *atoms);
+
+// getCaps derivation (metadata-driven; see ops.def + docs/LGFX_PORT_PROTOCOL.md)
+uint32_t lgfx_port_feature_bits(const lgfx_port_t *port);
+uint8_t lgfx_port_max_sprites(const lgfx_port_t *port);
+
+// Returns true if an op is known and enabled under build/runtime gates.
+// Disabled ops must behave as {error, unsupported} and must not be advertised via FeatureBits.
+bool lgfx_port_op_is_enabled(const lgfx_port_t *port, term op_atom);
 
 static inline void lgfx_last_error_clear(lgfx_port_t *port)
 {

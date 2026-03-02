@@ -152,6 +152,52 @@ _Static_assert((sizeof(s_op_meta) / sizeof(s_op_meta[0])) == LGFX_OP_COUNT, "s_o
 _Static_assert((sizeof(s_op_names) / sizeof(s_op_names[0])) == LGFX_OP_COUNT, "s_op_names size mismatch");
 _Static_assert((sizeof(s_handlers) / sizeof(s_handlers[0])) == LGFX_OP_COUNT, "s_handlers size mismatch");
 
+// -----------------------------------------------------------------------------
+// Capability toggle sanity: toggles must be backed by ops.def metadata.
+//
+// FeatureBits is derived from ops.def feature_cap_bit + enabled dispatch surface.
+// Therefore, setting LGFX_PORT_SUPPORTS_* to 1 is only meaningful if at least one
+// op in ops.def declares the corresponding LGFX_CAP_* bit.
+// -----------------------------------------------------------------------------
+
+enum
+{
+    LGFX_OPS_DECLARED_CAP_BITS =
+        0
+#define X(_op_name, _handler_fn, _atom_str, _min_arity, _max_arity, _allowed_flags_mask, _target_policy, _state_policy, feature_cap_bit_v) \
+        | ((int) (feature_cap_bit_v))
+#include "lgfx_port/ops.def"
+#undef X
+};
+
+_Static_assert(
+    ((((uint32_t) LGFX_OPS_DECLARED_CAP_BITS) & ~((uint32_t) LGFX_CAP_KNOWN_MASK)) == 0u),
+    "ops.def feature_cap_bit contains unknown bits");
+
+#if LGFX_PORT_SUPPORTS_JPG_FILE
+_Static_assert(
+    ((((uint32_t) LGFX_OPS_DECLARED_CAP_BITS) & (uint32_t) LGFX_CAP_JPG_FILE) != 0u),
+    "LGFX_PORT_SUPPORTS_JPG_FILE=1 but no op in ops.def declares LGFX_CAP_JPG_FILE");
+#endif
+
+#if LGFX_PORT_SUPPORTS_PNG_FILE
+_Static_assert(
+    ((((uint32_t) LGFX_OPS_DECLARED_CAP_BITS) & (uint32_t) LGFX_CAP_PNG_FILE) != 0u),
+    "LGFX_PORT_SUPPORTS_PNG_FILE=1 but no op in ops.def declares LGFX_CAP_PNG_FILE");
+#endif
+
+#if LGFX_PORT_SUPPORTS_BATCH_VOID
+_Static_assert(
+    ((((uint32_t) LGFX_OPS_DECLARED_CAP_BITS) & (uint32_t) LGFX_CAP_BATCH_VOID) != 0u),
+    "LGFX_PORT_SUPPORTS_BATCH_VOID=1 but no op in ops.def declares LGFX_CAP_BATCH_VOID");
+#endif
+
+#if (LGFX_PORT_SAFE_YIELD_CAP != 0u)
+_Static_assert(
+    ((((uint32_t) LGFX_OPS_DECLARED_CAP_BITS) & (uint32_t) LGFX_CAP_BATCH_VOID) != 0u),
+    "LGFX_PORT_SAFE_YIELD_CAP requires a transaction surface; declare LGFX_CAP_BATCH_VOID on an op in ops.def");
+#endif
+
 static int lgfx_op_index_from_atom(const lgfx_port_t *port, term op_atom)
 {
 #define X(op_name, _handler_fn, _atom_str, ...) \
@@ -163,6 +209,186 @@ static int lgfx_op_index_from_atom(const lgfx_port_t *port, term op_atom)
 #undef X
 
     return -1;
+}
+
+// -----------------------------------------------------------------------------
+// getCaps: metadata-driven FeatureBits + op enable gating
+// -----------------------------------------------------------------------------
+
+static bool lgfx_cap_bit_enabled(uint32_t cap_bit)
+{
+    // cap_bit is expected to be 0 or a single protocol bit in practice, but tolerate
+    // multi-bit values and disable if any constituent requires a disabled feature.
+    if (cap_bit == 0u) {
+        return true;
+    }
+
+    // Defensive: if unknown bits sneak in, treat as disabled.
+    if ((cap_bit & ~((uint32_t) LGFX_CAP_KNOWN_MASK)) != 0u) {
+        return false;
+    }
+
+    if ((cap_bit & (uint32_t) LGFX_CAP_SPRITE) != 0u) {
+#if LGFX_PORT_SUPPORTS_SPRITE
+        // ok
+#else
+        return false;
+#endif
+    }
+
+    if ((cap_bit & (uint32_t) LGFX_CAP_PUSHIMAGE) != 0u) {
+#if LGFX_PORT_SUPPORTS_PUSHIMAGE
+        // ok
+#else
+        return false;
+#endif
+    }
+
+    if ((cap_bit & (uint32_t) LGFX_CAP_TOUCH) != 0u) {
+#if LGFX_PORT_SUPPORTS_TOUCH
+        // ok
+#else
+        return false;
+#endif
+    }
+
+    if ((cap_bit & (uint32_t) LGFX_CAP_LAST_ERROR) != 0u) {
+#if LGFX_PORT_SUPPORTS_LAST_ERROR
+        // ok
+#else
+        return false;
+#endif
+    }
+
+    if ((cap_bit & (uint32_t) LGFX_CAP_JPG_FILE) != 0u) {
+#if LGFX_PORT_SUPPORTS_JPG_FILE
+        // ok
+#else
+        return false;
+#endif
+    }
+
+    if ((cap_bit & (uint32_t) LGFX_CAP_PNG_FILE) != 0u) {
+#if LGFX_PORT_SUPPORTS_PNG_FILE
+        // ok
+#else
+        return false;
+#endif
+    }
+
+    if ((cap_bit & (uint32_t) LGFX_CAP_BATCH_VOID) != 0u) {
+#if LGFX_PORT_SUPPORTS_BATCH_VOID
+        // ok
+#else
+        return false;
+#endif
+    }
+
+    // Safe-yield bits are build-selected (0 or exactly one). Only enable if the build
+    // selected the matching bit.
+    if ((cap_bit & (uint32_t) LGFX_CAP_SAFE_YIELD_FORGIVING) != 0u) {
+        if ((uint32_t) LGFX_PORT_SAFE_YIELD_CAP != (uint32_t) LGFX_CAP_SAFE_YIELD_FORGIVING) {
+            return false;
+        }
+    }
+
+    if ((cap_bit & (uint32_t) LGFX_CAP_SAFE_YIELD_STRICT) != 0u) {
+        if ((uint32_t) LGFX_PORT_SAFE_YIELD_CAP != (uint32_t) LGFX_CAP_SAFE_YIELD_STRICT) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Gates only (build/runtime capability gates via cap bits), independent of dispatch wiring.
+static bool lgfx_op_gated_by_index(int op_index)
+{
+    if (op_index < 0 || op_index >= (int) LGFX_OP_COUNT) {
+        return false;
+    }
+
+    const uint32_t cap_bit = s_op_meta[op_index].feature_cap_bit;
+    return lgfx_cap_bit_enabled(cap_bit);
+}
+
+// Hardening: "enabled" surface also requires a live dispatch entry.
+static bool lgfx_op_enabled_by_index(int op_index)
+{
+    if (!lgfx_op_gated_by_index(op_index)) {
+        return false;
+    }
+
+    if (s_handlers[op_index] == NULL) {
+        return false;
+    }
+
+    return true;
+}
+
+uint32_t lgfx_port_feature_bits(const lgfx_port_t *port)
+{
+    (void) port;
+
+    /*
+     * NOTE:
+     * - Only op-linked capability bits are advertised (ops.def feature_cap_bit).
+     * - Build toggles alone do not advertise reserved bits; see sanity asserts above.
+     */
+    uint32_t bits = 0;
+    bool has_transaction_ops = false;
+
+    // Op-linked capability bits: derived from ops.def metadata and enabled dispatch.
+    for (int i = 0; i < (int) LGFX_OP_COUNT; i++) {
+        const uint32_t cap_bit = s_op_meta[i].feature_cap_bit;
+
+        if (cap_bit == 0u) {
+            continue;
+        }
+        if (!lgfx_op_enabled_by_index(i)) {
+            continue;
+        }
+
+        bits |= cap_bit;
+
+        // Treat CAP_BATCH_VOID as a transaction-style surface for safe-yield advertisement.
+        if ((cap_bit & (uint32_t) LGFX_CAP_BATCH_VOID) != 0u) {
+            has_transaction_ops = true;
+        }
+    }
+
+    // Safe-yield cap is only valid when transaction-style ops exist.
+    if (has_transaction_ops) {
+        bits |= (uint32_t) LGFX_PORT_SAFE_YIELD_CAP;
+    }
+
+    return bits & (uint32_t) LGFX_CAP_KNOWN_MASK;
+}
+
+uint8_t lgfx_port_max_sprites(const lgfx_port_t *port)
+{
+    const uint32_t bits = lgfx_port_feature_bits(port);
+    if ((bits & (uint32_t) LGFX_CAP_SPRITE) == 0u) {
+        // Contract: MaxSprites must be 0 when CAP_SPRITE is not advertised.
+        return 0;
+    }
+
+    return (uint8_t) LGFX_PORT_MAX_SPRITES;
+}
+
+bool lgfx_port_op_is_enabled(const lgfx_port_t *port, term op_atom)
+{
+    if (port == NULL) {
+        return false;
+    }
+
+    const int op_index = lgfx_op_index_from_atom(port, op_atom);
+    if (op_index < 0) {
+        return false;
+    }
+
+    // Public meaning: enabled by build/runtime gates (not dispatch wiring).
+    return lgfx_op_gated_by_index(op_index);
 }
 
 const lgfx_op_meta_t *lgfx_op_meta_lookup(const lgfx_port_t *port, term op_atom)
@@ -189,6 +415,11 @@ lgfx_handler_fn lgfx_dispatch_lookup(lgfx_port_t *port, term op_atom)
 {
     int op_index = lgfx_op_index_from_atom((const lgfx_port_t *) port, op_atom);
     if (op_index < 0) {
+        return NULL;
+    }
+
+    // Disabled ops (by gates or missing dispatch entry) are treated as not present.
+    if (!lgfx_op_enabled_by_index(op_index)) {
         return NULL;
     }
 
@@ -334,6 +565,13 @@ void lgfx_port_handle_mailbox_message(Context *ctx, lgfx_port_t *port, term msg)
         goto send_reply;
     }
 
+    // 1b) Build/runtime gated ops exist in metadata but are not part of the active surface.
+    if (!lgfx_port_op_is_enabled(port, req.op)) {
+        lgfx_last_error_set(port, req.op, port->atoms.unsupported, req.flags, req.target, 0);
+        reply = lgfx_reply_error(ctx, port, port->atoms.unsupported);
+        goto send_reply;
+    }
+
     // 2) Shared validation driven by ops.def metadata.
     term pre = term_invalid_term();
 
@@ -369,6 +607,8 @@ void lgfx_port_handle_mailbox_message(Context *ctx, lgfx_port_t *port, term msg)
      */
     lgfx_handler_fn handler = lgfx_dispatch_lookup(port, req.op);
     if (handler == NULL) {
+        // If we got here, it is not a "disabled op" (we already handled that above).
+        // Treat it as internal wiring drift.
         lgfx_last_error_set(port, req.op, port->atoms.internal, req.flags, req.target, 0);
         reply = lgfx_reply_error(ctx, port, port->atoms.internal);
         goto send_reply;

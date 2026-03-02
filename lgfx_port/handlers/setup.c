@@ -22,8 +22,10 @@
 
 static term do_get_caps(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    uint32_t feature_bits = lgfx_proto_feature_bits();
-    uint32_t max_sprites = (uint32_t) lgfx_proto_max_sprites();
+    // Metadata-driven caps + runtime enable gating live in lgfx_port.c.
+    // This keeps FeatureBits aligned with ops.def feature_cap_bit and build gates.
+    uint32_t feature_bits = lgfx_port_feature_bits(port);
+    uint32_t max_sprites = (uint32_t) lgfx_port_max_sprites(port);
 
     term elems[5] = {
         port->atoms.caps,
