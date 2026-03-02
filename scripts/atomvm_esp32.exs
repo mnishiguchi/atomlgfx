@@ -15,7 +15,18 @@ defmodule Main do
   @boot_avm_rel_path "build/libs/esp32boot/elixir_esp32boot.avm"
 
   @atomvm_git_url "https://github.com/atomvm/AtomVM.git"
-  @atomvm_git_branch "main"
+
+  # Used only for the initial shallow clone.
+  @atomvm_clone_branch "main"
+
+  # Default AtomVM version (branch name, tag name, or full commit SHA).
+  # Override with: --atomvm-ref REF or ATOMVM_REF=REF
+  #
+  # Examples:
+  #   @atomvm_default_ref "main"
+  #   @atomvm_default_ref "v0.6.6"
+  #   @atomvm_default_ref "209835dce092c12afce6e520f30c1dece9483708"
+  @atomvm_default_ref @atomvm_clone_branch
 
   @sdkconfig_managed_settings [
     ~s(CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions-elixir.csv"),
@@ -41,6 +52,8 @@ defmodule Main do
           OptionParser.parse(rest,
             strict: [
               atomvm_repo: :string,
+              atomvm_ref: :string,
+              allow_dirty: :boolean,
               idf_dir: :string,
               target: :string,
               port: :string,
@@ -71,6 +84,7 @@ defmodule Main do
     this_repo_root = repo_root()
 
     atomvm_repo_override = Keyword.get(options, :atomvm_repo, "")
+    allow_dirty = Keyword.get(options, :allow_dirty, false) or truthy_env?("ATOMVM_ALLOW_DIRTY")
     idf_dir_override = Keyword.get(options, :idf_dir, "")
     target = Keyword.get(options, :target, @default_target)
     port = Keyword.get(options, :port, "")
@@ -78,6 +92,7 @@ defmodule Main do
 
     idf_dir = resolve_idf_dir(idf_dir_override)
     {atomvm_root, esp32_dir} = resolve_atomvm_paths(this_repo_root, atomvm_repo_override)
+    {atomvm_ref, atomvm_ref_source} = resolve_atomvm_ref(options)
     port_display = if port == "", do: "(not set)", else: port
 
     case command do
@@ -89,7 +104,10 @@ defmodule Main do
           idf_dir,
           target,
           port_display,
-          override_was_set
+          override_was_set,
+          atomvm_ref,
+          atomvm_ref_source,
+          allow_dirty
         )
 
       "install" ->
@@ -100,7 +118,10 @@ defmodule Main do
           idf_dir,
           target,
           port,
-          override_was_set
+          override_was_set,
+          atomvm_ref,
+          atomvm_ref_source,
+          allow_dirty
         )
 
       "monitor" ->
@@ -119,11 +140,16 @@ defmodule Main do
 
     Commands:
       info      Print resolved paths and basic checks (no changes)
-      install   Ensure AtomVM exists, link component, patch config, build + flash firmware
+      install   Ensure AtomVM exists, pin version, link component, patch config, build + flash firmware
       monitor   Attach serial monitor (idf.py monitor)
 
     Options:
       --atomvm-repo PATH   AtomVM repo root (or wrapper containing AtomVM/)
+      --atomvm-ref REF     AtomVM ref: branch/tag/full SHA
+                          default: #{@atomvm_default_ref}
+                          env: ATOMVM_REF
+      --allow-dirty        Allow pinning even if AtomVM repo has tracked local changes
+                          env: ATOMVM_ALLOW_DIRTY=1
       --idf-dir PATH       ESP-IDF root (contains export.sh). Optional.
       --target TARGET      esp32 / esp32s3 / etc (default: #{@default_target})
       --port PORT          Serial device (required for install/monitor)
@@ -132,10 +158,18 @@ defmodule Main do
     Examples:
       #{@script_name} info
       #{@script_name} install --target esp32s3 --port /dev/ttyACM0
+      #{@script_name} install --allow-dirty --target esp32s3 --port /dev/ttyACM0
+      #{@script_name} install --atomvm-ref v0.6.6 --target esp32s3 --port /dev/ttyACM0
+      #{@script_name} install --atomvm-ref 209835dce092c12afce6e520f30c1dece9483708 --target esp32s3 --port /dev/ttyACM0
       #{@script_name} monitor --port /dev/ttyACM0
 
     ESP-IDF discovery (if --idf-dir not provided):
       Uses ESP_IDF_DIR, then IDF_PATH, else defaults to: $HOME/#{@default_idf_rel_path}
+
+    AtomVM pinning:
+      - Branch ref (e.g. main): always fetches origin/<branch> with depth=1 before resolving
+      - Tag ref (e.g. v0.6.6): resolves tag target commit (stable)
+      - SHA ref (40 hex): checks out that commit (stable)
     """)
   end
 
@@ -296,7 +330,18 @@ defmodule Main do
     end
   end
 
-  defp ensure_atomvm_repo!(atomvm_root, override_was_set) do
+  defp resolve_atomvm_ref(options) do
+    cli = Keyword.get(options, :atomvm_ref, "") |> to_string() |> String.trim()
+    env = (System.get_env("ATOMVM_REF") || "") |> String.trim()
+
+    cond do
+      present?(cli) -> {cli, "--atomvm-ref"}
+      present?(env) -> {env, "ATOMVM_REF"}
+      true -> {@atomvm_default_ref, "default(@atomvm_default_ref)"}
+    end
+  end
+
+  defp ensure_atomvm_repo!(atomvm_root, override_was_set, atomvm_ref, atomvm_ref_source, allow_dirty) do
     cond do
       override_was_set ->
         if File.dir?(Path.join(atomvm_root, ".git")) do
@@ -322,10 +367,192 @@ defmodule Main do
           "--depth",
           "1",
           "--branch",
-          @atomvm_git_branch,
+          @atomvm_clone_branch,
           @atomvm_git_url,
           atomvm_root
         ])
+    end
+
+    ensure_atomvm_ref!(atomvm_root, atomvm_ref, atomvm_ref_source, allow_dirty)
+  end
+
+  defp ensure_atomvm_ref!(atomvm_root, atomvm_ref, atomvm_ref_source, allow_dirty) do
+    ref = to_string(atomvm_ref) |> String.trim()
+
+    if ref == "" do
+      say("✔ AtomVM ref: tracking #{@atomvm_clone_branch} (no pin configured)")
+      :ok
+    else
+      require_cmd!("git")
+
+      if not allow_dirty and git_tracked_dirty?(atomvm_root) do
+        die("""
+        AtomVM repo has tracked local changes and cannot be pinned safely:
+          #{atomvm_root}
+
+        Tip:
+          git -C #{shell_display(atomvm_root)} status
+          Commit/stash changes, or use a separate clean clone for builds.
+
+          If you want to bypass this check:
+            --allow-dirty
+            ATOMVM_ALLOW_DIRTY=1
+        """)
+      end
+
+      current_sha = git_rev_parse!(atomvm_root, "HEAD")
+      desired_sha = resolve_ref_to_commit!(atomvm_root, ref)
+
+      if current_sha == desired_sha do
+        say("✔ AtomVM pinned: #{ref} (#{String.slice(desired_sha, 0, 12)}) via #{atomvm_ref_source}")
+      else
+        say("Pinning AtomVM to: #{ref} (#{String.slice(desired_sha, 0, 12)}) via #{atomvm_ref_source}")
+        run!("git", ["checkout", "--detach", desired_sha], cd: atomvm_root)
+      end
+
+      :ok
+    end
+  end
+
+  defp resolve_ref_to_commit!(repo_dir, ref) do
+    cond do
+      sha40?(ref) ->
+        resolve_sha!(repo_dir, ref)
+
+      true ->
+        resolve_name_ref!(repo_dir, ref)
+    end
+  end
+
+  defp sha40?(ref), do: String.match?(ref, ~r/^[0-9a-f]{40}$/)
+
+  defp looks_like_version_tag?(ref) do
+    String.match?(ref, ~r/^v?\d+\.\d+(\.\d+)?/)
+  end
+
+  defp resolve_sha!(repo_dir, sha) do
+    case git_try_rev_parse(repo_dir, "#{sha}^{commit}") do
+      {:ok, commit} ->
+        commit
+
+      :error ->
+        {_, status} =
+          System.cmd("git", ["fetch", "--depth", "1", "origin", sha],
+            cd: repo_dir,
+            stderr_to_stdout: true
+          )
+
+        if status != 0, do: die("Could not fetch commit SHA from origin: #{sha}")
+        git_rev_parse!(repo_dir, "FETCH_HEAD")
+    end
+  end
+
+  defp resolve_name_ref!(repo_dir, ref) do
+    if looks_like_version_tag?(ref) do
+      # Tag-first path (v0.6.6, etc.)
+      cond do
+        fetch_tag(repo_dir, ref) ->
+          git_rev_parse!(repo_dir, "refs/tags/#{ref}^{commit}")
+
+        fetch_branch(repo_dir, ref) ->
+          git_rev_parse!(repo_dir, "refs/remotes/origin/#{ref}^{commit}")
+
+        match?({:ok, _}, git_try_rev_parse(repo_dir, "#{ref}^{commit}")) ->
+          git_rev_parse!(repo_dir, "#{ref}^{commit}")
+
+        true ->
+          die_unknown_ref!(ref)
+      end
+    else
+      # Branch-first path (main, feature/foo, etc.) with guaranteed refresh.
+      cond do
+        fetch_branch(repo_dir, ref) ->
+          git_rev_parse!(repo_dir, "refs/remotes/origin/#{ref}^{commit}")
+
+        fetch_tag(repo_dir, ref) ->
+          git_rev_parse!(repo_dir, "refs/tags/#{ref}^{commit}")
+
+        match?({:ok, _}, git_try_rev_parse(repo_dir, "#{ref}^{commit}")) ->
+          git_rev_parse!(repo_dir, "#{ref}^{commit}")
+
+        true ->
+          die_unknown_ref!(ref)
+      end
+    end
+  end
+
+  defp fetch_tag(repo_dir, tag) do
+    # Fetch exactly this tag ref into local tags, without fetching all tags.
+    refspec = "refs/tags/#{tag}:refs/tags/#{tag}"
+
+    {_, status} =
+      System.cmd("git", ["fetch", "--depth", "1", "origin", refspec],
+        cd: repo_dir,
+        stderr_to_stdout: true
+      )
+
+    status == 0
+  end
+
+  defp fetch_branch(repo_dir, branch) do
+    # Always refresh exactly this branch tip into origin/<branch>
+    refspec = "refs/heads/#{branch}:refs/remotes/origin/#{branch}"
+
+    {_, status} =
+      System.cmd("git", ["fetch", "--depth", "1", "origin", refspec],
+        cd: repo_dir,
+        stderr_to_stdout: true
+      )
+
+    status == 0
+  end
+
+  defp die_unknown_ref!(ref) do
+    die("""
+    Could not resolve AtomVM ref: #{ref}
+
+    Expected one of:
+      - branch name (e.g. main)
+      - tag name (e.g. v0.6.6)
+      - full SHA (40 hex chars)
+    """)
+  end
+
+  defp git_dirty?(repo_dir) do
+    {out, status} =
+      System.cmd("git", ["status", "--porcelain"],
+        cd: repo_dir,
+        stderr_to_stdout: true
+      )
+
+    status == 0 and String.trim(out) != ""
+  end
+
+  # Tracked changes only (ignores untracked files).
+  defp git_tracked_dirty?(repo_dir) do
+    {out, status} =
+      System.cmd("git", ["status", "--porcelain=v1", "--untracked-files=no"],
+        cd: repo_dir,
+        stderr_to_stdout: true
+      )
+
+    status == 0 and String.trim(out) != ""
+  end
+
+  defp git_try_rev_parse(repo_dir, rev) do
+    case System.cmd("git", ["rev-parse", "--verify", rev], cd: repo_dir, stderr_to_stdout: true) do
+      {out, 0} -> {:ok, String.trim(out)}
+      {_out, _} -> :error
+    end
+  end
+
+  defp git_rev_parse!(repo_dir, rev) do
+    case System.cmd("git", ["rev-parse", "--verify", rev], cd: repo_dir, stderr_to_stdout: true) do
+      {out, 0} ->
+        String.trim(out)
+
+      {out, status} ->
+        die("git rev-parse failed (#{status}) for #{rev}:\n#{String.trim(out)}")
     end
   end
 
@@ -458,7 +685,10 @@ defmodule Main do
          idf_dir,
          target,
          port_display,
-         override_was_set
+         override_was_set,
+         atomvm_ref,
+         atomvm_ref_source,
+         allow_dirty
        ) do
     component_name = Path.basename(this_repo_root)
     component_path = Path.join([esp32_dir, @components_dirname, component_name])
@@ -474,6 +704,9 @@ defmodule Main do
     say("Config")
     say("- target:      #{target}")
     say("- port:        #{port_display}")
+    say("- atomvm_ref:  #{atomvm_ref}")
+    say("- ref_source:  #{atomvm_ref_source}")
+    say("- allow_dirty: #{allow_dirty}")
 
     say("")
     say("Checks")
@@ -486,11 +719,35 @@ defmodule Main do
 
     if File.dir?(Path.join(atomvm_root, ".git")) do
       say("- AtomVM:      ok")
+
+      head =
+        case System.cmd("git", ["rev-parse", "HEAD"], cd: atomvm_root, stderr_to_stdout: true) do
+          {out, 0} -> String.trim(out)
+          _ -> "(unknown)"
+        end
+
+      dirty_any = if git_dirty?(atomvm_root), do: "yes", else: "no"
+      dirty_tracked = if git_tracked_dirty?(atomvm_root), do: "yes", else: "no"
+
+      say("- AtomVM HEAD: #{head}")
+      say("- AtomVM dirty(tracked): #{dirty_tracked}")
+      say("- AtomVM dirty(any): #{dirty_any}")
     else
       if override_was_set do
         say("- AtomVM:      missing at --atomvm-repo")
       else
         say("- AtomVM:      missing at default (install will clone)")
+      end
+
+      case maybe_resolve_atomvm_ref_without_repo(atomvm_ref) do
+        {:ok, sha, note} when is_binary(sha) and sha != "" ->
+          say("- AtomVM would use: #{sha}  (#{note})")
+
+        {:ok, nil, note} ->
+          say("- AtomVM would use: (not resolved)  (#{note})")
+
+        {:error, reason} ->
+          say("- AtomVM would use: (not resolved)  (#{reason})")
       end
     end
 
@@ -561,7 +818,10 @@ defmodule Main do
          idf_dir,
          target,
          port,
-         override_was_set
+         override_was_set,
+         atomvm_ref,
+         atomvm_ref_source,
+         allow_dirty
        ) do
     if port == "" do
       die("--port is required for install (e.g. --port /dev/ttyACM0)")
@@ -569,7 +829,7 @@ defmodule Main do
 
     ensure_serial_port_ready!(port)
 
-    ensure_atomvm_repo!(atomvm_root, override_was_set)
+    ensure_atomvm_repo!(atomvm_root, override_was_set, atomvm_ref, atomvm_ref_source, allow_dirty)
 
     if !File.dir?(esp32_dir) do
       die("AtomVM ESP32 platform dir missing: #{esp32_dir}")
@@ -796,6 +1056,109 @@ defmodule Main do
 
   defp ansi_enabled? do
     IO.ANSI.enabled?() and is_nil(System.get_env("NO_COLOR"))
+  end
+
+  defp truthy_env?(name) do
+    case System.get_env(name) do
+      nil ->
+        false
+
+      value ->
+        value
+        |> String.trim()
+        |> String.downcase()
+        |> then(&(&1 in ["1", "true", "yes", "y", "on"]))
+    end
+  end
+
+  # Resolve a ref to a commit SHA without a local repo (info-only).
+  # - Branch: uses ls-remote --heads
+  # - Tag: uses ls-remote --tags (prefers peeled ^{} when present)
+  # - SHA: returns the SHA as-is (not validated)
+  defp maybe_resolve_atomvm_ref_without_repo(ref) do
+    ref = to_string(ref) |> String.trim()
+
+    cond do
+      ref == "" ->
+        {:ok, nil, "no AtomVM ref configured"}
+
+      sha40?(ref) ->
+        {:ok, ref, "sha (not validated via ls-remote)"}
+
+      System.find_executable("git") == nil ->
+        {:error, "git not found (cannot resolve via ls-remote)"}
+
+      true ->
+        case ls_remote_head_sha(ref) do
+          {:ok, sha} ->
+            {:ok, sha, "branch tip from ls-remote"}
+
+          :error ->
+            case ls_remote_tag_sha(ref) do
+              {:ok, sha} -> {:ok, sha, "tag target from ls-remote"}
+              :error -> {:error, "ls-remote could not find branch or tag on origin for: #{ref}"}
+            end
+        end
+    end
+  end
+
+  defp ls_remote_head_sha(branch) do
+    args = ["ls-remote", "--heads", @atomvm_git_url, "refs/heads/#{branch}"]
+
+    case System.cmd("git", args, stderr_to_stdout: true) do
+      {out, 0} ->
+        out
+        |> String.split("\n", trim: true)
+        |> Enum.map(&String.split(&1, "\t"))
+        |> Enum.find_value(:error, fn
+          [sha, "refs/heads/" <> _] -> {:ok, sha}
+          _ -> nil
+        end)
+
+      _ ->
+        :error
+    end
+  end
+
+  defp ls_remote_tag_sha(tag) do
+    patterns = ["refs/tags/#{tag}^{}", "refs/tags/#{tag}"]
+    args = ["ls-remote", "--tags", @atomvm_git_url] ++ patterns
+
+    case System.cmd("git", args, stderr_to_stdout: true) do
+      {out, 0} ->
+        lines = String.split(out, "\n", trim: true)
+
+        peeled =
+          Enum.find_value(lines, fn line ->
+            case String.split(line, "\t") do
+              [sha, "refs/tags/" <> rest] ->
+                if rest == "#{tag}^{}", do: sha, else: nil
+
+              _ ->
+                nil
+            end
+          end)
+
+        direct =
+          Enum.find_value(lines, fn line ->
+            case String.split(line, "\t") do
+              [sha, "refs/tags/" <> rest] ->
+                if rest == tag, do: sha, else: nil
+
+              _ ->
+                nil
+            end
+          end)
+
+        cond do
+          is_binary(peeled) and peeled != "" -> {:ok, peeled}
+          is_binary(direct) and direct != "" -> {:ok, direct}
+          true -> :error
+        end
+
+      _ ->
+        :error
+    end
   end
 end
 
