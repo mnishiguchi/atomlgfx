@@ -99,10 +99,28 @@ esp_err_t lgfx_worker_device_draw_circle(lgfx_port_t *port, uint8_t target, int1
 esp_err_t lgfx_worker_device_fill_circle(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t r, uint16_t color565);
 
 // Draw a triangle with vertices (x0, y0), (x1, y1), and (x2, y2) using a specified color (RGB565).
-esp_err_t lgfx_worker_device_draw_triangle(lgfx_port_t *port, uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color565);
+esp_err_t lgfx_worker_device_draw_triangle(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    uint16_t color565);
 
 // Fill a triangle with vertices (x0, y0), (x1, y1), and (x2, y2) using a specified color (RGB565).
-esp_err_t lgfx_worker_device_fill_triangle(lgfx_port_t *port, uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color565);
+esp_err_t lgfx_worker_device_fill_triangle(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    uint16_t color565);
 
 // Set the text size for drawing text.
 esp_err_t lgfx_worker_device_set_text_size(lgfx_port_t *port, uint8_t target, uint8_t size);
@@ -138,7 +156,16 @@ esp_err_t lgfx_worker_device_calibrate_touch(lgfx_port_t *port, uint16_t out_par
 esp_err_t lgfx_worker_device_draw_string(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, const uint8_t *bytes, uint16_t len);
 
 // Push an image to the device (RGB565 format).
-esp_err_t lgfx_worker_device_push_image_rgb565_strided(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t stride_pixels, const uint8_t *bytes, size_t len);
+esp_err_t lgfx_worker_device_push_image_rgb565_strided(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t stride_pixels,
+    const uint8_t *bytes,
+    size_t len);
 
 // Create a sprite for use on the device.
 esp_err_t lgfx_worker_device_create_sprite(lgfx_port_t *port, uint8_t target, uint16_t w, uint16_t h, uint8_t color_depth);
@@ -150,13 +177,39 @@ esp_err_t lgfx_worker_device_delete_sprite(lgfx_port_t *port, uint8_t target);
 esp_err_t lgfx_worker_device_set_pivot(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y);
 
 // Push a sprite to the device with a given position (x, y) and optional transparency.
-esp_err_t lgfx_worker_device_push_sprite(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, bool has_transparent, uint16_t transparent565);
+esp_err_t lgfx_worker_device_push_sprite(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    bool has_transparent,
+    uint16_t transparent565);
 
 // Push a region of a sprite to the device with a given position (x, y) and optional transparency.
-esp_err_t lgfx_worker_device_push_sprite_region(lgfx_port_t *port, uint8_t target, int16_t dst_x, int16_t dst_y, int16_t src_x, int16_t src_y, uint16_t w, uint16_t h, bool has_transparent, uint16_t transparent565);
+esp_err_t lgfx_worker_device_push_sprite_region(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t dst_x,
+    int16_t dst_y,
+    int16_t src_x,
+    int16_t src_y,
+    uint16_t w,
+    uint16_t h,
+    bool has_transparent,
+    uint16_t transparent565);
 
-// Push a sprite to the device with rotation and zoom effects, along with transparency support.
-esp_err_t lgfx_worker_device_push_rotate_zoom(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, float angle_deg, float zoom_x, float zoom_y, bool has_transparent, uint16_t transparent565);
+// Push a sprite with rotation and zoom to a destination target (LCD or sprite), with optional transparency.
+esp_err_t lgfx_worker_device_push_rotate_zoom(
+    lgfx_port_t *port,
+    uint8_t src_target,
+    uint8_t dst_target,
+    int16_t x,
+    int16_t y,
+    float angle_deg,
+    float zoom_x,
+    float zoom_y,
+    bool has_transparent,
+    uint16_t transparent565);
 
 #ifdef __cplusplus
 }

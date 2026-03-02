@@ -12,6 +12,12 @@
 // centralized in lgfx_port.c via ops.def metadata. Handlers only decode payload fields.
 //
 // pushRotateZoom wire payload convention used in this handler:
+// - Request shape:
+//   {lgfx, ver, pushRotateZoom, SrcSprite, Flags,
+//      DstTarget, X, Y, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32 [, Transparent565]}
+//
+// - SrcSprite is the request header Target (sprite-only; 1..254)
+// - DstTarget is 0 (LCD) or 1..254 (sprite)
 // - Angle uses centi-degrees (i32; 9000 == 90.00°)
 // - Zoom uses x1024 fixed-point scale (i32; 1024 == 1.0x)
 //
@@ -55,6 +61,7 @@ typedef struct
 
 typedef struct
 {
+    uint8_t dst_target; // 0 => LCD, 1..254 => sprite
     int16_t x;
     int16_t y;
     int32_t angle_x100;
@@ -224,18 +231,25 @@ static bool decode_push_sprite_region_args(const lgfx_request_t *req, lgfx_push_
 static bool decode_push_rotate_zoom_args(const lgfx_request_t *req, lgfx_push_rotate_zoom_args_t *out)
 {
     // pushRotateZoom supports dual arity:
-    // - {lgfx, ver, pushRotateZoom, Target, Flags, X, Y, AngleX100I32, ZoomXX1024I32, ZoomYX1024I32}
-    // - {lgfx, ver, pushRotateZoom, Target, Flags, X, Y, AngleX100I32, ZoomXX1024I32, ZoomYX1024I32, Transparent565}
+    // - {lgfx, ver, pushRotateZoom, SrcSprite, Flags, DstTarget, X, Y, AngleX100I32, ZoomXX1024I32, ZoomYX1024I32}
+    // - {lgfx, ver, pushRotateZoom, SrcSprite, Flags, DstTarget, X, Y, AngleX100I32, ZoomXX1024I32, ZoomYX1024I32, Transparent565}
     //
-    // Shared metadata enforces arity range [10..11].
+    // Shared metadata enforces arity range [11..12].
 
-    term x_t = term_get_tuple_element(req->request_tuple, 5);
-    term y_t = term_get_tuple_element(req->request_tuple, 6);
-    term angle_t = term_get_tuple_element(req->request_tuple, 7);
-    term zoom_x_t = term_get_tuple_element(req->request_tuple, 8);
-    term zoom_y_t = term_get_tuple_element(req->request_tuple, 9);
+    term dst_target_t = term_get_tuple_element(req->request_tuple, 5);
+    term x_t = term_get_tuple_element(req->request_tuple, 6);
+    term y_t = term_get_tuple_element(req->request_tuple, 7);
+    term angle_t = term_get_tuple_element(req->request_tuple, 8);
+    term zoom_x_t = term_get_tuple_element(req->request_tuple, 9);
+    term zoom_y_t = term_get_tuple_element(req->request_tuple, 10);
 
+    uint32_t dst_target32 = 0;
     uint32_t transparent32 = 0;
+
+    if (!lgfx_term_to_u32(dst_target_t, &dst_target32) || dst_target32 > 254u) {
+        return false;
+    }
+    out->dst_target = (uint8_t) dst_target32;
 
     if (!lgfx_term_to_i16(x_t, &out->x)) {
         return false;
@@ -264,15 +278,15 @@ static bool decode_push_rotate_zoom_args(const lgfx_request_t *req, lgfx_push_ro
     out->has_transparent = false;
     out->transparent565 = 0;
 
-    if (req->arity == 11) {
-        term transparent_t = term_get_tuple_element(req->request_tuple, 10);
+    if (req->arity == 12) {
+        term transparent_t = term_get_tuple_element(req->request_tuple, 11);
         if (!lgfx_term_to_u32(transparent_t, &transparent32) || !lgfx_validate_u16(transparent32)) {
             return false;
         }
 
         out->has_transparent = true;
         out->transparent565 = (uint16_t) transparent32;
-    } else if (req->arity != 10) {
+    } else if (req->arity != 11) {
         // Defensive only; shared validator should catch this earlier.
         return false;
     }
@@ -390,7 +404,8 @@ static term do_push_rotate_zoom(Context *ctx, lgfx_port_t *port, const lgfx_requ
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_push_rotate_zoom(
             port,
-            (uint8_t) req->target,
+            (uint8_t) req->target,      // SrcSprite
+            args.dst_target,            // DstTarget (0 => LCD, 1..254 => sprite)
             args.x,
             args.y,
             angle_deg,

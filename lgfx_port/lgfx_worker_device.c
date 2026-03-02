@@ -530,7 +530,8 @@ esp_err_t lgfx_worker_device_push_sprite_region(
 
 esp_err_t lgfx_worker_device_push_rotate_zoom(
     lgfx_port_t *port,
-    uint8_t target,
+    uint8_t src_target,
+    uint8_t dst_target,
     int16_t x,
     int16_t y,
     float angle_deg,
@@ -542,7 +543,8 @@ esp_err_t lgfx_worker_device_push_rotate_zoom(
     lgfx_job_t job = {
         .kind = LGFX_JOB_PUSH_ROTATE_ZOOM,
         .a.push_rotate_zoom = {
-            .target = target,
+            .src_target = src_target,
+            .dst_target = dst_target,
             .x = x,
             .y = y,
             .angle_deg = angle_deg,

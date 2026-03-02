@@ -20,6 +20,7 @@ defmodule LGFXPort do
   - `pushRotateZoom` uses protocol units:
     - angle: centi-degrees (1.00° = 100)
     - zoom: x1024 fixed-point (1.0x = 1024)
+    - dst_target: 0 (LCD) or 1..254 (sprite)
   """
   @compile {:no_warn_undefined, :port}
 
@@ -258,10 +259,25 @@ defmodule LGFXPort do
   # -----------------------------------------------------------------------------
   # Sprite rotate/zoom (protocol units)
   # -----------------------------------------------------------------------------
+  # Wire shape:
+  #   {lgfx, ver, pushRotateZoom, SrcSprite, Flags,
+  #      DstTarget, X, Y, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32 [, Transparent565]}
+  #
   # - AngleCentiDegI32: 100 = 1.00°
   # - ZoomX1024I32:     1024 = 1.0x
-  def push_rotate_zoom(port, src_target, x, y, angle_centi_deg, zoom_x1024, zoom_y1024)
+  # - DstTarget:        0 (LCD) or 1..254 (sprite)
+  def push_rotate_zoom_to(
+        port,
+        src_target,
+        dst_target,
+        x,
+        y,
+        angle_centi_deg,
+        zoom_x1024,
+        zoom_y1024
+      )
       when is_integer(src_target) and src_target in 1..254 and
+             is_integer(dst_target) and dst_target in 0..254 and
              is_integer(x) and is_integer(y) and
              is_integer(angle_centi_deg) and
              is_integer(zoom_x1024) and zoom_x1024 > 0 and
@@ -271,15 +287,16 @@ defmodule LGFXPort do
       :pushRotateZoom,
       src_target,
       0,
-      [x, y, angle_centi_deg, zoom_x1024, zoom_y1024],
+      [dst_target, x, y, angle_centi_deg, zoom_x1024, zoom_y1024],
       @t_long
     )
   end
 
   # Transparent key is RGB565 u16 (protocol)
-  def push_rotate_zoom(
+  def push_rotate_zoom_to(
         port,
         src_target,
+        dst_target,
         x,
         y,
         angle_centi_deg,
@@ -288,6 +305,7 @@ defmodule LGFXPort do
         transparent565
       )
       when is_integer(src_target) and src_target in 1..254 and
+             is_integer(dst_target) and dst_target in 0..254 and
              is_integer(x) and is_integer(y) and
              is_integer(angle_centi_deg) and
              is_integer(zoom_x1024) and zoom_x1024 > 0 and
@@ -298,19 +316,15 @@ defmodule LGFXPort do
       :pushRotateZoom,
       src_target,
       0,
-      [x, y, angle_centi_deg, zoom_x1024, zoom_y1024, transparent565],
+      [dst_target, x, y, angle_centi_deg, zoom_x1024, zoom_y1024, transparent565],
       @t_long
     )
   end
 
-  def push_rotate_zoom(port, src_target, x, y, angle_centi_deg, zoom_x1024)
-      when is_integer(zoom_x1024) and zoom_x1024 > 0 do
-    push_rotate_zoom(port, src_target, x, y, angle_centi_deg, zoom_x1024, zoom_x1024)
-  end
-
   # Convenience: accept degrees + float zoom; convert to protocol units (centi-deg / x1024)
-  def push_rotate_zoom_deg(port, src_target, x, y, angle_deg, zoom_x, zoom_y)
+  def push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom_x, zoom_y)
       when is_integer(src_target) and src_target in 1..254 and
+             is_integer(dst_target) and dst_target in 0..254 and
              is_integer(x) and is_integer(y) and
              is_number(angle_deg) and
              is_number(zoom_x) and zoom_x > 0 and
@@ -318,12 +332,16 @@ defmodule LGFXPort do
     angle_centi_deg = round(angle_deg * 100)
     zx1024 = round(zoom_x * 1024)
     zy1024 = round(zoom_y * 1024)
-    push_rotate_zoom(port, src_target, x, y, angle_centi_deg, zx1024, zy1024)
+    push_rotate_zoom_to(port, src_target, dst_target, x, y, angle_centi_deg, zx1024, zy1024)
   end
 
-  def push_rotate_zoom_deg(port, src_target, x, y, angle_deg, zoom)
-      when is_number(angle_deg) and is_number(zoom) and zoom > 0 do
-    push_rotate_zoom_deg(port, src_target, x, y, angle_deg, zoom, zoom)
+  def push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom)
+      when is_integer(src_target) and src_target in 1..254 and
+             is_integer(dst_target) and dst_target in 0..254 and
+             is_integer(x) and is_integer(y) and
+             is_number(angle_deg) and
+             is_number(zoom) and zoom > 0 do
+    push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom, zoom)
   end
 
   # -----------------------------------------------------------------------------

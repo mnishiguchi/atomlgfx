@@ -235,18 +235,23 @@ esp_err_t lgfx_device_sprite_push_sprite(
     uint16_t transparent_rgb565);
 
 /*
- * Rotate + zoom sprite push.
+ * Rotate + zoom sprite push (destination-aware).
  *
  * Worker/handler layers convert protocol wire values to float before calling here:
  * - angle_deg: degrees as float
  * - zoom_x / zoom_y: scale factors as float (must be > 0)
  *
+ * Destination:
+ * - dst_target == 0: LCD
+ * - dst_target != 0: sprite handle (must exist)
+ *
  * Transparent-color overload is optional in some LovyanGFX/M5GFX variants.
  * This API uses best-effort dispatch and returns ESP_ERR_NOT_SUPPORTED if no
- * compatible pushRotateZoom overload is available.
+ * compatible overload is available.
  */
 esp_err_t lgfx_device_sprite_push_rotate_zoom(
-    uint8_t handle,
+    uint8_t src_handle,
+    uint8_t dst_target,
     int16_t x,
     int16_t y,
     float angle_deg,

@@ -196,27 +196,28 @@ static bool sprite_push_region_best_effort(
 
 // -----------------------------------------------------------------------------
 // Sprite rotate/zoom helper (best-effort across LovyanGFX/M5GFX variants)
+// Now destination-aware (LovyanGFX supports pushRotateZoom(dst, x, y, ...))
 // -----------------------------------------------------------------------------
 
 template <typename S>
 static auto sprite_push_rotate_zoom_plain_impl(
     S *spr,
-    int16_t x,
-    int16_t y,
+    float dst_x,
+    float dst_y,
     float angle_deg,
     float zoom_x,
     float zoom_y,
-    int) -> decltype(spr->pushRotateZoom(x, y, angle_deg, zoom_x, zoom_y), bool())
+    int) -> decltype(spr->pushRotateZoom(dst_x, dst_y, angle_deg, zoom_x, zoom_y), bool())
 {
-    spr->pushRotateZoom(x, y, angle_deg, zoom_x, zoom_y);
+    spr->pushRotateZoom(dst_x, dst_y, angle_deg, zoom_x, zoom_y);
     return true;
 }
 
 template <typename S>
 static bool sprite_push_rotate_zoom_plain_impl(
     S * /*spr*/,
-    int16_t /*x*/,
-    int16_t /*y*/,
+    float /*dst_x*/,
+    float /*dst_y*/,
     float /*angle_deg*/,
     float /*zoom_x*/,
     float /*zoom_y*/,
@@ -228,23 +229,83 @@ static bool sprite_push_rotate_zoom_plain_impl(
 template <typename S>
 static auto sprite_push_rotate_zoom_trans_impl(
     S *spr,
-    int16_t x,
-    int16_t y,
+    float dst_x,
+    float dst_y,
     float angle_deg,
     float zoom_x,
     float zoom_y,
     uint16_t transparent565,
-    int) -> decltype(spr->pushRotateZoom(x, y, angle_deg, zoom_x, zoom_y, transparent565), bool())
+    int) -> decltype(spr->pushRotateZoom(dst_x, dst_y, angle_deg, zoom_x, zoom_y, transparent565), bool())
 {
-    spr->pushRotateZoom(x, y, angle_deg, zoom_x, zoom_y, transparent565);
+    spr->pushRotateZoom(dst_x, dst_y, angle_deg, zoom_x, zoom_y, transparent565);
     return true;
 }
 
 template <typename S>
 static bool sprite_push_rotate_zoom_trans_impl(
     S * /*spr*/,
-    int16_t /*x*/,
-    int16_t /*y*/,
+    float /*dst_x*/,
+    float /*dst_y*/,
+    float /*angle_deg*/,
+    float /*zoom_x*/,
+    float /*zoom_y*/,
+    uint16_t /*transparent565*/,
+    long)
+{
+    return false;
+}
+
+template <typename S>
+static auto sprite_push_rotate_zoom_plain_to_impl(
+    S *spr,
+    lgfx::LovyanGFX *dst,
+    float dst_x,
+    float dst_y,
+    float angle_deg,
+    float zoom_x,
+    float zoom_y,
+    int) -> decltype(spr->pushRotateZoom(dst, dst_x, dst_y, angle_deg, zoom_x, zoom_y), bool())
+{
+    spr->pushRotateZoom(dst, dst_x, dst_y, angle_deg, zoom_x, zoom_y);
+    return true;
+}
+
+template <typename S>
+static bool sprite_push_rotate_zoom_plain_to_impl(
+    S * /*spr*/,
+    lgfx::LovyanGFX * /*dst*/,
+    float /*dst_x*/,
+    float /*dst_y*/,
+    float /*angle_deg*/,
+    float /*zoom_x*/,
+    float /*zoom_y*/,
+    long)
+{
+    return false;
+}
+
+template <typename S>
+static auto sprite_push_rotate_zoom_trans_to_impl(
+    S *spr,
+    lgfx::LovyanGFX *dst,
+    float dst_x,
+    float dst_y,
+    float angle_deg,
+    float zoom_x,
+    float zoom_y,
+    uint16_t transparent565,
+    int) -> decltype(spr->pushRotateZoom(dst, dst_x, dst_y, angle_deg, zoom_x, zoom_y, transparent565), bool())
+{
+    spr->pushRotateZoom(dst, dst_x, dst_y, angle_deg, zoom_x, zoom_y, transparent565);
+    return true;
+}
+
+template <typename S>
+static bool sprite_push_rotate_zoom_trans_to_impl(
+    S * /*spr*/,
+    lgfx::LovyanGFX * /*dst*/,
+    float /*dst_x*/,
+    float /*dst_y*/,
     float /*angle_deg*/,
     float /*zoom_x*/,
     float /*zoom_y*/,
@@ -256,23 +317,44 @@ static bool sprite_push_rotate_zoom_trans_impl(
 
 static bool sprite_push_rotate_zoom_best_effort(
     lgfx::LGFX_Sprite *spr,
-    int16_t x,
-    int16_t y,
+    lgfx::LovyanGFX *dst,
+    float dst_x,
+    float dst_y,
     float angle_deg,
     float zoom_x,
     float zoom_y,
     bool has_transparent,
-    uint16_t transparent565)
+    uint16_t transparent565,
+    bool allow_default_fallback)
 {
-    if (has_transparent) {
-        // Preserve protocol semantics: if transparent rotate/zoom overload is not
-        // available, report unsupported instead of silently dropping transparency.
-        return sprite_push_rotate_zoom_trans_impl(
-            spr, x, y, angle_deg, zoom_x, zoom_y, transparent565, 0);
+    if (!spr || !dst) {
+        return false;
     }
 
-    return sprite_push_rotate_zoom_plain_impl(
-        spr, x, y, angle_deg, zoom_x, zoom_y, 0);
+    if (has_transparent) {
+        // Prefer destination-aware overload.
+        if (sprite_push_rotate_zoom_trans_to_impl(spr, dst, dst_x, dst_y, angle_deg, zoom_x, zoom_y, transparent565, 0)) {
+            return true;
+        }
+
+        // Only allow fallback to the no-dst overload when dst is effectively the sprite parent (LCD).
+        if (allow_default_fallback) {
+            return sprite_push_rotate_zoom_trans_impl(spr, dst_x, dst_y, angle_deg, zoom_x, zoom_y, transparent565, 0);
+        }
+
+        // Preserve semantics: don't silently drop dst or transparency.
+        return false;
+    }
+
+    if (sprite_push_rotate_zoom_plain_to_impl(spr, dst, dst_x, dst_y, angle_deg, zoom_x, zoom_y, 0)) {
+        return true;
+    }
+
+    if (allow_default_fallback) {
+        return sprite_push_rotate_zoom_plain_impl(spr, dst_x, dst_y, angle_deg, zoom_x, zoom_y, 0);
+    }
+
+    return false;
 }
 
 } // namespace
@@ -439,7 +521,8 @@ extern "C" esp_err_t lgfx_device_sprite_push_sprite(
 }
 
 extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
-    uint8_t handle,
+    uint8_t src_handle,
+    uint8_t dst_target,
     int16_t x,
     int16_t y,
     float angle_deg,
@@ -449,7 +532,12 @@ extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
     uint16_t transparent565)
 {
     const uint8_t max_handle = lgfx_dev::max_handle_const();
-    if (handle == 0 || handle > max_handle) {
+    if (src_handle == 0 || src_handle > max_handle) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Destination target must be protocol-valid (0 LCD or sprite handle range).
+    if (!lgfx_device_is_valid_target(dst_target)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -468,13 +556,41 @@ extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
         return err;
     }
 
-    auto *spr = lgfx_dev::resolve_sprite_locked(handle);
-    if (!spr) {
+    auto *src = lgfx_dev::resolve_sprite_locked(src_handle);
+    if (!src) {
         return ESP_ERR_NOT_FOUND;
     }
 
+    lgfx::LovyanGFX *dst = nullptr;
+
+    if (dst_target == 0) {
+        dst = lgfx_dev::lcd_device_locked();
+        if (!dst) {
+            return ESP_ERR_INVALID_STATE;
+        }
+    } else {
+        auto *dst_spr = lgfx_dev::resolve_sprite_locked(dst_target);
+        if (!dst_spr) {
+            return ESP_ERR_NOT_FOUND;
+        }
+        dst = static_cast<lgfx::LovyanGFX *>(dst_spr);
+    }
+
+    // All sprites are constructed with the LCD as parent in this port.
+    // Fallback to the no-dst overload is only valid when destination is LCD.
+    const bool allow_default_fallback = (dst_target == 0);
+
     const bool pushed = sprite_push_rotate_zoom_best_effort(
-        spr, x, y, angle_deg, zoom_x, zoom_y, has_transparent, transparent565);
+        src,
+        dst,
+        (float) x,
+        (float) y,
+        angle_deg,
+        zoom_x,
+        zoom_y,
+        has_transparent,
+        transparent565,
+        allow_default_fallback);
 
     return pushed ? ESP_OK : ESP_ERR_NOT_SUPPORTED;
 }

@@ -408,7 +408,7 @@ If this table and `ops.def` disagree, `ops.def` (and the built driver) wins.
 | `setPivot` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `pushSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7/8` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `pushSpriteRegion` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `11/12` | `requires_init` | `LGFX_CAP_SPRITE` |
-| `pushRotateZoom` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `10/11` | `requires_init` | `LGFX_CAP_SPRITE` |
+| `pushRotateZoom` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `11/12` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `getTouch` | `T0/bad_target` | `F0` | `5` | `requires_init` | `LGFX_CAP_TOUCH` |
 | `getTouchRaw` | `T0/bad_target` | `F0` | `5` | `requires_init` | `LGFX_CAP_TOUCH` |
 | `setTouchCalibrate` | `T0/bad_target` | `F0` | `13` | `requires_init` | `LGFX_CAP_TOUCH` |
@@ -666,23 +666,30 @@ This operation draws a rectangular region from an existing sprite (named by `Tar
 
 ---
 
-## `pushRotateZoom` (sprite -> LCD rotated/scaled blit)
+## `pushRotateZoom` (sprite -> destination rotated/scaled blit)
 
-This operation draws an existing sprite (named by `Target`) onto the LCD with rotation and scaling.
+This operation draws an existing sprite (named by request header `Target`) onto a destination target with rotation and scaling.
 
-- `Target` is the **source sprite handle** (`1..254`)
+- Request header `Target` is the **source sprite handle** (`1..254`)
 - `Target == 0` is invalid (`LGFX_OP_TARGET_SPRITE_ONLY`)
-- Destination is the LCD (not another sprite)
-- Rotation uses the sprite pivot set by `setPivot`
+- Destination is selected by `DstTarget`:
+  - `DstTarget == 0` => LCD
+  - `DstTarget in 1..254` => sprite handle
+
+- Rotation uses the source sprite pivot set by `setPivot`
 
 ### Request args
 
-- `pushRotateZoom(DstXi16, DstYi16, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32)`
-- `pushRotateZoom(DstXi16, DstYi16, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32, TransparentRgb565U16)` (optional transparent-key blit)
+- `pushRotateZoom(DstTargetU8, DstXi16, DstYi16, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32)`
+- `pushRotateZoom(DstTargetU8, DstXi16, DstYi16, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32, TransparentRgb565U16)` (optional transparent-key blit)
 
 ### Rules
 
-- `DstXi16`, `DstYi16` are destination coordinates on the LCD
+- `DstTargetU8` is the destination target:
+  - `0` => LCD
+  - `1..254` => sprite handle (must exist)
+
+- `DstXi16`, `DstYi16` are destination coordinates on the selected destination target
 
 - `AngleCentiDegI32` is a fixed-point angle in **centi-degrees** (`i32`)
   - `100` = `1.00°`
@@ -705,9 +712,12 @@ This operation draws an existing sprite (named by `Target`) onto the LCD with ro
 
 - When `TransparentRgb565U16` is provided, pixels matching that color are skipped during compositing
 
-- Requires the sprite handle in `Target` to be currently allocated, else `{error, bad_target}` (or `{error, bad_args}` if your handler chooses that error shape consistently)
+- Requires:
+  - source sprite handle in request header `Target` to exist
+  - destination sprite handle (when `DstTarget != 0`) to exist
+  - otherwise `{error, bad_target}` / `{error, bad_args}` per handler conventions
 
-- LCD edge clipping is allowed (off-screen destination pixels may be clipped by the device/LovyanGFX path)
+- Edge clipping is allowed (off-screen destination pixels may be clipped by the device/LovyanGFX path)
 
 ### Response
 
@@ -718,6 +728,7 @@ This operation draws an existing sprite (named by `Target`) onto the LCD with ro
 
 - Set sprite pivot via `setPivot` before calling `pushRotateZoom` if you need stable rotation behavior (for example center rotation used by demo-style motion)
 - Host wrappers should expose helpers for centi-degree / x1024 fixed-point conversion
+- If you need explicit destination selection, use a destination-aware wrapper (for example `LGFXPort.push_rotate_zoom_to/8` and friends).
 
 ---
 
@@ -780,7 +791,7 @@ This catches protocol/implementation drift at the integration boundary (host ↔
   - `pushSpriteRegion` valid call succeeds; out-of-bounds source rect returns `{error, bad_args}`
 
 - **Rotate/zoom path check**
-  - `pushRotateZoom` valid fixed-point args (centi-deg + x1024 zoom) succeed; zero zoom returns `{error, bad_args}`
+  - `pushRotateZoom` valid fixed-point args (dst_target + centi-deg + x1024 zoom) succeed; zero zoom returns `{error, bad_args}`
 
 ### Tiny protocol metadata self-test (future-proof)
 
@@ -883,3 +894,8 @@ When you add or change an operation:
 - Change argument order/meaning for existing operations
 - Reinterpret existing flags
 - Change RGB565 pixel byte order for `pushImage`
+
+Note:
+
+- `pushRotateZoom` payload includes `DstTarget` (arity `11/12`) in current builds.
+  Earlier builds used arity `10/11` and implied `DstTarget = 0` (LCD).

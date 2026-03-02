@@ -341,7 +341,8 @@ typedef struct
 
         struct
         {
-            uint8_t target;
+            uint8_t src_target;
+            uint8_t dst_target;
             int16_t x;
             int16_t y;
             float angle_deg;

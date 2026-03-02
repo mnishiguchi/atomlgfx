@@ -67,8 +67,9 @@ X(pushSprite, lgfx_handle_pushSprite, ATOM_STR("\x0A", "pushSprite"), 7, 8, 0, L
 X(pushSpriteRegion, lgfx_handle_pushSpriteRegion, ATOM_STR("\x0E", "pushSpriteRegion"), 11, 12, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
 
 // pushRotateZoom payload semantics:
-// X, Y, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32 [, Transparent565]
-X(pushRotateZoom, lgfx_handle_pushRotateZoom, ATOM_STR("\x0E", "pushRotateZoom"), 10, 11, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
+// DstTarget, X, Y, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32 [, Transparent565]
+// - Target (header) is SrcSprite (sprite-only)
+X(pushRotateZoom, lgfx_handle_pushRotateZoom, ATOM_STR("\x0E", "pushRotateZoom"), 11, 12, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
 
 //
 // Touch (LCD-only)

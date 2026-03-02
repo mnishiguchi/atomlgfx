@@ -498,7 +498,8 @@ static void lgfx_worker_task_main(void *arg)
                 }
 
                 job->err = lgfx_device_sprite_push_rotate_zoom(
-                    job->a.push_rotate_zoom.target,
+                    job->a.push_rotate_zoom.src_target,
+                    job->a.push_rotate_zoom.dst_target,
                     job->a.push_rotate_zoom.x,
                     job->a.push_rotate_zoom.y,
                     angle_deg,

@@ -8,114 +8,71 @@ defmodule SampleApp.MovingIcons do
   import SampleApp.AtomVMCompat, only: [yield: 0]
 
   # -----------------------------------------------------------------------------
-  # Tuning knobs
+  # Demo config (LovyanGFX-style)
   # -----------------------------------------------------------------------------
 
-  # Toggle this for quick fps testing.
-  # - true  => fewer objects, slower HUD refresh, transform throttling
-  # - false => normal demo feel
-  @benchmark_mode false
+  @obj_count 5
 
-  # Fine-grained object timing is helpful for profiling, but it costs fps.
-  # Keep false for normal runs.
-  @measure_object_timings false
-
-  # Faster default: avoid transparent-key blending on a black background.
-  # (Sprite background and playfield are both black.)
-  @use_transparent_push_sprite false
-
-  # Update angle/zoom every N frames (position still updates every frame).
-  # This can improve fps while keeping motion smooth enough.
-  @rotate_zoom_every_n_frames if @benchmark_mode, do: 2, else: 1
-
-  # HUD refresh interval (seconds)
-  @hud_refresh_s if @benchmark_mode, do: 2, else: 1
-
-  # Bench knob
-  @obj_count if @benchmark_mode, do: 10, else: 5
-
-  # Keep frame_index bounded over very long runs.
-  @frame_index_wrap 1_000_000
-
-  # HUD
-  @hud_h 32
-  @hud_bg 0x101010
-  @hud_fg 0xFFFFFF
-  @hud_dim 0xA0A0A0
-
-  # Playfield background (RGB888)
-  @bg 0x000000
-
-  # Sprite atlas background and transparent key.
+  # Icon sprites are authored with a solid background color. Use a transparent-color key so
+  # that background pixels do not overwrite what is already in the destination.
   #
-  # - For fill/clear operations we use RGB888.
-  # - For sprite transparent-key APIs the protocol expects RGB565 u16.
+  # - Protocol expects the transparent key as RGB565 u16.
+  # - `0x0000` matches the upstream LovyanGFX demo (`transparent=0`).
+  @use_transparent_key true
   @transparent_key_rgb888 0x000000
   @transparent_key_rgb565 0x0000
 
-  # Capability bits (LGFX_PORT_PROTOCOL.md)
+  # Background fill color for the playfield and frame buffers (RGB888).
+  @bg 0x000000
+
+  # Capability bit: sprite operations available.
   @cap_sprite 1 <<< 0
 
-  # Sprite handles reserved for icon atlases
+  # Source sprite handles (icons).
   @sprite_info 1
   @sprite_alert 2
   @sprite_close 3
 
-  # Zoom animation (Q8, demo-side)
-  # - Q8 = 256 means 1.0x
-  @zoom_min_q8 256
-  @zoom_max_q8 512
+  # Destination sprite handles (double-buffered strip renderer).
+  @sprite_buf0 10
+  @sprite_buf1 11
 
-  # Dirty-rect padding for rotated corners
-  @clear_pad_px 8
+  # Zoom bounds in protocol units (x1024 fixed-point).
+  # - 512  = 0.5x
+  # - 2048 = 2.0x
+  @zoom_min_x1024 512
+  @zoom_max_x1024 2048
 
-  # Expects display already initialized and rotated, with normalized logical dims.
-  def run(port, w, h)
-      when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
+  # -----------------------------------------------------------------------------
+  # Public entry
+  # -----------------------------------------------------------------------------
+
+  def run(port, w, h) when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
     icon_w = Assets.icon_w()
     icon_h = Assets.icon_h()
 
     icons = {Assets.icon(:info), Assets.icon(:alert), Assets.icon(:close)}
     log_icon_sizes(icons, icon_w, icon_h)
-    log_runtime_tuning()
-
-    max_x = max_i(0, w - icon_w)
-    min_y = @hud_h
-    max_y = max_i(min_y, h - icon_h)
 
     with {:ok, caps} <- Port.get_caps(port),
-         :ok <- ensure_sprite_support(caps),
-         :ok <- Port.fill_screen(port, @bg) do
-      case prepare_icon_sprites(port, icons, icon_w, icon_h) do
-        {:ok, sprite_handles} ->
-          try do
-            # HUD failure should not crash the demo loop on constrained devices.
-            case draw_hud(port, w, @obj_count, 0, 0, 0, 0, true) do
-              :ok ->
-                :ok
+         :ok <- ensure_sprite_support(caps, 5),
+         :ok <- Port.fill_screen(port, @bg),
+         {:ok, icon_handles} <- prepare_icon_sprites(port, icons, icon_w, icon_h),
+         {:ok, strip_h} <- prepare_frame_sprites(port, w, h) do
+      try do
+        {_seed, objects} = init_objects(1, @obj_count, w, h)
 
-              {:error, _reason} ->
-                IO.puts("moving_icons hud init failed; continuing")
-                :ok
-            end
+        now_ms = :erlang.monotonic_time(:millisecond)
+        sec = div(now_ms, 1000)
 
-            {_seed, objects} =
-              init_objects(1, @obj_count, max_x, min_y, max_y, sprite_handles)
+        # State tuple:
+        # {w, h, strip_h, buf0, buf1, flip, objects, fps, frame_count, prev_sec, icon_handles}
+        state = {w, h, strip_h, @sprite_buf0, @sprite_buf1, 0, objects, 0, 0, sec, icon_handles}
 
-            # State tuple:
-            # {w, h, max_x, min_y, max_y, icon_w, icon_h, objects,
-            #  fps, frame_count, prev_sec, hud_sec, rotate_enabled, frame_index}
-            state =
-              {w, h, max_x, min_y, max_y, icon_w, icon_h, objects, 0, 0, nil, nil, true, 0}
-
-            loop(port, state)
-          after
-            cleanup_icon_sprites(port)
-          end
-
-        {:error, reason} ->
-          IO.puts("prepare_icon_sprites failed: #{Port.format_error(reason)}")
-          {:error, reason}
+        loop(port, state)
+      after
+        cleanup_frame_sprites(port)
+        cleanup_icon_sprites(port)
       end
     else
       {:error, reason} ->
@@ -128,13 +85,13 @@ defmodule SampleApp.MovingIcons do
   # Setup / capabilities
   # -----------------------------------------------------------------------------
 
-  defp ensure_sprite_support(%{feature_bits: feature_bits, max_sprites: max_sprites}) do
+  defp ensure_sprite_support(%{feature_bits: feature_bits, max_sprites: max_sprites}, needed) do
     cond do
       (feature_bits &&& @cap_sprite) == 0 ->
         {:error, :cap_sprite_missing}
 
-      max_sprites < 3 ->
-        {:error, {:insufficient_sprite_capacity, max_sprites, 3}}
+      max_sprites < needed ->
+        {:error, {:insufficient_sprite_capacity, max_sprites, needed}}
 
       true ->
         :ok
@@ -146,18 +103,18 @@ defmodule SampleApp.MovingIcons do
     alert_bin = elem(icons, 1)
     close_bin = elem(icons, 2)
 
-    with :ok <- create_and_load_sprite(port, @sprite_info, icon_w, icon_h, info_bin),
-         :ok <- create_and_load_sprite(port, @sprite_alert, icon_w, icon_h, alert_bin),
-         :ok <- create_and_load_sprite(port, @sprite_close, icon_w, icon_h, close_bin) do
+    with :ok <- create_and_load_icon_sprite(port, @sprite_info, icon_w, icon_h, info_bin),
+         :ok <- create_and_load_icon_sprite(port, @sprite_alert, icon_w, icon_h, alert_bin),
+         :ok <- create_and_load_icon_sprite(port, @sprite_close, icon_w, icon_h, close_bin) do
       {:ok, {@sprite_info, @sprite_alert, @sprite_close}}
     else
-      {:error, _reason} = err ->
+      {:error, _} = err ->
         cleanup_icon_sprites(port)
         err
     end
   end
 
-  defp create_and_load_sprite(port, sprite_target, icon_w, icon_h, pixels) do
+  defp create_and_load_icon_sprite(port, sprite_target, icon_w, icon_h, pixels) do
     pivot_x = div(icon_w, 2)
     pivot_y = div(icon_h, 2)
 
@@ -173,10 +130,41 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
+  defp prepare_frame_sprites(port, w, h) do
+    prepare_frame_sprites_i(port, w, h, 2)
+  end
+
+  # Allocate two frame sprites used as strip buffers. If allocation fails, reduce strip height
+  # by increasing `div` until it fits.
+  defp prepare_frame_sprites_i(port, w, h, div) do
+    strip_h = div_ceil(h, div)
+
+    with :ok <- create_frame_sprite(port, @sprite_buf0, w, strip_h),
+         :ok <- create_frame_sprite(port, @sprite_buf1, w, strip_h) do
+      {:ok, strip_h}
+    else
+      {:error, _reason} ->
+        cleanup_frame_sprites(port)
+        prepare_frame_sprites_i(port, w, h, div + 1)
+    end
+  end
+
+  defp create_frame_sprite(port, target, w, h) do
+    # Use a fixed depth for now; align with LCD depth later if you expose it via the protocol.
+    color_depth = 16
+    Port.create_sprite(port, w, h, color_depth, target)
+  end
+
   defp cleanup_icon_sprites(port) do
     _ = safe_delete_sprite(port, @sprite_info)
     _ = safe_delete_sprite(port, @sprite_alert)
     _ = safe_delete_sprite(port, @sprite_close)
+    :ok
+  end
+
+  defp cleanup_frame_sprites(port) do
+    _ = safe_delete_sprite(port, @sprite_buf0)
+    _ = safe_delete_sprite(port, @sprite_buf1)
     :ok
   end
 
@@ -197,116 +185,124 @@ defmodule SampleApp.MovingIcons do
   end
 
   # -----------------------------------------------------------------------------
-  # Setup helpers
+  # Object init + move
   # -----------------------------------------------------------------------------
 
-  defp log_icon_sizes(icons, icon_w, icon_h) do
-    expected = icon_w * icon_h * 2
-
-    i0 = byte_size(elem(icons, 0))
-    i1 = byte_size(elem(icons, 1))
-    i2 = byte_size(elem(icons, 2))
-
-    IO.puts("icon bytes info=#{i0} alert=#{i1} close=#{i2} expected=#{expected}")
+  # Object tuple:
+  # {x, y, dx, dy, img_index, r_cdeg, z_x1024, dr_cdeg, dz_x1024}
+  defp init_objects(seed, count, w, h) do
+    init_objects_i(seed, 0, count, w, h, [])
   end
 
-  defp log_runtime_tuning do
-    IO.puts(
-      "moving_icons cfg obj=#{@obj_count} bench=#{bool_i(@benchmark_mode)} " <>
-        "tm=#{bool_i(@measure_object_timings)} rz_step=#{@rotate_zoom_every_n_frames} " <>
-        "hud=#{@hud_refresh_s}s tr_fallback=#{bool_i(@use_transparent_push_sprite)}"
-    )
+  defp init_objects_i(seed, _i, count, _w, _h, acc) when count <= 0 do
+    {seed, :lists.reverse(acc)}
   end
 
-  # objects are tuples:
-  # {x, y, dx, dy, sprite_target, angle_tenths, d_angle_tenths, zoom_q8, d_zoom_q8}
-  defp init_objects(seed, count, max_x, min_y, max_y, sprite_handles) do
-    init_objects_i(seed, count, max_x, min_y, max_y, sprite_handles, [])
-  end
-
-  defp init_objects_i(seed, 0, _max_x, _min_y, _max_y, _sprite_handles, acc),
-    do: {seed, :lists.reverse(acc)}
-
-  defp init_objects_i(seed, n, max_x, min_y, max_y, sprite_handles, acc) do
+  defp init_objects_i(seed, i, count, w, h, acc) do
     {seed, r1} = rand_u32(seed)
     {seed, r2} = rand_u32(seed)
     {seed, r3} = rand_u32(seed)
     {seed, r4} = rand_u32(seed)
     {seed, r5} = rand_u32(seed)
-    {seed, r6} = rand_u32(seed)
 
-    x = rem(r1, max_x + 1)
-    y = min_y + rem(r2, max_i(1, max_y - min_y + 1))
+    img = rem(i, 3)
 
-    base_dx = rem(r3, 4) + 1
-    base_dy = rem(r4, 4) + 1
+    x = rem(r1, w)
+    y = rem(r2, h)
 
-    dx = if rem(r1, 2) == 0, do: base_dx, else: -base_dx
-    dy = if rem(r2, 2) == 0, do: base_dy, else: -base_dy
+    dx0 = (band3(r3) + 1) * sign(i &&& 1)
+    dy0 = (band3(r4) + 1) * sign(i &&& 2)
 
-    sprite_index = rem(n, 3)
+    dr_deg = (band3(r5) + 1) * sign(i &&& 2)
+    dr_cdeg = dr_deg * 100
 
-    sprite_target =
-      case sprite_index do
-        0 -> elem(sprite_handles, 0)
-        1 -> elem(sprite_handles, 1)
-        _ -> elem(sprite_handles, 2)
-      end
+    # Zoom and delta-zoom in protocol units:
+    # - z_x1024: 1.0..1.9 (step 0.1)
+    # - dz_x1024: 0.01..0.10 (step 0.01)
+    z10 = rem(r3, 10) + 10
+    z_x1024 = div(z10 * 1024, 10)
 
-    angle_tenths = rem(r5, 3600)
-    d_angle_tenths0 = (rem(r6, 8) + 2) * 10
-    d_angle_tenths = if rem(r5, 2) == 0, do: d_angle_tenths0, else: -d_angle_tenths0
+    dz100 = rem(r4, 10) + 1
+    dz_x1024 = div(dz100 * 1024, 100)
 
-    zoom_q8 = @zoom_min_q8 + rem(r3, @zoom_max_q8 - @zoom_min_q8 + 1)
-    d_zoom_q80 = rem(r4, 5) + 2
-    d_zoom_q8 = if rem(r6, 2) == 0, do: d_zoom_q80, else: -d_zoom_q80
+    obj = {x, y, dx0, dy0, img, 0, z_x1024, dr_cdeg, dz_x1024}
+    init_objects_i(seed, i + 1, count - 1, w, h, [obj | acc])
+  end
 
-    object =
-      {x, y, dx, dy, sprite_target, angle_tenths, d_angle_tenths, zoom_q8, d_zoom_q8}
+  defp band3(u32), do: u32 &&& 3
 
-    init_objects_i(seed, n - 1, max_x, min_y, max_y, sprite_handles, [object | acc])
+  defp sign(0), do: -1
+  defp sign(_), do: 1
+
+  defp move_objects(objects, w, h) do
+    move_objects_i(objects, w, h, [])
+  end
+
+  defp move_objects_i([], _w, _h, acc), do: :lists.reverse(acc)
+
+  defp move_objects_i([{x, y, dx, dy, img, r_cdeg, z_x1024, dr_cdeg, dz_x1024} | rest], w, h, acc) do
+    r2 = wrap_angle_cdeg(r_cdeg + dr_cdeg)
+
+    {x2, dx2} = bounce_i16(x + dx, dx, 0, w - 1)
+    {y2, dy2} = bounce_i16(y + dy, dy, 0, h - 1)
+
+    z2 = z_x1024 + dz_x1024
+    {z3, dz2} = bounce_i32(z2, dz_x1024, @zoom_min_x1024, @zoom_max_x1024)
+
+    move_objects_i(rest, w, h, [{x2, y2, dx2, dy2, img, r2, z3, dr_cdeg, dz2} | acc])
+  end
+
+  defp bounce_i16(pos, delta, min_v, max_v) do
+    cond do
+      pos < min_v -> {min_v, abs(delta)}
+      pos > max_v -> {max_v, -abs(delta)}
+      true -> {pos, delta}
+    end
+  end
+
+  defp bounce_i32(pos, delta, min_v, max_v) do
+    cond do
+      pos < min_v -> {min_v, abs(delta)}
+      pos > max_v -> {max_v, -abs(delta)}
+      true -> {pos, delta}
+    end
+  end
+
+  defp wrap_angle_cdeg(a) do
+    cond do
+      a < 0 -> a + 36_000
+      a >= 36_000 -> a - 36_000
+      true -> a
+    end
   end
 
   # -----------------------------------------------------------------------------
   # Main loop
   # -----------------------------------------------------------------------------
 
-  defp loop(port, state) do
-    now_ms = :erlang.monotonic_time(:millisecond)
-    sec = div(now_ms, 1000)
+  defp loop(
+         port,
+         {w, h, strip_h, buf0, buf1, flip0, objects0, fps0, frame_count0, prev_sec0, icon_handles}
+       ) do
+    objects = move_objects(objects0, w, h)
 
-    {w, _h, _max_x, _min_y, _max_y, _iw, _ih, _objects, fps0, frame_count0, prev_sec0, hud_sec0,
-     _rotate_enabled0, frame_index0} = state
+    case render_strips(port, w, h, strip_h, buf0, buf1, flip0, objects, fps0, icon_handles) do
+      {:ok, flip1} ->
+        now_ms = :erlang.monotonic_time(:millisecond)
+        sec = div(now_ms, 1000)
 
-    {fps, frame_count, prev_sec} = tick_fps(sec, fps0, frame_count0, prev_sec0)
-
-    advance_transforms = should_advance_transforms?(frame_index0)
-
-    case render_frame(port, state, advance_transforms) do
-      {:ok, objects_next, clr_ms, blit_ms, draw_ms, rotate_enabled} ->
-        hud_sec =
-          if should_refresh_hud?(hud_sec0, sec) do
-            case draw_hud(port, w, @obj_count, fps, draw_ms, clr_ms, blit_ms, rotate_enabled) do
-              :ok ->
-                sec
-
-              {:error, _reason} ->
-                IO.puts("moving_icons hud update failed; continuing")
-                sec
-            end
+        {fps, frame_count, prev_sec} =
+          if sec == prev_sec0 do
+            {fps0, frame_count0 + 1, prev_sec0}
           else
-            hud_sec0
+            {frame_count0 + 1, 0, sec}
           end
 
         yield()
 
-        {w1, h1, max_x1, min_y1, max_y1, iw1, ih1, _objects1, _fps1, _fc1, _ps1, _hs1, _rz1, _fi1} =
-          state
-
         loop(
           port,
-          {w1, h1, max_x1, min_y1, max_y1, iw1, ih1, objects_next, fps, frame_count, prev_sec,
-           hud_sec, rotate_enabled, bump_frame_index(frame_index0)}
+          {w, h, strip_h, buf0, buf1, flip1, objects, fps, frame_count, prev_sec, icon_handles}
         )
 
       {:error, reason} ->
@@ -315,220 +311,50 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp tick_fps(sec, fps, frame_count, prev_sec) do
-    case prev_sec do
-      nil ->
-        {fps, 1, sec}
+  defp render_strips(port, w, h, strip_h, buf0, buf1, flip0, objects, fps, icon_handles) do
+    case render_strips_i(port, w, h, strip_h, 0, buf0, buf1, flip0, objects, fps, icon_handles) do
+      {:ok, flip1} ->
+        case Port.display(port) do
+          :ok -> {:ok, flip1}
+          {:error, reason} -> {:error, reason}
+        end
 
-      ^sec ->
-        {fps, frame_count + 1, sec}
-
-      _ ->
-        {frame_count, 1, sec}
+      {:error, _} = err ->
+        err
     end
   end
 
-  defp should_refresh_hud?(nil, _sec), do: true
-
-  defp should_refresh_hud?(hud_sec, sec) do
-    sec - hud_sec >= @hud_refresh_s
+  defp render_strips_i(_port, _w, h, _strip_h, y, _buf0, _buf1, flip, _objects, _fps, _icons)
+       when y >= h do
+    {:ok, flip}
   end
 
-  defp should_advance_transforms?(frame_index) do
-    if @rotate_zoom_every_n_frames <= 1 do
-      true
-    else
-      rem(frame_index, @rotate_zoom_every_n_frames) == 0
-    end
-  end
+  # Render the frame in vertical strips into a sprite buffer, then blit each strip to the LCD.
+  # This avoids per-object "erase then redraw" artifacts when objects overlap.
+  defp render_strips_i(port, w, h, strip_h, y0, buf0, buf1, flip0, objects, fps, icon_handles) do
+    {flip1, buf} =
+      if flip0 == 0 do
+        {1, buf0}
+      else
+        {0, buf1}
+      end
 
-  defp bump_frame_index(frame_index) do
-    if frame_index >= @frame_index_wrap do
-      0
-    else
-      frame_index + 1
-    end
-  end
-
-  # -----------------------------------------------------------------------------
-  # Render
-  # -----------------------------------------------------------------------------
-
-  defp render_frame(port, state, advance_transforms) do
-    {w, h, max_x, min_y, max_y, icon_w, icon_h, objects, _fps, _fc, _ps, _hs, rotate_enabled0,
-     _fi} =
-      state
-
-    t0 = :erlang.monotonic_time(:millisecond)
-
-    case render_objects_i(
-           port,
-           objects,
-           w,
-           h,
-           max_x,
-           min_y,
-           max_y,
-           icon_w,
-           icon_h,
-           0,
-           0,
-           rotate_enabled0,
-           advance_transforms,
-           []
-         ) do
-      {:ok, objects_rev, clr_ms, blit_ms, rotate_enabled} ->
-        t1 = :erlang.monotonic_time(:millisecond)
-        objects_next = :lists.reverse(objects_rev)
-        draw_ms = t1 - t0
-        {:ok, objects_next, clr_ms, blit_ms, draw_ms, rotate_enabled}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp render_objects_i(
-         _port,
-         [],
-         _screen_w,
-         _screen_h,
-         _max_x,
-         _min_y,
-         _max_y,
-         _icon_w,
-         _icon_h,
-         clr_ms,
-         blit_ms,
-         rotate_enabled,
-         _advance_transforms,
-         acc
-       ) do
-    {:ok, acc, clr_ms, blit_ms, rotate_enabled}
-  end
-
-  defp render_objects_i(
-         port,
-         [{x, y, dx, dy, sprite_target, angle_tenths, d_angle_tenths, zoom_q8, d_zoom_q8} | rest],
-         screen_w,
-         screen_h,
-         max_x,
-         min_y,
-         max_y,
-         icon_w,
-         icon_h,
-         clr_ms,
-         blit_ms,
-         rotate_enabled,
-         advance_transforms,
-         acc
-       ) do
-    if @measure_object_timings do
-      render_objects_i_measured(
+    with :ok <- Port.clear(port, @bg, buf),
+         :ok <- draw_all_objects_to_strip(port, objects, icon_handles, buf, y0),
+         :ok <- maybe_draw_hud(port, y0, buf, fps),
+         :ok <- Port.push_sprite(port, buf, 0, y0) do
+      render_strips_i(
         port,
-        {x, y, dx, dy, sprite_target, angle_tenths, d_angle_tenths, zoom_q8, d_zoom_q8},
-        rest,
-        screen_w,
-        screen_h,
-        max_x,
-        min_y,
-        max_y,
-        icon_w,
-        icon_h,
-        clr_ms,
-        blit_ms,
-        rotate_enabled,
-        advance_transforms,
-        acc
-      )
-    else
-      render_objects_i_fast(
-        port,
-        {x, y, dx, dy, sprite_target, angle_tenths, d_angle_tenths, zoom_q8, d_zoom_q8},
-        rest,
-        screen_w,
-        screen_h,
-        max_x,
-        min_y,
-        max_y,
-        icon_w,
-        icon_h,
-        clr_ms,
-        blit_ms,
-        rotate_enabled,
-        advance_transforms,
-        acc
-      )
-    end
-  end
-
-  defp render_objects_i_fast(
-         port,
-         {x, y, dx, dy, sprite_target, angle_tenths, d_angle_tenths, zoom_q8, d_zoom_q8},
-         rest,
-         screen_w,
-         screen_h,
-         max_x,
-         min_y,
-         max_y,
-         icon_w,
-         icon_h,
-         clr_ms,
-         blit_ms,
-         rotate_enabled,
-         advance_transforms,
-         acc
-       ) do
-    with :ok <-
-           clear_object_box(
-             port,
-             x,
-             y,
-             zoom_q8,
-             icon_w,
-             icon_h,
-             screen_w,
-             screen_h,
-             min_y,
-             rotate_enabled
-           ),
-         {:ok, x2, dx2} <- bounce_axis(x, dx, 0, max_x),
-         {:ok, y2, dy2} <- bounce_axis(y, dy, min_y, max_y),
-         {:ok, angle2, d_angle2, zoom2, d_zoom2} <-
-           advance_object_transform(
-             angle_tenths,
-             d_angle_tenths,
-             zoom_q8,
-             d_zoom_q8,
-             advance_transforms
-           ),
-         {:ok, rotate_enabled2} <-
-           draw_object(
-             port,
-             sprite_target,
-             x2,
-             y2,
-             angle2,
-             zoom2,
-             icon_w,
-             icon_h,
-             rotate_enabled
-           ) do
-      render_objects_i(
-        port,
-        rest,
-        screen_w,
-        screen_h,
-        max_x,
-        min_y,
-        max_y,
-        icon_w,
-        icon_h,
-        clr_ms,
-        blit_ms,
-        rotate_enabled2,
-        advance_transforms,
-        [{x2, y2, dx2, dy2, sprite_target, angle2, d_angle2, zoom2, d_zoom2} | acc]
+        w,
+        h,
+        strip_h,
+        y0 + strip_h,
+        buf0,
+        buf1,
+        flip1,
+        objects,
+        fps,
+        icon_handles
       )
     else
       {:error, reason} ->
@@ -536,315 +362,85 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp render_objects_i_measured(
+  defp draw_all_objects_to_strip(port, objects, icon_handles, dst_strip_sprite, y0) do
+    draw_all_objects_to_strip_i(port, objects, icon_handles, dst_strip_sprite, y0)
+  end
+
+  defp draw_all_objects_to_strip_i(_port, [], _icons, _dst, _y0), do: :ok
+
+  defp draw_all_objects_to_strip_i(
          port,
-         {x, y, dx, dy, sprite_target, angle_tenths, d_angle_tenths, zoom_q8, d_zoom_q8},
-         rest,
-         screen_w,
-         screen_h,
-         max_x,
-         min_y,
-         max_y,
-         icon_w,
-         icon_h,
-         clr_ms,
-         blit_ms,
-         rotate_enabled,
-         advance_transforms,
-         acc
+         [{x, y, _dx, _dy, img, r_cdeg, z_x1024, _dr, _dz} | rest],
+         icon_handles,
+         dst_strip_sprite,
+         y0
        ) do
-    t0 = :erlang.monotonic_time(:millisecond)
-
-    with :ok <-
-           clear_object_box(
-             port,
-             x,
-             y,
-             zoom_q8,
-             icon_w,
-             icon_h,
-             screen_w,
-             screen_h,
-             min_y,
-             rotate_enabled
-           ),
-         {:ok, x2, dx2} <- bounce_axis(x, dx, 0, max_x),
-         {:ok, y2, dy2} <- bounce_axis(y, dy, min_y, max_y),
-         {:ok, angle2, d_angle2, zoom2, d_zoom2} <-
-           advance_object_transform(
-             angle_tenths,
-             d_angle_tenths,
-             zoom_q8,
-             d_zoom_q8,
-             advance_transforms
-           ) do
-      t1 = :erlang.monotonic_time(:millisecond)
-
-      case draw_object(
-             port,
-             sprite_target,
-             x2,
-             y2,
-             angle2,
-             zoom2,
-             icon_w,
-             icon_h,
-             rotate_enabled
-           ) do
-        {:ok, rotate_enabled2} ->
-          t2 = :erlang.monotonic_time(:millisecond)
-
-          render_objects_i(
-            port,
-            rest,
-            screen_w,
-            screen_h,
-            max_x,
-            min_y,
-            max_y,
-            icon_w,
-            icon_h,
-            clr_ms + (t1 - t0),
-            blit_ms + (t2 - t1),
-            rotate_enabled2,
-            advance_transforms,
-            [{x2, y2, dx2, dy2, sprite_target, angle2, d_angle2, zoom2, d_zoom2} | acc]
-          )
-
-        {:error, reason} ->
-          {:error, reason}
+    src =
+      case img do
+        0 -> elem(icon_handles, 0)
+        1 -> elem(icon_handles, 1)
+        _ -> elem(icon_handles, 2)
       end
-    else
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
 
-  defp advance_object_transform(
-         angle_tenths,
-         d_angle_tenths,
-         zoom_q8,
-         d_zoom_q8,
-         advance_transforms
-       ) do
-    if advance_transforms do
-      with {:ok, angle2, d_angle2} <- advance_angle(angle_tenths, d_angle_tenths),
-           {:ok, zoom2, d_zoom2} <- advance_zoom(zoom_q8, d_zoom_q8) do
-        {:ok, angle2, d_angle2, zoom2, d_zoom2}
-      end
-    else
-      {:ok, angle_tenths, d_angle_tenths, zoom_q8, d_zoom_q8}
-    end
-  end
+    # Strip-local coordinates: subtract the strip's top y-offset.
+    dst_x = x
+    dst_y = y - y0
 
-  defp clear_object_box(
-         port,
-         x,
-         y,
-         zoom_q8,
-         icon_w,
-         icon_h,
-         screen_w,
-         screen_h,
-         min_y,
-         rotate_enabled
-       ) do
-    if rotate_enabled do
-      center_x = x + div(icon_w, 2)
-      center_y = y + div(icon_h, 2)
-
-      # Round up scaling to avoid leaving un-erased edge pixels.
-      scaled_w = max_i(icon_w, div(icon_w * zoom_q8 + 255, 256))
-      scaled_h = max_i(icon_h, div(icon_h * zoom_q8 + 255, 256))
-
-      # Generous padding so rotated corners are erased cleanly.
-      half = div(max_i(scaled_w, scaled_h), 2) + @clear_pad_px + 1
-
-      rect_x0 = center_x - half
-      rect_y0 = center_y - half
-
-      # rect_x1/rect_y1 are treated as exclusive bounds.
-      rect_x1 = center_x + half + 1
-      rect_y1 = center_y + half + 1
-
-      fill_clipped_rect(port, rect_x0, rect_y0, rect_x1, rect_y1, screen_w, screen_h, min_y)
-    else
-      # Tight box when rotate path is unavailable and we are falling back to pushSprite.
-      rect_x0 = x
-      rect_y0 = y
-      rect_x1 = x + icon_w
-      rect_y1 = y + icon_h
-
-      fill_clipped_rect(port, rect_x0, rect_y0, rect_x1, rect_y1, screen_w, screen_h, min_y)
-    end
-  end
-
-  defp fill_clipped_rect(port, rect_x0, rect_y0, rect_x1, rect_y1, screen_w, screen_h, min_y) do
-    clip_x0 = max_i(0, rect_x0)
-    clip_y0 = max_i(min_y, rect_y0)
-    clip_x1 = min_i(screen_w, rect_x1)
-    clip_y1 = min_i(screen_h, rect_y1)
-
-    rect_w = max_i(0, clip_x1 - clip_x0)
-    rect_h = max_i(0, clip_y1 - clip_y0)
-
-    if rect_w > 0 and rect_h > 0 do
-      Port.fill_rect(port, clip_x0, clip_y0, rect_w, rect_h, @bg)
-    else
-      :ok
-    end
-  end
-
-  defp bounce_axis(pos, delta, min_value, max_value) do
-    if pos + delta < min_value do
-      {:ok, min_value, abs(delta)}
-    else
-      if pos + delta > max_value do
-        {:ok, max_value, -abs(delta)}
+    result =
+      if @use_transparent_key do
+        Port.push_rotate_zoom_to(
+          port,
+          src,
+          dst_strip_sprite,
+          dst_x,
+          dst_y,
+          r_cdeg,
+          z_x1024,
+          z_x1024,
+          @transparent_key_rgb565
+        )
       else
-        {:ok, pos + delta, delta}
+        Port.push_rotate_zoom_to(
+          port,
+          src,
+          dst_strip_sprite,
+          dst_x,
+          dst_y,
+          r_cdeg,
+          z_x1024,
+          z_x1024
+        )
       end
+
+    case result do
+      :ok -> draw_all_objects_to_strip_i(port, rest, icon_handles, dst_strip_sprite, y0)
+      {:error, reason} -> {:error, reason}
     end
   end
 
-  defp advance_angle(angle_tenths, d_angle_tenths) do
-    angle2 = angle_tenths + d_angle_tenths
-
-    angle_wrapped =
-      cond do
-        angle2 < 0 -> angle2 + 3600
-        angle2 >= 3600 -> angle2 - 3600
-        true -> angle2
-      end
-
-    {:ok, angle_wrapped, d_angle_tenths}
+  # Draw a tiny HUD only on the first strip, similar to the upstream demo.
+  defp maybe_draw_hud(port, 0, dst_strip_sprite, fps) do
+    text = <<"obj:", i2b(@obj_count)::binary, "  fps:", i2b(fps)::binary>>
+    Port.draw_string_bg(port, 0, 0, 0xFFFFFF, @bg, 2, text, dst_strip_sprite)
   end
 
-  defp advance_zoom(zoom_q8, d_zoom_q8) do
-    zoom2 = zoom_q8 + d_zoom_q8
-
-    cond do
-      zoom2 < @zoom_min_q8 ->
-        {:ok, @zoom_min_q8, abs(d_zoom_q8)}
-
-      zoom2 > @zoom_max_q8 ->
-        {:ok, @zoom_max_q8, -abs(d_zoom_q8)}
-
-      true ->
-        {:ok, zoom2, d_zoom_q8}
-    end
-  end
-
-  defp draw_object(
-         port,
-         sprite_target,
-         x,
-         y,
-         angle_tenths,
-         zoom_q8,
-         icon_w,
-         icon_h,
-         rotate_enabled
-       ) do
-    if rotate_enabled do
-      center_x = x + div(icon_w, 2)
-      center_y = y + div(icon_h, 2)
-
-      # Demo units -> protocol units
-      # - angle: tenths of a degree -> centi-degrees
-      # - zoom:  Q8 (256 = 1.0x)    -> x1024 (1024 = 1.0x)
-      angle_cdeg = angle_tenths * 10
-      zoom_x1024 = zoom_q8 * 4
-
-      # Fast path: non-transparent rotate/zoom.
-      # Background is already black, so transparent-key blending is usually unnecessary.
-      case Port.push_rotate_zoom(
-             port,
-             sprite_target,
-             center_x,
-             center_y,
-             angle_cdeg,
-             zoom_x1024,
-             zoom_x1024
-           ) do
-        :ok ->
-          {:ok, true}
-
-        # If the driver build does not support rotate/zoom yet, fall back to pushSprite.
-        {:error, :unsupported} ->
-          draw_object_fallback_push_sprite(port, sprite_target, x, y)
-
-        {:error, :bad_args} ->
-          draw_object_fallback_push_sprite(port, sprite_target, x, y)
-
-        {:error, reason} ->
-          {:error, reason}
-      end
-    else
-      draw_object_fallback_push_sprite(port, sprite_target, x, y)
-    end
-  end
-
-  defp draw_object_fallback_push_sprite(port, sprite_target, x, y) do
-    if @use_transparent_push_sprite do
-      case Port.push_sprite(port, sprite_target, x, y, @transparent_key_rgb565) do
-        :ok -> {:ok, false}
-        {:error, reason} -> {:error, reason}
-      end
-    else
-      case Port.push_sprite(port, sprite_target, x, y) do
-        :ok -> {:ok, false}
-        {:error, reason} -> {:error, reason}
-      end
-    end
-  end
+  defp maybe_draw_hud(_port, _y0, _dst, _fps), do: :ok
 
   # -----------------------------------------------------------------------------
-  # HUD
+  # Misc
   # -----------------------------------------------------------------------------
 
-  defp draw_hud(port, screen_w, object_count, fps, draw_ms, clr_ms, blit_ms, rotate_enabled) do
-    rotate_label =
-      if rotate_enabled do
-        "rz:on"
-      else
-        "rz:off"
-      end
-
-    timing_label =
-      if @measure_object_timings do
-        "tm:on"
-      else
-        "tm:off"
-      end
-
-    line1 =
-      <<"obj:", i2b(object_count)::binary, " fps:", i2b(fps)::binary, " draw:",
-        i2b(draw_ms)::binary>>
-
-    line2 =
-      <<"clr:", i2b(clr_ms)::binary, " blt:", i2b(blit_ms)::binary, " ", rotate_label::binary,
-        " ", timing_label::binary>>
-
-    with :ok <- Port.fill_rect(port, 0, 0, screen_w, @hud_h, @hud_bg),
-         :ok <- Port.draw_string_bg(port, 4, 0, @hud_fg, @hud_bg, 2, line1),
-         :ok <- Port.draw_string_bg(port, 4, 16, @hud_dim, @hud_bg, 1, line2) do
-      :ok
-    end
+  defp log_icon_sizes(icons, icon_w, icon_h) do
+    expected = icon_w * icon_h * 2
+    i0 = byte_size(elem(icons, 0))
+    i1 = byte_size(elem(icons, 1))
+    i2 = byte_size(elem(icons, 2))
+    IO.puts("icon bytes info=#{i0} alert=#{i1} close=#{i2} expected=#{expected}")
   end
 
-  # -----------------------------------------------------------------------------
-  # Tiny helpers (AtomVM-safe)
-  # -----------------------------------------------------------------------------
+  defp div_ceil(a, b) when is_integer(a) and is_integer(b) and b > 0 do
+    div(a + b - 1, b)
+  end
 
   defp i2b(i), do: :erlang.integer_to_binary(i)
-
-  defp bool_i(true), do: 1
-  defp bool_i(false), do: 0
-
-  defp min_i(a, b) when a <= b, do: a
-  defp min_i(_a, b), do: b
-
-  defp max_i(a, b) when a >= b, do: a
-  defp max_i(_a, b), do: b
 end

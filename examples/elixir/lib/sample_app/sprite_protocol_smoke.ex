@@ -11,10 +11,12 @@ defmodule SampleApp.SpriteProtocolSmoke do
 
   @cap_sprite 1 <<< 0
 
-  # pushRotateZoom wire format (protocol v1+):
-  # - Non-transparent: [x, y, angle_cdeg, zoom_x1024, zoom_y1024]
+  # pushRotateZoom wire format (protocol v1):
+  # - Non-transparent: [dst_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024]
+  # - Transparent:     [dst_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024, transparent565]
   #
   # Where:
+  # - dst_target: 0 (LCD) or 1..254 (sprite)
   # - angle_cdeg: centi-degrees (0.01 deg). Example: 90deg => 9000.
   # - zoom_x1024: 1024 = 1.0x scale
   @zoom_1x 1024
@@ -104,8 +106,8 @@ defmodule SampleApp.SpriteProtocolSmoke do
   end
 
   defp check_push_rotate_zoom_target_zero_bad_target(port, raw_call) do
-    # Non-transparent form: [x, y, angle_cdeg, zoom_x1024, zoom_y1024]
-    args = [0, 0, 0, @zoom_1x, @zoom_1x]
+    # Non-transparent form: [dst_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024]
+    args = [0, 0, 0, 0, @zoom_1x, @zoom_1x]
 
     case raw_call.(port, :pushRotateZoom, 0, 0, args, @t_short) do
       {:error, :bad_op} ->
@@ -145,7 +147,7 @@ defmodule SampleApp.SpriteProtocolSmoke do
          :ok <- check_set_pivot(port, raw_call, @sprite_target),
          :ok <- check_push_sprite(port, raw_call, @sprite_target),
          :ok <- check_push_sprite_region(port, raw_call, @sprite_target),
-         :ok <- check_push_rotate_zoom(port, raw_call, @sprite_target),
+         :ok <- check_push_rotate_zoom_to_lcd(port, raw_call, @sprite_target),
          :ok <- check_delete_sprite(port, raw_call, @sprite_target) do
       :ok
     else
@@ -275,10 +277,10 @@ defmodule SampleApp.SpriteProtocolSmoke do
     end
   end
 
-  defp check_push_rotate_zoom(port, raw_call, sprite_target) do
-    # Non-transparent form: [x, y, angle_cdeg, zoom_x1024, zoom_y1024]
-    # 0 deg, 1.0x scale
-    args = [28, 4, 0, @zoom_1x, @zoom_1x]
+  defp check_push_rotate_zoom_to_lcd(port, raw_call, sprite_target) do
+    # Non-transparent form: [dst_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024]
+    # dst_target=0 (LCD), 0 deg, 1.0x scale
+    args = [0, 28, 4, 0, @zoom_1x, @zoom_1x]
 
     case raw_call.(port, :pushRotateZoom, sprite_target, 0, args, @t_short) do
       {:error, :bad_op} ->
