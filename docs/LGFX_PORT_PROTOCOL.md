@@ -375,13 +375,13 @@ If this table and `ops.def` disagree, `ops.def` (and the built driver) wins.
 | `ping` | `T0/bad_target` | `F0` | `5` | `any` | - |
 | `getCaps` | `T0/bad_target` | `F0` | `5` | `any` | - |
 | `getLastError` | `T0/bad_target` | `F0` | `5` | `any` | `LGFX_CAP_LAST_ERROR` |
-| `width` | `T0/unsupported` | `F0` | `5` | `requires_init` | - |
-| `height` | `T0/unsupported` | `F0` | `5` | `requires_init` | - |
+| `width` | `LGFX_OP_TARGET_ANY` | `F0` | `5` | `requires_init` | - |
+| `height` | `LGFX_OP_TARGET_ANY` | `F0` | `5` | `requires_init` | - |
 | `init` | `T0/bad_target` | `F0` | `5` | `any` | - |
 | `close` | `T0/bad_target` | `F0` | `5` | `any` | - |
 | `setRotation` | `T0/bad_target` | `F0` | `6` | `requires_init` | - |
 | `setBrightness` | `T0/bad_target` | `F0` | `6` | `requires_init` | - |
-| `setColorDepth` | `T0/unsupported` | `F0` | `6` | `requires_init` | - |
+| `setColorDepth` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `display` | `T0/bad_target` | `F0` | `5` | `requires_init` | - |
 | `fillScreen` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `clear` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |

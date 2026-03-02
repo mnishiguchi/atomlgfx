@@ -56,6 +56,14 @@ esp_err_t lgfx_worker_device_close(lgfx_port_t *port);
 // Get the device dimensions (width and height).
 esp_err_t lgfx_worker_device_get_dims(lgfx_port_t *port, uint16_t *out_w, uint16_t *out_h);
 
+// Get target dimensions (LCD target 0, sprite handle 1..254).
+// For sprite targets, returns ESP_ERR_NOT_FOUND when the handle is unallocated.
+esp_err_t lgfx_worker_device_get_target_dims(
+    lgfx_port_t *port,
+    uint8_t target,
+    uint16_t *out_w,
+    uint16_t *out_h);
+
 // Set the device rotation (0-3, typically).
 esp_err_t lgfx_worker_device_set_rotation(lgfx_port_t *port, uint8_t rot);
 
@@ -78,25 +86,70 @@ esp_err_t lgfx_worker_device_clear(lgfx_port_t *port, uint8_t target, uint16_t c
 esp_err_t lgfx_worker_device_draw_pixel(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t color565);
 
 // Draw a fast vertical line starting at (x, y) with a given height and color (RGB565).
-esp_err_t lgfx_worker_device_draw_fast_vline(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t h, uint16_t color565);
+esp_err_t lgfx_worker_device_draw_fast_vline(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t h,
+    uint16_t color565);
 
 // Draw a fast horizontal line starting at (x, y) with a given width and color (RGB565).
-esp_err_t lgfx_worker_device_draw_fast_hline(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t color565);
+esp_err_t lgfx_worker_device_draw_fast_hline(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t color565);
 
 // Draw a line from (x0, y0) to (x1, y1) with a specified color (RGB565).
-esp_err_t lgfx_worker_device_draw_line(lgfx_port_t *port, uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color565);
+esp_err_t lgfx_worker_device_draw_line(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    uint16_t color565);
 
 // Draw a rectangle with a specified position (x, y), width, and height, and color (RGB565).
-esp_err_t lgfx_worker_device_draw_rect(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t color565);
+esp_err_t lgfx_worker_device_draw_rect(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t color565);
 
 // Fill a rectangle with a specified position (x, y), width, and height, and color (RGB565).
-esp_err_t lgfx_worker_device_fill_rect(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t color565);
+esp_err_t lgfx_worker_device_fill_rect(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t color565);
 
 // Draw a circle with a center (x, y) and radius (r) using a specified color (RGB565).
-esp_err_t lgfx_worker_device_draw_circle(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t r, uint16_t color565);
+esp_err_t lgfx_worker_device_draw_circle(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t r,
+    uint16_t color565);
 
 // Fill a circle with a center (x, y) and radius (r) using a specified color (RGB565).
-esp_err_t lgfx_worker_device_fill_circle(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t r, uint16_t color565);
+esp_err_t lgfx_worker_device_fill_circle(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t r,
+    uint16_t color565);
 
 // Draw a triangle with vertices (x0, y0), (x1, y1), and (x2, y2) using a specified color (RGB565).
 esp_err_t lgfx_worker_device_draw_triangle(
@@ -141,10 +194,20 @@ esp_err_t lgfx_worker_device_set_font_preset(lgfx_port_t *port, uint8_t target, 
 esp_err_t lgfx_worker_device_set_text_color(lgfx_port_t *port, uint8_t target, uint16_t fg565, bool has_bg, uint16_t bg565);
 
 // Get touch information (e.g., coordinates, size) for LCD-only devices.
-esp_err_t lgfx_worker_device_get_touch(lgfx_port_t *port, bool *out_touched, int16_t *out_x, int16_t *out_y, uint16_t *out_size);
+esp_err_t lgfx_worker_device_get_touch(
+    lgfx_port_t *port,
+    bool *out_touched,
+    int16_t *out_x,
+    int16_t *out_y,
+    uint16_t *out_size);
 
 // Get raw touch information (e.g., coordinates) for LCD-only devices.
-esp_err_t lgfx_worker_device_get_touch_raw(lgfx_port_t *port, bool *out_touched, int16_t *out_x, int16_t *out_y, uint16_t *out_size);
+esp_err_t lgfx_worker_device_get_touch_raw(
+    lgfx_port_t *port,
+    bool *out_touched,
+    int16_t *out_x,
+    int16_t *out_y,
+    uint16_t *out_size);
 
 // Set touch calibration parameters for LCD-only devices.
 esp_err_t lgfx_worker_device_set_touch_calibrate(lgfx_port_t *port, const uint16_t params[8]);
@@ -153,7 +216,13 @@ esp_err_t lgfx_worker_device_set_touch_calibrate(lgfx_port_t *port, const uint16
 esp_err_t lgfx_worker_device_calibrate_touch(lgfx_port_t *port, uint16_t out_params[8]);
 
 // Draw a string on the device with a given position (x, y) and color (RGB565).
-esp_err_t lgfx_worker_device_draw_string(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, const uint8_t *bytes, uint16_t len);
+esp_err_t lgfx_worker_device_draw_string(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    const uint8_t *bytes,
+    uint16_t len);
 
 // Push an image to the device (RGB565 format).
 esp_err_t lgfx_worker_device_push_image_rgb565_strided(

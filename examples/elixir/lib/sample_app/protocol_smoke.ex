@@ -17,7 +17,6 @@ defmodule SampleApp.ProtocolSmoke do
 
   def run(port, raw_call) when is_function(raw_call, 6) do
     with :ok <- check_local_cap_constants(),
-         :ok <- check_set_color_depth_target_nonzero(port, raw_call),
          {:ok, caps} <- check_get_caps_metadata_and_pushimage(port, raw_call),
          :ok <- check_last_error_cap_matches_availability(port, raw_call, caps.feature_bits) do
       IO.puts("protocol smoke ok")
@@ -55,24 +54,7 @@ defmodule SampleApp.ProtocolSmoke do
   defp power_of_two?(_), do: false
 
   # -----------------------------------------------------------------------------
-  # 1) setColorDepth Target != 0 must return unsupported (protocol v1 policy)
-  # -----------------------------------------------------------------------------
-  defp check_set_color_depth_target_nonzero(port, raw_call) do
-    # {lgfx, Ver, setColorDepth, Target=1, Flags=0, Depth=16}
-    case raw_call.(port, :setColorDepth, 1, 0, [16], @t_short) do
-      {:error, :unsupported} ->
-        :ok
-
-      {:error, reason} ->
-        {:error, {:set_color_depth_target_nonzero_expected_unsupported, reason}}
-
-      {:ok, result} ->
-        {:error, {:set_color_depth_target_nonzero_unexpected_ok, result}}
-    end
-  end
-
-  # -----------------------------------------------------------------------------
-  # 2) getCaps metadata sanity + CAP_PUSHIMAGE must be advertised
+  # 1) getCaps metadata sanity + CAP_PUSHIMAGE must be advertised
   # -----------------------------------------------------------------------------
   defp check_get_caps_metadata_and_pushimage(port, raw_call) do
     case raw_call.(port, :getCaps, 0, 0, [], @t_short) do
@@ -139,7 +121,7 @@ defmodule SampleApp.ProtocolSmoke do
   end
 
   # -----------------------------------------------------------------------------
-  # 3) CAP_LAST_ERROR bit must match actual getLastError availability
+  # 2) CAP_LAST_ERROR bit must match actual getLastError availability
   # -----------------------------------------------------------------------------
   defp check_last_error_cap_matches_availability(port, raw_call, feature_bits) do
     cap_last_error? = cap_set?(feature_bits, @cap_last_error)

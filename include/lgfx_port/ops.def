@@ -12,8 +12,8 @@
 X(ping, lgfx_handle_ping, ATOM_STR("\x04", "ping"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, 0)
 X(getCaps, lgfx_handle_getCaps, ATOM_STR("\x07", "getCaps"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, 0)
 X(getLastError, lgfx_handle_getLastError, ATOM_STR("\x0C", "getLastError"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, LGFX_CAP_LAST_ERROR)
-X(width, lgfx_handle_width, ATOM_STR("\x05", "width"), 5, 5, 0, LGFX_OP_TARGET_UNSUPPORTED, LGFX_OP_STATE_REQUIRES_INIT, 0)
-X(height, lgfx_handle_height, ATOM_STR("\x06", "height"), 5, 5, 0, LGFX_OP_TARGET_UNSUPPORTED, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(width, lgfx_handle_width, ATOM_STR("\x05", "width"), 5, 5, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(height, lgfx_handle_height, ATOM_STR("\x06", "height"), 5, 5, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 
 //
 // Setup
@@ -22,7 +22,8 @@ X(init, lgfx_handle_init, ATOM_STR("\x04", "init"), 5, 5, 0, LGFX_OP_TARGET_BAD_
 X(close, lgfx_handle_close, ATOM_STR("\x05", "close"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, 0)
 X(setRotation, lgfx_handle_setRotation, ATOM_STR("\x0B", "setRotation"), 6, 6, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(setBrightness, lgfx_handle_setBrightness, ATOM_STR("\x0D", "setBrightness"), 6, 6, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, 0)
-X(setColorDepth, lgfx_handle_setColorDepth, ATOM_STR("\x0D", "setColorDepth"), 6, 6, 0, LGFX_OP_TARGET_UNSUPPORTED, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(setColorDepth, lgfx_handle_setColorDepth, ATOM_STR("\x0D", "setColorDepth"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+
 X(display, lgfx_handle_display, ATOM_STR("\x07", "display"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, 0)
 
 //

@@ -230,6 +230,13 @@ static void lgfx_worker_task_main(void *arg)
                 job->err = lgfx_device_get_dims(&job->a.get_dims.w, &job->a.get_dims.h);
                 break;
 
+            case LGFX_JOB_GET_TARGET_DIMS:
+                job->err = lgfx_device_get_target_dims(
+                    job->a.get_target_dims.target,
+                    &job->a.get_target_dims.w,
+                    &job->a.get_target_dims.h);
+                break;
+
             case LGFX_JOB_SET_ROTATION:
                 job->err = lgfx_device_set_rotation(job->a.set_rotation.rot);
                 break;

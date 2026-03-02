@@ -95,12 +95,41 @@ term lgfx_handle_getLastError(Context *ctx, lgfx_port_t *port, const lgfx_reques
 // Request envelope validation is centralized in lgfx_port.c via ops.def metadata.
 term lgfx_handle_width(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    return reply_ok(ctx, port, req, term_from_int32((int32_t) port->width));
+#if !LGFX_PORT_SUPPORTS_SPRITE
+    // Sprite surface is compiled out; treat non-zero targets as unsupported.
+    if (req->target != 0u) {
+        return reply_error(ctx, port, req, port->atoms.unsupported, (int32_t) ESP_ERR_NOT_SUPPORTED);
+    }
+#endif
+
+    // LCD target uses cached dimensions (refreshed at init / setRotation).
+    if (req->target == 0u) {
+        return reply_ok(ctx, port, req, term_from_int32((int32_t) port->width));
+    }
+
+    // Sprite target: query live dimensions (unallocated => ESP_ERR_NOT_FOUND => {error, bad_target}).
+    uint16_t w = 0;
+    uint16_t h = 0;
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_get_target_dims(port, (uint8_t) req->target, &w, &h));
+    return reply_ok(ctx, port, req, term_from_int32((int32_t) w));
 }
 
 term lgfx_handle_height(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    return reply_ok(ctx, port, req, term_from_int32((int32_t) port->height));
+#if !LGFX_PORT_SUPPORTS_SPRITE
+    if (req->target != 0u) {
+        return reply_error(ctx, port, req, port->atoms.unsupported, (int32_t) ESP_ERR_NOT_SUPPORTED);
+    }
+#endif
+
+    if (req->target == 0u) {
+        return reply_ok(ctx, port, req, term_from_int32((int32_t) port->height));
+    }
+
+    uint16_t w = 0;
+    uint16_t h = 0;
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_get_target_dims(port, (uint8_t) req->target, &w, &h));
+    return reply_ok(ctx, port, req, term_from_int32((int32_t) h));
 }
 
 // -----------------------------------------------------------------------------
@@ -194,6 +223,13 @@ static term do_set_color_depth(Context *ctx, lgfx_port_t *port, const lgfx_reque
     // {lgfx, ver, setColorDepth, target, flags, Depth}
     term d_t = term_get_tuple_element(req->request_tuple, 5);
 
+#if !LGFX_PORT_SUPPORTS_SPRITE
+    // Sprite surface is compiled out; treat non-zero targets as unsupported.
+    if (req->target != 0u) {
+        return reply_error(ctx, port, req, port->atoms.unsupported, (int32_t) ESP_ERR_NOT_SUPPORTED);
+    }
+#endif
+
     uint32_t d = 0;
     if (!lgfx_term_to_u32(d_t, &d)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -204,7 +240,7 @@ static term do_set_color_depth(Context *ctx, lgfx_port_t *port, const lgfx_reque
     }
 
     // Device ABI: (target, depth)
-    // Protocol v1 validates target via ops.def metadata (T0/unsupported).
+    // Protocol validates target via ops.def metadata (target-aware).
     LGFX_RETURN_IF_ESP_ERR(
         ctx, port, req, lgfx_worker_device_set_color_depth(port, (uint8_t) req->target, (uint8_t) d));
 

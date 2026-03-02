@@ -119,6 +119,11 @@ esp_err_t lgfx_device_set_font_preset(uint8_t target, uint8_t preset);
 uint16_t lgfx_device_width(uint8_t target);
 uint16_t lgfx_device_height(uint8_t target);
 
+// Target-aware dims query.
+// - target == 0: LCD
+// - target != 0: sprite handle (must exist, else ESP_ERR_NOT_FOUND)
+esp_err_t lgfx_device_get_target_dims(uint8_t target, uint16_t *out_w, uint16_t *out_h);
+
 // Convenience: get LCD dimensions in one call (used by worker to populate port cache)
 // Returns PANEL_W/H before init, or the current lcd->width/height after init/rotation.
 esp_err_t lgfx_device_get_dims(uint16_t *out_w, uint16_t *out_h);

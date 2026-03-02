@@ -19,6 +19,7 @@ typedef enum
     LGFX_JOB_INIT = 1,
     LGFX_JOB_CLOSE,
     LGFX_JOB_GET_DIMS,
+    LGFX_JOB_GET_TARGET_DIMS,
     LGFX_JOB_SET_ROTATION,
     LGFX_JOB_SET_BRIGHTNESS,
     LGFX_JOB_SET_COLOR_DEPTH,
@@ -83,6 +84,13 @@ typedef struct
             uint16_t w;
             uint16_t h;
         } get_dims;
+
+        struct
+        {
+            uint8_t target;
+            uint16_t w;
+            uint16_t h;
+        } get_target_dims;
 
         struct
         {

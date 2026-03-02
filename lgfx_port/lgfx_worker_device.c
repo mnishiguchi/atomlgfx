@@ -81,6 +81,25 @@ esp_err_t lgfx_worker_device_get_dims(lgfx_port_t *port, uint16_t *out_w, uint16
     return err;
 }
 
+esp_err_t lgfx_worker_device_get_target_dims(lgfx_port_t *port, uint8_t target, uint16_t *out_w, uint16_t *out_h)
+{
+    if (!out_w || !out_h) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_GET_TARGET_DIMS,
+        .a.get_target_dims = { .target = target, .w = 0, .h = 0 }
+    };
+
+    esp_err_t err = lgfx_worker_call(port, &job);
+    if (err == ESP_OK) {
+        *out_w = job.a.get_target_dims.w;
+        *out_h = job.a.get_target_dims.h;
+    }
+    return err;
+}
+
 esp_err_t lgfx_worker_device_set_rotation(lgfx_port_t *port, uint8_t rot)
 {
     lgfx_job_t job = { .kind = LGFX_JOB_SET_ROTATION, .a.set_rotation = { .rot = rot } };

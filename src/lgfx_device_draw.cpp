@@ -32,6 +32,43 @@ static uint16_t linebuf[MAX_LINE_PIXELS];
 // Common ops (LCD or sprite target)
 // -----------------------------------------------------------------------------
 
+extern "C" esp_err_t lgfx_device_get_target_dims(uint8_t target, uint16_t *out_w, uint16_t *out_h)
+{
+    if (!out_w || !out_h) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint16_t w_out = 0;
+    uint16_t h_out = 0;
+    bool dims_ok = true;
+
+    esp_err_t err = lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) {
+        const int32_t w = gfx->width();
+        const int32_t h = gfx->height();
+
+        if (w < 0 || h < 0 || w > 65535 || h > 65535) {
+            // Should not happen, but keep the contract strict.
+            dims_ok = false;
+            return;
+        }
+
+        w_out = static_cast<uint16_t>(w);
+        h_out = static_cast<uint16_t>(h);
+    });
+
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    if (!dims_ok) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    *out_w = w_out;
+    *out_h = h_out;
+    return ESP_OK;
+}
+
 extern "C" esp_err_t lgfx_device_set_color_depth(uint8_t target, uint8_t depth)
 {
     return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setColorDepth(depth); });
