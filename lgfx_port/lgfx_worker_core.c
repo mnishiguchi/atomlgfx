@@ -389,6 +389,13 @@ static void lgfx_worker_task_main(void *arg)
                     job->a.set_text_size.size);
                 break;
 
+            case LGFX_JOB_SET_TEXT_SIZE_XY:
+                job->err = lgfx_device_set_text_size_xy(
+                    job->a.set_text_size_xy.target,
+                    job->a.set_text_size_xy.sx,
+                    job->a.set_text_size_xy.sy);
+                break;
+
             case LGFX_JOB_SET_TEXT_DATUM:
                 job->err = lgfx_device_set_text_datum(
                     job->a.set_text_datum.target,
@@ -401,6 +408,13 @@ static void lgfx_worker_task_main(void *arg)
                     job->a.set_text_wrap.target,
                     job->a.set_text_wrap.wrap,
                     job->a.set_text_wrap.wrap);
+                break;
+
+            case LGFX_JOB_SET_TEXT_WRAP_XY:
+                job->err = lgfx_device_set_text_wrap(
+                    job->a.set_text_wrap_xy.target,
+                    job->a.set_text_wrap_xy.wrap_x,
+                    job->a.set_text_wrap_xy.wrap_y);
                 break;
 
             case LGFX_JOB_SET_TEXT_FONT:

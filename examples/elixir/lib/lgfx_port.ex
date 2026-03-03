@@ -483,7 +483,20 @@ defmodule LGFXPort do
     result = call_ok(port, :setTextSize, target, 0, [size], @t_long)
 
     if result == :ok do
-      :erlang.put({:lgfx_text_size, port, target}, size)
+      :erlang.put({:lgfx_text_size, port, target}, {size, size})
+    end
+
+    result
+  end
+
+  def set_text_size_xy(port, sx, sy, target \\ 0)
+      when is_integer(sx) and sx in 1..255 and
+             is_integer(sy) and sy in 0..255 and
+             is_integer(target) and target in 0..254 do
+    result = call_ok(port, :setTextSize, target, 0, [sx, sy], @t_long)
+
+    if result == :ok do
+      :erlang.put({:lgfx_text_size, port, target}, {sx, sy})
     end
 
     result
@@ -494,9 +507,17 @@ defmodule LGFXPort do
     call_ok(port, :setTextDatum, target, 0, [datum], @t_long)
   end
 
+  # Single-arg wrap form (applies to both axes).
   def set_text_wrap(port, wrap, target \\ 0)
       when is_boolean(wrap) and is_integer(target) and target in 0..254 do
     call_ok(port, :setTextWrap, target, 0, [wrap], @t_long)
+  end
+
+  # 2-arg wrap overload.
+  def set_text_wrap_xy(port, wrap_x, wrap_y, target \\ 0)
+      when is_boolean(wrap_x) and is_boolean(wrap_y) and
+             is_integer(target) and target in 0..254 do
+    call_ok(port, :setTextWrap, target, 0, [wrap_x, wrap_y], @t_long)
   end
 
   def set_text_font(port, font_id, target \\ 0)
@@ -808,10 +829,10 @@ defmodule LGFXPort do
   defp font_preset_to_wire(other), do: {:error, {:bad_font_preset, other}}
 
   # Single-font strategy mapping (host cache only; device is source of truth).
-  defp implied_text_size_for_preset(:ascii), do: 1
-  defp implied_text_size_for_preset(:jp_small), do: 1
-  defp implied_text_size_for_preset(:jp_medium), do: 2
-  defp implied_text_size_for_preset(:jp_large), do: 3
+  defp implied_text_size_for_preset(:ascii), do: {1, 1}
+  defp implied_text_size_for_preset(:jp_small), do: {1, 1}
+  defp implied_text_size_for_preset(:jp_medium), do: {2, 2}
+  defp implied_text_size_for_preset(:jp_large), do: {3, 3}
 
   defp maybe_set_text_color(port, fg888, bg888, target) do
     key = {:lgfx_text_color, port, target}
@@ -825,9 +846,10 @@ defmodule LGFXPort do
 
   defp maybe_set_text_size(port, size, target) do
     key = {:lgfx_text_size, port, target}
+    desired = {size, size}
 
     case :erlang.get(key) do
-      ^size -> :ok
+      ^desired -> :ok
       _ -> set_text_size(port, size, target)
     end
   end

@@ -333,6 +333,15 @@ esp_err_t lgfx_worker_device_set_text_size(lgfx_port_t *port, uint8_t target, ui
     return lgfx_worker_call(port, &job);
 }
 
+esp_err_t lgfx_worker_device_set_text_size_xy(lgfx_port_t *port, uint8_t target, uint8_t sx, uint8_t sy)
+{
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_SET_TEXT_SIZE_XY,
+        .a.set_text_size_xy = { .target = target, .sx = sx, .sy = sy }
+    };
+    return lgfx_worker_call(port, &job);
+}
+
 esp_err_t lgfx_worker_device_set_text_datum(lgfx_port_t *port, uint8_t target, uint8_t datum)
 {
     lgfx_job_t job = {
@@ -347,6 +356,15 @@ esp_err_t lgfx_worker_device_set_text_wrap(lgfx_port_t *port, uint8_t target, bo
     lgfx_job_t job = {
         .kind = LGFX_JOB_SET_TEXT_WRAP,
         .a.set_text_wrap = { .target = target, .wrap = wrap }
+    };
+    return lgfx_worker_call(port, &job);
+}
+
+esp_err_t lgfx_worker_device_set_text_wrap_xy(lgfx_port_t *port, uint8_t target, bool wrap_x, bool wrap_y)
+{
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_SET_TEXT_WRAP_XY,
+        .a.set_text_wrap_xy = { .target = target, .wrap_x = wrap_x, .wrap_y = wrap_y }
     };
     return lgfx_worker_call(port, &job);
 }

@@ -395,9 +395,9 @@ If this table and `ops.def` disagree, `ops.def` (and the built driver) wins.
 | `fillCircle` | `LGFX_OP_TARGET_ANY` | `F0` | `9` | `requires_init` | - |
 | `drawTriangle` | `LGFX_OP_TARGET_ANY` | `F0` | `12` | `requires_init` | - |
 | `fillTriangle` | `LGFX_OP_TARGET_ANY` | `F0` | `12` | `requires_init` | - |
-| `setTextSize` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
+| `setTextSize` | `LGFX_OP_TARGET_ANY` | `F0` | `6/7` | `requires_init` | - |
 | `setTextDatum` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
-| `setTextWrap` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
+| `setTextWrap` | `LGFX_OP_TARGET_ANY` | `F0` | `6/7` | `requires_init` | - |
 | `setTextFont` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `setFontPreset` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `setTextColor` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_TEXT_HAS_BG)` | `6/7` | `requires_init` | - |

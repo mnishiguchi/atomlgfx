@@ -44,9 +44,12 @@ typedef enum
     LGFX_JOB_DRAW_TRIANGLE,
     LGFX_JOB_FILL_TRIANGLE,
 
+    // Text
     LGFX_JOB_SET_TEXT_SIZE,
+    LGFX_JOB_SET_TEXT_SIZE_XY, // (sx, sy) overload; sy==0 means "same as x"
     LGFX_JOB_SET_TEXT_DATUM,
     LGFX_JOB_SET_TEXT_WRAP,
+    LGFX_JOB_SET_TEXT_WRAP_XY, // (wrap_x, wrap_y) overload
     LGFX_JOB_SET_TEXT_FONT,
     LGFX_JOB_SET_FONT_PRESET,
     LGFX_JOB_SET_TEXT_COLOR,
@@ -254,6 +257,13 @@ typedef struct
         struct
         {
             uint8_t target;
+            uint8_t sx;
+            uint8_t sy; // 0 => "same as x" (device ABI behavior)
+        } set_text_size_xy;
+
+        struct
+        {
+            uint8_t target;
             uint8_t datum;
         } set_text_datum;
 
@@ -262,6 +272,13 @@ typedef struct
             uint8_t target;
             bool wrap;
         } set_text_wrap;
+
+        struct
+        {
+            uint8_t target;
+            bool wrap_x;
+            bool wrap_y;
+        } set_text_wrap_xy;
 
         struct
         {

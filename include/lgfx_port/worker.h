@@ -1,4 +1,4 @@
-// lgfx_port/include/lgfx_port/worker.h
+// include/lgfx_port/worker.h
 #pragma once
 
 #include <stdbool.h>
@@ -178,11 +178,17 @@ esp_err_t lgfx_worker_device_fill_triangle(
 // Set the text size for drawing text.
 esp_err_t lgfx_worker_device_set_text_size(lgfx_port_t *port, uint8_t target, uint8_t size);
 
+// Set the text size for drawing text (X/Y overload; sy==0 means "same as x").
+esp_err_t lgfx_worker_device_set_text_size_xy(lgfx_port_t *port, uint8_t target, uint8_t sx, uint8_t sy);
+
 // Set the text datum (alignment) for drawing text.
 esp_err_t lgfx_worker_device_set_text_datum(lgfx_port_t *port, uint8_t target, uint8_t datum);
 
-// Set whether text should wrap when drawing.
+// Set whether text should wrap when drawing (single-arg form; applies to both axes).
 esp_err_t lgfx_worker_device_set_text_wrap(lgfx_port_t *port, uint8_t target, bool wrap);
+
+// Set whether text should wrap when drawing (X/Y overload).
+esp_err_t lgfx_worker_device_set_text_wrap_xy(lgfx_port_t *port, uint8_t target, bool wrap_x, bool wrap_y);
 
 // Set the font to use for text drawing.
 esp_err_t lgfx_worker_device_set_text_font(lgfx_port_t *port, uint8_t target, uint8_t font);

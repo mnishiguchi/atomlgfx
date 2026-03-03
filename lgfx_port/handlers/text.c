@@ -34,13 +34,70 @@ static bool decode_font_preset(term preset_t, uint8_t *out_preset)
     return true;
 }
 
+static bool decode_bool_term(const lgfx_port_t *port, term t, bool *out_value)
+{
+    if (!port || !out_value) {
+        return false;
+    }
+
+    // Prefer atom true/false if available; otherwise accept 0/1.
+    if (term_is_atom(t)) {
+        if (t == port->atoms.true_) {
+            *out_value = true;
+            return true;
+        }
+        if (t == port->atoms.false_) {
+            *out_value = false;
+            return true;
+        }
+        return false;
+    }
+
+    uint32_t v = 0;
+    if (!lgfx_term_to_u32(t, &v) || (v != 0 && v != 1)) {
+        return false;
+    }
+
+    *out_value = (v == 1);
+    return true;
+}
+
 static term do_set_text_size(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    // {lgfx, ver, setTextSize, target, flags, Size}
-    term size_term = term_get_tuple_element(req->request_tuple, 5);
+    // arity 6: {lgfx, ver, setTextSize, target, flags, Size}
+    // arity 7: {lgfx, ver, setTextSize, target, flags, SizeX, SizeY}
+    const int arity = term_get_tuple_arity(req->request_tuple);
 
-    uint32_t size = 0;
-    if (!lgfx_term_to_u32(size_term, &size) || size == 0 || size > 255) {
+    if (arity == 6) {
+        term size_term = term_get_tuple_element(req->request_tuple, 5);
+
+        uint32_t size = 0;
+        if (!lgfx_term_to_u32(size_term, &size) || size == 0 || size > 255) {
+            return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+        }
+
+        LGFX_RETURN_IF_ESP_ERR(
+            ctx,
+            port,
+            req,
+            lgfx_worker_device_set_text_size(port, (uint8_t) req->target, (uint8_t) size));
+
+        return reply_ok(ctx, port, req, port->atoms.ok); // {ok, ok}
+    }
+
+    // arity == 7 (enforced by ops.def validation)
+    term sx_term = term_get_tuple_element(req->request_tuple, 5);
+    term sy_term = term_get_tuple_element(req->request_tuple, 6);
+
+    uint32_t sx = 0;
+    uint32_t sy = 0;
+
+    if (!lgfx_term_to_u32(sx_term, &sx) || sx == 0 || sx > 255) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+
+    // sy==0 is allowed (means "same as x" per device ABI behavior)
+    if (!lgfx_term_to_u32(sy_term, &sy) || sy > 255) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -48,7 +105,11 @@ static term do_set_text_size(Context *ctx, lgfx_port_t *port, const lgfx_request
         ctx,
         port,
         req,
-        lgfx_worker_device_set_text_size(port, (uint8_t) req->target, (uint8_t) size));
+        lgfx_worker_device_set_text_size_xy(
+            port,
+            (uint8_t) req->target,
+            (uint8_t) sx,
+            (uint8_t) sy));
 
     return reply_ok(ctx, port, req, port->atoms.ok); // {ok, ok}
 }
@@ -74,34 +135,30 @@ static term do_set_text_datum(Context *ctx, lgfx_port_t *port, const lgfx_reques
 
 static term do_set_text_wrap(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    // {lgfx, ver, setTextWrap, target, flags, WrapBool}
-    term wrap_t = term_get_tuple_element(req->request_tuple, 5);
+    // arity 6: {lgfx, ver, setTextWrap, target, flags, WrapX}
+    // arity 7: {lgfx, ver, setTextWrap, target, flags, WrapX, WrapY}
+    const int arity = term_get_tuple_arity(req->request_tuple);
 
-    bool wrap = false;
+    term wrap_x_t = term_get_tuple_element(req->request_tuple, 5);
 
-    // Prefer atom true/false if available; otherwise accept 0/1.
-    if (term_is_atom(wrap_t)) {
-        if (wrap_t == port->atoms.true_) {
-            wrap = true;
-        } else if (wrap_t == port->atoms.false_) {
-            wrap = false;
-        } else {
-            return reply_error(ctx, port, req, port->atoms.bad_args, 0);
-        }
-    } else {
-        uint32_t v = 0;
-        if (!lgfx_term_to_u32(wrap_t, &v) || (v != 0 && v != 1)) {
-            return reply_error(ctx, port, req, port->atoms.bad_args, 0);
-        }
-        wrap = (v == 1);
+    bool wrap_x = false;
+    if (!decode_bool_term(port, wrap_x_t, &wrap_x)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    // Protocol currently carries one wrap flag; worker applies it to both axes.
+    bool wrap_y = wrap_x;
+    if (arity == 7) {
+        term wrap_y_t = term_get_tuple_element(req->request_tuple, 6);
+        if (!decode_bool_term(port, wrap_y_t, &wrap_y)) {
+            return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+        }
+    }
+
     LGFX_RETURN_IF_ESP_ERR(
         ctx,
         port,
         req,
-        lgfx_worker_device_set_text_wrap(port, (uint8_t) req->target, wrap));
+        lgfx_worker_device_set_text_wrap_xy(port, (uint8_t) req->target, wrap_x, wrap_y));
 
     return reply_ok(ctx, port, req, port->atoms.ok); // {ok, ok}
 }

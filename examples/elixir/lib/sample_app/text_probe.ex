@@ -29,9 +29,10 @@ defmodule SampleApp.TextProbe do
   def run(port, w, h) when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
     with :ok <- Port.fill_screen(port, @bg),
          :ok <- Port.reset_text_state(port, 0),
-         :ok <- Port.set_text_wrap(port, false, 0),
+         :ok <- Port.set_text_wrap_xy(port, false, false, 0),
          :ok <- Port.set_text_datum(port, 0, 0),
          :ok <- Port.set_text_font(port, 1, 0),
+         :ok <- Port.set_text_size_xy(port, 2, 0, 0),
          :ok <- Port.set_text_size(port, 1, 0),
          :ok <- Port.set_text_color(port, @fg, nil, 0),
          :ok <- Port.draw_rect(port, 0, 0, w, h, @frame),
@@ -61,9 +62,10 @@ defmodule SampleApp.TextProbe do
   def run_smoke(port, w, h) when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
     with :ok <- Port.fill_screen(port, @bg),
          :ok <- Port.reset_text_state(port, 0),
-         :ok <- Port.set_text_wrap(port, false, 0),
+         :ok <- Port.set_text_wrap_xy(port, false, false, 0),
          :ok <- Port.set_text_datum(port, 0, 0),
          :ok <- Port.set_text_font(port, 1, 0),
+         :ok <- Port.set_text_size_xy(port, 2, 0, 0),
          :ok <- Port.set_text_size(port, 1, 0),
          :ok <- Port.set_text_color(port, @fg, nil, 0),
          :ok <- Port.draw_rect(port, 0, 0, w, h, @frame),
