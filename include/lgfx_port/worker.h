@@ -251,19 +251,21 @@ esp_err_t lgfx_worker_device_delete_sprite(lgfx_port_t *port, uint8_t target);
 // Set the pivot point for a sprite on the device.
 esp_err_t lgfx_worker_device_set_pivot(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y);
 
-// Push a sprite to the device with a given position (x, y) and optional transparency.
+// Push a sprite to a destination target (LCD or sprite) with a given position (x, y) and optional transparency.
 esp_err_t lgfx_worker_device_push_sprite(
     lgfx_port_t *port,
-    uint8_t target,
+    uint8_t src_target,
+    uint8_t dst_target,
     int16_t x,
     int16_t y,
     bool has_transparent,
     uint16_t transparent565);
 
-// Push a region of a sprite to the device with a given position (x, y) and optional transparency.
+// Push a region of a sprite to a destination target (LCD or sprite) with a given position (dst_x, dst_y) and optional transparency.
 esp_err_t lgfx_worker_device_push_sprite_region(
     lgfx_port_t *port,
-    uint8_t target,
+    uint8_t src_target,
+    uint8_t dst_target,
     int16_t dst_x,
     int16_t dst_y,
     int16_t src_x,

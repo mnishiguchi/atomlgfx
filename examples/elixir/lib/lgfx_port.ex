@@ -50,6 +50,20 @@ defmodule LGFXPort do
   @font_preset_jp_large 3
 
   # -----------------------------------------------------------------------------
+  # Protocol numeric types (guards)
+  # -----------------------------------------------------------------------------
+  defguardp i16(v) when is_integer(v) and v >= -0x8000 and v <= 0x7FFF
+  defguardp u16(v) when is_integer(v) and v >= 0 and v <= 0xFFFF
+  defguardp i32(v) when is_integer(v) and v >= -0x8000_0000 and v <= 0x7FFF_FFFF
+  defguardp u8(v) when is_integer(v) and v >= 0 and v <= 0xFF
+
+  defguardp target_any(v) when is_integer(v) and v >= 0 and v <= 254
+  defguardp sprite_handle(v) when is_integer(v) and v >= 1 and v <= 254
+
+  defguardp color888(v) when is_integer(v) and v >= 0 and v <= 0xFFFFFF
+  defguardp rgb565(v) when is_integer(v) and v >= 0 and v <= 0xFFFF
+
+  # -----------------------------------------------------------------------------
   # Port lifecycle
   # -----------------------------------------------------------------------------
   def open do
@@ -81,7 +95,7 @@ defmodule LGFXPort do
     end
   end
 
-  def width(port, target \\ 0) when is_integer(target) and target in 0..254 do
+  def width(port, target \\ 0) when target_any(target) do
     with {:ok, value} <- call(port, :width, target, 0, [], @t_short),
          true <- is_integer(value) do
       {:ok, value}
@@ -91,7 +105,7 @@ defmodule LGFXPort do
     end
   end
 
-  def height(port, target \\ 0) when is_integer(target) and target in 0..254 do
+  def height(port, target \\ 0) when target_any(target) do
     with {:ok, value} <- call(port, :height, target, 0, [], @t_short),
          true <- is_integer(value) do
       {:ok, value}
@@ -162,13 +176,12 @@ defmodule LGFXPort do
     call_ok(port, :setRotation, 0, 0, [rotation], @t_long)
   end
 
-  def set_brightness(port, brightness) when is_integer(brightness) and brightness in 0..255 do
+  def set_brightness(port, brightness) when u8(brightness) do
     call_ok(port, :setBrightness, 0, 0, [brightness], @t_long)
   end
 
   def set_color_depth(port, depth, target \\ 0)
-      when is_integer(depth) and depth in [1, 2, 4, 8, 16, 24] and is_integer(target) and
-             target in 0..254 do
+      when is_integer(depth) and depth in [1, 2, 4, 8, 16, 24] and target_any(target) do
     call_ok(port, :setColorDepth, target, 0, [depth], @t_long)
   end
 
@@ -176,59 +189,142 @@ defmodule LGFXPort do
   # Sprite operations (LGFX_Sprite)
   # -----------------------------------------------------------------------------
   def create_sprite(port, width, height, target)
-      when is_integer(width) and width >= 1 and
-             is_integer(height) and height >= 1 and
-             is_integer(target) and target in 1..254 do
+      when u16(width) and width >= 1 and
+             u16(height) and height >= 1 and
+             sprite_handle(target) do
     call_ok(port, :createSprite, target, 0, [width, height], @t_long)
   end
 
   def create_sprite(port, width, height, color_depth, target)
-      when is_integer(width) and width >= 1 and
-             is_integer(height) and height >= 1 and
+      when u16(width) and width >= 1 and
+             u16(height) and height >= 1 and
              is_integer(color_depth) and color_depth in [1, 2, 4, 8, 16, 24] and
-             is_integer(target) and target in 1..254 do
+             sprite_handle(target) do
     call_ok(port, :createSprite, target, 0, [width, height, color_depth], @t_long)
   end
 
-  def delete_sprite(port, target) when is_integer(target) and target in 1..254 do
+  def delete_sprite(port, target) when sprite_handle(target) do
     call_ok(port, :deleteSprite, target, 0, [], @t_long)
   end
 
   def set_pivot(port, target, x, y)
-      when is_integer(target) and target in 1..254 and is_integer(x) and is_integer(y) do
+      when sprite_handle(target) and i16(x) and i16(y) do
     call_ok(port, :setPivot, target, 0, [x, y], @t_long)
   end
 
-  def push_sprite(port, src_target, x, y)
-      when is_integer(src_target) and src_target in 1..254 and is_integer(x) and is_integer(y) do
-    call_ok(port, :pushSprite, src_target, 0, [x, y], @t_long)
+  # -----------------------------------------------------------------------------
+  # pushSprite (destination-aware)
+  #
+  # Wire payload:
+  #   [dst_target, x, y] or [dst_target, x, y, transparent565]
+  # Header Target is src sprite handle (1..254).
+  # dst_target: 0 (LCD) or 1..254 (sprite)
+  # -----------------------------------------------------------------------------
+  def push_sprite_to(port, src_target, dst_target, x, y)
+      when sprite_handle(src_target) and
+             target_any(dst_target) and
+             i16(x) and i16(y) do
+    call_ok(port, :pushSprite, src_target, 0, [dst_target, x, y], @t_long)
   end
 
   # Transparent key is RGB565 u16 (protocol)
-  def push_sprite(port, src_target, x, y, transparent565)
-      when is_integer(src_target) and src_target in 1..254 and
-             is_integer(x) and is_integer(y) and
-             is_integer(transparent565) and transparent565 in 0..0xFFFF do
-    call_ok(port, :pushSprite, src_target, 0, [x, y, transparent565], @t_long)
+  def push_sprite_to(port, src_target, dst_target, x, y, transparent565)
+      when sprite_handle(src_target) and
+             target_any(dst_target) and
+             i16(x) and i16(y) and
+             rgb565(transparent565) do
+    call_ok(port, :pushSprite, src_target, 0, [dst_target, x, y, transparent565], @t_long)
   end
 
-  def push_sprite_region(port, src_target, dst_x, dst_y, src_x, src_y, width, height)
-      when is_integer(src_target) and src_target in 1..254 and
-             is_integer(dst_x) and is_integer(dst_y) and
-             is_integer(src_x) and is_integer(src_y) and
-             is_integer(width) and width >= 1 and
-             is_integer(height) and height >= 1 do
+  # Convenience: push to LCD (dst_target=0)
+  def push_sprite(port, src_target, x, y)
+      when sprite_handle(src_target) and i16(x) and i16(y) do
+    push_sprite_to(port, src_target, 0, x, y)
+  end
+
+  def push_sprite(port, src_target, x, y, transparent565)
+      when sprite_handle(src_target) and
+             i16(x) and i16(y) and
+             rgb565(transparent565) do
+    push_sprite_to(port, src_target, 0, x, y, transparent565)
+  end
+
+  # -----------------------------------------------------------------------------
+  # pushSpriteRegion (destination-aware)
+  #
+  # Wire payload:
+  #   [dst_target, dst_x, dst_y, src_x, src_y, w, h]
+  #   [dst_target, dst_x, dst_y, src_x, src_y, w, h, transparent565]
+  # -----------------------------------------------------------------------------
+  def push_sprite_region_to(
+        port,
+        src_target,
+        dst_target,
+        dst_x,
+        dst_y,
+        src_x,
+        src_y,
+        width,
+        height
+      )
+      when sprite_handle(src_target) and
+             target_any(dst_target) and
+             i16(dst_x) and i16(dst_y) and
+             i16(src_x) and src_x >= 0 and
+             i16(src_y) and src_y >= 0 and
+             u16(width) and width >= 1 and
+             u16(height) and height >= 1 do
     call_ok(
       port,
       :pushSpriteRegion,
       src_target,
       0,
-      [dst_x, dst_y, src_x, src_y, width, height],
+      [dst_target, dst_x, dst_y, src_x, src_y, width, height],
       @t_long
     )
   end
 
-  # Transparent key is RGB565 u16 (protocol)
+  def push_sprite_region_to(
+        port,
+        src_target,
+        dst_target,
+        dst_x,
+        dst_y,
+        src_x,
+        src_y,
+        width,
+        height,
+        transparent565
+      )
+      when sprite_handle(src_target) and
+             target_any(dst_target) and
+             i16(dst_x) and i16(dst_y) and
+             i16(src_x) and src_x >= 0 and
+             i16(src_y) and src_y >= 0 and
+             u16(width) and width >= 1 and
+             u16(height) and height >= 1 and
+             rgb565(transparent565) do
+    call_ok(
+      port,
+      :pushSpriteRegion,
+      src_target,
+      0,
+      [dst_target, dst_x, dst_y, src_x, src_y, width, height, transparent565],
+      @t_long
+    )
+  end
+
+  # Convenience: push region to LCD (dst_target=0)
+  def push_sprite_region(port, src_target, dst_x, dst_y, src_x, src_y, width, height)
+      when sprite_handle(src_target) and
+             i16(dst_x) and i16(dst_y) and
+             i16(src_x) and src_x >= 0 and
+             i16(src_y) and src_y >= 0 and
+             u16(width) and width >= 1 and
+             u16(height) and height >= 1 do
+    push_sprite_region_to(port, src_target, 0, dst_x, dst_y, src_x, src_y, width, height)
+  end
+
   def push_sprite_region(
         port,
         src_target,
@@ -240,19 +336,24 @@ defmodule LGFXPort do
         height,
         transparent565
       )
-      when is_integer(src_target) and src_target in 1..254 and
-             is_integer(dst_x) and is_integer(dst_y) and
-             is_integer(src_x) and is_integer(src_y) and
-             is_integer(width) and width >= 1 and
-             is_integer(height) and height >= 1 and
-             is_integer(transparent565) and transparent565 in 0..0xFFFF do
-    call_ok(
+      when sprite_handle(src_target) and
+             i16(dst_x) and i16(dst_y) and
+             i16(src_x) and src_x >= 0 and
+             i16(src_y) and src_y >= 0 and
+             u16(width) and width >= 1 and
+             u16(height) and height >= 1 and
+             rgb565(transparent565) do
+    push_sprite_region_to(
       port,
-      :pushSpriteRegion,
       src_target,
       0,
-      [dst_x, dst_y, src_x, src_y, width, height, transparent565],
-      @t_long
+      dst_x,
+      dst_y,
+      src_x,
+      src_y,
+      width,
+      height,
+      transparent565
     )
   end
 
@@ -276,12 +377,12 @@ defmodule LGFXPort do
         zoom_x1024,
         zoom_y1024
       )
-      when is_integer(src_target) and src_target in 1..254 and
-             is_integer(dst_target) and dst_target in 0..254 and
-             is_integer(x) and is_integer(y) and
-             is_integer(angle_centi_deg) and
-             is_integer(zoom_x1024) and zoom_x1024 > 0 and
-             is_integer(zoom_y1024) and zoom_y1024 > 0 do
+      when sprite_handle(src_target) and
+             target_any(dst_target) and
+             i16(x) and i16(y) and
+             i32(angle_centi_deg) and
+             i32(zoom_x1024) and zoom_x1024 > 0 and
+             i32(zoom_y1024) and zoom_y1024 > 0 do
     call_ok(
       port,
       :pushRotateZoom,
@@ -304,13 +405,13 @@ defmodule LGFXPort do
         zoom_y1024,
         transparent565
       )
-      when is_integer(src_target) and src_target in 1..254 and
-             is_integer(dst_target) and dst_target in 0..254 and
-             is_integer(x) and is_integer(y) and
-             is_integer(angle_centi_deg) and
-             is_integer(zoom_x1024) and zoom_x1024 > 0 and
-             is_integer(zoom_y1024) and zoom_y1024 > 0 and
-             is_integer(transparent565) and transparent565 in 0..0xFFFF do
+      when sprite_handle(src_target) and
+             target_any(dst_target) and
+             i16(x) and i16(y) and
+             i32(angle_centi_deg) and
+             i32(zoom_x1024) and zoom_x1024 > 0 and
+             i32(zoom_y1024) and zoom_y1024 > 0 and
+             rgb565(transparent565) do
     call_ok(
       port,
       :pushRotateZoom,
@@ -323,22 +424,22 @@ defmodule LGFXPort do
 
   # Convenience: accept degrees + float zoom; convert to protocol units (centi-deg / x1024)
   def push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom_x, zoom_y)
-      when is_integer(src_target) and src_target in 1..254 and
-             is_integer(dst_target) and dst_target in 0..254 and
-             is_integer(x) and is_integer(y) and
+      when sprite_handle(src_target) and
+             target_any(dst_target) and
+             i16(x) and i16(y) and
              is_number(angle_deg) and
              is_number(zoom_x) and zoom_x > 0 and
              is_number(zoom_y) and zoom_y > 0 do
     angle_centi_deg = round(angle_deg * 100)
-    zx1024 = round(zoom_x * 1024)
-    zy1024 = round(zoom_y * 1024)
+    zx1024 = max(1, round(zoom_x * 1024))
+    zy1024 = max(1, round(zoom_y * 1024))
     push_rotate_zoom_to(port, src_target, dst_target, x, y, angle_centi_deg, zx1024, zy1024)
   end
 
   def push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom)
-      when is_integer(src_target) and src_target in 1..254 and
-             is_integer(dst_target) and dst_target in 0..254 and
-             is_integer(x) and is_integer(y) and
+      when sprite_handle(src_target) and
+             target_any(dst_target) and
+             i16(x) and i16(y) and
              is_number(angle_deg) and
              is_number(zoom) and zoom > 0 do
     push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom, zoom)
@@ -348,96 +449,94 @@ defmodule LGFXPort do
   # Primitives
   # -----------------------------------------------------------------------------
   def fill_screen(port, color888, target \\ 0)
-      when is_integer(color888) and color888 in 0..0xFFFFFF and is_integer(target) and
-             target in 0..254 do
+      when color888(color888) and target_any(target) do
     call_ok(port, :fillScreen, target, 0, [color888], @t_long)
   end
 
   def clear(port, color888, target \\ 0)
-      when is_integer(color888) and color888 in 0..0xFFFFFF and is_integer(target) and
-             target in 0..254 do
+      when color888(color888) and target_any(target) do
     call_ok(port, :clear, target, 0, [color888], @t_long)
   end
 
   def draw_pixel(port, x, y, color888, target \\ 0)
-      when is_integer(x) and is_integer(y) and
-             is_integer(color888) and color888 in 0..0xFFFFFF and
-             is_integer(target) and target in 0..254 do
+      when i16(x) and i16(y) and
+             color888(color888) and
+             target_any(target) do
     call_ok(port, :drawPixel, target, 0, [x, y, color888], @t_long)
   end
 
   def draw_fast_vline(port, x, y, height, color888, target \\ 0)
-      when is_integer(x) and is_integer(y) and
-             is_integer(height) and height >= 0 and
-             is_integer(color888) and color888 in 0..0xFFFFFF and
-             is_integer(target) and target in 0..254 do
+      when i16(x) and i16(y) and
+             u16(height) and
+             color888(color888) and
+             target_any(target) do
     call_ok(port, :drawFastVLine, target, 0, [x, y, height, color888], @t_long)
   end
 
   def draw_fast_hline(port, x, y, width, color888, target \\ 0)
-      when is_integer(x) and is_integer(y) and
-             is_integer(width) and width >= 0 and
-             is_integer(color888) and color888 in 0..0xFFFFFF and
-             is_integer(target) and target in 0..254 do
+      when i16(x) and i16(y) and
+             u16(width) and
+             color888(color888) and
+             target_any(target) do
     call_ok(port, :drawFastHLine, target, 0, [x, y, width, color888], @t_long)
   end
 
   def draw_line(port, x0, y0, x1, y1, color888, target \\ 0)
-      when is_integer(x0) and is_integer(y0) and is_integer(x1) and is_integer(y1) and
-             is_integer(color888) and color888 in 0..0xFFFFFF and
-             is_integer(target) and target in 0..254 do
+      when i16(x0) and i16(y0) and i16(x1) and i16(y1) and
+             color888(color888) and
+             target_any(target) do
     call_ok(port, :drawLine, target, 0, [x0, y0, x1, y1, color888], @t_long)
   end
 
   def draw_rect(port, x, y, width, height, color888, target \\ 0)
-      when is_integer(x) and is_integer(y) and
-             is_integer(width) and width >= 0 and
-             is_integer(height) and height >= 0 and
-             is_integer(color888) and color888 in 0..0xFFFFFF and
-             is_integer(target) and target in 0..254 do
+      when i16(x) and i16(y) and
+             u16(width) and
+             u16(height) and
+             color888(color888) and
+             target_any(target) do
     call_ok(port, :drawRect, target, 0, [x, y, width, height, color888], @t_long)
   end
 
   def fill_rect(port, x, y, width, height, color888, target \\ 0)
-      when is_integer(x) and is_integer(y) and
-             is_integer(width) and width >= 0 and
-             is_integer(height) and height >= 0 and
-             is_integer(color888) and color888 in 0..0xFFFFFF and
-             is_integer(target) and target in 0..254 do
+      when i16(x) and i16(y) and
+             u16(width) and
+             u16(height) and
+             color888(color888) and
+             target_any(target) do
     call_ok(port, :fillRect, target, 0, [x, y, width, height, color888], @t_long)
   end
 
   def draw_circle(port, x, y, radius, color888, target \\ 0)
-      when is_integer(x) and is_integer(y) and
-             is_integer(radius) and radius >= 0 and
-             is_integer(color888) and color888 in 0..0xFFFFFF and
-             is_integer(target) and target in 0..254 do
+      when i16(x) and i16(y) and
+             u16(radius) and
+             color888(color888) and
+             target_any(target) do
     call_ok(port, :drawCircle, target, 0, [x, y, radius, color888], @t_long)
   end
 
   def fill_circle(port, x, y, radius, color888, target \\ 0)
-      when is_integer(x) and is_integer(y) and
-             is_integer(radius) and radius >= 0 and
-             is_integer(color888) and color888 in 0..0xFFFFFF and
-             is_integer(target) and target in 0..254 do
+      when i16(x) and i16(y) and
+             u16(radius) and
+             color888(color888) and
+             target_any(target) do
     call_ok(port, :fillCircle, target, 0, [x, y, radius, color888], @t_long)
   end
 
   def draw_triangle(port, x0, y0, x1, y1, x2, y2, color888, target \\ 0)
-      when is_integer(x0) and is_integer(y0) and
-             is_integer(x1) and is_integer(y1) and
-             is_integer(x2) and is_integer(y2) and
-             is_integer(color888) and color888 in 0..0xFFFFFF and
-             is_integer(target) and target in 0..254 do
+      when i16(x0) and i16(y0) and
+             i16(x1) and i16(y1) and
+             i16(x2) and i16(y2) and
+             color888(color888) and
+             target_any(target) do
     call_ok(port, :drawTriangle, target, 0, [x0, y0, x1, y1, x2, y2, color888], @t_long)
   end
 
   def fill_triangle(port, x0, y0, x1, y1, x2, y2, color888, target \\ 0)
-      when is_integer(x0) and is_integer(y0) and
-             is_integer(x1) and is_integer(y1) and
-             is_integer(x2) and is_integer(y2) and
-             is_integer(color888) and color888 in 0..0xFFFFFF and
-             is_integer(target) and target in 0..254 do
+      when i16(x0) and i16(y0) and
+             i16(x1) and i16(y1) and
+             i16(x2) and i16(y2) and
+             color888(color888) and
+             target_any(target) do
     call_ok(port, :fillTriangle, target, 0, [x0, y0, x1, y1, x2, y2, color888], @t_long)
   end
 
@@ -479,7 +578,7 @@ defmodule LGFXPort do
   # Text (with simple caching for AtomVM)
   # -----------------------------------------------------------------------------
   def set_text_size(port, size, target \\ 0)
-      when is_integer(size) and size in 1..255 and is_integer(target) and target in 0..254 do
+      when is_integer(size) and size in 1..255 and target_any(target) do
     result = call_ok(port, :setTextSize, target, 0, [size], @t_long)
 
     if result == :ok do
@@ -491,8 +590,8 @@ defmodule LGFXPort do
 
   def set_text_size_xy(port, sx, sy, target \\ 0)
       when is_integer(sx) and sx in 1..255 and
-             is_integer(sy) and sy in 0..255 and
-             is_integer(target) and target in 0..254 do
+             is_integer(sy) and sy in 1..255 and
+             target_any(target) do
     result = call_ok(port, :setTextSize, target, 0, [sx, sy], @t_long)
 
     if result == :ok do
@@ -503,25 +602,24 @@ defmodule LGFXPort do
   end
 
   def set_text_datum(port, datum, target \\ 0)
-      when is_integer(datum) and datum in 0..255 and is_integer(target) and target in 0..254 do
+      when u8(datum) and target_any(target) do
     call_ok(port, :setTextDatum, target, 0, [datum], @t_long)
   end
 
   # Single-arg wrap form (applies to both axes).
   def set_text_wrap(port, wrap, target \\ 0)
-      when is_boolean(wrap) and is_integer(target) and target in 0..254 do
+      when is_boolean(wrap) and target_any(target) do
     call_ok(port, :setTextWrap, target, 0, [wrap], @t_long)
   end
 
   # 2-arg wrap overload.
   def set_text_wrap_xy(port, wrap_x, wrap_y, target \\ 0)
-      when is_boolean(wrap_x) and is_boolean(wrap_y) and
-             is_integer(target) and target in 0..254 do
+      when is_boolean(wrap_x) and is_boolean(wrap_y) and target_any(target) do
     call_ok(port, :setTextWrap, target, 0, [wrap_x, wrap_y], @t_long)
   end
 
   def set_text_font(port, font_id, target \\ 0)
-      when is_integer(font_id) and font_id in 0..255 and is_integer(target) and target in 0..254 do
+      when u8(font_id) and target_any(target) do
     result = call_ok(port, :setTextFont, target, 0, [font_id], @t_long)
 
     if result == :ok do
@@ -535,7 +633,7 @@ defmodule LGFXPort do
   # Font preset helper (driver-defined names mapped to wire preset IDs).
   # Note: preset selection may also change text size on the device (single-font strategy).
   def set_font_preset(port, preset, target \\ 0)
-      when is_integer(target) and target in 0..254 do
+      when target_any(target) do
     case font_preset_to_wire(preset) do
       {:ok, preset_id, canonical_preset} ->
         result = call_ok(port, :setFontPreset, target, 0, [preset_id], @t_long)
@@ -557,7 +655,7 @@ defmodule LGFXPort do
   end
 
   def set_text_color(port, fg888, bg888 \\ nil, target \\ 0)
-      when is_integer(fg888) and fg888 in 0..0xFFFFFF and is_integer(target) and target in 0..254 do
+      when color888(fg888) and target_any(target) do
     case bg888 do
       nil ->
         result = call_ok(port, :setTextColor, target, 0, [fg888], @t_long)
@@ -568,7 +666,7 @@ defmodule LGFXPort do
 
         result
 
-      bg when is_integer(bg) and bg in 0..0xFFFFFF ->
+      bg when color888(bg) ->
         result = call_ok(port, :setTextColor, target, @f_text_has_bg, [fg888, bg], @t_long)
 
         if result == :ok do
@@ -583,8 +681,7 @@ defmodule LGFXPort do
   end
 
   def draw_string(port, x, y, text, target \\ 0)
-      when is_integer(x) and is_integer(y) and is_binary(text) and is_integer(target) and
-             target in 0..254 do
+      when i16(x) and i16(y) and is_binary(text) and target_any(target) do
     case validate_text_binary(text) do
       :ok -> call_ok(port, :drawString, target, 0, [x, y, text], @t_long)
       {:error, reason} -> {:error, reason}
@@ -593,11 +690,12 @@ defmodule LGFXPort do
 
   # Minimal convenience helper used heavily by SampleApp.
   def draw_string_bg(port, x, y, fg888, bg888, size, text, target \\ 0)
-      when is_integer(fg888) and fg888 in 0..0xFFFFFF and
-             is_integer(bg888) and bg888 in 0..0xFFFFFF and
+      when i16(x) and i16(y) and
+             color888(fg888) and
+             color888(bg888) and
              is_integer(size) and size in 1..255 and
              is_binary(text) and
-             is_integer(target) and target in 0..254 do
+             target_any(target) do
     with :ok <- validate_text_binary(text),
          :ok <- maybe_set_text_color(port, fg888, bg888, target),
          :ok <- maybe_set_text_size(port, size, target),
@@ -607,7 +705,7 @@ defmodule LGFXPort do
   end
 
   # Minimal convenience: clears host-side cached text state.
-  def reset_text_state(port, target \\ 0) when is_integer(target) and target in 0..254 do
+  def reset_text_state(port, target \\ 0) when target_any(target) do
     :erlang.erase({:lgfx_text_color, port, target})
     :erlang.erase({:lgfx_text_size, port, target})
     :erlang.erase({:lgfx_text_font_selection, port, target})
@@ -618,12 +716,12 @@ defmodule LGFXPort do
   # Pixel/image transfer (RGB565)
   # -----------------------------------------------------------------------------
   def push_image_rgb565(port, x, y, width, height, pixels, stride_pixels \\ 0, target \\ 0)
-      when is_integer(x) and is_integer(y) and
-             is_integer(width) and width >= 0 and
-             is_integer(height) and height >= 0 and
+      when i16(x) and i16(y) and
+             u16(width) and
+             u16(height) and
              is_binary(pixels) and
-             is_integer(stride_pixels) and stride_pixels >= 0 and
-             is_integer(target) and target in 0..254 do
+             u16(stride_pixels) and
+             target_any(target) do
     cond do
       width == 0 or height == 0 ->
         :ok
@@ -721,6 +819,8 @@ defmodule LGFXPort do
   defp decode_caps({:caps, proto_ver, max_binary_bytes, max_sprites, feature_bits})
        when is_integer(proto_ver) and is_integer(max_binary_bytes) and
               is_integer(max_sprites) and is_integer(feature_bits) do
+    sprite_cap_set? = (feature_bits &&& @cap_sprite) != 0
+
     cond do
       proto_ver != @proto_ver ->
         {:error, {:bad_caps_proto_ver, @proto_ver, proto_ver}}
@@ -730,6 +830,10 @@ defmodule LGFXPort do
 
       max_sprites < 0 ->
         {:error, {:bad_caps_payload, {:max_sprites, max_sprites}}}
+
+      not sprite_cap_set? and max_sprites != 0 ->
+        {:error,
+         {:bad_caps_payload, {:max_sprites_without_cap_sprite, max_sprites, feature_bits}}}
 
       feature_bits < 0 ->
         {:error, {:bad_caps_payload, {:feature_bits, feature_bits}}}

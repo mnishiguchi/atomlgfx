@@ -519,7 +519,8 @@ esp_err_t lgfx_worker_device_set_pivot(
 
 esp_err_t lgfx_worker_device_push_sprite(
     lgfx_port_t *port,
-    uint8_t target,
+    uint8_t src_target,
+    uint8_t dst_target,
     int16_t x,
     int16_t y,
     bool has_transparent,
@@ -528,7 +529,8 @@ esp_err_t lgfx_worker_device_push_sprite(
     lgfx_job_t job = {
         .kind = LGFX_JOB_PUSH_SPRITE,
         .a.push_sprite = {
-            .target = target,
+            .src_target = src_target,
+            .dst_target = dst_target,
             .x = x,
             .y = y,
             .has_transparent = has_transparent,
@@ -539,7 +541,8 @@ esp_err_t lgfx_worker_device_push_sprite(
 
 esp_err_t lgfx_worker_device_push_sprite_region(
     lgfx_port_t *port,
-    uint8_t target,
+    uint8_t src_target,
+    uint8_t dst_target,
     int16_t dst_x,
     int16_t dst_y,
     int16_t src_x,
@@ -552,7 +555,8 @@ esp_err_t lgfx_worker_device_push_sprite_region(
     lgfx_job_t job = {
         .kind = LGFX_JOB_PUSH_SPRITE_REGION,
         .a.push_sprite_region = {
-            .target = target,
+            .src_target = src_target,
+            .dst_target = dst_target,
             .dst_x = dst_x,
             .dst_y = dst_y,
             .src_x = src_x,

@@ -11,7 +11,21 @@
 // Request envelope validation (version/arity/flags/target/init-state) is
 // centralized in lgfx_port.c via ops.def metadata. Handlers only decode payload fields.
 //
+// Destination-aware sprite blits (this handler):
+//
+// - pushSprite request shape:
+//   {lgfx, ver, pushSprite, SrcSprite, Flags,
+//      DstTarget, X, Y [, Transparent565]}
+//
+// - pushSpriteRegion request shape:
+//   {lgfx, ver, pushSpriteRegion, SrcSprite, Flags,
+//      DstTarget, DstX, DstY, SrcX, SrcY, W, H [, Transparent565]}
+//
+// - SrcSprite is the request header Target (sprite-only; 1..254)
+// - DstTarget is 0 (LCD) or 1..254 (sprite)
+//
 // pushRotateZoom wire payload convention used in this handler:
+//
 // - Request shape:
 //   {lgfx, ver, pushRotateZoom, SrcSprite, Flags,
 //      DstTarget, X, Y, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32 [, Transparent565]}
@@ -41,6 +55,7 @@ typedef struct
 
 typedef struct
 {
+    uint8_t dst_target; // 0 => LCD, 1..254 => sprite
     int16_t x;
     int16_t y;
     bool has_transparent;
@@ -49,6 +64,7 @@ typedef struct
 
 typedef struct
 {
+    uint8_t dst_target; // 0 => LCD, 1..254 => sprite
     int16_t dst_x;
     int16_t dst_y;
     int16_t src_x;
@@ -131,16 +147,23 @@ static bool decode_set_pivot_args(const lgfx_request_t *req, lgfx_set_pivot_args
 
 static bool decode_push_sprite_args(const lgfx_request_t *req, lgfx_push_sprite_args_t *out)
 {
-    // pushSprite supports dual arity:
-    // - {lgfx, ver, pushSprite, Target, Flags, X, Y}
-    // - {lgfx, ver, pushSprite, Target, Flags, X, Y, Transparent565}
+    // pushSprite supports dual arity (destination-aware):
+    // - {lgfx, ver, pushSprite, SrcSprite, Flags, DstTarget, X, Y}
+    // - {lgfx, ver, pushSprite, SrcSprite, Flags, DstTarget, X, Y, Transparent565}
     //
-    // Shared metadata enforces arity range [7..8].
+    // Shared metadata enforces arity range [8..9].
 
-    term x_t = term_get_tuple_element(req->request_tuple, 5);
-    term y_t = term_get_tuple_element(req->request_tuple, 6);
+    term dst_target_t = term_get_tuple_element(req->request_tuple, 5);
+    term x_t = term_get_tuple_element(req->request_tuple, 6);
+    term y_t = term_get_tuple_element(req->request_tuple, 7);
 
+    uint32_t dst_target32 = 0;
     uint32_t transparent32 = 0;
+
+    if (!lgfx_term_to_u32(dst_target_t, &dst_target32) || dst_target32 > 254u) {
+        return false;
+    }
+    out->dst_target = (uint8_t) dst_target32;
 
     if (!lgfx_term_to_i16(x_t, &out->x)) {
         return false;
@@ -152,15 +175,15 @@ static bool decode_push_sprite_args(const lgfx_request_t *req, lgfx_push_sprite_
     out->has_transparent = false;
     out->transparent565 = 0;
 
-    if (req->arity == 8) {
-        term transparent_t = term_get_tuple_element(req->request_tuple, 7);
+    if (req->arity == 9) {
+        term transparent_t = term_get_tuple_element(req->request_tuple, 8);
         if (!lgfx_term_to_u32(transparent_t, &transparent32) || !lgfx_validate_u16(transparent32)) {
             return false;
         }
 
         out->has_transparent = true;
         out->transparent565 = (uint16_t) transparent32;
-    } else if (req->arity != 7) {
+    } else if (req->arity != 8) {
         // Defensive only; shared validator should catch this earlier.
         return false;
     }
@@ -170,22 +193,29 @@ static bool decode_push_sprite_args(const lgfx_request_t *req, lgfx_push_sprite_
 
 static bool decode_push_sprite_region_args(const lgfx_request_t *req, lgfx_push_sprite_region_args_t *out)
 {
-    // pushSpriteRegion supports dual arity:
-    // - {lgfx, ver, pushSpriteRegion, Target, Flags, DstX, DstY, SrcX, SrcY, W, H}
-    // - {lgfx, ver, pushSpriteRegion, Target, Flags, DstX, DstY, SrcX, SrcY, W, H, Transparent565}
+    // pushSpriteRegion supports dual arity (destination-aware):
+    // - {lgfx, ver, pushSpriteRegion, SrcSprite, Flags, DstTarget, DstX, DstY, SrcX, SrcY, W, H}
+    // - {lgfx, ver, pushSpriteRegion, SrcSprite, Flags, DstTarget, DstX, DstY, SrcX, SrcY, W, H, Transparent565}
     //
-    // Shared metadata enforces arity range [11..12].
+    // Shared metadata enforces arity range [12..13].
 
-    term dst_x_t = term_get_tuple_element(req->request_tuple, 5);
-    term dst_y_t = term_get_tuple_element(req->request_tuple, 6);
-    term src_x_t = term_get_tuple_element(req->request_tuple, 7);
-    term src_y_t = term_get_tuple_element(req->request_tuple, 8);
-    term w_t = term_get_tuple_element(req->request_tuple, 9);
-    term h_t = term_get_tuple_element(req->request_tuple, 10);
+    term dst_target_t = term_get_tuple_element(req->request_tuple, 5);
+    term dst_x_t = term_get_tuple_element(req->request_tuple, 6);
+    term dst_y_t = term_get_tuple_element(req->request_tuple, 7);
+    term src_x_t = term_get_tuple_element(req->request_tuple, 8);
+    term src_y_t = term_get_tuple_element(req->request_tuple, 9);
+    term w_t = term_get_tuple_element(req->request_tuple, 10);
+    term h_t = term_get_tuple_element(req->request_tuple, 11);
 
+    uint32_t dst_target32 = 0;
     uint32_t w32 = 0;
     uint32_t h32 = 0;
     uint32_t transparent32 = 0;
+
+    if (!lgfx_term_to_u32(dst_target_t, &dst_target32) || dst_target32 > 254u) {
+        return false;
+    }
+    out->dst_target = (uint8_t) dst_target32;
 
     if (!lgfx_term_to_i16(dst_x_t, &out->dst_x)) {
         return false;
@@ -212,15 +242,15 @@ static bool decode_push_sprite_region_args(const lgfx_request_t *req, lgfx_push_
     out->has_transparent = false;
     out->transparent565 = 0;
 
-    if (req->arity == 12) {
-        term transparent_t = term_get_tuple_element(req->request_tuple, 11);
+    if (req->arity == 13) {
+        term transparent_t = term_get_tuple_element(req->request_tuple, 12);
         if (!lgfx_term_to_u32(transparent_t, &transparent32) || !lgfx_validate_u16(transparent32)) {
             return false;
         }
 
         out->has_transparent = true;
         out->transparent565 = (uint16_t) transparent32;
-    } else if (req->arity != 11) {
+    } else if (req->arity != 12) {
         // Defensive only; shared validator should catch this earlier.
         return false;
     }
@@ -349,10 +379,34 @@ static term do_push_sprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
+    // Protocol semantics:
+    // - SrcSprite (request header Target) must exist
+    // - DstTarget must exist when DstTarget != 0
+    //
+    // Use get_target_dims as the cheap existence probe.
+    uint16_t src_w = 0;
+    uint16_t src_h = 0;
+    esp_err_t err = lgfx_worker_device_get_target_dims(port, (uint8_t) req->target, &src_w, &src_h);
+    if (err == ESP_ERR_NOT_FOUND) {
+        return reply_error(ctx, port, req, port->atoms.bad_target, 0);
+    }
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, err);
+
+    if (args.dst_target != 0) {
+        uint16_t dst_w = 0;
+        uint16_t dst_h = 0;
+        err = lgfx_worker_device_get_target_dims(port, args.dst_target, &dst_w, &dst_h);
+        if (err == ESP_ERR_NOT_FOUND) {
+            return reply_error(ctx, port, req, port->atoms.bad_target, 0);
+        }
+        LGFX_RETURN_IF_ESP_ERR(ctx, port, req, err);
+    }
+
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_push_sprite(
             port,
-            (uint8_t) req->target,
+            (uint8_t) req->target, // SrcSprite
+            args.dst_target, // DstTarget (0 => LCD, 1..254 => sprite)
             args.x,
             args.y,
             args.has_transparent,
@@ -369,10 +423,44 @@ static term do_push_sprite_region(Context *ctx, lgfx_port_t *port, const lgfx_re
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
+    // Protocol semantics:
+    // - SrcSprite (request header Target) must exist
+    // - DstTarget must exist when DstTarget != 0
+    // - Source rectangle validation is strict and enforced here:
+    //   src_x/src_y must be >= 0 and src_x+w/src_y+h must be within sprite bounds.
+    uint16_t src_w = 0;
+    uint16_t src_h = 0;
+    esp_err_t err = lgfx_worker_device_get_target_dims(port, (uint8_t) req->target, &src_w, &src_h);
+    if (err == ESP_ERR_NOT_FOUND) {
+        return reply_error(ctx, port, req, port->atoms.bad_target, 0);
+    }
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, err);
+
+    if (args.src_x < 0 || args.src_y < 0) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+
+    const int32_t x1 = (int32_t) args.src_x + (int32_t) args.w;
+    const int32_t y1 = (int32_t) args.src_y + (int32_t) args.h;
+    if (x1 > (int32_t) src_w || y1 > (int32_t) src_h) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+
+    if (args.dst_target != 0) {
+        uint16_t dst_w = 0;
+        uint16_t dst_h = 0;
+        err = lgfx_worker_device_get_target_dims(port, args.dst_target, &dst_w, &dst_h);
+        if (err == ESP_ERR_NOT_FOUND) {
+            return reply_error(ctx, port, req, port->atoms.bad_target, 0);
+        }
+        LGFX_RETURN_IF_ESP_ERR(ctx, port, req, err);
+    }
+
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_push_sprite_region(
             port,
-            (uint8_t) req->target,
+            (uint8_t) req->target, // SrcSprite
+            args.dst_target, // DstTarget (0 => LCD, 1..254 => sprite)
             args.dst_x,
             args.dst_y,
             args.src_x,
@@ -404,8 +492,8 @@ static term do_push_rotate_zoom(Context *ctx, lgfx_port_t *port, const lgfx_requ
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
         lgfx_worker_device_push_rotate_zoom(
             port,
-            (uint8_t) req->target,      // SrcSprite
-            args.dst_target,            // DstTarget (0 => LCD, 1..254 => sprite)
+            (uint8_t) req->target, // SrcSprite
+            args.dst_target, // DstTarget (0 => LCD, 1..254 => sprite)
             args.x,
             args.y,
             angle_deg,

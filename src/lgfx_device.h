@@ -232,12 +232,52 @@ esp_err_t lgfx_device_sprite_set_color_depth(uint8_t handle, uint8_t depth);
 esp_err_t lgfx_device_sprite_create_palette(uint8_t handle);
 esp_err_t lgfx_device_sprite_set_palette_color(uint8_t handle, uint8_t index, uint16_t rgb565);
 esp_err_t lgfx_device_sprite_set_pivot(uint8_t handle, int16_t px, int16_t py);
+
+/*
+ * Sprite push (destination-aware).
+ *
+ * Destination:
+ * - dst_target == 0: LCD
+ * - dst_target != 0: sprite handle (must exist)
+ *
+ * Transparent-color overload is optional in some LovyanGFX/M5GFX variants.
+ * This API uses best-effort dispatch and returns ESP_ERR_NOT_SUPPORTED if no
+ * compatible overload is available for the requested form.
+ */
 esp_err_t lgfx_device_sprite_push_sprite(
-    uint8_t handle,
+    uint8_t src_handle,
+    uint8_t dst_target,
     int16_t x,
     int16_t y,
     bool has_transparent,
     uint16_t transparent_rgb565);
+
+/*
+ * Sprite region push (destination-aware).
+ *
+ * Destination:
+ * - dst_target == 0: LCD
+ * - dst_target != 0: sprite handle (must exist)
+ *
+ * Source rectangle validation policy is primarily enforced in the port handler.
+ * This API may still return ESP_ERR_INVALID_ARG for obviously invalid inputs
+ * (e.g. w/h == 0).
+ *
+ * Transparent-color overload is optional in some LovyanGFX/M5GFX variants.
+ * This API uses best-effort dispatch and returns ESP_ERR_NOT_SUPPORTED if no
+ * compatible overload is available for the requested form.
+ */
+esp_err_t lgfx_device_sprite_push_sprite_region(
+    uint8_t src_handle,
+    uint8_t dst_target,
+    int16_t dst_x,
+    int16_t dst_y,
+    int16_t src_x,
+    int16_t src_y,
+    uint16_t w,
+    uint16_t h,
+    bool has_transparent,
+    uint16_t transparent565);
 
 /*
  * Rotate + zoom sprite push (destination-aware).
@@ -264,18 +304,6 @@ esp_err_t lgfx_device_sprite_push_rotate_zoom(
     float zoom_y,
     bool has_transparent,
     uint16_t transparent565);
-
-esp_err_t lgfx_device_sprite_push_sprite_region(
-    uint8_t sprite_handle,
-    int16_t dst_x,
-    int16_t dst_y,
-    int16_t src_x,
-    int16_t src_y,
-    uint16_t w,
-    uint16_t h,
-    bool has_transparent,
-    uint16_t transparent565,
-    bool *out_pushed);
 
 #ifdef __cplusplus
 }

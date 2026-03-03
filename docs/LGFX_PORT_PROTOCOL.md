@@ -406,8 +406,8 @@ If this table and `ops.def` disagree, `ops.def` (and the built driver) wins.
 | `createSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7/8` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `deleteSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `5` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `setPivot` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7` | `requires_init` | `LGFX_CAP_SPRITE` |
-| `pushSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7/8` | `requires_init` | `LGFX_CAP_SPRITE` |
-| `pushSpriteRegion` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `11/12` | `requires_init` | `LGFX_CAP_SPRITE` |
+| `pushSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `8/9` | `requires_init` | `LGFX_CAP_SPRITE` |
+| `pushSpriteRegion` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `12/13` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `pushRotateZoom` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `11/12` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `getTouch` | `T0/bad_target` | `F0` | `5` | `requires_init` | `LGFX_CAP_TOUCH` |
 | `getTouchRaw` | `T0/bad_target` | `F0` | `5` | `requires_init` | `LGFX_CAP_TOUCH` |
@@ -594,25 +594,38 @@ Behavior:
 
 ---
 
-## `pushSprite` (sprite -> LCD blit)
+## `pushSprite` (sprite -> destination blit)
 
-This operation draws an existing sprite (named by `Target`) onto the LCD at a destination position.
+This operation draws an existing sprite (named by request header `Target`) onto a destination target.
 
-- `Target` is the **source sprite handle** (`1..254`)
+- Request header `Target` is the **source sprite handle** (`1..254`)
 - `Target == 0` is invalid (`LGFX_OP_TARGET_SPRITE_ONLY`)
-- Destination is the LCD (not another sprite)
+- Destination is selected by `DstTarget`:
+  - `DstTarget == 0` => LCD
+  - `DstTarget in 1..254` => sprite handle
 
 ### Request args
 
-- `pushSprite(DstXi16, DstYi16)`
-- `pushSprite(DstXi16, DstYi16, TransparentRgb565U16)` (optional transparent-key blit)
+- `pushSprite(DstTargetU8, DstXi16, DstYi16)`
+- `pushSprite(DstTargetU8, DstXi16, DstYi16, TransparentRgb565U16)` (optional transparent-key blit)
 
 ### Rules
 
-- `DstXi16`, `DstYi16` are destination coordinates on the LCD
+- `DstTargetU8` is the destination target:
+  - `0` => LCD
+  - `1..254` => sprite handle (must exist)
+
+- `DstXi16`, `DstYi16` are destination coordinates on the selected destination target
+
 - Optional `TransparentRgb565U16` is an RGB565 color key (`u16`)
-- When `TransparentRgb565U16` is provided, pixels matching that color are skipped
-- Requires the sprite handle in `Target` to be currently allocated, else `{error, bad_target}` (or `{error, bad_args}` if your handler chooses that error shape consistently)
+  - When provided, pixels matching that color are skipped during compositing
+
+- Requires:
+  - source sprite handle in request header `Target` to exist
+  - destination sprite handle (when `DstTarget != 0`) to exist
+  - otherwise `{error, bad_target}` / `{error, bad_args}` per handler conventions
+
+- Edge clipping is allowed (off-screen destination pixels may be clipped by the device/LovyanGFX path)
 
 ### Response
 
@@ -621,24 +634,30 @@ This operation draws an existing sprite (named by `Target`) onto the LCD at a de
 
 ---
 
-## `pushSpriteRegion` (sprite region -> LCD blit)
+## `pushSpriteRegion` (sprite region -> destination blit)
 
-This operation draws a rectangular region from an existing sprite (named by `Target`) onto the LCD at a destination position.
+This operation draws a rectangular region from an existing sprite (named by request header `Target`) onto a destination target.
 
-- `Target` is the **source sprite handle** (`1..254`)
+- Request header `Target` is the **source sprite handle** (`1..254`)
 - `Target == 0` is invalid (`LGFX_OP_TARGET_SPRITE_ONLY`)
-- Destination is the LCD (not another sprite)
+- Destination is selected by `DstTarget`:
+  - `DstTarget == 0` => LCD
+  - `DstTarget in 1..254` => sprite handle
 
 ### Request args
 
-- `pushSpriteRegion(DstXi16, DstYi16, SrcXi16, SrcYi16, Wu16, Hu16)`
-- `pushSpriteRegion(DstXi16, DstYi16, SrcXi16, SrcYi16, Wu16, Hu16, TransparentRgb565U16)` (optional transparent-key blit)
+- `pushSpriteRegion(DstTargetU8, DstXi16, DstYi16, SrcXi16, SrcYi16, Wu16, Hu16)`
+- `pushSpriteRegion(DstTargetU8, DstXi16, DstYi16, SrcXi16, SrcYi16, Wu16, Hu16, TransparentRgb565U16)` (optional transparent-key blit)
 
 ### Rules
 
-- `DstXi16`, `DstYi16` are destination coordinates on the LCD
+- `DstTargetU8` is the destination target:
+  - `0` => LCD
+  - `1..254` => sprite handle (must exist)
 
-- `SrcXi16`, `SrcYi16` are source coordinates inside the sprite
+- `DstXi16`, `DstYi16` are destination coordinates on the selected destination target
+
+- `SrcXi16`, `SrcYi16` are source coordinates inside the source sprite
 
 - `Wu16`, `Hu16` are source region size
 
@@ -651,13 +670,15 @@ This operation draws a rectangular region from an existing sprite (named by `Tar
   - `SrcYi16 + Hu16 <= sprite_height(Target)`
   - otherwise `{error, bad_args}`
 
-- LCD edge clipping is allowed (off-screen destination pixels may be clipped by the device/LovyanGFX path)
-
 - Optional `TransparentRgb565U16` is an RGB565 color key (`u16`)
+  - When provided, pixels matching that color are skipped during compositing
 
-- When `TransparentRgb565U16` is provided, pixels matching that color are skipped during compositing
+- Requires:
+  - source sprite handle in request header `Target` to exist
+  - destination sprite handle (when `DstTarget != 0`) to exist
+  - otherwise `{error, bad_target}` / `{error, bad_args}` per handler conventions
 
-- Requires the sprite handle in `Target` to be currently allocated, else `{error, bad_target}` (or `{error, bad_args}` if your handler chooses that error shape consistently)
+- Edge clipping is allowed (off-screen destination pixels may be clipped by the device/LovyanGFX path)
 
 ### Response
 
@@ -671,7 +692,9 @@ This operation draws a rectangular region from an existing sprite (named by `Tar
 This operation draws an existing sprite (named by request header `Target`) onto a destination target with rotation and scaling.
 
 - Request header `Target` is the **source sprite handle** (`1..254`)
+
 - `Target == 0` is invalid (`LGFX_OP_TARGET_SPRITE_ONLY`)
+
 - Destination is selected by `DstTarget`:
   - `DstTarget == 0` => LCD
   - `DstTarget in 1..254` => sprite handle
@@ -709,8 +732,7 @@ This operation draws an existing sprite (named by request header `Target`) onto 
   - `zoom_y = ZoomYX1024I32 / 1024.0`
 
 - Optional `TransparentRgb565U16` is an RGB565 color key (`u16`)
-
-- When `TransparentRgb565U16` is provided, pixels matching that color are skipped during compositing
+  - When provided, pixels matching that color are skipped during compositing
 
 - Requires:
   - source sprite handle in request header `Target` to exist
@@ -879,6 +901,15 @@ When you add or change an operation:
 ---
 
 ## Protocol compatibility rules
+
+### Pre-release note
+
+This repository is pre-release. Until the first tagged release, the protocol may
+change in breaking ways without bumping `LGFX_PORT_PROTO_VER`.
+
+Host and driver must be updated together.
+
+After the first release, breaking changes must bump `LGFX_PORT_PROTO_VER`.
 
 ### Allowed (compatible) changes
 

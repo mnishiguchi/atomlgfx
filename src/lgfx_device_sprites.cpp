@@ -1,8 +1,11 @@
 // src/lgfx_device_sprites.cpp
-// Sprite subsystem APIs and sprite compatibility helpers (region push, rotate/zoom).
+// Sprite subsystem APIs and LovyanGFX/M5GFX variant helpers
+// (push, region push, rotate/zoom).
 
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"
+
+#include "esp_log.h"
 
 #include <cmath>
 #include <new>
@@ -10,6 +13,7 @@
 
 namespace
 {
+static const char *TAG = "lgfx_device_sprites";
 
 // -----------------------------------------------------------------------------
 // Sprite create helpers (normalize LovyanGFX / M5GFX return-type differences)
@@ -76,7 +80,122 @@ static auto sprite_create_palette_impl(S *spr, long)
 }
 
 // -----------------------------------------------------------------------------
+// Sprite push helpers (best-effort across LovyanGFX/M5GFX variants)
+// Destination-aware when possible: pushSprite(dst, x, y [, transparent])
+//
+// Note: "fallback" in this file refers to overload availability across library
+// variants, not wire/protocol compatibility.
+// -----------------------------------------------------------------------------
+
+template <typename S>
+static auto sprite_push_plain_impl(S *spr, int16_t x, int16_t y, int)
+    -> decltype(spr->pushSprite(x, y), bool())
+{
+    spr->pushSprite(x, y);
+    return true;
+}
+
+template <typename S>
+static bool sprite_push_plain_impl(S * /*spr*/, int16_t /*x*/, int16_t /*y*/, long)
+{
+    return false;
+}
+
+template <typename S>
+static auto sprite_push_trans_impl(S *spr, int16_t x, int16_t y, uint16_t transparent565, int)
+    -> decltype(spr->pushSprite(x, y, transparent565), bool())
+{
+    spr->pushSprite(x, y, transparent565);
+    return true;
+}
+
+template <typename S>
+static bool sprite_push_trans_impl(S * /*spr*/, int16_t /*x*/, int16_t /*y*/, uint16_t /*transparent565*/, long)
+{
+    return false;
+}
+
+// IMPORTANT:
+// Do not type-erase dst to LGFXBase* for sprite->sprite calls.
+// Some LovyanGFX/M5GFX variants provide overloads that require a more specific dst type
+// (e.g., LGFX_Sprite*). Using the concrete pointer type keeps those overloads reachable.
+template <typename S, typename DstT>
+static auto sprite_push_plain_to_impl(S *spr, DstT *dst, int16_t x, int16_t y, int)
+    -> decltype(spr->pushSprite(dst, x, y), bool())
+{
+    spr->pushSprite(dst, x, y);
+    return true;
+}
+
+template <typename S, typename DstT>
+static bool sprite_push_plain_to_impl(S * /*spr*/, DstT * /*dst*/, int16_t /*x*/, int16_t /*y*/, long)
+{
+    return false;
+}
+
+template <typename S, typename DstT>
+static auto sprite_push_trans_to_impl(S *spr, DstT *dst, int16_t x, int16_t y, uint16_t transparent565, int)
+    -> decltype(spr->pushSprite(dst, x, y, transparent565), bool())
+{
+    spr->pushSprite(dst, x, y, transparent565);
+    return true;
+}
+
+template <typename S, typename DstT>
+static bool sprite_push_trans_to_impl(
+    S * /*spr*/,
+    DstT * /*dst*/,
+    int16_t /*x*/,
+    int16_t /*y*/,
+    uint16_t /*transparent565*/,
+    long)
+{
+    return false;
+}
+
+template <typename DstT>
+static bool sprite_push_sprite_best_effort(
+    lgfx::LGFX_Sprite *spr,
+    DstT *dst,
+    int16_t x,
+    int16_t y,
+    bool has_transparent,
+    uint16_t transparent565,
+    bool allow_default_fallback)
+{
+    if (!spr || !dst) {
+        return false;
+    }
+
+    if (has_transparent) {
+        // Prefer destination-aware overload.
+        if (sprite_push_trans_to_impl(spr, dst, x, y, transparent565, 0)) {
+            return true;
+        }
+
+        // Only allow fallback to the no-dst overload when destination is LCD.
+        if (allow_default_fallback) {
+            return sprite_push_trans_impl(spr, x, y, transparent565, 0);
+        }
+
+        // Preserve semantics: don't silently drop dst or transparency.
+        return false;
+    }
+
+    if (sprite_push_plain_to_impl(spr, dst, x, y, 0)) {
+        return true;
+    }
+
+    if (allow_default_fallback) {
+        return sprite_push_plain_impl(spr, x, y, 0);
+    }
+
+    return false;
+}
+
+// -----------------------------------------------------------------------------
 // Sprite region push helper (best-effort across LovyanGFX/M5GFX variants)
+// Destination-aware when possible: pushSprite(dst, dst_x, dst_y, src_x, src_y, w, h [, transparent])
 // -----------------------------------------------------------------------------
 
 template <typename S>
@@ -139,6 +258,70 @@ static bool sprite_push_region_trans_impl(
     return false;
 }
 
+template <typename S, typename DstT>
+static auto sprite_push_region_plain_to_impl(
+    S *spr,
+    DstT *dst,
+    int16_t dst_x,
+    int16_t dst_y,
+    int16_t src_x,
+    int16_t src_y,
+    uint16_t w,
+    uint16_t h,
+    int) -> decltype(spr->pushSprite(dst, dst_x, dst_y, src_x, src_y, w, h), bool())
+{
+    spr->pushSprite(dst, dst_x, dst_y, src_x, src_y, w, h);
+    return true;
+}
+
+template <typename S, typename DstT>
+static bool sprite_push_region_plain_to_impl(
+    S * /*spr*/,
+    DstT * /*dst*/,
+    int16_t /*dst_x*/,
+    int16_t /*dst_y*/,
+    int16_t /*src_x*/,
+    int16_t /*src_y*/,
+    uint16_t /*w*/,
+    uint16_t /*h*/,
+    long)
+{
+    return false;
+}
+
+template <typename S, typename DstT>
+static auto sprite_push_region_trans_to_impl(
+    S *spr,
+    DstT *dst,
+    int16_t dst_x,
+    int16_t dst_y,
+    int16_t src_x,
+    int16_t src_y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t transparent565,
+    int) -> decltype(spr->pushSprite(dst, dst_x, dst_y, src_x, src_y, w, h, transparent565), bool())
+{
+    spr->pushSprite(dst, dst_x, dst_y, src_x, src_y, w, h, transparent565);
+    return true;
+}
+
+template <typename S, typename DstT>
+static bool sprite_push_region_trans_to_impl(
+    S * /*spr*/,
+    DstT * /*dst*/,
+    int16_t /*dst_x*/,
+    int16_t /*dst_y*/,
+    int16_t /*src_x*/,
+    int16_t /*src_y*/,
+    uint16_t /*w*/,
+    uint16_t /*h*/,
+    uint16_t /*transparent565*/,
+    long)
+{
+    return false;
+}
+
 static bool sprite_push_region_best_effort(
     lgfx::LGFX_Sprite *spr,
     int16_t dst_x,
@@ -155,8 +338,8 @@ static bool sprite_push_region_best_effort(
             return true;
         }
 
-        // Do not silently drop transparency. Only allow a compatibility fallback
-        // if this is effectively a full-sprite push and the transparent full-push
+        // Do not silently drop transparency. Only allow an overload fallback
+        // when this is effectively a full-sprite push and the transparent full-push
         // overload is available.
         if (src_x == 0 && src_y == 0) {
             const int32_t sprite_w = spr->width();
@@ -165,8 +348,7 @@ static bool sprite_push_region_best_effort(
             if (sprite_w >= 0 && sprite_h >= 0
                 && static_cast<uint16_t>(sprite_w) == w
                 && static_cast<uint16_t>(sprite_h) == h) {
-                spr->pushSprite(dst_x, dst_y, transparent565);
-                return true;
+                return sprite_push_trans_impl(spr, dst_x, dst_y, transparent565, 0);
             }
         }
 
@@ -177,8 +359,8 @@ static bool sprite_push_region_best_effort(
         return true;
     }
 
-    // Compatibility fallback: if caller is effectively pushing the whole sprite,
-    // use the widely supported non-region pushSprite overload.
+    // Overload fallback: if caller is effectively pushing the whole sprite,
+    // use the widely supported non-region pushSprite overload (some variants lack region overloads).
     if (src_x == 0 && src_y == 0) {
         const int32_t sprite_w = spr->width();
         const int32_t sprite_h = spr->height();
@@ -186,9 +368,77 @@ static bool sprite_push_region_best_effort(
         if (sprite_w >= 0 && sprite_h >= 0
             && static_cast<uint16_t>(sprite_w) == w
             && static_cast<uint16_t>(sprite_h) == h) {
-            spr->pushSprite(dst_x, dst_y);
+            return sprite_push_plain_impl(spr, dst_x, dst_y, 0);
+        }
+    }
+
+    return false;
+}
+
+template <typename DstT>
+static bool sprite_push_region_best_effort_to(
+    lgfx::LGFX_Sprite *spr,
+    DstT *dst,
+    int16_t dst_x,
+    int16_t dst_y,
+    int16_t src_x,
+    int16_t src_y,
+    uint16_t w,
+    uint16_t h,
+    bool has_transparent,
+    uint16_t transparent565,
+    bool allow_default_fallback)
+{
+    if (!spr || !dst) {
+        return false;
+    }
+
+    const bool is_full_sprite = [&]() -> bool {
+        if (src_x != 0 || src_y != 0) {
+            return false;
+        }
+        const int32_t sprite_w = spr->width();
+        const int32_t sprite_h = spr->height();
+        if (sprite_w < 0 || sprite_h < 0) {
+            return false;
+        }
+        return static_cast<uint16_t>(sprite_w) == w && static_cast<uint16_t>(sprite_h) == h;
+    }();
+
+    if (has_transparent) {
+        // Prefer destination-aware region overload.
+        if (sprite_push_region_trans_to_impl(spr, dst, dst_x, dst_y, src_x, src_y, w, h, transparent565, 0)) {
             return true;
         }
+
+        // Preserve semantics: if region is effectively whole-sprite, allow overload fallback
+        // to destination-aware full push (still keeping transparency and destination).
+        if (is_full_sprite) {
+            if (sprite_push_trans_to_impl(spr, dst, dst_x, dst_y, transparent565, 0)) {
+                return true;
+            }
+        }
+
+        // Only allow fallback to the no-dst path when destination is LCD.
+        if (allow_default_fallback) {
+            return sprite_push_region_best_effort(spr, dst_x, dst_y, src_x, src_y, w, h, true, transparent565);
+        }
+
+        return false;
+    }
+
+    if (sprite_push_region_plain_to_impl(spr, dst, dst_x, dst_y, src_x, src_y, w, h, 0)) {
+        return true;
+    }
+
+    if (is_full_sprite) {
+        if (sprite_push_plain_to_impl(spr, dst, dst_x, dst_y, 0)) {
+            return true;
+        }
+    }
+
+    if (allow_default_fallback) {
+        return sprite_push_region_best_effort(spr, dst_x, dst_y, src_x, src_y, w, h, false, 0);
     }
 
     return false;
@@ -255,10 +505,10 @@ static bool sprite_push_rotate_zoom_trans_impl(
     return false;
 }
 
-template <typename S>
+template <typename S, typename DstT>
 static auto sprite_push_rotate_zoom_plain_to_impl(
     S *spr,
-    lgfx::LovyanGFX *dst,
+    DstT *dst,
     float dst_x,
     float dst_y,
     float angle_deg,
@@ -270,10 +520,10 @@ static auto sprite_push_rotate_zoom_plain_to_impl(
     return true;
 }
 
-template <typename S>
+template <typename S, typename DstT>
 static bool sprite_push_rotate_zoom_plain_to_impl(
     S * /*spr*/,
-    lgfx::LovyanGFX * /*dst*/,
+    DstT * /*dst*/,
     float /*dst_x*/,
     float /*dst_y*/,
     float /*angle_deg*/,
@@ -284,10 +534,10 @@ static bool sprite_push_rotate_zoom_plain_to_impl(
     return false;
 }
 
-template <typename S>
+template <typename S, typename DstT>
 static auto sprite_push_rotate_zoom_trans_to_impl(
     S *spr,
-    lgfx::LovyanGFX *dst,
+    DstT *dst,
     float dst_x,
     float dst_y,
     float angle_deg,
@@ -300,10 +550,10 @@ static auto sprite_push_rotate_zoom_trans_to_impl(
     return true;
 }
 
-template <typename S>
+template <typename S, typename DstT>
 static bool sprite_push_rotate_zoom_trans_to_impl(
     S * /*spr*/,
-    lgfx::LovyanGFX * /*dst*/,
+    DstT * /*dst*/,
     float /*dst_x*/,
     float /*dst_y*/,
     float /*angle_deg*/,
@@ -315,9 +565,10 @@ static bool sprite_push_rotate_zoom_trans_to_impl(
     return false;
 }
 
+template <typename DstT>
 static bool sprite_push_rotate_zoom_best_effort(
     lgfx::LGFX_Sprite *spr,
-    lgfx::LovyanGFX *dst,
+    DstT *dst,
     float dst_x,
     float dst_y,
     float angle_deg,
@@ -337,7 +588,8 @@ static bool sprite_push_rotate_zoom_best_effort(
             return true;
         }
 
-        // Only allow fallback to the no-dst overload when dst is effectively the sprite parent (LCD).
+        // Only allow fallback to the no-dst overload when dst is LCD
+        // (some variants implement only pushRotateZoom(x,y,...) and imply the parent device).
         if (allow_default_fallback) {
             return sprite_push_rotate_zoom_trans_impl(spr, dst_x, dst_y, angle_deg, zoom_x, zoom_y, transparent565, 0);
         }
@@ -505,19 +757,161 @@ extern "C" esp_err_t lgfx_device_sprite_set_pivot(uint8_t handle, int16_t px, in
 }
 
 extern "C" esp_err_t lgfx_device_sprite_push_sprite(
-    uint8_t handle,
+    uint8_t src_handle,
+    uint8_t dst_target,
     int16_t x,
     int16_t y,
     bool has_transparent,
     uint16_t transparent_rgb565)
 {
-    return lgfx_dev::with_sprite(handle, [&](lgfx::LGFX_Sprite *spr) {
-        if (has_transparent) {
-            spr->pushSprite(x, y, transparent_rgb565);
-        } else {
-            spr->pushSprite(x, y);
+    const uint8_t max_handle = lgfx_dev::max_handle_const();
+    if (src_handle == 0 || src_handle > max_handle) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Destination target must be protocol-valid (0 LCD or sprite handle range).
+    if (!lgfx_device_is_valid_target(dst_target)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    lgfx_dev::ScopedLcdLock lock;
+    esp_err_t err = lgfx_dev::lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    auto *src = lgfx_dev::resolve_sprite_locked(src_handle);
+    if (!src) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (dst_target == 0) {
+        auto *lcd = lgfx_dev::lcd_device_locked();
+        if (!lcd) {
+            return ESP_ERR_INVALID_STATE;
         }
-    });
+
+        // dst is LCD => allow default (no-dst) fallback.
+        const bool pushed = sprite_push_sprite_best_effort(src, lcd, x, y, has_transparent, transparent_rgb565, true);
+
+        if (!pushed) {
+            ESP_LOGW(TAG,
+                "pushSprite unsupported: src=%u dst=%u(lcd) transparent=%s",
+                (unsigned) src_handle, (unsigned) dst_target, has_transparent ? "true" : "false");
+        }
+
+        return pushed ? ESP_OK : ESP_ERR_NOT_SUPPORTED;
+    }
+
+    auto *dst_spr = lgfx_dev::resolve_sprite_locked(dst_target);
+    if (!dst_spr) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    // dst is sprite => do NOT allow default fallback (would drop destination semantics).
+    const bool pushed = sprite_push_sprite_best_effort(src, dst_spr, x, y, has_transparent, transparent_rgb565, false);
+
+    if (!pushed) {
+        ESP_LOGW(TAG,
+            "pushSprite unsupported: src=%u dst=%u(sprite) transparent=%s",
+            (unsigned) src_handle, (unsigned) dst_target, has_transparent ? "true" : "false");
+    }
+
+    return pushed ? ESP_OK : ESP_ERR_NOT_SUPPORTED;
+}
+
+extern "C" esp_err_t lgfx_device_sprite_push_sprite_region(
+    uint8_t src_handle,
+    uint8_t dst_target,
+    int16_t dst_x,
+    int16_t dst_y,
+    int16_t src_x,
+    int16_t src_y,
+    uint16_t w,
+    uint16_t h,
+    bool has_transparent,
+    uint16_t transparent565)
+{
+    const uint8_t max_handle = lgfx_dev::max_handle_const();
+    if (src_handle == 0 || src_handle > max_handle || w == 0 || h == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Destination target must be protocol-valid (0 LCD or sprite handle range).
+    if (!lgfx_device_is_valid_target(dst_target)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    lgfx_dev::ScopedLcdLock lock;
+    esp_err_t err = lgfx_dev::lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    auto *src = lgfx_dev::resolve_sprite_locked(src_handle);
+    if (!src) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (dst_target == 0) {
+        auto *lcd = lgfx_dev::lcd_device_locked();
+        if (!lcd) {
+            return ESP_ERR_INVALID_STATE;
+        }
+
+        const bool pushed = sprite_push_region_best_effort_to(
+            src,
+            lcd,
+            dst_x,
+            dst_y,
+            src_x,
+            src_y,
+            w,
+            h,
+            has_transparent,
+            transparent565,
+            true);
+
+        if (!pushed) {
+            ESP_LOGW(TAG,
+                "pushSpriteRegion unsupported: src=%u dst=%u(lcd) transparent=%s dst_xy=(%d,%d) src_xy=(%d,%d) wh=(%u,%u)",
+                (unsigned) src_handle, (unsigned) dst_target, has_transparent ? "true" : "false",
+                (int) dst_x, (int) dst_y,
+                (int) src_x, (int) src_y,
+                (unsigned) w, (unsigned) h);
+        }
+
+        return pushed ? ESP_OK : ESP_ERR_NOT_SUPPORTED;
+    }
+
+    auto *dst_spr = lgfx_dev::resolve_sprite_locked(dst_target);
+    if (!dst_spr) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    const bool pushed = sprite_push_region_best_effort_to(
+        src,
+        dst_spr,
+        dst_x,
+        dst_y,
+        src_x,
+        src_y,
+        w,
+        h,
+        has_transparent,
+        transparent565,
+        false);
+
+    if (!pushed) {
+        ESP_LOGW(TAG,
+            "pushSpriteRegion unsupported: src=%u dst=%u(sprite) transparent=%s dst_xy=(%d,%d) src_xy=(%d,%d) wh=(%u,%u)",
+            (unsigned) src_handle, (unsigned) dst_target, has_transparent ? "true" : "false",
+            (int) dst_x, (int) dst_y,
+            (int) src_x, (int) src_y,
+            (unsigned) w, (unsigned) h);
+    }
+
+    return pushed ? ESP_OK : ESP_ERR_NOT_SUPPORTED;
 }
 
 extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
@@ -561,28 +955,46 @@ extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
         return ESP_ERR_NOT_FOUND;
     }
 
-    lgfx::LovyanGFX *dst = nullptr;
-
     if (dst_target == 0) {
-        dst = lgfx_dev::lcd_device_locked();
-        if (!dst) {
+        auto *lcd = lgfx_dev::lcd_device_locked();
+        if (!lcd) {
             return ESP_ERR_INVALID_STATE;
         }
-    } else {
-        auto *dst_spr = lgfx_dev::resolve_sprite_locked(dst_target);
-        if (!dst_spr) {
-            return ESP_ERR_NOT_FOUND;
+
+        const bool pushed = sprite_push_rotate_zoom_best_effort(
+            src,
+            lcd,
+            (float) x,
+            (float) y,
+            angle_deg,
+            zoom_x,
+            zoom_y,
+            has_transparent,
+            transparent565,
+            true);
+
+        if (!pushed) {
+            const int32_t angle_cdeg = (int32_t) std::lroundf(angle_deg * 100.0f);
+            const int32_t zx1024 = (int32_t) std::lroundf(zoom_x * 1024.0f);
+            const int32_t zy1024 = (int32_t) std::lroundf(zoom_y * 1024.0f);
+
+            ESP_LOGW(TAG,
+                "pushRotateZoom unsupported: src=%u dst=%u(lcd) transparent=%s xy=(%d,%d) angle_cdeg=%ld zoom_x1024=(%ld,%ld)",
+                (unsigned) src_handle, (unsigned) dst_target, has_transparent ? "true" : "false",
+                (int) x, (int) y, (long) angle_cdeg, (long) zx1024, (long) zy1024);
         }
-        dst = static_cast<lgfx::LovyanGFX *>(dst_spr);
+
+        return pushed ? ESP_OK : ESP_ERR_NOT_SUPPORTED;
     }
 
-    // All sprites are constructed with the LCD as parent in this port.
-    // Fallback to the no-dst overload is only valid when destination is LCD.
-    const bool allow_default_fallback = (dst_target == 0);
+    auto *dst_spr = lgfx_dev::resolve_sprite_locked(dst_target);
+    if (!dst_spr) {
+        return ESP_ERR_NOT_FOUND;
+    }
 
     const bool pushed = sprite_push_rotate_zoom_best_effort(
         src,
-        dst,
+        dst_spr,
         (float) x,
         (float) y,
         angle_deg,
@@ -590,48 +1002,17 @@ extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
         zoom_y,
         has_transparent,
         transparent565,
-        allow_default_fallback);
+        false);
 
-    return pushed ? ESP_OK : ESP_ERR_NOT_SUPPORTED;
-}
+    if (!pushed) {
+        const int32_t angle_cdeg = (int32_t) std::lroundf(angle_deg * 100.0f);
+        const int32_t zx1024 = (int32_t) std::lroundf(zoom_x * 1024.0f);
+        const int32_t zy1024 = (int32_t) std::lroundf(zoom_y * 1024.0f);
 
-extern "C" esp_err_t lgfx_device_sprite_push_sprite_region(
-    uint8_t sprite_handle,
-    int16_t dst_x,
-    int16_t dst_y,
-    int16_t src_x,
-    int16_t src_y,
-    uint16_t w,
-    uint16_t h,
-    bool has_transparent,
-    uint16_t transparent565,
-    bool *out_pushed)
-{
-    if (out_pushed) {
-        *out_pushed = false;
-    }
-
-    const uint8_t max_handle = lgfx_dev::max_handle_const();
-    if (sprite_handle == 0 || sprite_handle > max_handle || w == 0 || h == 0) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    lgfx_dev::ScopedLcdLock lock;
-    esp_err_t err = lgfx_dev::lock_ready(lock);
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    auto *spr = lgfx_dev::resolve_sprite_locked(sprite_handle);
-    if (!spr) {
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    const bool pushed = sprite_push_region_best_effort(
-        spr, dst_x, dst_y, src_x, src_y, w, h, has_transparent, transparent565);
-
-    if (out_pushed) {
-        *out_pushed = pushed;
+        ESP_LOGW(TAG,
+            "pushRotateZoom unsupported: src=%u dst=%u(sprite) transparent=%s xy=(%d,%d) angle_cdeg=%ld zoom_x1024=(%ld,%ld)",
+            (unsigned) src_handle, (unsigned) dst_target, has_transparent ? "true" : "false",
+            (int) x, (int) y, (long) angle_cdeg, (long) zx1024, (long) zy1024);
     }
 
     return pushed ? ESP_OK : ESP_ERR_NOT_SUPPORTED;

@@ -480,7 +480,8 @@ static void lgfx_worker_task_main(void *arg)
 
             case LGFX_JOB_PUSH_SPRITE:
                 job->err = lgfx_device_sprite_push_sprite(
-                    job->a.push_sprite.target,
+                    job->a.push_sprite.src_target,
+                    job->a.push_sprite.dst_target,
                     job->a.push_sprite.x,
                     job->a.push_sprite.y,
                     job->a.push_sprite.has_transparent,
@@ -489,7 +490,8 @@ static void lgfx_worker_task_main(void *arg)
 
             case LGFX_JOB_PUSH_SPRITE_REGION:
                 job->err = lgfx_device_sprite_push_sprite_region(
-                    job->a.push_sprite_region.target,
+                    job->a.push_sprite_region.src_target,
+                    job->a.push_sprite_region.dst_target,
                     job->a.push_sprite_region.dst_x,
                     job->a.push_sprite_region.dst_y,
                     job->a.push_sprite_region.src_x,
@@ -497,8 +499,7 @@ static void lgfx_worker_task_main(void *arg)
                     job->a.push_sprite_region.w,
                     job->a.push_sprite_region.h,
                     job->a.push_sprite_region.has_transparent,
-                    job->a.push_sprite_region.transparent565,
-                    NULL);
+                    job->a.push_sprite_region.transparent565);
                 break;
 
             case LGFX_JOB_PUSH_ROTATE_ZOOM: {

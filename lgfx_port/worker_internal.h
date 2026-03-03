@@ -344,7 +344,8 @@ typedef struct
 
         struct
         {
-            uint8_t target;
+            uint8_t src_target;
+            uint8_t dst_target;
             int16_t x;
             int16_t y;
             bool has_transparent;
@@ -353,7 +354,8 @@ typedef struct
 
         struct
         {
-            uint8_t target;
+            uint8_t src_target;
+            uint8_t dst_target;
             int16_t dst_x;
             int16_t dst_y;
             int16_t src_x;

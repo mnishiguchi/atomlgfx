@@ -135,9 +135,9 @@ defmodule SampleApp.MovingIcons do
   end
 
   # Allocate two frame sprites used as strip buffers. If allocation fails, reduce strip height
-  # by increasing `div` until it fits.
-  defp prepare_frame_sprites_i(port, w, h, div) do
-    strip_h = div_ceil(h, div)
+  # by increasing split_factor until it fits.
+  defp prepare_frame_sprites_i(port, w, h, split_factor) do
+    strip_h = div_ceil(h, split_factor)
 
     with :ok <- create_frame_sprite(port, @sprite_buf0, w, strip_h),
          :ok <- create_frame_sprite(port, @sprite_buf1, w, strip_h) do
@@ -145,7 +145,7 @@ defmodule SampleApp.MovingIcons do
     else
       {:error, _reason} ->
         cleanup_frame_sprites(port)
-        prepare_frame_sprites_i(port, w, h, div + 1)
+        prepare_frame_sprites_i(port, w, h, split_factor + 1)
     end
   end
 
@@ -286,7 +286,7 @@ defmodule SampleApp.MovingIcons do
        ) do
     objects = move_objects(objects0, w, h)
 
-    case render_strips(port, w, h, strip_h, buf0, buf1, flip0, objects, fps0, icon_handles) do
+    case render_strips(port, h, strip_h, buf0, buf1, flip0, objects, fps0, icon_handles) do
       {:ok, flip1} ->
         now_ms = :erlang.monotonic_time(:millisecond)
         sec = div(now_ms, 1000)
@@ -311,8 +311,8 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp render_strips(port, w, h, strip_h, buf0, buf1, flip0, objects, fps, icon_handles) do
-    case render_strips_i(port, w, h, strip_h, 0, buf0, buf1, flip0, objects, fps, icon_handles) do
+  defp render_strips(port, h, strip_h, buf0, buf1, flip0, objects, fps, icon_handles) do
+    case render_strips_i(port, h, strip_h, 0, buf0, buf1, flip0, objects, fps, icon_handles) do
       {:ok, flip1} ->
         case Port.display(port) do
           :ok -> {:ok, flip1}
@@ -324,14 +324,14 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp render_strips_i(_port, _w, h, _strip_h, y, _buf0, _buf1, flip, _objects, _fps, _icons)
+  defp render_strips_i(_port, h, _strip_h, y, _buf0, _buf1, flip, _objects, _fps, _icons)
        when y >= h do
     {:ok, flip}
   end
 
   # Render the frame in vertical strips into a sprite buffer, then blit each strip to the LCD.
   # This avoids per-object "erase then redraw" artifacts when objects overlap.
-  defp render_strips_i(port, w, h, strip_h, y0, buf0, buf1, flip0, objects, fps, icon_handles) do
+  defp render_strips_i(port, h, strip_h, y0, buf0, buf1, flip0, objects, fps, icon_handles) do
     {flip1, buf} =
       if flip0 == 0 do
         {1, buf0}
@@ -345,7 +345,6 @@ defmodule SampleApp.MovingIcons do
          :ok <- Port.push_sprite(port, buf, 0, y0) do
       render_strips_i(
         port,
-        w,
         h,
         strip_h,
         y0 + strip_h,
