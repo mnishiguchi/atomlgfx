@@ -10,26 +10,44 @@
 #include "context.h"
 #include "term.h" // AtomVM core term API
 
-#include "lgfx_port/lgfx_port.h"
+// -----------------------------------------------------------------------------
+// AtomVM compatibility
+// -----------------------------------------------------------------------------
+// AtomVM deprecated term_from_int32() (unsafe on some targets). In this port we
+// only encode small integers that fit in avm_int_t, so use term_from_int().
+// Keep call sites unchanged by shadowing the deprecated function name.
+#ifndef LGFX_PORT_ALLOW_DEPRECATED_TERM_FROM_INT32
+#ifdef term_from_int32
+#undef term_from_int32
+#endif
+#define term_from_int32(v) term_from_int((avm_int_t) (v))
+#endif
+
+#include "lgfx_port/protocol.h" // protocol constants / limits
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+// Forward declaration (keep this header light; implementations live in proto_term.c)
+typedef struct lgfx_port_t lgfx_port_t;
+
 // ----------------------------------------------------------------------------
 // Request decode surface
 // ----------------------------------------------------------------------------
-typedef struct
+typedef struct lgfx_request_t
 {
     uint32_t proto_ver;
     term op; // atom
-    uint32_t target; // 0..254
-    uint32_t flags; // u32
+    uint32_t target; // decoded u32 (range/policy validated elsewhere)
+    uint32_t flags; // u32 (mask validated elsewhere)
     term request_tuple; // original request tuple
     int arity; // tuple arity
 } lgfx_request_t;
 
 // Decode {lgfx, ProtoVer, Op, Target, Flags, ...}
+// - Minimal structural decode + integer conversion only.
+// - Policy validation happens in lgfx_port.c (ops.def metadata).
 bool lgfx_term_decode_request(
     Context *ctx,
     lgfx_port_t *port,
@@ -37,7 +55,7 @@ bool lgfx_term_decode_request(
     lgfx_request_t *out,
     term *out_error_reply);
 
-// Reply constructors
+// Reply constructors (raw, no last_error side-effects)
 term lgfx_reply_ok(Context *ctx, lgfx_port_t *port, term result);
 term lgfx_reply_error(Context *ctx, lgfx_port_t *port, term reason_atom);
 term lgfx_reply_error_detail(Context *ctx, lgfx_port_t *port, term reason_atom, term detail);
@@ -151,114 +169,50 @@ static inline bool lgfx_term_to_color565(term color_t, uint16_t *out_color565)
 }
 
 // ----------------------------------------------------------------------------
-// Reply helpers
+// Reply helpers (with last_error side-effects)
 // ----------------------------------------------------------------------------
 
-// esp_err -> protocol reply mapping
-static inline term lgfx_reply_from_esp_err(Context *ctx, lgfx_port_t *port, esp_err_t err)
-{
-    switch (err) {
-        case ESP_OK:
-            return term_invalid_term(); // means "no error"
-        case ESP_ERR_INVALID_ARG:
-        case ESP_ERR_INVALID_SIZE:
-            return lgfx_reply_error(ctx, port, port->atoms.bad_args);
-        case ESP_ERR_NO_MEM:
-            return lgfx_reply_error(ctx, port, port->atoms.no_memory);
-        case ESP_ERR_INVALID_STATE:
-            return lgfx_reply_error(ctx, port, port->atoms.internal);
-        case ESP_ERR_NOT_SUPPORTED:
-            return lgfx_reply_error(ctx, port, port->atoms.unsupported);
-        case ESP_ERR_NOT_FOUND:
-            return lgfx_reply_error(ctx, port, port->atoms.bad_target);
-        default:
-            // Optional detail form: {error, {internal, EspErr}}
-            return lgfx_reply_error_detail(ctx, port, port->atoms.internal, term_from_int32((int32_t) err));
-    }
-}
+// esp_err -> protocol reply mapping (no last_error side-effects)
+term lgfx_reply_from_esp_err(Context *ctx, lgfx_port_t *port, esp_err_t err);
 
-static inline void reply_encode_oom_last_error(lgfx_port_t *port, const lgfx_request_t *req)
-{
-    lgfx_last_error_set(
-        port,
-        req->op,
-        port->atoms.no_memory,
-        req->flags,
-        req->target,
-        (int32_t) ESP_ERR_NO_MEM);
-}
+// esp_err -> protocol reply mapping + last_error update (OOM-safe)
+term lgfx_reply_from_esp_err_req(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, esp_err_t err);
 
-static inline term reply_from_esp_err(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, esp_err_t err)
-{
-    if (err == ESP_OK) {
-        return term_invalid_term();
-    }
+// Reply constructors + last_error update (OOM-safe)
+term lgfx_reply_ok_req(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, term payload);
+term lgfx_reply_error_req(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, term reason, int32_t esp_err);
+term lgfx_reply_error_detail_req(
+    Context *ctx,
+    lgfx_port_t *port,
+    const lgfx_request_t *req,
+    term reason,
+    term detail,
+    int32_t esp_err);
 
-    term reply = lgfx_reply_from_esp_err(ctx, port, err);
-
-    if (term_is_invalid_term(reply)) {
-        reply_encode_oom_last_error(port, req);
-        return term_invalid_term();
-    }
-
-    term reason = term_invalid_term();
-    if (lgfx_is_error_reply(ctx, port, reply, &reason)) {
-        lgfx_last_error_set(port, req->op, reason, req->flags, req->target, (int32_t) err);
-    } else {
-        lgfx_last_error_set(port, req->op, port->atoms.internal, req->flags, req->target, (int32_t) err);
-    }
-
-    return reply;
-}
-
-#define LGFX_RETURN_IF_ESP_ERR(ctx, port, req, esp_expr)            \
-    do {                                                            \
-        esp_err_t __err = (esp_expr);                               \
-        if (__err != ESP_OK) {                                      \
-            return reply_from_esp_err((ctx), (port), (req), __err); \
-        }                                                           \
+// Keep existing handler-facing helpers/macros (now thin wrappers over functions)
+#define LGFX_RETURN_IF_ESP_ERR(ctx, port, req, esp_expr)                     \
+    do {                                                                     \
+        esp_err_t __err = (esp_expr);                                        \
+        if (__err != ESP_OK) {                                               \
+            return lgfx_reply_from_esp_err_req((ctx), (port), (req), __err); \
+        }                                                                    \
     } while (0)
 
 static inline term reply_ok(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, term payload)
 {
-    term reply = lgfx_reply_ok(ctx, port, payload);
-
-    if (term_is_invalid_term(reply)) {
-        reply_encode_oom_last_error(port, req);
-        return term_invalid_term();
-    }
-
-    return reply;
+    return lgfx_reply_ok_req(ctx, port, req, payload);
 }
 
 static inline term reply_error(
     Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, term reason, int32_t esp_err)
 {
-    lgfx_last_error_set(port, req->op, reason, req->flags, req->target, esp_err);
-
-    term reply = lgfx_reply_error(ctx, port, reason);
-
-    if (term_is_invalid_term(reply)) {
-        reply_encode_oom_last_error(port, req);
-        return term_invalid_term();
-    }
-
-    return reply;
+    return lgfx_reply_error_req(ctx, port, req, reason, esp_err);
 }
 
 static inline term reply_error_detail(
     Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, term reason, term detail, int32_t esp_err)
 {
-    lgfx_last_error_set(port, req->op, reason, req->flags, req->target, esp_err);
-
-    term reply = lgfx_reply_error_detail(ctx, port, reason, detail);
-
-    if (term_is_invalid_term(reply)) {
-        reply_encode_oom_last_error(port, req);
-        return term_invalid_term();
-    }
-
-    return reply;
+    return lgfx_reply_error_detail_req(ctx, port, req, reason, detail, esp_err);
 }
 
 #ifdef __cplusplus

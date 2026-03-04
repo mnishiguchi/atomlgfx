@@ -5,7 +5,12 @@
 #include "context.h"
 #include "term.h"
 
+#include "esp_err.h"
+
+#include "lgfx_port/handler_decode.h"
+#include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
+#include "lgfx_port/proto_term.h"
 #include "lgfx_port/worker.h"
 
 // Request envelope validation (version/arity/flags/target/init-state) is
@@ -95,23 +100,19 @@ static bool decode_create_sprite_args(const lgfx_request_t *req, lgfx_create_spr
     //
     // Shared metadata already enforces arity range [7..8], but we still decode safely.
 
-    term w_t = term_get_tuple_element(req->request_tuple, 5);
-    term h_t = term_get_tuple_element(req->request_tuple, 6);
-
     uint32_t w32 = 0;
     uint32_t h32 = 0;
     uint32_t depth32 = (uint32_t) LGFX_PORT_SPRITE_DEFAULT_DEPTH;
 
-    if (!lgfx_term_to_u32(w_t, &w32) || !lgfx_validate_u16(w32) || w32 == 0) {
+    if (!lgfx_decode_u32_at(req, 5, &w32) || !lgfx_validate_u16(w32) || w32 == 0) {
         return false;
     }
-    if (!lgfx_term_to_u32(h_t, &h32) || !lgfx_validate_u16(h32) || h32 == 0) {
+    if (!lgfx_decode_u32_at(req, 6, &h32) || !lgfx_validate_u16(h32) || h32 == 0) {
         return false;
     }
 
     if (req->arity == 8) {
-        term depth_t = term_get_tuple_element(req->request_tuple, 7);
-        if (!lgfx_term_to_u32(depth_t, &depth32) || !lgfx_validate_color_depth(depth32)) {
+        if (!lgfx_decode_u32_at(req, 7, &depth32) || !lgfx_validate_color_depth(depth32)) {
             return false;
         }
     } else if (req->arity != 7) {
@@ -132,17 +133,8 @@ static bool decode_set_pivot_args(const lgfx_request_t *req, lgfx_set_pivot_args
     //
     // Shared metadata enforces exact arity 7.
 
-    term px_t = term_get_tuple_element(req->request_tuple, 5);
-    term py_t = term_get_tuple_element(req->request_tuple, 6);
-
-    if (!lgfx_term_to_i16(px_t, &out->px)) {
-        return false;
-    }
-    if (!lgfx_term_to_i16(py_t, &out->py)) {
-        return false;
-    }
-
-    return true;
+    return lgfx_decode_i16_at(req, 5, &out->px)
+        && lgfx_decode_i16_at(req, 6, &out->py);
 }
 
 static bool decode_push_sprite_args(const lgfx_request_t *req, lgfx_push_sprite_args_t *out)
@@ -153,22 +145,18 @@ static bool decode_push_sprite_args(const lgfx_request_t *req, lgfx_push_sprite_
     //
     // Shared metadata enforces arity range [8..9].
 
-    term dst_target_t = term_get_tuple_element(req->request_tuple, 5);
-    term x_t = term_get_tuple_element(req->request_tuple, 6);
-    term y_t = term_get_tuple_element(req->request_tuple, 7);
-
     uint32_t dst_target32 = 0;
     uint32_t transparent32 = 0;
 
-    if (!lgfx_term_to_u32(dst_target_t, &dst_target32) || dst_target32 > 254u) {
+    if (!lgfx_decode_u32_at(req, 5, &dst_target32) || dst_target32 > 254u) {
         return false;
     }
     out->dst_target = (uint8_t) dst_target32;
 
-    if (!lgfx_term_to_i16(x_t, &out->x)) {
+    if (!lgfx_decode_i16_at(req, 6, &out->x)) {
         return false;
     }
-    if (!lgfx_term_to_i16(y_t, &out->y)) {
+    if (!lgfx_decode_i16_at(req, 7, &out->y)) {
         return false;
     }
 
@@ -176,8 +164,7 @@ static bool decode_push_sprite_args(const lgfx_request_t *req, lgfx_push_sprite_
     out->transparent565 = 0;
 
     if (req->arity == 9) {
-        term transparent_t = term_get_tuple_element(req->request_tuple, 8);
-        if (!lgfx_term_to_u32(transparent_t, &transparent32) || !lgfx_validate_u16(transparent32)) {
+        if (!lgfx_decode_u32_at(req, 8, &transparent32) || !lgfx_validate_u16(transparent32)) {
             return false;
         }
 
@@ -199,41 +186,33 @@ static bool decode_push_sprite_region_args(const lgfx_request_t *req, lgfx_push_
     //
     // Shared metadata enforces arity range [12..13].
 
-    term dst_target_t = term_get_tuple_element(req->request_tuple, 5);
-    term dst_x_t = term_get_tuple_element(req->request_tuple, 6);
-    term dst_y_t = term_get_tuple_element(req->request_tuple, 7);
-    term src_x_t = term_get_tuple_element(req->request_tuple, 8);
-    term src_y_t = term_get_tuple_element(req->request_tuple, 9);
-    term w_t = term_get_tuple_element(req->request_tuple, 10);
-    term h_t = term_get_tuple_element(req->request_tuple, 11);
-
     uint32_t dst_target32 = 0;
     uint32_t w32 = 0;
     uint32_t h32 = 0;
     uint32_t transparent32 = 0;
 
-    if (!lgfx_term_to_u32(dst_target_t, &dst_target32) || dst_target32 > 254u) {
+    if (!lgfx_decode_u32_at(req, 5, &dst_target32) || dst_target32 > 254u) {
         return false;
     }
     out->dst_target = (uint8_t) dst_target32;
 
-    if (!lgfx_term_to_i16(dst_x_t, &out->dst_x)) {
+    if (!lgfx_decode_i16_at(req, 6, &out->dst_x)) {
         return false;
     }
-    if (!lgfx_term_to_i16(dst_y_t, &out->dst_y)) {
+    if (!lgfx_decode_i16_at(req, 7, &out->dst_y)) {
         return false;
     }
-    if (!lgfx_term_to_i16(src_x_t, &out->src_x)) {
+    if (!lgfx_decode_i16_at(req, 8, &out->src_x)) {
         return false;
     }
-    if (!lgfx_term_to_i16(src_y_t, &out->src_y)) {
+    if (!lgfx_decode_i16_at(req, 9, &out->src_y)) {
         return false;
     }
 
-    if (!lgfx_term_to_u32(w_t, &w32) || !lgfx_validate_u16(w32) || w32 == 0) {
+    if (!lgfx_decode_u32_at(req, 10, &w32) || !lgfx_validate_u16(w32) || w32 == 0) {
         return false;
     }
-    if (!lgfx_term_to_u32(h_t, &h32) || !lgfx_validate_u16(h32) || h32 == 0) {
+    if (!lgfx_decode_u32_at(req, 11, &h32) || !lgfx_validate_u16(h32) || h32 == 0) {
         return false;
     }
 
@@ -243,8 +222,7 @@ static bool decode_push_sprite_region_args(const lgfx_request_t *req, lgfx_push_
     out->transparent565 = 0;
 
     if (req->arity == 13) {
-        term transparent_t = term_get_tuple_element(req->request_tuple, 12);
-        if (!lgfx_term_to_u32(transparent_t, &transparent32) || !lgfx_validate_u16(transparent32)) {
+        if (!lgfx_decode_u32_at(req, 12, &transparent32) || !lgfx_validate_u16(transparent32)) {
             return false;
         }
 
@@ -266,34 +244,27 @@ static bool decode_push_rotate_zoom_args(const lgfx_request_t *req, lgfx_push_ro
     //
     // Shared metadata enforces arity range [11..12].
 
-    term dst_target_t = term_get_tuple_element(req->request_tuple, 5);
-    term x_t = term_get_tuple_element(req->request_tuple, 6);
-    term y_t = term_get_tuple_element(req->request_tuple, 7);
-    term angle_t = term_get_tuple_element(req->request_tuple, 8);
-    term zoom_x_t = term_get_tuple_element(req->request_tuple, 9);
-    term zoom_y_t = term_get_tuple_element(req->request_tuple, 10);
-
     uint32_t dst_target32 = 0;
     uint32_t transparent32 = 0;
 
-    if (!lgfx_term_to_u32(dst_target_t, &dst_target32) || dst_target32 > 254u) {
+    if (!lgfx_decode_u32_at(req, 5, &dst_target32) || dst_target32 > 254u) {
         return false;
     }
     out->dst_target = (uint8_t) dst_target32;
 
-    if (!lgfx_term_to_i16(x_t, &out->x)) {
+    if (!lgfx_decode_i16_at(req, 6, &out->x)) {
         return false;
     }
-    if (!lgfx_term_to_i16(y_t, &out->y)) {
+    if (!lgfx_decode_i16_at(req, 7, &out->y)) {
         return false;
     }
-    if (!lgfx_term_to_i32(angle_t, &out->angle_x100)) {
+    if (!lgfx_decode_i32_at(req, 8, &out->angle_x100)) {
         return false;
     }
-    if (!lgfx_term_to_i32(zoom_x_t, &out->zoom_x_x1024)) {
+    if (!lgfx_decode_i32_at(req, 9, &out->zoom_x_x1024)) {
         return false;
     }
-    if (!lgfx_term_to_i32(zoom_y_t, &out->zoom_y_x1024)) {
+    if (!lgfx_decode_i32_at(req, 10, &out->zoom_y_x1024)) {
         return false;
     }
 
@@ -309,8 +280,7 @@ static bool decode_push_rotate_zoom_args(const lgfx_request_t *req, lgfx_push_ro
     out->transparent565 = 0;
 
     if (req->arity == 12) {
-        term transparent_t = term_get_tuple_element(req->request_tuple, 11);
-        if (!lgfx_term_to_u32(transparent_t, &transparent32) || !lgfx_validate_u16(transparent32)) {
+        if (!lgfx_decode_u32_at(req, 11, &transparent32) || !lgfx_validate_u16(transparent32)) {
             return false;
         }
 
@@ -332,7 +302,10 @@ static term do_create_sprite(Context *ctx, lgfx_port_t *port, const lgfx_request
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
         lgfx_worker_device_create_sprite(
             port,
             (uint8_t) req->target,
@@ -345,11 +318,7 @@ static term do_create_sprite(Context *ctx, lgfx_port_t *port, const lgfx_request
 
 static term do_delete_sprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
-        lgfx_worker_device_delete_sprite(
-            port,
-            (uint8_t) req->target));
-
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_delete_sprite(port, (uint8_t) req->target));
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
@@ -361,7 +330,10 @@ static term do_set_pivot(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
         lgfx_worker_device_set_pivot(
             port,
             (uint8_t) req->target,
@@ -402,7 +374,10 @@ static term do_push_sprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t
         LGFX_RETURN_IF_ESP_ERR(ctx, port, req, err);
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
         lgfx_worker_device_push_sprite(
             port,
             (uint8_t) req->target, // SrcSprite
@@ -456,7 +431,10 @@ static term do_push_sprite_region(Context *ctx, lgfx_port_t *port, const lgfx_re
         LGFX_RETURN_IF_ESP_ERR(ctx, port, req, err);
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
         lgfx_worker_device_push_sprite_region(
             port,
             (uint8_t) req->target, // SrcSprite
@@ -489,7 +467,10 @@ static term do_push_rotate_zoom(Context *ctx, lgfx_port_t *port, const lgfx_requ
     const float zoom_x = ((float) args.zoom_x_x1024) / LGFX_ZOOM_X1024_SCALE;
     const float zoom_y = ((float) args.zoom_y_x1024) / LGFX_ZOOM_X1024_SCALE;
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
         lgfx_worker_device_push_rotate_zoom(
             port,
             (uint8_t) req->target, // SrcSprite

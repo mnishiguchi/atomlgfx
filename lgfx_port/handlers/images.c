@@ -5,6 +5,10 @@
 #include "context.h"
 #include "term.h"
 
+#include "lgfx_port/handler_decode.h"
+#include "lgfx_port/lgfx_port_internal.h"
+#include "lgfx_port/proto_term.h"
+
 #include "lgfx_port/ops.h"
 #include "lgfx_port/worker.h"
 
@@ -14,12 +18,6 @@
 static term do_push_image(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     // {lgfx, ver, pushImage, target, flags, X, Y, W, H, StridePixels, DataRgb565Binary}
-    term x_t = term_get_tuple_element(req->request_tuple, 5);
-    term y_t = term_get_tuple_element(req->request_tuple, 6);
-    term w_t = term_get_tuple_element(req->request_tuple, 7);
-    term h_t = term_get_tuple_element(req->request_tuple, 8);
-    term stride_t = term_get_tuple_element(req->request_tuple, 9);
-    term data_t = term_get_tuple_element(req->request_tuple, 10);
 
     int16_t x = 0;
     int16_t y = 0;
@@ -27,35 +25,31 @@ static term do_push_image(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     uint16_t h = 0;
     uint16_t stride = 0;
 
-    if (!lgfx_term_to_i16(x_t, &x)) {
+    if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_term_to_i16(y_t, &y)) {
+    if (!lgfx_decode_i16_at(req, 6, &y)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_term_to_u16(w_t, &w) || w == 0) {
+    if (!lgfx_decode_u16_at(req, 7, &w) || w == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_term_to_u16(h_t, &h) || h == 0) {
+    if (!lgfx_decode_u16_at(req, 8, &h) || h == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_term_to_u16(stride_t, &stride)) {
+    if (!lgfx_decode_u16_at(req, 9, &stride)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!term_is_binary(data_t)) {
+
+    const uint8_t *bytes = NULL;
+    size_t len = 0;
+    if (!lgfx_decode_binary_at(req, 10, &bytes, &len)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
     // Effective stride rule: stride == 0 means tightly packed (stride = w).
     uint32_t stride_eff = (stride == 0) ? (uint32_t) w : (uint32_t) stride;
     if (stride_eff < (uint32_t) w) {
-        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
-    }
-
-    const uint8_t *bytes = (const uint8_t *) term_binary_data(data_t);
-    size_t len = (size_t) term_binary_size(data_t);
-
-    if (len > (size_t) LGFX_PORT_MAX_BINARY_BYTES) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -75,7 +69,10 @@ static term do_push_image(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req,
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
         lgfx_worker_device_push_image_rgb565_strided(
             port,
             (uint8_t) req->target,

@@ -10,7 +10,7 @@
 
 #include <stdbool.h>
 
-#include "lgfx_port/lgfx_port.h"
+#include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/worker.h"
 
 // AtomVM headers are used only by the port-thread mailbox drain path.

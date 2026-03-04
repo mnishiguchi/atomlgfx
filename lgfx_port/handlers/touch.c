@@ -2,9 +2,15 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "context.h"
+#include "term.h"
+
 #include "esp_err.h"
 
+#include "lgfx_port/handler_decode.h"
+#include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
+#include "lgfx_port/proto_term.h"
 #include "lgfx_port/worker.h"
 
 // Request envelope validation (version/arity/flags/target/init-state) is
@@ -87,10 +93,8 @@ term lgfx_handle_setTouchCalibrate(Context *ctx, lgfx_port_t *port, const lgfx_r
 
     // {lgfx, ver, setTouchCalibrate, target, flags, P0, P1, P2, P3, P4, P5, P6, P7}
     for (int i = 0; i < 8; i++) {
-        term t = term_get_tuple_element(req->request_tuple, 5 + i);
-
         uint16_t v = 0;
-        if (!lgfx_term_to_u16(t, &v)) {
+        if (!lgfx_decode_u16_at(req, 5 + i, &v)) {
             return reply_error(ctx, port, req, port->atoms.bad_args, 0);
         }
         params[i] = v;

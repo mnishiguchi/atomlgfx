@@ -5,10 +5,10 @@ defmodule Main do
   Generate and inject LGFX protocol doc tables from C metadata files.
   """
 
-  @ops_def_path "include/lgfx_port/ops.def"
+  @ops_def_path "lgfx_port/include_internal/lgfx_port/ops.def"
 
   # Capabilities + error vocabulary are currently defined in this header.
-  @port_h_path "include/lgfx_port/lgfx_port.h"
+  @port_h_path "lgfx_port/include_internal/lgfx_port/protocol.h"
 
   @protocol_doc_path "docs/LGFX_PORT_PROTOCOL.md"
 
@@ -487,11 +487,6 @@ defmodule Main do
       trimmed_line = String.trim(line)
 
       cond do
-        # Old wording
-        String.contains?(trimmed_line, "Canonical error atoms") ->
-          {acc, :canonical}
-
-        # New wording (matches your current header comment)
         String.contains?(trimmed_line, "protocol-level error atom") ->
           {acc, :canonical}
 

@@ -6,12 +6,13 @@
 #include "context.h"
 #include "term.h"
 
-#include "lgfx_port/lgfx_port.h"
-#include "lgfx_port/proto_term.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Forward declarations (keep this header light)
+typedef struct lgfx_port_t lgfx_port_t;
+typedef struct lgfx_request_t lgfx_request_t;
 
 // ----------------------------------------------------------------------------
 // Op policies

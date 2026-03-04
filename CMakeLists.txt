@@ -6,6 +6,9 @@
 set(LGFX_ROOT     "${CMAKE_CURRENT_LIST_DIR}/third_party/LovyanGFX")
 set(LGFX_SRC_ROOT "${LGFX_ROOT}/src")
 
+# Config template location (moved out of public include/)
+set(LGFX_PORT_CONFIG_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/lgfx_port/cmake/lgfx_port_config.h.in")
+
 # Optional build knob (helps when flash is tight)
 option(LGFX_PORT_ENABLE_JP_FONTS "Enable Japanese font data for setFontPreset jp_*" ON)
 
@@ -58,7 +61,7 @@ option(LGFX_PORT_TOUCH_BUS_SHARED "Touch bus_shared" ON)
 #
 # If you set TOUCH CS to -1:
 # - touch code may still compile (LGFX_PORT_ENABLE_TOUCH=ON)
-# - CAP_TOUCH is suppressed (LGFX_PORT_SUPPORTS_TOUCH=0)
+# - touch will not be advertised via getCaps (LGFX_PORT_SUPPORTS_TOUCH_INT=0)
 #
 set(LGFX_PORT_SPI_SCLK_GPIO     "7"         CACHE STRING "SPI SCLK GPIO")
 set(LGFX_PORT_SPI_MOSI_GPIO     "9"         CACHE STRING "SPI MOSI GPIO")
@@ -96,6 +99,9 @@ idf_component_register(
     # Port entrypoint / lifecycle
     "lgfx_port/lgfx_port.c"
 
+    # Validation (moved out of public headers)
+    "lgfx_port/validate.c"
+
     # Worker split
     "lgfx_port/lgfx_worker_core.c"
     "lgfx_port/lgfx_worker_device.c"
@@ -118,10 +124,17 @@ idf_component_register(
     "src/lgfx_device_draw.cpp"
     "src/lgfx_device_sprites.cpp"
   INCLUDE_DIRS
+    # Public API headers only
     "include"
   PRIV_INCLUDE_DIRS
+    # Private headers (not exported)
+    "lgfx_port/include_internal"
+
+    # Local component-private includes
     "src"
     "lgfx_port"
+
+    # LovyanGFX headers
     "${LGFX_SRC_ROOT}"
   REQUIRES
     efuse
@@ -170,7 +183,91 @@ lgfx_port_bool_to_int(LGFX_PORT_LCD_BUS_SHARED      LGFX_PORT_LCD_BUS_SHARED_INT
 lgfx_port_bool_to_int(LGFX_PORT_TOUCH_BUS_SHARED    LGFX_PORT_TOUCH_BUS_SHARED_INT)
 
 # -----------------------------------------------------------------------------
-# Compute CAP_TOUCH advertisement
+# Protocol advertisement / enable gates (numeric literals)
+#
+# These are substituted into lgfx_port_config.h and validated by protocol.h.
+# Keep them as CACHE STRING so callers can override with -D...=0/1.
+# -----------------------------------------------------------------------------
+set(LGFX_PORT_SUPPORTS_SPRITE_INT     "1" CACHE STRING "0/1: advertise sprite support")
+set(LGFX_PORT_SUPPORTS_LAST_ERROR_INT "1" CACHE STRING "0/1: advertise getLastError support")
+set(LGFX_PORT_SUPPORTS_PUSHIMAGE_INT  "1" CACHE STRING "0/1: advertise pushImage support")
+set(LGFX_PORT_SUPPORTS_JPG_FILE_INT   "0" CACHE STRING "0/1: advertise JPG file support")
+set(LGFX_PORT_SUPPORTS_PNG_FILE_INT   "0" CACHE STRING "0/1: advertise PNG file support")
+set(LGFX_PORT_SUPPORTS_BATCH_VOID_INT "0" CACHE STRING "0/1: advertise batch_void support")
+
+# Optional safe-yield capability advertisement.
+# Must be: 0/0u, (1u<<8), or (1u<<9). Emitted verbatim into the config header.
+set(LGFX_PORT_SAFE_YIELD_CAP_INT      "0u" CACHE STRING "0/0u, (1u<<8), or (1u<<9): safe-yield capability bit")
+
+# -----------------------------------------------------------------------------
+# Protocol constants (numeric literals)
+# -----------------------------------------------------------------------------
+# Max sprites supported by this build. Must be a numeric literal (recommend 'u').
+# Range: 0..254
+set(LGFX_PORT_MAX_SPRITES "8u" CACHE STRING "Max sprites (numeric literal, e.g. 8u; must be 0..254)")
+
+# -----------------------------------------------------------------------------
+# Validate protocol gate literals (avoid accidental -D...=ON, etc.)
+# -----------------------------------------------------------------------------
+function(lgfx_port_validate_01_literal var_name)
+  string(STRIP "${${var_name}}" _v)
+  if(NOT (_v STREQUAL "0" OR _v STREQUAL "1"))
+    message(FATAL_ERROR
+      "${var_name} must be \"0\" or \"1\" (got: \"${${var_name}}\")\n"
+      "Hint: pass -D${var_name}=0 or -D${var_name}=1"
+    )
+  endif()
+endfunction()
+
+function(lgfx_port_validate_safe_yield_literal var_name)
+  string(STRIP "${${var_name}}" _v)
+  if(NOT (
+    _v STREQUAL "0" OR
+    _v STREQUAL "0u" OR
+    _v STREQUAL "(1u<<8)" OR
+    _v STREQUAL "(1u<<9)" OR
+    _v STREQUAL "1u<<8" OR
+    _v STREQUAL "1u<<9"
+  ))
+    message(FATAL_ERROR
+      "${var_name} must be 0/0u, (1u<<8), or (1u<<9) (got: \"${${var_name}}\")\n"
+      "Hint: pass -D${var_name}=0u  or  -D${var_name}=(1u<<8)  or  -D${var_name}=(1u<<9)"
+    )
+  endif()
+endfunction()
+
+function(lgfx_port_validate_u8_literal var_name)
+  string(STRIP "${${var_name}}" _v)
+
+  # Accept: 0, 8, 254, 8u, 254u
+  if(NOT _v MATCHES "^[0-9]+u?$")
+    message(FATAL_ERROR
+      "${var_name} must be a numeric literal like 8u (got: \"${${var_name}}\")\n"
+      "Hint: pass -D${var_name}=8u (or another value in 0..254)"
+    )
+  endif()
+
+  # Strip optional trailing 'u' for numeric compare
+  string(REGEX REPLACE "u$" "" _num "${_v}")
+  if(_num GREATER 254)
+    message(FATAL_ERROR
+      "${var_name} must be <= 254 (got: \"${${var_name}}\")\n"
+      "Hint: pass -D${var_name}=254u (or smaller)"
+    )
+  endif()
+endfunction()
+
+lgfx_port_validate_01_literal(LGFX_PORT_SUPPORTS_SPRITE_INT)
+lgfx_port_validate_01_literal(LGFX_PORT_SUPPORTS_LAST_ERROR_INT)
+lgfx_port_validate_01_literal(LGFX_PORT_SUPPORTS_PUSHIMAGE_INT)
+lgfx_port_validate_01_literal(LGFX_PORT_SUPPORTS_JPG_FILE_INT)
+lgfx_port_validate_01_literal(LGFX_PORT_SUPPORTS_PNG_FILE_INT)
+lgfx_port_validate_01_literal(LGFX_PORT_SUPPORTS_BATCH_VOID_INT)
+lgfx_port_validate_safe_yield_literal(LGFX_PORT_SAFE_YIELD_CAP_INT)
+lgfx_port_validate_u8_literal(LGFX_PORT_MAX_SPRITES)
+
+# -----------------------------------------------------------------------------
+# Compute touch advertisement gate (LGFX_PORT_SUPPORTS_TOUCH_INT)
 # -----------------------------------------------------------------------------
 set(LGFX_PORT_SUPPORTS_TOUCH_INT 0)
 if(LGFX_PORT_ENABLE_TOUCH)
@@ -180,7 +277,7 @@ if(LGFX_PORT_ENABLE_TOUCH)
 endif()
 
 if(LGFX_PORT_ENABLE_TOUCH AND "${LGFX_PORT_TOUCH_CS_GPIO}" STREQUAL "-1")
-  message(STATUS "LGFX touch: enabled but unattached (LGFX_PORT_TOUCH_CS_GPIO=-1) -> CAP_TOUCH will NOT be advertised")
+  message(STATUS "LGFX touch: enabled but unattached (LGFX_PORT_TOUCH_CS_GPIO=-1) -> touch will NOT be advertised")
 endif()
 
 # -----------------------------------------------------------------------------
@@ -190,7 +287,7 @@ set(LGFX_PORT_GEN_INC_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${LGFX_PORT_GEN_INC_DIR}/lgfx_port")
 
 configure_file(
-  "${CMAKE_CURRENT_LIST_DIR}/include/lgfx_port/lgfx_port_config.h.in"
+  "${LGFX_PORT_CONFIG_TEMPLATE}"
   "${LGFX_PORT_GEN_INC_DIR}/lgfx_port/lgfx_port_config.h"
   @ONLY
 )

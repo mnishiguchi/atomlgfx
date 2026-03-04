@@ -15,8 +15,8 @@
 // - Reply encoding helpers (handled by proto_term.c)
 
 #include <limits.h>
-#include <stddef.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -27,11 +27,22 @@
 #include "port.h" // port_parse_gen_message / port_send_reply
 #include "portnifloader.h"
 
-#include "lgfx_port/lgfx_port.h"
+#include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
 #include "lgfx_port/proto_term.h"
-#include "lgfx_port/validate.h"
 #include "lgfx_port/worker.h"
+
+// Private (non-public) validation API (implemented in lgfx_port/validate.c)
+#include "lgfx_port/validate.h"
+
+// Internal debug knobs (kept out of public headers)
+// - Gates op name table and non-wire layout asserts.
+#ifndef LGFX_PORT_DEBUG
+#define LGFX_PORT_DEBUG 0
+#endif
+#if (LGFX_PORT_DEBUG != 0) && (LGFX_PORT_DEBUG != 1)
+#error "LGFX_PORT_DEBUG must be 0 or 1"
+#endif
 
 // -----------------------------------------------------------------------------
 // Atom initialization
@@ -91,7 +102,8 @@ _Static_assert(LGFX_OP_TARGET_SPRITE_ONLY == 3, "LGFX_OP_TARGET_SPRITE_ONLY must
 _Static_assert(LGFX_OP_STATE_ANY == 0, "LGFX_OP_STATE_ANY must be 0");
 _Static_assert(LGFX_OP_STATE_REQUIRES_INIT == 1, "LGFX_OP_STATE_REQUIRES_INIT must be 1");
 
-// Keep layout deterministic and compact.
+// Non-wire internal layout asserts (useful while iterating, but not part of the wire contract).
+#if LGFX_PORT_DEBUG
 _Static_assert(sizeof(lgfx_op_meta_t) == 12, "lgfx_op_meta_t must stay 12 bytes");
 _Static_assert(offsetof(lgfx_op_meta_t, allowed_flags_mask) == 0, "allowed_flags_mask offset drift");
 _Static_assert(offsetof(lgfx_op_meta_t, feature_cap_bit) == 4, "feature_cap_bit offset drift");
@@ -99,6 +111,7 @@ _Static_assert(offsetof(lgfx_op_meta_t, min_arity) == 8, "min_arity offset drift
 _Static_assert(offsetof(lgfx_op_meta_t, max_arity) == 9, "max_arity offset drift");
 _Static_assert(offsetof(lgfx_op_meta_t, target_policy) == 10, "target_policy offset drift");
 _Static_assert(offsetof(lgfx_op_meta_t, state_policy) == 11, "state_policy offset drift");
+#endif
 
 // Validate ops.def values at compile time.
 #define X(op_name, _handler_fn, _atom_str, min_arity_v, max_arity_v, allowed_flags_mask_v, target_policy_v, state_policy_v, feature_cap_bit_v)                                                                              \
@@ -133,12 +146,14 @@ static const lgfx_op_meta_t s_op_meta[LGFX_OP_COUNT] = {
 };
 #undef X
 
+#if LGFX_PORT_DEBUG
 #define X(op_name, _handler_fn, _atom_str, ...) [LGFX_OP_##op_name] = #op_name,
 
 static const char *const s_op_names[LGFX_OP_COUNT] = {
 #include "lgfx_port/ops.def"
 };
 #undef X
+#endif
 
 // Dispatch table (indexed by LGFX_OP_* enum)
 #define X(op_name, handler_fn, _atom_str, ...) [LGFX_OP_##op_name] = (handler_fn),
@@ -149,7 +164,9 @@ static const lgfx_handler_fn s_handlers[LGFX_OP_COUNT] = {
 #undef X
 
 _Static_assert((sizeof(s_op_meta) / sizeof(s_op_meta[0])) == LGFX_OP_COUNT, "s_op_meta size mismatch");
+#if LGFX_PORT_DEBUG
 _Static_assert((sizeof(s_op_names) / sizeof(s_op_names[0])) == LGFX_OP_COUNT, "s_op_names size mismatch");
+#endif
 _Static_assert((sizeof(s_handlers) / sizeof(s_handlers[0])) == LGFX_OP_COUNT, "s_handlers size mismatch");
 
 // -----------------------------------------------------------------------------
@@ -162,10 +179,9 @@ _Static_assert((sizeof(s_handlers) / sizeof(s_handlers[0])) == LGFX_OP_COUNT, "s
 
 enum
 {
-    LGFX_OPS_DECLARED_CAP_BITS =
-        0
+    LGFX_OPS_DECLARED_CAP_BITS = 0
 #define X(_op_name, _handler_fn, _atom_str, _min_arity, _max_arity, _allowed_flags_mask, _target_policy, _state_policy, feature_cap_bit_v) \
-        | ((int) (feature_cap_bit_v))
+    | ((int) (feature_cap_bit_v))
 #include "lgfx_port/ops.def"
 #undef X
 };
@@ -215,90 +231,15 @@ static int lgfx_op_index_from_atom(const lgfx_port_t *port, term op_atom)
 // getCaps: metadata-driven FeatureBits + op enable gating
 // -----------------------------------------------------------------------------
 
-static bool lgfx_cap_bit_enabled(uint32_t cap_bit)
+static inline bool lgfx_cap_bit_enabled(uint32_t cap_bits)
 {
-    // cap_bit is expected to be 0 or a single protocol bit in practice, but tolerate
-    // multi-bit values and disable if any constituent requires a disabled feature.
-    if (cap_bit == 0u) {
+    if (cap_bits == 0u) {
         return true;
     }
-
-    // Defensive: if unknown bits sneak in, treat as disabled.
-    if ((cap_bit & ~((uint32_t) LGFX_CAP_KNOWN_MASK)) != 0u) {
+    if ((cap_bits & ~((uint32_t) LGFX_CAP_KNOWN_MASK)) != 0u) {
         return false;
     }
-
-    if ((cap_bit & (uint32_t) LGFX_CAP_SPRITE) != 0u) {
-#if LGFX_PORT_SUPPORTS_SPRITE
-        // ok
-#else
-        return false;
-#endif
-    }
-
-    if ((cap_bit & (uint32_t) LGFX_CAP_PUSHIMAGE) != 0u) {
-#if LGFX_PORT_SUPPORTS_PUSHIMAGE
-        // ok
-#else
-        return false;
-#endif
-    }
-
-    if ((cap_bit & (uint32_t) LGFX_CAP_TOUCH) != 0u) {
-#if LGFX_PORT_SUPPORTS_TOUCH
-        // ok
-#else
-        return false;
-#endif
-    }
-
-    if ((cap_bit & (uint32_t) LGFX_CAP_LAST_ERROR) != 0u) {
-#if LGFX_PORT_SUPPORTS_LAST_ERROR
-        // ok
-#else
-        return false;
-#endif
-    }
-
-    if ((cap_bit & (uint32_t) LGFX_CAP_JPG_FILE) != 0u) {
-#if LGFX_PORT_SUPPORTS_JPG_FILE
-        // ok
-#else
-        return false;
-#endif
-    }
-
-    if ((cap_bit & (uint32_t) LGFX_CAP_PNG_FILE) != 0u) {
-#if LGFX_PORT_SUPPORTS_PNG_FILE
-        // ok
-#else
-        return false;
-#endif
-    }
-
-    if ((cap_bit & (uint32_t) LGFX_CAP_BATCH_VOID) != 0u) {
-#if LGFX_PORT_SUPPORTS_BATCH_VOID
-        // ok
-#else
-        return false;
-#endif
-    }
-
-    // Safe-yield bits are build-selected (0 or exactly one). Only enable if the build
-    // selected the matching bit.
-    if ((cap_bit & (uint32_t) LGFX_CAP_SAFE_YIELD_FORGIVING) != 0u) {
-        if ((uint32_t) LGFX_PORT_SAFE_YIELD_CAP != (uint32_t) LGFX_CAP_SAFE_YIELD_FORGIVING) {
-            return false;
-        }
-    }
-
-    if ((cap_bit & (uint32_t) LGFX_CAP_SAFE_YIELD_STRICT) != 0u) {
-        if ((uint32_t) LGFX_PORT_SAFE_YIELD_CAP != (uint32_t) LGFX_CAP_SAFE_YIELD_STRICT) {
-            return false;
-        }
-    }
-
-    return true;
+    return (cap_bits & ~((uint32_t) LGFX_BUILD_CAP_MASK)) == 0u;
 }
 
 // Gates only (build/runtime capability gates via cap bits), independent of dispatch wiring.
@@ -408,7 +349,11 @@ const char *lgfx_op_name_from_atom(const lgfx_port_t *port, term op_atom)
         return "unknown_op";
     }
 
+#if LGFX_PORT_DEBUG
     return s_op_names[op_index];
+#else
+    return "op";
+#endif
 }
 
 lgfx_handler_fn lgfx_dispatch_lookup(lgfx_port_t *port, term op_atom)
@@ -557,6 +502,21 @@ void lgfx_port_handle_mailbox_message(Context *ctx, lgfx_port_t *port, term msg)
 
     term reply = term_invalid_term();
 
+    // 0) Protocol-wide envelope rules (proto_term.c does not enforce these).
+    term pre = term_invalid_term();
+
+    pre = lgfx_require_proto_ver(ctx, port, &req);
+    if (!term_is_invalid_term(pre)) {
+        reply = pre;
+        goto send_reply;
+    }
+
+    pre = lgfx_require_target_domain(ctx, port, &req);
+    if (!term_is_invalid_term(pre)) {
+        reply = pre;
+        goto send_reply;
+    }
+
     // 1) Metadata lookup from the generated op registry (unknown op => bad_op).
     const lgfx_op_meta_t *meta = lgfx_op_meta_lookup(port, req.op);
     if (meta == NULL) {
@@ -573,8 +533,6 @@ void lgfx_port_handle_mailbox_message(Context *ctx, lgfx_port_t *port, term msg)
     }
 
     // 2) Shared validation driven by ops.def metadata.
-    term pre = term_invalid_term();
-
     pre = lgfx_require_arity_range(ctx, port, &req, meta->min_arity, meta->max_arity);
     if (!term_is_invalid_term(pre)) {
         reply = pre;
@@ -587,13 +545,13 @@ void lgfx_port_handle_mailbox_message(Context *ctx, lgfx_port_t *port, term msg)
         goto send_reply;
     }
 
-    pre = lgfx_require_target_policy(ctx, port, &req, (lgfx_op_target_policy_t) meta->target_policy);
+    pre = lgfx_require_target_policy(ctx, port, &req, meta->target_policy);
     if (!term_is_invalid_term(pre)) {
         reply = pre;
         goto send_reply;
     }
 
-    pre = lgfx_require_state_policy(ctx, port, &req, (lgfx_op_state_policy_t) meta->state_policy);
+    pre = lgfx_require_state_policy(ctx, port, &req, meta->state_policy);
     if (!term_is_invalid_term(pre)) {
         reply = pre;
         goto send_reply;

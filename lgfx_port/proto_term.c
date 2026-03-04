@@ -1,11 +1,13 @@
 // lgfx_port/proto_term.c
-#include "lgfx_port/proto_term.h"
 
 #include <stddef.h>
 #include <stdint.h>
 
 #include "memory.h"
 #include "port.h" // port_create_tuple2, etc.
+
+#include "lgfx_port/lgfx_port_internal.h" // atoms, last_error, struct fields
+#include "lgfx_port/proto_term.h"
 
 // -----------------------------------------------------------------------------
 // Request decode
@@ -33,10 +35,18 @@ bool lgfx_term_decode_request(
     lgfx_request_t *out,
     term *out_error_reply)
 {
-    (void) ctx;
-
     if (out_error_reply != NULL) {
         *out_error_reply = term_invalid_term();
+    }
+
+    // NOTE:
+    // - port is required to construct protocol error replies (needs atoms).
+    // - If port is NULL, we cannot safely allocate a reply tuple here.
+    if (port == NULL) {
+        if (out_error_reply != NULL) {
+            *out_error_reply = term_invalid_term();
+        }
+        return false;
     }
 
     if (out == NULL) {
@@ -58,13 +68,16 @@ bool lgfx_term_decode_request(
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
     }
 
-    term ver_t = term_get_tuple_element(request, 1);
-    if (!term_is_integer(ver_t)) {
-        return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
-    }
+    // NOTE:
+    // Envelope validation (proto_ver match, arity bounds, allowed flags, target policy, init-state)
+    // is centralized in lgfx_port.c using ops.def metadata.
+    //
+    // Here we only perform minimal structural decode + integer conversion so callers can
+    // apply consistent policy/metadata validation afterward.
 
-    avm_int_t ver_i = term_to_int(ver_t);
-    if (ver_i < 0 || (uint32_t) ver_i != (uint32_t) LGFX_PORT_PROTO_VER) {
+    term ver_t = term_get_tuple_element(request, 1);
+    uint32_t proto_ver = 0;
+    if (!lgfx_term_to_u32(ver_t, &proto_ver)) {
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
     }
 
@@ -75,7 +88,7 @@ bool lgfx_term_decode_request(
 
     term target_t = term_get_tuple_element(request, 3);
     uint32_t target = 0;
-    if (!lgfx_term_to_u32(target_t, &target) || target > 254u) {
+    if (!lgfx_term_to_u32(target_t, &target)) {
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_target));
     }
 
@@ -85,7 +98,7 @@ bool lgfx_term_decode_request(
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_flags));
     }
 
-    out->proto_ver = (uint32_t) ver_i;
+    out->proto_ver = proto_ver;
     out->op = op;
     out->target = target;
     out->flags = flags;
@@ -96,7 +109,7 @@ bool lgfx_term_decode_request(
 }
 
 // -----------------------------------------------------------------------------
-// Reply encode helpers
+// Reply encode helpers (tuple builders)
 // -----------------------------------------------------------------------------
 
 term lgfx_make_tuple(Context *ctx, int arity, const term *elements)
@@ -127,6 +140,7 @@ term lgfx_reply_error_detail(Context *ctx, lgfx_port_t *port, term reason_atom, 
     term elems[2] = { reason_atom, detail };
     term inner = lgfx_make_tuple(ctx, 2, elems);
     if (term_is_invalid_term(inner)) {
+        // best-effort fallback (may still OOM)
         return lgfx_reply_error(ctx, port, port->atoms.no_memory);
     }
     return port_create_tuple2(ctx, port->atoms.error, inner);
@@ -166,4 +180,111 @@ bool lgfx_is_error_reply(Context *ctx, lgfx_port_t *port, term reply, term *out_
         *out_reason = reason;
     }
     return true;
+}
+
+// -----------------------------------------------------------------------------
+// Reply helpers (esp_err mapping + last_error side-effects)
+// -----------------------------------------------------------------------------
+
+term lgfx_reply_from_esp_err(Context *ctx, lgfx_port_t *port, esp_err_t err)
+{
+    switch (err) {
+        case ESP_OK:
+            return term_invalid_term(); // means "no error"
+        case ESP_ERR_INVALID_ARG:
+        case ESP_ERR_INVALID_SIZE:
+            return lgfx_reply_error(ctx, port, port->atoms.bad_args);
+        case ESP_ERR_NO_MEM:
+            return lgfx_reply_error(ctx, port, port->atoms.no_memory);
+        case ESP_ERR_INVALID_STATE:
+            return lgfx_reply_error(ctx, port, port->atoms.internal);
+        case ESP_ERR_NOT_SUPPORTED:
+            return lgfx_reply_error(ctx, port, port->atoms.unsupported);
+        case ESP_ERR_NOT_FOUND:
+            return lgfx_reply_error(ctx, port, port->atoms.bad_target);
+        default:
+            // Optional detail form: {error, {internal, EspErr}}
+            return lgfx_reply_error_detail(ctx, port, port->atoms.internal, term_from_int32((int32_t) err));
+    }
+}
+
+static inline void encode_oom_last_error(lgfx_port_t *port, const lgfx_request_t *req)
+{
+    lgfx_last_error_set(
+        port,
+        req->op,
+        port->atoms.no_memory,
+        req->flags,
+        req->target,
+        (int32_t) ESP_ERR_NO_MEM);
+}
+
+term lgfx_reply_from_esp_err_req(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, esp_err_t err)
+{
+    if (err == ESP_OK) {
+        return term_invalid_term();
+    }
+
+    term reply = lgfx_reply_from_esp_err(ctx, port, err);
+
+    if (term_is_invalid_term(reply)) {
+        // OOM while trying to allocate the reply tuple
+        encode_oom_last_error(port, req);
+        return term_invalid_term();
+    }
+
+    term reason = term_invalid_term();
+    if (lgfx_is_error_reply(ctx, port, reply, &reason)) {
+        lgfx_last_error_set(port, req->op, reason, req->flags, req->target, (int32_t) err);
+    } else {
+        lgfx_last_error_set(port, req->op, port->atoms.internal, req->flags, req->target, (int32_t) err);
+    }
+
+    return reply;
+}
+
+term lgfx_reply_ok_req(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, term payload)
+{
+    term reply = lgfx_reply_ok(ctx, port, payload);
+
+    if (term_is_invalid_term(reply)) {
+        encode_oom_last_error(port, req);
+        return term_invalid_term();
+    }
+
+    return reply;
+}
+
+term lgfx_reply_error_req(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, term reason, int32_t esp_err)
+{
+    lgfx_last_error_set(port, req->op, reason, req->flags, req->target, esp_err);
+
+    term reply = lgfx_reply_error(ctx, port, reason);
+
+    if (term_is_invalid_term(reply)) {
+        encode_oom_last_error(port, req);
+        return term_invalid_term();
+    }
+
+    return reply;
+}
+
+term lgfx_reply_error_detail_req(
+    Context *ctx,
+    lgfx_port_t *port,
+    const lgfx_request_t *req,
+    term reason,
+    term detail,
+    int32_t esp_err)
+{
+    lgfx_last_error_set(port, req->op, reason, req->flags, req->target, esp_err);
+
+    term reply = lgfx_reply_error_detail(ctx, port, reason, detail);
+
+    if (term_is_invalid_term(reply)) {
+        encode_oom_last_error(port, req);
+        return term_invalid_term();
+    }
+
+    return reply;
 }

@@ -21,7 +21,7 @@
 
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"
-#include "lgfx_port/lgfx_port.h"
+#include "lgfx_port/protocol.h"
 
 namespace
 {
@@ -32,191 +32,145 @@ namespace
 
 static constexpr const char *TAG = "lgfx_device";
 
-// -----------------------------------------------------------------------------
-// LCD/SPI wiring knobs (generated header; override via CMake cache vars)
-// -----------------------------------------------------------------------------
-// Defaults match current piyopiyo-pcb v1.5 mapping.
-// Override examples:
-// -DLGFX_PORT_SPI_SCLK_GPIO=7
-// -DLGFX_PORT_SPI_MOSI_GPIO=9
-// -DLGFX_PORT_SPI_MISO_GPIO=8
-// -DLGFX_PORT_LCD_CS_GPIO=43
-// -DLGFX_PORT_LCD_DC_GPIO=3
-// -DLGFX_PORT_LCD_RST_GPIO=2
-// -DLGFX_PORT_LCD_SPI_HOST=SPI2_HOST
+// ----------------------------------------------------------------------------
+// Configuration requirements (no silent defaults)
+// ----------------------------------------------------------------------------
 //
+// The port must include the generated config header and that header must define
+// all of the knobs used here. If any are missing, fail the build loudly.
+//
+// This eliminates nondeterministic "fallback defaults" when the config header is
+// missing, stale, or not included correctly.
+//
+#ifndef LGFX_PORT_MAX_SPRITES
+#error "LGFX_PORT_MAX_SPRITES must be defined by lgfx_port_config.h"
+#endif
 
 #ifndef LGFX_PORT_SPI_SCLK_GPIO
-#define LGFX_PORT_SPI_SCLK_GPIO (7)
+#error "LGFX_PORT_SPI_SCLK_GPIO must be defined by lgfx_port_config.h"
 #endif
-
 #ifndef LGFX_PORT_SPI_MOSI_GPIO
-#define LGFX_PORT_SPI_MOSI_GPIO (9)
+#error "LGFX_PORT_SPI_MOSI_GPIO must be defined by lgfx_port_config.h"
 #endif
-
 #ifndef LGFX_PORT_SPI_MISO_GPIO
-#define LGFX_PORT_SPI_MISO_GPIO (8)
+#error "LGFX_PORT_SPI_MISO_GPIO must be defined by lgfx_port_config.h"
 #endif
 
 #ifndef LGFX_PORT_LCD_CS_GPIO
-#define LGFX_PORT_LCD_CS_GPIO (43)
+#error "LGFX_PORT_LCD_CS_GPIO must be defined by lgfx_port_config.h"
 #endif
-
 #ifndef LGFX_PORT_LCD_DC_GPIO
-#define LGFX_PORT_LCD_DC_GPIO (3)
+#error "LGFX_PORT_LCD_DC_GPIO must be defined by lgfx_port_config.h"
 #endif
-
 #ifndef LGFX_PORT_LCD_RST_GPIO
-#define LGFX_PORT_LCD_RST_GPIO (2)
+#error "LGFX_PORT_LCD_RST_GPIO must be defined by lgfx_port_config.h"
 #endif
-
 #ifndef LGFX_PORT_LCD_SPI_HOST
-#define LGFX_PORT_LCD_SPI_HOST (SPI2_HOST)
+#error "LGFX_PORT_LCD_SPI_HOST must be defined by lgfx_port_config.h"
 #endif
 
-// piyopiyo-pcb v1.5 GPIO mapping (now backed by generated config defs)
+#ifndef LGFX_PORT_PANEL_WIDTH
+#error "LGFX_PORT_PANEL_WIDTH must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_PANEL_HEIGHT
+#error "LGFX_PORT_PANEL_HEIGHT must be defined by lgfx_port_config.h"
+#endif
+
+#ifndef LGFX_PORT_LCD_SPI_MODE
+#error "LGFX_PORT_LCD_SPI_MODE must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_LCD_FREQ_WRITE_HZ
+#error "LGFX_PORT_LCD_FREQ_WRITE_HZ must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_LCD_FREQ_READ_HZ
+#error "LGFX_PORT_LCD_FREQ_READ_HZ must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_LCD_SPI_3WIRE
+#error "LGFX_PORT_LCD_SPI_3WIRE must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_LCD_USE_LOCK
+#error "LGFX_PORT_LCD_USE_LOCK must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_LCD_DMA_CHANNEL
+#error "LGFX_PORT_LCD_DMA_CHANNEL must be defined by lgfx_port_config.h"
+#endif
+
+#ifndef LGFX_PORT_LCD_PIN_BUSY
+#error "LGFX_PORT_LCD_PIN_BUSY must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_LCD_OFFSET_X
+#error "LGFX_PORT_LCD_OFFSET_X must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_LCD_OFFSET_Y
+#error "LGFX_PORT_LCD_OFFSET_Y must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_LCD_OFFSET_ROTATION
+#error "LGFX_PORT_LCD_OFFSET_ROTATION must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_LCD_DUMMY_READ_PIXEL
+#error "LGFX_PORT_LCD_DUMMY_READ_PIXEL must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_LCD_DUMMY_READ_BITS
+#error "LGFX_PORT_LCD_DUMMY_READ_BITS must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_LCD_READABLE
+#error "LGFX_PORT_LCD_READABLE must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_LCD_INVERT
+#error "LGFX_PORT_LCD_INVERT must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_LCD_RGB_ORDER
+#error "LGFX_PORT_LCD_RGB_ORDER must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_LCD_DLEN_16BIT
+#error "LGFX_PORT_LCD_DLEN_16BIT must be defined by lgfx_port_config.h"
+#endif
+#ifndef LGFX_PORT_LCD_BUS_SHARED
+#error "LGFX_PORT_LCD_BUS_SHARED must be defined by lgfx_port_config.h"
+#endif
+
+#if defined(LGFX_PORT_ENABLE_TOUCH) && (LGFX_PORT_ENABLE_TOUCH == 1)
+#ifndef LGFX_PORT_TOUCH_CS_GPIO
+#error "LGFX_PORT_TOUCH_CS_GPIO must be defined by lgfx_port_config.h when touch is enabled"
+#endif
+#ifndef LGFX_PORT_TOUCH_IRQ_GPIO
+#error "LGFX_PORT_TOUCH_IRQ_GPIO must be defined by lgfx_port_config.h when touch is enabled"
+#endif
+#ifndef LGFX_PORT_TOUCH_SPI_HOST
+#error "LGFX_PORT_TOUCH_SPI_HOST must be defined by lgfx_port_config.h when touch is enabled"
+#endif
+#ifndef LGFX_PORT_TOUCH_SPI_FREQ_HZ
+#error "LGFX_PORT_TOUCH_SPI_FREQ_HZ must be defined by lgfx_port_config.h when touch is enabled"
+#endif
+#ifndef LGFX_PORT_TOUCH_OFFSET_ROTATION
+#error "LGFX_PORT_TOUCH_OFFSET_ROTATION must be defined by lgfx_port_config.h when touch is enabled"
+#endif
+#ifndef LGFX_PORT_TOUCH_BUS_SHARED
+#error "LGFX_PORT_TOUCH_BUS_SHARED must be defined by lgfx_port_config.h when touch is enabled"
+#endif
+#endif
+
+// ----------------------------------------------------------------------------
+// Wiring / geometry / knobs (all sourced from generated config)
+// ----------------------------------------------------------------------------
+
+// SPI pins
 static constexpr int PIN_SCLK = (int) (LGFX_PORT_SPI_SCLK_GPIO);
 static constexpr int PIN_MOSI = (int) (LGFX_PORT_SPI_MOSI_GPIO);
 static constexpr int PIN_MISO = (int) (LGFX_PORT_SPI_MISO_GPIO);
 
+// LCD pins / host
 static constexpr int PIN_LCD_CS = (int) (LGFX_PORT_LCD_CS_GPIO);
 static constexpr int PIN_LCD_DC = (int) (LGFX_PORT_LCD_DC_GPIO);
 static constexpr int PIN_LCD_RST = (int) (LGFX_PORT_LCD_RST_GPIO);
 
-// -----------------------------------------------------------------------------
-// Panel geometry (generated header; override via CMake cache vars)
-// -----------------------------------------------------------------------------
-
-#ifndef LGFX_PORT_PANEL_WIDTH
-#define LGFX_PORT_PANEL_WIDTH (320)
-#endif
-
-#ifndef LGFX_PORT_PANEL_HEIGHT
-#define LGFX_PORT_PANEL_HEIGHT (480)
-#endif
-
+// Panel geometry
 static constexpr uint16_t PANEL_W = (uint16_t) (LGFX_PORT_PANEL_WIDTH);
 static constexpr uint16_t PANEL_H = (uint16_t) (LGFX_PORT_PANEL_HEIGHT);
 
-// -----------------------------------------------------------------------------
-// LovyanGFX Bus_SPI config knobs (generated header; override via CMake cache vars)
-// -----------------------------------------------------------------------------
-
-#ifndef LGFX_PORT_LCD_SPI_MODE
-#define LGFX_PORT_LCD_SPI_MODE (0)
-#endif
-
-#ifndef LGFX_PORT_LCD_FREQ_WRITE_HZ
-#define LGFX_PORT_LCD_FREQ_WRITE_HZ (20 * 1000 * 1000)
-#endif
-
-#ifndef LGFX_PORT_LCD_FREQ_READ_HZ
-#define LGFX_PORT_LCD_FREQ_READ_HZ (10 * 1000 * 1000)
-#endif
-
-#ifndef LGFX_PORT_LCD_SPI_3WIRE
-#define LGFX_PORT_LCD_SPI_3WIRE (0)
-#endif
-
-#ifndef LGFX_PORT_LCD_USE_LOCK
-#define LGFX_PORT_LCD_USE_LOCK (1)
-#endif
-
-#ifndef LGFX_PORT_LCD_DMA_CHANNEL
-#define LGFX_PORT_LCD_DMA_CHANNEL (SPI_DMA_CH_AUTO)
-#endif
-
-// -----------------------------------------------------------------------------
-// LovyanGFX Panel config knobs (generated header; override via CMake cache vars)
-// -----------------------------------------------------------------------------
-
-#ifndef LGFX_PORT_LCD_PIN_BUSY
-#define LGFX_PORT_LCD_PIN_BUSY (-1)
-#endif
-
-#ifndef LGFX_PORT_LCD_OFFSET_X
-#define LGFX_PORT_LCD_OFFSET_X (0)
-#endif
-
-#ifndef LGFX_PORT_LCD_OFFSET_Y
-#define LGFX_PORT_LCD_OFFSET_Y (0)
-#endif
-
-#ifndef LGFX_PORT_LCD_OFFSET_ROTATION
-#define LGFX_PORT_LCD_OFFSET_ROTATION (0)
-#endif
-
-#ifndef LGFX_PORT_LCD_DUMMY_READ_PIXEL
-#define LGFX_PORT_LCD_DUMMY_READ_PIXEL (8)
-#endif
-
-#ifndef LGFX_PORT_LCD_DUMMY_READ_BITS
-#define LGFX_PORT_LCD_DUMMY_READ_BITS (1)
-#endif
-
-#ifndef LGFX_PORT_LCD_READABLE
-#define LGFX_PORT_LCD_READABLE (0)
-#endif
-
-#ifndef LGFX_PORT_LCD_INVERT
-#define LGFX_PORT_LCD_INVERT (0)
-#endif
-
-#ifndef LGFX_PORT_LCD_RGB_ORDER
-#define LGFX_PORT_LCD_RGB_ORDER (0)
-#endif
-
-#ifndef LGFX_PORT_LCD_DLEN_16BIT
-#define LGFX_PORT_LCD_DLEN_16BIT (0)
-#endif
-
-#ifndef LGFX_PORT_LCD_BUS_SHARED
-#define LGFX_PORT_LCD_BUS_SHARED (1)
-#endif
-
 #if defined(LGFX_PORT_ENABLE_TOUCH) && (LGFX_PORT_ENABLE_TOUCH == 1)
-//
-// Touch wiring knobs (generated header; override via CMake cache vars)
-//
-// Examples:
-// -DLGFX_PORT_TOUCH_CS_GPIO=44
-// -DLGFX_PORT_TOUCH_IRQ_GPIO=1
-// -DLGFX_PORT_TOUCH_OFFSET_ROTATION=3
-//
-// Leave CS as -1 to compile touch but keep it unattached.
-//
-
-#ifndef LGFX_PORT_TOUCH_CS_GPIO
-#define LGFX_PORT_TOUCH_CS_GPIO (-1)
-#endif
-
-#ifndef LGFX_PORT_TOUCH_IRQ_GPIO
-#define LGFX_PORT_TOUCH_IRQ_GPIO (-1)
-#endif
-
-// Default touch host to the LCD host (so overriding LCD host also updates touch).
-#ifndef LGFX_PORT_TOUCH_SPI_HOST
-#define LGFX_PORT_TOUCH_SPI_HOST (LGFX_PORT_LCD_SPI_HOST)
-#endif
-
-#ifndef LGFX_PORT_TOUCH_SPI_FREQ_HZ
-#define LGFX_PORT_TOUCH_SPI_FREQ_HZ (1000000u) // conservative start for stability
-#endif
-
-// Touch coordinate alignment knob.
-// If touch feels rotated/mirrored relative to the display, adjust this (0..7).
-// (Calibration via setTouchCalibrate/calibrateTouch is still the best long-term fix.)
-#ifndef LGFX_PORT_TOUCH_OFFSET_ROTATION
-#define LGFX_PORT_TOUCH_OFFSET_ROTATION (LGFX_PORT_LCD_OFFSET_ROTATION)
-#endif
-
-#ifndef LGFX_PORT_TOUCH_BUS_SHARED
-#define LGFX_PORT_TOUCH_BUS_SHARED (1)
-#endif
-
 // XPT2046 touch (SPI).
-// - requires a dedicated CS pin for touch
-// - optional IRQ pin reduces unnecessary reads when not touched
+// Leave CS as -1 to compile touch but keep it unattached.
 static constexpr int PIN_TOUCH_CS = (int) (LGFX_PORT_TOUCH_CS_GPIO);
 static constexpr int PIN_TOUCH_IRQ = (int) (LGFX_PORT_TOUCH_IRQ_GPIO);
 
@@ -311,7 +265,7 @@ public:
             auto cfg = touch_.config();
 
             cfg.spi_host = TOUCH_SPI_HOST; // should match the LCD bus host
-            cfg.freq = TOUCH_SPI_FREQ_HZ; // conservative start for stability
+            cfg.freq = TOUCH_SPI_FREQ_HZ; // start conservative for stability
 
             cfg.pin_sclk = PIN_SCLK;
             cfg.pin_mosi = PIN_MOSI;
@@ -323,7 +277,7 @@ public:
             cfg.bus_shared = ((LGFX_PORT_TOUCH_BUS_SHARED) != 0);
 
             // Touch coordinate alignment relative to the panel orientation.
-            // If left/right is swapped or rotation feels off, try:
+            // If left/right is swapped or rotation feels off, try adjusting:
             //   -DLGFX_PORT_TOUCH_OFFSET_ROTATION=1/2/3/... (0..7)
             // Then run SampleApp :touch_calibrate for best results.
             cfg.offset_rotation = TOUCH_OFFSET_ROTATION;

@@ -26,7 +26,11 @@
 
 #include "lgfx_port/worker.h"
 
-#include "worker_internal.h"
+// Canonical job layout (enum + job struct + union members)
+#include "lgfx_port/worker_jobs.h"
+
+// Internal helper used by worker_device.c (lgfx_worker_call)
+#include "lgfx_port/worker_internal.h"
 
 static esp_err_t lgfx_worker_copy_payload(lgfx_job_t *job, const uint8_t *bytes, size_t len)
 {

@@ -11,22 +11,29 @@
 // Build-time configuration (generated from include/lgfx_port/lgfx_port_config.h.in)
 #include "lgfx_port/lgfx_port_config.h"
 
+// Shared protocol-level constants (stable wire values, e.g., font preset IDs)
+#include "lgfx_port/lgfx_port.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // ----------------------------------------------------------------------------
-// Build options (set via CMake target_compile_definitions)
+// Build options (must come from generated config header; no silent defaults)
 // ----------------------------------------------------------------------------
 //
 // - LGFX_PORT_ENABLE_JP_FONTS=1
-//     JP presets are supported (device maps jp_* to LovyanGFX JapanGothic font).
+//     JP presets are supported (device maps jp_* to a JP font object).
 // - LGFX_PORT_ENABLE_JP_FONTS=0
 //     JP presets are compiled out. Device must return ESP_ERR_NOT_SUPPORTED for jp_*.
 //     ASCII preset remains available.
 //
 #ifndef LGFX_PORT_ENABLE_JP_FONTS
-#define LGFX_PORT_ENABLE_JP_FONTS 1
+#error "LGFX_PORT_ENABLE_JP_FONTS must be defined by lgfx_port_config.h"
+#endif
+
+#if (LGFX_PORT_ENABLE_JP_FONTS != 0) && (LGFX_PORT_ENABLE_JP_FONTS != 1)
+#error "LGFX_PORT_ENABLE_JP_FONTS must be 0 or 1"
 #endif
 
 // ----------------------------------------------------------------------------
@@ -34,15 +41,34 @@ extern "C" {
 // ----------------------------------------------------------------------------
 //
 // This is a thin C ABI around LovyanGFX:
-// - target == 0       : LCD device (singleton)
-// - target in 1..254  : sprite handle allocated by lgfx_device_sprite_create()
-//                       or lgfx_device_sprite_create_at()
 //
-// Note:
-// - "Valid target" means protocol-valid target range (0 for LCD, 1..254 for sprite slots).
+// - target == LGFX_DEVICE_TARGET_LCD (0)
+//     LCD device (singleton)
+//
+// - target in LGFX_DEVICE_TARGET_MIN_SPRITE..LGFX_DEVICE_TARGET_MAX_SPRITE (1..254)
+//     sprite handle allocated by lgfx_device_sprite_create()
+//     or lgfx_device_sprite_create_at()
+//
+// Notes:
+// - “Valid target” means protocol-valid target range (0 for LCD, 1..254 for sprite slots).
 // - Whether a sprite slot is currently allocated is checked by sprite operations and
 //   typically returns ESP_ERR_NOT_FOUND when the slot is empty.
 // - Most APIs return ESP_ERR_INVALID_STATE if lgfx_device_init() was not called.
+//
+#define LGFX_DEVICE_TARGET_LCD ((uint8_t) 0)
+#define LGFX_DEVICE_TARGET_MIN_SPRITE ((uint8_t) 1)
+#define LGFX_DEVICE_TARGET_MAX_SPRITE ((uint8_t) 254)
+
+static inline bool lgfx_device_is_lcd_target(uint8_t target)
+{
+    return target == LGFX_DEVICE_TARGET_LCD;
+}
+
+static inline bool lgfx_device_is_sprite_target(uint8_t target)
+{
+    return (target >= LGFX_DEVICE_TARGET_MIN_SPRITE) && (target <= LGFX_DEVICE_TARGET_MAX_SPRITE);
+}
+
 bool lgfx_device_is_valid_target(uint8_t target);
 
 // ----------------------------------------------------------------------------
@@ -63,6 +89,7 @@ uint32_t lgfx_device_max_sprites(void);
 //           the mutex when supported by the FreeRTOS config.
 //
 // close(): protocol-facing alias of deinit().
+//
 esp_err_t lgfx_device_init(void);
 esp_err_t lgfx_device_deinit(void);
 esp_err_t lgfx_device_close(void);
@@ -82,20 +109,14 @@ esp_err_t lgfx_device_set_base_color(uint8_t target, uint16_t rgb565);
 // Text config (LCD or sprite target)
 // ----------------------------------------------------------------------------
 //
-// Font preset IDs (stable protocol enum -> device-side mapping).
-// Keep these in sync with:
-// - ports/handlers/text.c (decode/range checks)
-// - ports/lgfx_worker.c (job payload)
-// - src/lgfx_device_api.cpp (mapping to LovyanGFX fonts)
-// - host-side mapping in examples/elixir/lib/sample_app/port.ex
-enum
-{
-    LGFX_FONT_PRESET_ASCII = 0,
-    LGFX_FONT_PRESET_JP_SMALL = 1,
-    LGFX_FONT_PRESET_JP_MEDIUM = 2,
-    LGFX_FONT_PRESET_JP_LARGE = 3,
-};
-
+// Font preset IDs are protocol-level constants (stable wire values) and are
+// defined in include/lgfx_port/lgfx_port.h:
+//
+// - LGFX_FONT_PRESET_ASCII
+// - LGFX_FONT_PRESET_JP_SMALL
+// - LGFX_FONT_PRESET_JP_MEDIUM
+// - LGFX_FONT_PRESET_JP_LARGE
+//
 esp_err_t lgfx_device_set_text_size(uint8_t target, uint8_t size);
 esp_err_t lgfx_device_set_text_size_xy(uint8_t target, uint8_t sx, uint8_t sy);
 esp_err_t lgfx_device_set_text_datum(uint8_t target, uint8_t datum);
@@ -111,6 +132,7 @@ esp_err_t lgfx_device_set_text_font(uint8_t target, uint8_t font);
 // Mapping strategy (current):
 // - ASCII preset uses setTextFont(1) and normalizes size=1
 // - JP presets may use a single JP font object and scale it with setTextSize()
+//
 esp_err_t lgfx_device_set_font_preset(uint8_t target, uint8_t preset);
 
 // ----------------------------------------------------------------------------
@@ -138,6 +160,7 @@ esp_err_t lgfx_device_get_dims(uint16_t *out_w, uint16_t *out_h);
 //
 // If not touched:
 // - out_touched=false, other outputs set to 0 (best-effort convenience)
+//
 esp_err_t lgfx_device_get_touch(bool *out_touched, int16_t *out_x, int16_t *out_y, uint16_t *out_size);
 esp_err_t lgfx_device_get_touch_raw(bool *out_touched, int16_t *out_x, int16_t *out_y, uint16_t *out_size);
 esp_err_t lgfx_device_set_touch_calibrate(const uint16_t params[8]);
@@ -203,7 +226,7 @@ esp_err_t lgfx_device_push_image_rgb565_strided(
 //
 // These APIs are intended to be used in the "in_write" state managed by the
 // protocol validator/handler layer.
-
+//
 // pushPixels (LCD-only)
 esp_err_t lgfx_device_push_pixels_rgb565(const uint8_t *pixels_be, size_t pixels_len);
 
@@ -277,7 +300,7 @@ esp_err_t lgfx_device_sprite_push_sprite_region(
     uint16_t w,
     uint16_t h,
     bool has_transparent,
-    uint16_t transparent565);
+    uint16_t transparent_rgb565);
 
 /*
  * Rotate + zoom sprite push (destination-aware).
@@ -303,7 +326,7 @@ esp_err_t lgfx_device_sprite_push_rotate_zoom(
     float zoom_x,
     float zoom_y,
     bool has_transparent,
-    uint16_t transparent565);
+    uint16_t transparent_rgb565);
 
 #ifdef __cplusplus
 }

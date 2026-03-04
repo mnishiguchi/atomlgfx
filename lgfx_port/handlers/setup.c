@@ -9,8 +9,10 @@
 #include "context.h"
 #include "term.h"
 
-#include "lgfx_port/lgfx_port.h"
+#include "lgfx_port/handler_decode.h"
+#include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
+#include "lgfx_port/proto_term.h" // term helpers + reply helpers/macros (now required since ops.h is slim)
 #include "lgfx_port/worker.h"
 
 // Request envelope validation (version/arity/flags/target/init-state) is
@@ -183,10 +185,8 @@ static term do_close(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 
 static term do_set_rotation(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    term rot_t = term_get_tuple_element(req->request_tuple, 5);
-
     uint32_t rot = 0;
-    if (!lgfx_term_to_u32(rot_t, &rot) || rot > 7) {
+    if (!lgfx_decode_u32_at(req, 5, &rot) || rot > 7u) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -206,10 +206,8 @@ static term do_set_rotation(Context *ctx, lgfx_port_t *port, const lgfx_request_
 static term do_set_brightness(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     // {lgfx, ver, setBrightness, target, flags, Brightness}
-    term b_t = term_get_tuple_element(req->request_tuple, 5);
-
     uint32_t b = 0;
-    if (!lgfx_term_to_u32(b_t, &b) || b > 255) {
+    if (!lgfx_decode_u32_at(req, 5, &b) || b > 255u) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -221,7 +219,6 @@ static term do_set_brightness(Context *ctx, lgfx_port_t *port, const lgfx_reques
 static term do_set_color_depth(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     // {lgfx, ver, setColorDepth, target, flags, Depth}
-    term d_t = term_get_tuple_element(req->request_tuple, 5);
 
 #if !LGFX_PORT_SUPPORTS_SPRITE
     // Sprite surface is compiled out; treat non-zero targets as unsupported.
@@ -231,7 +228,7 @@ static term do_set_color_depth(Context *ctx, lgfx_port_t *port, const lgfx_reque
 #endif
 
     uint32_t d = 0;
-    if (!lgfx_term_to_u32(d_t, &d)) {
+    if (!lgfx_decode_u32_at(req, 5, &d)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
