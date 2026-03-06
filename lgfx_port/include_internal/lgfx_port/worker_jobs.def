@@ -45,7 +45,6 @@ X(FILL_TRIANGLE, fill_triangle, uint8_t target; int16_t x0; int16_t y0; int16_t 
 X(SET_TEXT_SIZE, set_text_size, uint8_t target; uint8_t size;, job->err = lgfx_device_set_text_size(job->a.set_text_size.target, job->a.set_text_size.size);)
 X(SET_TEXT_SIZE_XY, set_text_size_xy, uint8_t target; uint8_t sx; uint8_t sy;, job->err = lgfx_device_set_text_size_xy(job->a.set_text_size_xy.target, job->a.set_text_size_xy.sx, job->a.set_text_size_xy.sy);)
 X(SET_TEXT_DATUM, set_text_datum, uint8_t target; uint8_t datum;, job->err = lgfx_device_set_text_datum(job->a.set_text_datum.target, job->a.set_text_datum.datum);)
-X(SET_TEXT_WRAP, set_text_wrap, uint8_t target; bool wrap;, job->err = lgfx_device_set_text_wrap(job->a.set_text_wrap.target, job->a.set_text_wrap.wrap, job->a.set_text_wrap.wrap);)
 X(SET_TEXT_WRAP_XY, set_text_wrap_xy, uint8_t target; bool wrap_x; bool wrap_y;, job->err = lgfx_device_set_text_wrap(job->a.set_text_wrap_xy.target, job->a.set_text_wrap_xy.wrap_x, job->a.set_text_wrap_xy.wrap_y);)
 X(SET_TEXT_FONT, set_text_font, uint8_t target; uint8_t font;, job->err = lgfx_device_set_text_font(job->a.set_text_font.target, job->a.set_text_font.font);)
 X(SET_FONT_PRESET, set_font_preset, uint8_t target; uint8_t preset;, job->err = lgfx_device_set_font_preset(job->a.set_font_preset.target, job->a.set_font_preset.preset);)

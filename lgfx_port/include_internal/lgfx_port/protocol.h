@@ -104,8 +104,7 @@
 #endif
 
 // -----------------------------------------------------------------------------
-// Advertisement / enable gates (0/1).
-// These must come from the generated config (single source of truth).
+// Computed capability gates (0/1)
 // -----------------------------------------------------------------------------
 #ifndef LGFX_PORT_SUPPORTS_SPRITE
 #error "LGFX_PORT_SUPPORTS_SPRITE must be defined by lgfx_port_config.h"
@@ -119,15 +118,6 @@
 #ifndef LGFX_PORT_SUPPORTS_TOUCH
 #error "LGFX_PORT_SUPPORTS_TOUCH must be defined by lgfx_port_config.h"
 #endif
-#ifndef LGFX_PORT_SUPPORTS_JPG_FILE
-#error "LGFX_PORT_SUPPORTS_JPG_FILE must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_SUPPORTS_PNG_FILE
-#error "LGFX_PORT_SUPPORTS_PNG_FILE must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_SUPPORTS_BATCH_VOID
-#error "LGFX_PORT_SUPPORTS_BATCH_VOID must be defined by lgfx_port_config.h"
-#endif
 
 #if (LGFX_PORT_SUPPORTS_SPRITE != 0) && (LGFX_PORT_SUPPORTS_SPRITE != 1)
 #error "LGFX_PORT_SUPPORTS_SPRITE must be 0 or 1"
@@ -140,15 +130,6 @@
 #endif
 #if (LGFX_PORT_SUPPORTS_TOUCH != 0) && (LGFX_PORT_SUPPORTS_TOUCH != 1)
 #error "LGFX_PORT_SUPPORTS_TOUCH must be 0 or 1"
-#endif
-#if (LGFX_PORT_SUPPORTS_JPG_FILE != 0) && (LGFX_PORT_SUPPORTS_JPG_FILE != 1)
-#error "LGFX_PORT_SUPPORTS_JPG_FILE must be 0 or 1"
-#endif
-#if (LGFX_PORT_SUPPORTS_PNG_FILE != 0) && (LGFX_PORT_SUPPORTS_PNG_FILE != 1)
-#error "LGFX_PORT_SUPPORTS_PNG_FILE must be 0 or 1"
-#endif
-#if (LGFX_PORT_SUPPORTS_BATCH_VOID != 0) && (LGFX_PORT_SUPPORTS_BATCH_VOID != 1)
-#error "LGFX_PORT_SUPPORTS_BATCH_VOID must be 0 or 1"
 #endif
 
 // -----------------------------------------------------------------------------
@@ -179,60 +160,29 @@ static inline bool lgfx_validate_color_depth(uint32_t d)
 // -----------------------------------------------------------------------------
 // FeatureBits (wire)
 // -----------------------------------------------------------------------------
+// Dense current capability layout after removing dead capability vocabulary.
 #define LGFX_CAP_SPRITE (1u << 0)
 #define LGFX_CAP_PUSHIMAGE (1u << 1)
-#define LGFX_CAP_JPG_FILE (1u << 2)
-#define LGFX_CAP_PNG_FILE (1u << 3)
-#define LGFX_CAP_LAST_ERROR (1u << 4)
-#define LGFX_CAP_BATCH_VOID (1u << 5)
-#define LGFX_CAP_TOUCH (1u << 6)
+#define LGFX_CAP_LAST_ERROR (1u << 2)
+#define LGFX_CAP_TOUCH (1u << 3)
 
-#define LGFX_CAP_SAFE_YIELD_FORGIVING (1u << 8)
-#define LGFX_CAP_SAFE_YIELD_STRICT (1u << 9)
-
-#define LGFX_CAP_KNOWN_MASK                                                                                                                    \
-    (LGFX_CAP_SPRITE | LGFX_CAP_PUSHIMAGE | LGFX_CAP_TOUCH | LGFX_CAP_JPG_FILE | LGFX_CAP_PNG_FILE | LGFX_CAP_LAST_ERROR | LGFX_CAP_BATCH_VOID \
-        | LGFX_CAP_SAFE_YIELD_FORGIVING | LGFX_CAP_SAFE_YIELD_STRICT)
-
-// Safe yield capability (0 or one of the two safe-yield bits). Must come from config.
-#ifndef LGFX_PORT_SAFE_YIELD_CAP
-#error "LGFX_PORT_SAFE_YIELD_CAP must be defined by lgfx_port_config.h"
-#endif
-
-#if (LGFX_PORT_SAFE_YIELD_CAP != 0u) && (LGFX_PORT_SAFE_YIELD_CAP != LGFX_CAP_SAFE_YIELD_FORGIVING) && (LGFX_PORT_SAFE_YIELD_CAP != LGFX_CAP_SAFE_YIELD_STRICT)
-#error "LGFX_PORT_SAFE_YIELD_CAP must be 0, LGFX_CAP_SAFE_YIELD_FORGIVING, or LGFX_CAP_SAFE_YIELD_STRICT"
-#endif
+#define LGFX_CAP_KNOWN_MASK \
+    (LGFX_CAP_SPRITE | LGFX_CAP_PUSHIMAGE | LGFX_CAP_LAST_ERROR | LGFX_CAP_TOUCH)
 
 // -----------------------------------------------------------------------------
-// Build capability mask (compiled surface area for FeatureBits gating)
-//
-// Used by the port implementation to check whether an ops.def feature_cap_bit is
-// valid/enabled under the current build configuration.
-//
-// Notes:
-// - Safe-yield is selected by LGFX_PORT_SAFE_YIELD_CAP (0 or exactly one bit).
-// - This mask is intentionally independent of "transaction surface exists" logic;
-//   FeatureBits still decides whether to advertise the safe-yield bit at runtime.
+// Build capability mask
 // -----------------------------------------------------------------------------
 #define LGFX_BUILD_CAP_MASK                                          \
     ((uint32_t) ((LGFX_PORT_SUPPORTS_SPRITE ? LGFX_CAP_SPRITE : 0u)  \
         | (LGFX_PORT_SUPPORTS_PUSHIMAGE ? LGFX_CAP_PUSHIMAGE : 0u)   \
-        | (LGFX_PORT_SUPPORTS_TOUCH ? LGFX_CAP_TOUCH : 0u)           \
         | (LGFX_PORT_SUPPORTS_LAST_ERROR ? LGFX_CAP_LAST_ERROR : 0u) \
-        | (LGFX_PORT_SUPPORTS_JPG_FILE ? LGFX_CAP_JPG_FILE : 0u)     \
-        | (LGFX_PORT_SUPPORTS_PNG_FILE ? LGFX_CAP_PNG_FILE : 0u)     \
-        | (LGFX_PORT_SUPPORTS_BATCH_VOID ? LGFX_CAP_BATCH_VOID : 0u) \
-        | (uint32_t) LGFX_PORT_SAFE_YIELD_CAP))
+        | (LGFX_PORT_SUPPORTS_TOUCH ? LGFX_CAP_TOUCH : 0u)))
 
 // -----------------------------------------------------------------------------
 // Op-specific request flags (req->flags)
-//
-// NOTE:
-// - These are per-op. Unrecognized bits must be rejected as bad_flags.
 // -----------------------------------------------------------------------------
 #define LGFX_F_TEXT_HAS_BG (1u << 0) // setTextColor: background color is provided
 
-// Back-compat alias (if any callers still use the short name)
 #ifndef F_TEXT_HAS_BG
 #define F_TEXT_HAS_BG LGFX_F_TEXT_HAS_BG
 #endif

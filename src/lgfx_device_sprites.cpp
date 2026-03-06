@@ -1,6 +1,5 @@
 // src/lgfx_device_sprites.cpp
-// Sprite subsystem APIs for the pinned LovyanGFX surface
-// (push, rotate/zoom).
+// Sprite subsystem APIs for the pinned LovyanGFX surface used by the current protocol.
 
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"
@@ -14,79 +13,22 @@ namespace
 // Supported LovyanGFX surface for this component:
 //
 // - createSprite(w, h)
-// - createPalette()
 // - pushSprite(dst, x, y [, transparent565])
 // - pushRotateZoom(dst, x, y, angle_deg, zoom_x, zoom_y [, transparent565])
 //
 // If the pinned LovyanGFX submodule changes these signatures, prefer an
 // explicit update here over reintroducing compile-time fallback probes.
 
-static bool sprite_create(lgfx::LGFX_Sprite *spr, uint16_t w, uint16_t h)
+static bool protocol_valid_target(uint8_t target)
 {
-    if (!spr) {
-        return false;
-    }
-
-    spr->createSprite(w, h);
-    return spr->getBuffer() != nullptr;
-}
-
-static void sprite_create_palette(lgfx::LGFX_Sprite *spr)
-{
-    spr->createPalette();
+    return lgfx_device_is_lcd_target(target) || lgfx_device_is_sprite_target(target);
 }
 
 } // namespace
 
-extern "C" esp_err_t lgfx_device_sprite_create(uint16_t w, uint16_t h, uint8_t color_depth, uint8_t *out_handle)
-{
-    if (!out_handle || w == 0 || h == 0) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    *out_handle = 0;
-
-    lgfx_dev::ScopedLcdLock lock;
-    esp_err_t err = lgfx_dev::lock_ready(lock);
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    auto *lcd = lgfx_dev::lcd_device_locked();
-    if (!lcd) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    uint8_t handle = lgfx_dev::alloc_sprite_handle_locked();
-    if (handle == 0) {
-        return ESP_ERR_NO_MEM;
-    }
-
-    auto *spr = new (std::nothrow) lgfx::LGFX_Sprite(lcd);
-    if (!spr) {
-        return ESP_ERR_NO_MEM;
-    }
-
-    if (color_depth != 0) {
-        spr->setColorDepth(color_depth);
-    }
-
-    if (!sprite_create(spr, w, h)) {
-        delete spr;
-        return ESP_ERR_NO_MEM;
-    }
-
-    lgfx_dev::set_sprite_locked(handle, spr);
-    lgfx_dev::increment_sprite_count_locked();
-
-    *out_handle = handle;
-    return ESP_OK;
-}
-
 extern "C" esp_err_t lgfx_device_sprite_create_at(uint8_t handle, uint16_t w, uint16_t h, uint8_t color_depth)
 {
-    const uint8_t max_handle = lgfx_dev::max_handle_const();
-    if (handle == 0 || handle > max_handle || w == 0 || h == 0) {
+    if (!lgfx_device_is_sprite_target(handle) || w == 0 || h == 0) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -122,7 +64,8 @@ extern "C" esp_err_t lgfx_device_sprite_create_at(uint8_t handle, uint16_t w, ui
         spr->setColorDepth(color_depth);
     }
 
-    if (!sprite_create(spr, w, h)) {
+    spr->createSprite(w, h);
+    if (spr->getBuffer() == nullptr) {
         delete spr;
         return ESP_ERR_NO_MEM;
     }
@@ -135,8 +78,7 @@ extern "C" esp_err_t lgfx_device_sprite_create_at(uint8_t handle, uint16_t w, ui
 
 extern "C" esp_err_t lgfx_device_sprite_delete(uint8_t handle)
 {
-    const uint8_t max_handle = lgfx_dev::max_handle_const();
-    if (handle == 0 || handle > max_handle) {
+    if (!lgfx_device_is_sprite_target(handle)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -161,23 +103,6 @@ extern "C" esp_err_t lgfx_device_sprite_delete(uint8_t handle)
     return ESP_OK;
 }
 
-extern "C" esp_err_t lgfx_device_sprite_set_color_depth(uint8_t handle, uint8_t depth)
-{
-    return lgfx_dev::with_sprite(handle, [&](lgfx::LGFX_Sprite *spr) { spr->setColorDepth(depth); });
-}
-
-extern "C" esp_err_t lgfx_device_sprite_create_palette(uint8_t handle)
-{
-    return lgfx_dev::with_sprite(handle, [&](lgfx::LGFX_Sprite *spr) {
-        sprite_create_palette(spr);
-    });
-}
-
-extern "C" esp_err_t lgfx_device_sprite_set_palette_color(uint8_t handle, uint8_t index, uint16_t rgb565)
-{
-    return lgfx_dev::with_sprite(handle, [&](lgfx::LGFX_Sprite *spr) { spr->setPaletteColor(index, rgb565); });
-}
-
 extern "C" esp_err_t lgfx_device_sprite_set_pivot(uint8_t handle, int16_t px, int16_t py)
 {
     return lgfx_dev::with_sprite(handle, [&](lgfx::LGFX_Sprite *spr) { spr->setPivot(px, py); });
@@ -191,13 +116,11 @@ extern "C" esp_err_t lgfx_device_sprite_push_sprite(
     bool has_transparent,
     uint16_t transparent_rgb565)
 {
-    const uint8_t max_handle = lgfx_dev::max_handle_const();
-    if (src_handle == 0 || src_handle > max_handle) {
+    if (!lgfx_device_is_sprite_target(src_handle)) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    // Destination target must be protocol-valid (0 LCD or sprite handle range).
-    if (!lgfx_device_is_valid_target(dst_target)) {
+    if (!protocol_valid_target(dst_target)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -212,7 +135,7 @@ extern "C" esp_err_t lgfx_device_sprite_push_sprite(
         return ESP_ERR_NOT_FOUND;
     }
 
-    if (dst_target == 0) {
+    if (lgfx_device_is_lcd_target(dst_target)) {
         auto *lcd = lgfx_dev::lcd_device_locked();
         if (!lcd) {
             return ESP_ERR_INVALID_STATE;
@@ -252,17 +175,14 @@ extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
     bool has_transparent,
     uint16_t transparent565)
 {
-    const uint8_t max_handle = lgfx_dev::max_handle_const();
-    if (src_handle == 0 || src_handle > max_handle) {
+    if (!lgfx_device_is_sprite_target(src_handle)) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    // Destination target must be protocol-valid (0 LCD or sprite handle range).
-    if (!lgfx_device_is_valid_target(dst_target)) {
+    if (!protocol_valid_target(dst_target)) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    // Protocol semantics require finite inputs and positive zoom.
     if (!std::isfinite(angle_deg) || !std::isfinite(zoom_x) || !std::isfinite(zoom_y)) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -282,7 +202,7 @@ extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
         return ESP_ERR_NOT_FOUND;
     }
 
-    if (dst_target == 0) {
+    if (lgfx_device_is_lcd_target(dst_target)) {
         auto *lcd = lgfx_dev::lcd_device_locked();
         if (!lcd) {
             return ESP_ERR_INVALID_STATE;

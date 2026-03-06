@@ -14,32 +14,17 @@
 #define LGFX_PORT_ENABLE_TOUCH    @LGFX_PORT_ENABLE_TOUCH_INT@
 
 // ----------------------------------------------------------------------------
-// Protocol advertisement / enable gates (0/1)
-//
-// These must be defined by the generated config so protocol.h can validate them
-// deterministically (and so missing macros do not silently become 0).
+// Computed capability gates (0/1)
 // ----------------------------------------------------------------------------
 //
-#define LGFX_PORT_SUPPORTS_SPRITE     @LGFX_PORT_SUPPORTS_SPRITE_INT@
-#define LGFX_PORT_SUPPORTS_LAST_ERROR @LGFX_PORT_SUPPORTS_LAST_ERROR_INT@
-#define LGFX_PORT_SUPPORTS_PUSHIMAGE  @LGFX_PORT_SUPPORTS_PUSHIMAGE_INT@
-#define LGFX_PORT_SUPPORTS_TOUCH      @LGFX_PORT_SUPPORTS_TOUCH_INT@
-#define LGFX_PORT_SUPPORTS_JPG_FILE   @LGFX_PORT_SUPPORTS_JPG_FILE_INT@
-#define LGFX_PORT_SUPPORTS_PNG_FILE   @LGFX_PORT_SUPPORTS_PNG_FILE_INT@
-#define LGFX_PORT_SUPPORTS_BATCH_VOID @LGFX_PORT_SUPPORTS_BATCH_VOID_INT@
-
-/*
- * Optional safe-yield capability advertisement.
- * Must be 0, (1u<<8), or (1u<<9). This must be emitted as a numeric literal.
- */
-#define LGFX_PORT_SAFE_YIELD_CAP      @LGFX_PORT_SAFE_YIELD_CAP_INT@
+#define LGFX_PORT_SUPPORTS_SPRITE      1
+#define LGFX_PORT_SUPPORTS_LAST_ERROR  1
+#define LGFX_PORT_SUPPORTS_PUSHIMAGE   1
+#define LGFX_PORT_SUPPORTS_TOUCH       @LGFX_PORT_SUPPORTS_TOUCH_INT@
 
 // ----------------------------------------------------------------------------
 // Protocol constants (numeric literals)
 // ----------------------------------------------------------------------------
-//
-// Max sprites supported by this build.
-// - Must be a numeric literal (recommend 'u' suffix).
 //
 #define LGFX_PORT_MAX_SPRITES         @LGFX_PORT_MAX_SPRITES@
 
@@ -54,24 +39,20 @@
 // Wiring defaults (override from parent project with -D...)
 // ----------------------------------------------------------------------------
 //
-// SPI pins
 #define LGFX_PORT_SPI_SCLK_GPIO   @LGFX_PORT_SPI_SCLK_GPIO@
 #define LGFX_PORT_SPI_MOSI_GPIO   @LGFX_PORT_SPI_MOSI_GPIO@
 #define LGFX_PORT_SPI_MISO_GPIO   @LGFX_PORT_SPI_MISO_GPIO@
 
-// LCD
 #define LGFX_PORT_LCD_SPI_HOST    @LGFX_PORT_LCD_SPI_HOST@
 #define LGFX_PORT_LCD_CS_GPIO     @LGFX_PORT_LCD_CS_GPIO@
 #define LGFX_PORT_LCD_DC_GPIO     @LGFX_PORT_LCD_DC_GPIO@
 #define LGFX_PORT_LCD_RST_GPIO    @LGFX_PORT_LCD_RST_GPIO@
 
-// Touch (XPT2046)
 #define LGFX_PORT_TOUCH_CS_GPIO      @LGFX_PORT_TOUCH_CS_GPIO@
 #define LGFX_PORT_TOUCH_IRQ_GPIO     @LGFX_PORT_TOUCH_IRQ_GPIO@
 #define LGFX_PORT_TOUCH_SPI_HOST     @LGFX_PORT_TOUCH_SPI_HOST@
 #define LGFX_PORT_TOUCH_SPI_FREQ_HZ  @LGFX_PORT_TOUCH_SPI_FREQ_HZ@
 
-// Touch coordinate alignment (0..7). Used by lgfx_device_state.cpp.
 #define LGFX_PORT_TOUCH_OFFSET_ROTATION @LGFX_PORT_TOUCH_OFFSET_ROTATION@
 
 // ----------------------------------------------------------------------------
@@ -102,7 +83,6 @@
 #define LGFX_PORT_LCD_DLEN_16BIT       @LGFX_PORT_LCD_DLEN_16BIT_INT@
 #define LGFX_PORT_LCD_BUS_SHARED       @LGFX_PORT_LCD_BUS_SHARED_INT@
 
-// Touch config (additional)
 #define LGFX_PORT_TOUCH_BUS_SHARED     @LGFX_PORT_TOUCH_BUS_SHARED_INT@
 
 // clang-format on

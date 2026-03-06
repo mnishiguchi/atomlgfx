@@ -70,11 +70,12 @@ static esp_err_t lgfx_worker_exec_push_rotate_zoom(lgfx_job_t *job)
     const float zoom_x = job->a.push_rotate_zoom.zoom_x;
     const float zoom_y = job->a.push_rotate_zoom.zoom_y;
 
-    // Basic worker-side validation. Device layer will also validate and call
-    // the pinned LovyanGFX-backed sprite rotate/zoom path.
+    // Basic worker-side validation. The device layer also validates and then
+    // calls the pinned LovyanGFX-backed sprite rotate/zoom path.
     if (!isfinite(angle_deg) || !isfinite(zoom_x) || !isfinite(zoom_y)) {
         return ESP_ERR_INVALID_ARG;
     }
+
     if (zoom_x <= 0.0f || zoom_y <= 0.0f) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -99,8 +100,8 @@ esp_err_t lgfx_worker_call(lgfx_port_t *port, lgfx_job_t *job)
         return ESP_ERR_INVALID_STATE;
     }
 
-    lgfx_worker_t *w = (lgfx_worker_t *) port->worker;
-    if (!w || !w->queue || w->stopping) {
+    lgfx_worker_t *worker = (lgfx_worker_t *) port->worker;
+    if (!worker || !worker->queue || worker->stopping) {
         lgfx_worker_cleanup_job_payload(job);
         return ESP_ERR_INVALID_STATE;
     }
@@ -114,8 +115,8 @@ esp_err_t lgfx_worker_call(lgfx_port_t *port, lgfx_job_t *job)
         return ESP_ERR_INVALID_STATE;
     }
 
-    lgfx_job_t *p = job;
-    if (xQueueSend(w->queue, &p, portMAX_DELAY) != pdTRUE) {
+    lgfx_job_t *queued_job = job;
+    if (xQueueSend(worker->queue, &queued_job, portMAX_DELAY) != pdTRUE) {
         lgfx_worker_cleanup_job_payload(job);
         return ESP_FAIL;
     }
@@ -145,37 +146,38 @@ bool lgfx_worker_start(lgfx_port_t *port)
     if (!port || !port->ctx) {
         return false;
     }
+
     if (port->worker) {
         return true;
     }
 
-    lgfx_worker_t *w = (lgfx_worker_t *) calloc(1, sizeof(lgfx_worker_t));
-    if (!w) {
+    lgfx_worker_t *worker = (lgfx_worker_t *) calloc(1, sizeof(lgfx_worker_t));
+    if (!worker) {
         return false;
     }
 
-    w->port = port;
-    w->queue = xQueueCreate(LGFX_WORKER_QUEUE_LEN, sizeof(lgfx_job_t *));
-    if (!w->queue) {
-        free(w);
+    worker->port = port;
+    worker->queue = xQueueCreate(LGFX_WORKER_QUEUE_LEN, sizeof(lgfx_job_t *));
+    if (!worker->queue) {
+        free(worker);
         return false;
     }
 
     // Publish worker state before starting the task to avoid races.
-    port->worker = (void *) w;
+    port->worker = (void *) worker;
 
     BaseType_t ok = xTaskCreate(
         lgfx_worker_task_main,
         LGFX_WORKER_TASK_NAME,
         LGFX_WORKER_TASK_STACK_WORDS,
-        (void *) w,
+        (void *) worker,
         LGFX_WORKER_TASK_PRIORITY,
-        &w->task);
+        &worker->task);
 
     if (ok != pdPASS) {
         port->worker = NULL;
-        vQueueDelete(w->queue);
-        free(w);
+        vQueueDelete(worker->queue);
+        free(worker);
         return false;
     }
 
@@ -188,46 +190,43 @@ void lgfx_worker_stop(lgfx_port_t *port)
         return;
     }
 
-    lgfx_worker_t *w = (lgfx_worker_t *) port->worker;
-    if (!w || !w->queue || w->stopping) {
+    lgfx_worker_t *worker = (lgfx_worker_t *) port->worker;
+    if (!worker || !worker->queue || worker->stopping) {
         return;
     }
 
-    w->stopping = true;
+    worker->stopping = true;
 
     // Prepare join notification before sending the stop sentinel to avoid races.
-    w->stop_notify_task = xTaskGetCurrentTaskHandle();
+    worker->stop_notify_task = xTaskGetCurrentTaskHandle();
 
     // Stop sentinel: NULL job pointer.
     lgfx_job_t *stop = NULL;
-    (void) xQueueSend(w->queue, &stop, portMAX_DELAY);
+    (void) xQueueSend(worker->queue, &stop, portMAX_DELAY);
 
     // Wait for worker task shutdown acknowledgement.
     (void) ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
     // Worker task exits via vTaskDelete(NULL) after sending the ack.
-    vQueueDelete(w->queue);
+    vQueueDelete(worker->queue);
     port->worker = NULL;
-    free(w);
+    free(worker);
 }
 
-// -----------------------------------------------------------------------------
 // Worker task: executes only device calls with plain C arguments.
-// -----------------------------------------------------------------------------
-
 static void lgfx_worker_task_main(void *arg)
 {
-    lgfx_worker_t *w = (lgfx_worker_t *) arg;
-    lgfx_port_t *port = w ? w->port : NULL;
+    lgfx_worker_t *worker = (lgfx_worker_t *) arg;
+    lgfx_port_t *port = worker ? worker->port : NULL;
 
-    if (!w || !port || !w->queue) {
+    if (!worker || !port || !worker->queue) {
         vTaskDelete(NULL);
         return;
     }
 
     while (true) {
         lgfx_job_t *job = NULL;
-        if (xQueueReceive(w->queue, &job, portMAX_DELAY) != pdTRUE) {
+        if (xQueueReceive(worker->queue, &job, portMAX_DELAY) != pdTRUE) {
             continue;
         }
 
@@ -267,8 +266,8 @@ static void lgfx_worker_task_main(void *arg)
         }
     }
 
-    if (w->stop_notify_task) {
-        xTaskNotifyGive(w->stop_notify_task);
+    if (worker->stop_notify_task) {
+        xTaskNotifyGive(worker->stop_notify_task);
     }
 
     vTaskDelete(NULL);

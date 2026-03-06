@@ -16,9 +16,11 @@
 extern void lgfx_port_handle_mailbox_message(Context *ctx, lgfx_port_t *port, term msg);
 
 /*
- * Drain the AtomVM mailbox on the port thread and forward each message term to
- * the port handler. Mailbox message ownership/disposal stays on the port thread.
- * The worker task never touches msg_term or mailbox objects.
+ * Drain the AtomVM mailbox on the port thread and forward each normal-message
+ * term to the port handler.
+ *
+ * Mailbox message ownership and disposal stay on the port thread.
+ * The worker task never touches mailbox objects or AtomVM terms.
  */
 void lgfx_worker_drain_mailbox(lgfx_port_t *port)
 {
@@ -27,22 +29,22 @@ void lgfx_worker_drain_mailbox(lgfx_port_t *port)
     }
 
     Context *ctx = port->ctx;
-    Mailbox *mbox = &ctx->mailbox;
+    Mailbox *mailbox = &ctx->mailbox;
     Heap *heap = &ctx->heap;
 
     while (true) {
-        MailboxMessage *m = mailbox_take_message(mbox);
-        if (!m) {
+        MailboxMessage *message = mailbox_take_message(mailbox);
+        if (!message) {
             break;
         }
 
-        if (m->type == NormalMessage) {
-            Message *mm = (Message *) m;
-            term msg_term = mm->message;
+        if (message->type == NormalMessage) {
+            Message *normal_message = (Message *) message;
+            term message_term = normal_message->message;
 
-            lgfx_port_handle_mailbox_message(ctx, port, msg_term);
+            lgfx_port_handle_mailbox_message(ctx, port, message_term);
         }
 
-        mailbox_message_dispose(m, heap);
+        mailbox_message_dispose(message, heap);
     }
 }

@@ -21,7 +21,6 @@
 
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"
-#include "lgfx_port/protocol.h"
 
 namespace
 {
@@ -184,13 +183,6 @@ static bool is_initialized = false;
 
 static constexpr uint16_t MAX_SPRITES = static_cast<uint16_t>(LGFX_PORT_MAX_SPRITES);
 static constexpr uint8_t MAX_HANDLE = 254;
-
-// NOTE: Feature bits are intentionally kept local to this component.
-// If your protocol expects a specific bit layout, align these with protocol caps.
-static constexpr uint32_t FEATURE_STRIDED_PUSH_IMAGE = 1u << 0;
-static constexpr uint32_t FEATURE_SPRITES = 1u << 1;
-static constexpr uint32_t FEATURE_SPRITE_REGION = 1u << 2;
-static constexpr uint32_t FEATURE_LCD_WRITE_PATH = 1u << 3;
 
 class PiyopiyoLGFX : public lgfx::LGFX_Device
 {
@@ -402,19 +394,6 @@ static inline lgfx::LGFXBase *resolve_target(uint8_t target)
     return sprites[target];
 }
 
-static uint8_t alloc_sprite_handle_locked()
-{
-    if (sprite_count >= MAX_SPRITES) {
-        return 0;
-    }
-    for (int i = 1; i <= MAX_HANDLE; i++) {
-        if (!sprites[i]) {
-            return (uint8_t) i;
-        }
-    }
-    return 0;
-}
-
 } // namespace
 
 // -----------------------------------------------------------------------------
@@ -442,16 +421,6 @@ uint8_t max_handle_const()
 uint16_t max_sprites_const()
 {
     return MAX_SPRITES;
-}
-
-uint32_t feature_bits_const()
-{
-    uint32_t bits = 0;
-    bits |= FEATURE_STRIDED_PUSH_IMAGE;
-    bits |= FEATURE_SPRITES;
-    bits |= FEATURE_SPRITE_REGION;
-    bits |= FEATURE_LCD_WRITE_PATH;
-    return bits;
 }
 
 esp_err_t ensure_allocated()
@@ -528,11 +497,6 @@ lgfx::LGFX_Sprite *resolve_sprite_locked(uint8_t handle)
     return sprites[handle];
 }
 
-uint8_t alloc_sprite_handle_locked()
-{
-    return ::alloc_sprite_handle_locked();
-}
-
 void set_sprite_locked(uint8_t handle, lgfx::LGFX_Sprite *spr)
 {
     if (handle == 0 || handle > MAX_HANDLE) {
@@ -589,19 +553,6 @@ void destroy_all_sprites_locked()
 } // namespace lgfx_dev
 
 // ----------------------------------------------------------------------------
-// API: validation
-// ----------------------------------------------------------------------------
-
-extern "C" bool lgfx_device_is_valid_target(uint8_t target)
-{
-    if (target == 0) {
-        return true;
-    }
-
-    return target <= MAX_HANDLE;
-}
-
-// ----------------------------------------------------------------------------
 // API: setup / lifecycle
 // ----------------------------------------------------------------------------
 
@@ -616,7 +567,7 @@ extern "C" esp_err_t lgfx_device_init(void)
         return ESP_ERR_NO_MEM;
     }
 
-    // Defensive: close()/deinit() may have raced after ensure_allocated() and before we got the lock.
+    // Defensive: close() may have raced after ensure_allocated() and before we got the lock.
     if (!lcd) {
         unlock_lcd();
         return ESP_ERR_INVALID_STATE;
@@ -642,7 +593,7 @@ extern "C" esp_err_t lgfx_device_init(void)
     return ESP_OK;
 }
 
-extern "C" esp_err_t lgfx_device_deinit(void)
+static esp_err_t lgfx_device_deinit(void)
 {
     // Idempotent teardown.
     // Allow deinit/close even if init never happened.

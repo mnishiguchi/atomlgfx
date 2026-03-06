@@ -1,5 +1,5 @@
 // /src/lgfx_device_api.cpp
-// LCD-only control + size + touch + text APIs.
+// LCD-only control + size/touch + text APIs that back the current protocol surface.
 
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"
@@ -32,48 +32,8 @@ extern "C" esp_err_t lgfx_device_display(void)
 }
 
 // -----------------------------------------------------------------------------
-// Size query APIs (LCD or sprite target) with pre-init LCD fallback behavior.
+// LCD dimension query with pre-init fallback behavior.
 // -----------------------------------------------------------------------------
-
-extern "C" uint16_t lgfx_device_width(uint8_t target)
-{
-    if (!lgfx_dev::lock_lcd()) {
-        return (target == 0) ? lgfx_dev::panel_width_const() : 0;
-    }
-
-    auto *lcd = lgfx_dev::lcd_device_locked();
-    if (target == 0 && (!lcd || !lgfx_dev::is_initialized_locked())) {
-        lgfx_dev::unlock_lcd();
-        return lgfx_dev::panel_width_const();
-    }
-
-    lgfx::LGFXBase *gfx = lgfx_dev::resolve_target_locked(target);
-    uint16_t w = gfx ? static_cast<uint16_t>(gfx->width()) : 0;
-
-    lgfx_dev::unlock_lcd();
-
-    return w ? w : (target == 0 ? lgfx_dev::panel_width_const() : 0);
-}
-
-extern "C" uint16_t lgfx_device_height(uint8_t target)
-{
-    if (!lgfx_dev::lock_lcd()) {
-        return (target == 0) ? lgfx_dev::panel_height_const() : 0;
-    }
-
-    auto *lcd = lgfx_dev::lcd_device_locked();
-    if (target == 0 && (!lcd || !lgfx_dev::is_initialized_locked())) {
-        lgfx_dev::unlock_lcd();
-        return lgfx_dev::panel_height_const();
-    }
-
-    lgfx::LGFXBase *gfx = lgfx_dev::resolve_target_locked(target);
-    uint16_t h = gfx ? static_cast<uint16_t>(gfx->height()) : 0;
-
-    lgfx_dev::unlock_lcd();
-
-    return h ? h : (target == 0 ? lgfx_dev::panel_height_const() : 0);
-}
 
 extern "C" esp_err_t lgfx_device_get_dims(uint16_t *out_w, uint16_t *out_h)
 {
@@ -280,26 +240,6 @@ extern "C" esp_err_t lgfx_device_calibrate_touch(uint16_t out_params[8])
 extern const lgfx::U8g2font ui_font_ja_16_min;
 #endif
 
-template <typename G>
-static auto set_text_size_xy_impl(G *gfx, uint8_t sx, uint8_t sy, int)
-    -> decltype(gfx->setTextSize(sx, sy), void())
-{
-    gfx->setTextSize(sx, sy);
-}
-
-template <typename G>
-static void set_text_size_xy_impl(G *gfx, uint8_t sx, uint8_t sy, long)
-{
-    (void) sy;
-    gfx->setTextSize(sx);
-}
-
-template <typename G>
-static void set_text_size_xy(G *gfx, uint8_t sx, uint8_t sy)
-{
-    set_text_size_xy_impl(gfx, sx, sy, 0);
-}
-
 static esp_err_t set_jp_font_scaled(uint8_t target, uint8_t text_size)
 {
 #if !defined(LGFX_PORT_ENABLE_JP_FONTS) || (LGFX_PORT_ENABLE_JP_FONTS != 1)
@@ -332,7 +272,7 @@ extern "C" esp_err_t lgfx_device_set_text_size_xy(uint8_t target, uint8_t sx, ui
         sy = sx;
     }
 
-    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { set_text_size_xy(gfx, sx, sy); });
+    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextSize(sx, sy); });
 }
 
 extern "C" esp_err_t lgfx_device_set_text_datum(uint8_t target, uint8_t datum)

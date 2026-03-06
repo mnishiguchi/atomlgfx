@@ -13,9 +13,6 @@
 #include "lgfx_port/proto_term.h"
 #include "lgfx_port/worker.h"
 
-// Request envelope validation (version/arity/flags/target/init-state) is
-// centralized in lgfx_port.c via ops.def metadata. Handlers only decode payload fields.
-
 static term make_touch_tuple_or_none(
     Context *ctx,
     lgfx_port_t *port,
@@ -91,7 +88,6 @@ term lgfx_handle_setTouchCalibrate(Context *ctx, lgfx_port_t *port, const lgfx_r
 {
     uint16_t params[8] = { 0 };
 
-    // {lgfx, ver, setTouchCalibrate, target, flags, P0, P1, P2, P3, P4, P5, P6, P7}
     for (int i = 0; i < 8; i++) {
         uint16_t v = 0;
         if (!lgfx_decode_u16_at(req, 5 + i, &v)) {

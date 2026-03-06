@@ -14,8 +14,7 @@ term lgfx_require_proto_ver(Context *ctx, lgfx_port_t *port, const lgfx_request_
     }
 
     if (req->proto_ver != (uint32_t) LGFX_PORT_PROTO_VER) {
-        lgfx_last_error_set(port, req->op, port->atoms.bad_proto, req->flags, req->target, 0);
-        return lgfx_reply_error(ctx, port, port->atoms.bad_proto);
+        return reply_error(ctx, port, req, port->atoms.bad_proto, 0);
     }
 
     return term_invalid_term();
@@ -30,8 +29,7 @@ term lgfx_require_target_domain(Context *ctx, lgfx_port_t *port, const lgfx_requ
     // Protocol target domain is always 0..254 (0 = LCD, 1..254 = sprite).
     // This check is intentionally independent of per-op target_policy.
     if (req->target > 254u) {
-        lgfx_last_error_set(port, req->op, port->atoms.bad_target, req->flags, req->target, 0);
-        return lgfx_reply_error(ctx, port, port->atoms.bad_target);
+        return reply_error(ctx, port, req, port->atoms.bad_target, 0);
     }
 
     return term_invalid_term();
@@ -44,13 +42,11 @@ term lgfx_require_arity_range(Context *ctx, lgfx_port_t *port, const lgfx_reques
     }
 
     if (min_arity > max_arity) {
-        lgfx_last_error_set(port, req->op, port->atoms.internal, req->flags, req->target, 0);
-        return lgfx_reply_error(ctx, port, port->atoms.internal);
+        return reply_error(ctx, port, req, port->atoms.internal, 0);
     }
 
     if (req->arity < min_arity || req->arity > max_arity) {
-        lgfx_last_error_set(port, req->op, port->atoms.bad_args, req->flags, req->target, 0);
-        return lgfx_reply_error(ctx, port, port->atoms.bad_args);
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
     return term_invalid_term();
@@ -63,8 +59,7 @@ term lgfx_require_flags_allowed_mask(Context *ctx, lgfx_port_t *port, const lgfx
     }
 
     if ((req->flags & ~allowed_mask) != 0u) {
-        lgfx_last_error_set(port, req->op, port->atoms.bad_flags, req->flags, req->target, 0);
-        return lgfx_reply_error(ctx, port, port->atoms.bad_flags);
+        return reply_error(ctx, port, req, port->atoms.bad_flags, 0);
     }
 
     return term_invalid_term();
@@ -73,9 +68,9 @@ term lgfx_require_flags_allowed_mask(Context *ctx, lgfx_port_t *port, const lgfx
 static term require_target_zero_reason(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, term reason_atom)
 {
     if (req->target != 0u) {
-        lgfx_last_error_set(port, req->op, reason_atom, req->flags, req->target, 0);
-        return lgfx_reply_error(ctx, port, reason_atom);
+        return reply_error(ctx, port, req, reason_atom, 0);
     }
+
     return term_invalid_term();
 }
 
@@ -85,8 +80,7 @@ static term require_target_sprite_only(Context *ctx, lgfx_port_t *port, const lg
         return term_invalid_term();
     }
 
-    lgfx_last_error_set(port, req->op, port->atoms.bad_target, req->flags, req->target, 0);
-    return lgfx_reply_error(ctx, port, port->atoms.bad_target);
+    return reply_error(ctx, port, req, port->atoms.bad_target, 0);
 }
 
 term lgfx_require_target_policy(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, uint8_t policy)
@@ -98,15 +92,18 @@ term lgfx_require_target_policy(Context *ctx, lgfx_port_t *port, const lgfx_requ
     switch ((lgfx_op_target_policy_t) policy) {
         case LGFX_OP_TARGET_ANY:
             return term_invalid_term();
+
         case LGFX_OP_TARGET_BAD_TARGET:
             return require_target_zero_reason(ctx, port, req, port->atoms.bad_target);
+
         case LGFX_OP_TARGET_UNSUPPORTED:
             return require_target_zero_reason(ctx, port, req, port->atoms.unsupported);
+
         case LGFX_OP_TARGET_SPRITE_ONLY:
             return require_target_sprite_only(ctx, port, req);
+
         default:
-            lgfx_last_error_set(port, req->op, port->atoms.internal, req->flags, req->target, 0);
-            return lgfx_reply_error(ctx, port, port->atoms.internal);
+            return reply_error(ctx, port, req, port->atoms.internal, 0);
     }
 }
 
@@ -124,11 +121,10 @@ term lgfx_require_state_policy(Context *ctx, lgfx_port_t *port, const lgfx_reque
             if (port->initialized) {
                 return term_invalid_term();
             }
-            lgfx_last_error_set(port, req->op, port->atoms.not_initialized, req->flags, req->target, 0);
-            return lgfx_reply_error(ctx, port, port->atoms.not_initialized);
+
+            return reply_error(ctx, port, req, port->atoms.not_initialized, 0);
 
         default:
-            lgfx_last_error_set(port, req->op, port->atoms.internal, req->flags, req->target, 0);
-            return lgfx_reply_error(ctx, port, port->atoms.internal);
+            return reply_error(ctx, port, req, port->atoms.internal, 0);
     }
 }

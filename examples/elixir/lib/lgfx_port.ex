@@ -40,8 +40,8 @@ defmodule LGFXPort do
   # Protocol capability bits
   @cap_sprite 1 <<< 0
   @cap_pushimage 1 <<< 1
-  @cap_last_error 1 <<< 4
-  @cap_touch 1 <<< 6
+  @cap_last_error 1 <<< 2
+  @cap_touch 1 <<< 3
 
   # Font preset wire IDs (setFontPreset)
   @font_preset_ascii 0

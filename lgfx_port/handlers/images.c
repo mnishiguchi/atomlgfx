@@ -12,10 +12,7 @@
 #include "lgfx_port/ops.h"
 #include "lgfx_port/worker.h"
 
-// Request envelope validation (version/arity/flags/target/init-state) is
-// centralized in lgfx_port.c via ops.def metadata. Handlers only decode payload fields.
-
-static term do_push_image(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_pushImage(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     // {lgfx, ver, pushImage, target, flags, X, Y, W, H, StridePixels, DataRgb565Binary}
 
@@ -47,18 +44,15 @@ static term do_push_image(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    // Effective stride rule: stride == 0 means tightly packed (stride = w).
     uint32_t stride_eff = (stride == 0) ? (uint32_t) w : (uint32_t) stride;
     if (stride_eff < (uint32_t) w) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    // RGB565 must be even byte length.
     if ((len & 1u) != 0u) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    // Required minimum size: StrideEff * H * 2 (allow extra trailing bytes).
     uint64_t needed64 = (uint64_t) stride_eff * (uint64_t) h * 2u;
     if (needed64 > (uint64_t) SIZE_MAX) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -80,14 +74,9 @@ static term do_push_image(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
             y,
             w,
             h,
-            stride, // keep original value (0 => tightly packed); C++ applies the stride==0 rule
+            stride,
             bytes,
             len));
 
-    return reply_ok(ctx, port, req, port->atoms.ok); // {ok, ok}
-}
-
-term lgfx_handle_pushImage(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_push_image(ctx, port, req);
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }

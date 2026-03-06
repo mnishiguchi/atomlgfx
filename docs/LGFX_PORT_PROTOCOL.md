@@ -1,13 +1,18 @@
 # LovyanGFX AtomVM Port Protocol (v1)
 
-This document defines the **term (tuple) protocol** between a host application (Elixir on AtomVM) and an AtomVM **port driver** that wraps **LovyanGFX**.
+## Summary
 
-- Host and driver communicate using **Erlang terms** (tuples, atoms, integers, binaries, lists).
-- Pixel/image payloads are carried as **binaries** for throughput.
+This document defines the tuple protocol between an AtomVM host application and the `lgfx_port` driver.
 
----
+Key points:
 
-## Goals
+- Host and driver communicate using Erlang terms.
+- Large payloads such as text and pixel data use binaries.
+- Operation names are LovyanGFX-flavored atoms.
+- Validation, dispatch, and capability advertisement are metadata-driven.
+- The implemented protocol surface is the one declared in `ops.def`.
+- The current sprite surface includes whole-sprite blit via `pushSprite` and rotate/zoom blit via `pushRotateZoom`.
+- General filesystem ops are out of scope for this protocol.
 
 - Elixir-friendly API via tuples and atoms (pattern matching on the caller side).
 - Minimal parsing complexity in C (arity/type/range checks, no custom frame parser).
@@ -18,11 +23,22 @@ This document defines the **term (tuple) protocol** between a host application (
   - Optional file-backed decode ops may exist later (JPEG/PNG) to keep hot paths in C.
 - Keep host-side protocol smoke tests aligned with the same metadata-driven contract.
 
----
+The protocol contract is defined by these sources, with different roles:
 
-## Source of truth and metadata model
+- `lgfx_port/include_internal/lgfx_port/ops.def`
+  - normative operation surface
+  - op atom
+  - handler
+  - arity range
+  - allowed flags mask
+  - target policy
+  - state policy
+  - `feature_cap_bit`
 
-The protocol contract is defined across C metadata headers and this document, with distinct roles:
+- internal protocol headers under `lgfx_port/include_internal/lgfx_port/`
+  - protocol constants
+  - capability bit names and values
+  - canonical error atoms and limits
 
 - **Normative op metadata:** `ports/include/lgfx_port/ops.def`
   - Defines the protocol-visible operation surface:
@@ -42,9 +58,7 @@ The protocol contract is defined across C metadata headers and this document, wi
   - Defines canonical protocol error atoms (`LGFX_ERR_*`)
   - Defines optional detail tuple reason tags (for example `batch_failed`)
 
-- **Human-readable contract:** this document (`docs/LGFX_PORT_PROTOCOL.md`)
-  - Mirrors the current protocol surface and explains semantics
-  - Includes generated tables synced from the metadata files above
+## Request / response model
 
 ### Important invariants
 
@@ -112,9 +126,10 @@ All requests use a single uniform tuple shape:
 {lgfx, ProtoVer, Op, Target, Flags, Arg1, Arg2, ...}
 ```
 
-Where:
+Field meanings:
 
-- `lgfx` is a tag atom.
+- `lgfx`
+  - tag atom
 
 - `ProtoVer` is an integer (must equal `LGFX_PORT_PROTO_VER`).
 
@@ -151,13 +166,76 @@ Responses are always one of:
 
 Conventions:
 
-- Void operations return `{ok, ok}`.
-- Getters return `{ok, Value}`.
-- Structured returns use tuples.
+- void operations return `{ok, ok}`
+- getters return `{ok, Value}`
+- structured returns use tuples
+- `Reason` is an atom or detail tuple
 
 `Reason` is an atom or a tuple (see **Error reasons**).
 
----
+Common failure mapping:
+
+- wrong tuple tag or protocol version => `bad_proto`
+- unknown op => `bad_op`
+- wrong arity or types => `bad_args`
+- value out of range => `bad_args`
+- invalid target => `bad_target`
+- invalid non-zero flags => `bad_flags`
+
+Policy details are driven by `ops.def`.
+
+## Binary payload lifetime
+
+Binaries are used for throughput, but the driver must treat raw pointers from term binaries as request-scoped.
+
+Rule:
+
+- The driver must not retain pointers into caller binaries past the request boundary unless it explicitly manages lifetime.
+
+Current implementation model:
+
+- deep-copy variable-length payloads before enqueueing worker jobs
+- free the copied payload after the device call completes
+
+That rule matters especially for `pushImage` and string-bearing operations.
+
+## Common data and encodings
+
+### Integer ranges
+
+Driver-enforced ranges:
+
+- `i16`: `-32768..32767`
+- `i32`: `-2147483648..2147483647`
+- `u16`: `0..65535`
+- `u32`: `0..4294967295`
+
+Common usage:
+
+- `x`, `y` => `i16`
+- `w`, `h` => `u16`
+
+### Strings
+
+- text arguments are UTF-8 binaries
+- no trailing NUL is required
+- embedded NUL may be rejected for ops that call C-string APIs
+
+### Colors
+
+Primitive and text colors:
+
+- `0x00RRGGBB` as packed RGB888 in `u32`
+- converted internally to RGB565
+
+`pushImage` pixel blobs:
+
+- RGB565 only
+- big-endian per pixel (`hi lo`)
+
+Sprite transparent keys:
+
+- optional transparent color uses RGB565 in `u16`
 
 ## Error reasons
 
@@ -187,7 +265,7 @@ Optional detail forms (examples):
 - `{error, {internal, EspErr}}`
 - `{error, {batch_failed, FailedIndex, FailedOp, Reason}}` (reserved for `batchVoid`)
 
-Client guidance:
+Client rule:
 
 - Always match `{error, reason}` and treat `reason` as opaque (it may be an atom or a tuple).
 
@@ -316,7 +394,7 @@ Flag names are conceptual host constants. The driver enforces the bitmask, not t
 
 ## Operation policy notation
 
-This notation is used in the operation matrix and mirrors the validation metadata in `ops.def`.
+This notation mirrors `ops.def`.
 
 ### Target rule
 
@@ -341,26 +419,22 @@ This notation is used in the operation matrix and mirrors the validation metadat
 ### Flags rule
 
 - `F0`
-  - Require `Flags == 0`, else `{error, bad_flags}`
+  - require `Flags == 0`
 
 - `Fmask(X)`
-  - Require `(Flags & ~X) == 0`, else `{error, bad_flags}`
-
-### Arity rule
-
-- Arity mismatch => `{error, bad_args}`
+  - require `(Flags & ~X) == 0`
 
 ### State rule
 
 - `any`
-  - Operation may be called before `init`
+  - callable before `init`
 
 - `requires_init`
   - Operation requires a successfully initialized display state, else `{error, not_initialized}`
 
----
+## Implemented operation matrix
 
-## Implemented operation matrix (current protocol surface)
+This table documents the entire implemented protocol surface.
 
 This table is the current documented contract for the protocol-visible operation metadata.
 
@@ -417,15 +491,15 @@ If this table and `ops.def` disagree, `ops.def` (and the built driver) wins.
 
 If an operation is not listed here, it is not implemented and must return `{error, bad_op}`.
 
----
+## Capabilities
 
-## Capabilities (`getCaps`)
+### `getCaps()`
 
-### Request
+Request:
 
 - `getCaps()` (LCD only; `Target` must be `0`)
 
-### Response
+Response:
 
 ```erlang
 {ok, {caps, ProtoVer, MaxBinaryBytes, MaxSprites, FeatureBits}}
@@ -434,21 +508,25 @@ If an operation is not listed here, it is not implemented and must return `{erro
 Fields:
 
 - `ProtoVer`
-  - `LGFX_PORT_PROTO_VER`
+  - protocol version returned by the driver
 
 - `MaxBinaryBytes`
   - Maximum accepted size (bytes) for any binary argument
 
 - `MaxSprites`
-  - Maximum concurrently allocated sprites
-  - If `CAP_SPRITE` is not set, `MaxSprites` must be `0`
+  - maximum concurrently allocated sprites
+  - must be `0` if sprite support is absent
 
 - `FeatureBits`
-  - Protocol feature bitset (`CAP_*` only)
+  - protocol feature bitset only
 
 ### Capability derivation rules (normative behavior)
 
-`FeatureBits` is derived from the operation metadata and active dispatch table:
+- start from `0`
+- walk operations declared in `ops.def`
+- if an op has a non-zero `feature_cap_bit` and is enabled in the built dispatch surface, OR that bit into `FeatureBits`
+- apply build/runtime gates
+- mask to known protocol bits before returning
 
 - Start with `0`
 
@@ -471,16 +549,11 @@ Fields:
 | --- | --- | --- | --- | --- |
 | `LGFX_CAP_SPRITE` | `CAP_SPRITE` | `0` | `0x0001` | `ops.def` feature_cap_bit |
 | `LGFX_CAP_PUSHIMAGE` | `CAP_PUSHIMAGE` | `1` | `0x0002` | `ops.def` feature_cap_bit |
-| `LGFX_CAP_JPG_FILE` | `CAP_JPG_FILE` | `2` | `0x0004` | reserved / not currently op-linked |
-| `LGFX_CAP_PNG_FILE` | `CAP_PNG_FILE` | `3` | `0x0008` | reserved / not currently op-linked |
-| `LGFX_CAP_LAST_ERROR` | `CAP_LAST_ERROR` | `4` | `0x0010` | `ops.def` feature_cap_bit |
-| `LGFX_CAP_BATCH_VOID` | `CAP_BATCH_VOID` | `5` | `0x0020` | reserved / not currently op-linked |
-| `LGFX_CAP_TOUCH` | `CAP_TOUCH` | `6` | `0x0040` | `ops.def` feature_cap_bit |
-| `LGFX_CAP_SAFE_YIELD_FORGIVING` | `CAP_SAFE_YIELD_FORGIVING` | `8` | `0x0100` | build option (`LGFX_PORT_SAFE_YIELD_CAP`) |
-| `LGFX_CAP_SAFE_YIELD_STRICT` | `CAP_SAFE_YIELD_STRICT` | `9` | `0x0200` | build option (`LGFX_PORT_SAFE_YIELD_CAP`) |
+| `LGFX_CAP_LAST_ERROR` | `CAP_LAST_ERROR` | `2` | `0x0004` | `ops.def` feature_cap_bit |
+| `LGFX_CAP_TOUCH` | `CAP_TOUCH` | `3` | `0x0008` | `ops.def` feature_cap_bit |
 <!-- END:generated_caps_table -->
 
-Semantics and usage notes:
+Current meaning:
 
 - `CAP_SPRITE        = 1 bsl 0`
   - Advertised when sprite operations are available (for example `createSprite`, `pushSprite`, `pushRotateZoom`)
@@ -529,11 +602,11 @@ Given the current `ops.def` surface:
 
 ### `getLastError()`
 
-### Request
+Request:
 
 - `getLastError()` (LCD only; `Target` must be `0`)
 
-### Response
+Response:
 
 ```erlang
 {ok, {last_error, LastOp, Reason, LastFlags, LastTarget, EspErr}}
@@ -542,10 +615,10 @@ Given the current `ops.def` surface:
 Fields:
 
 - `LastOp`
-  - Last failing operation atom, or `none`
+  - last failing op atom, or `none`
 
 - `Reason`
-  - Last error reason, or `none`
+  - last error reason, or `none`
 
 - `LastFlags`
   - Flags from the failing request (integer)
@@ -558,34 +631,91 @@ Fields:
 
 Behavior:
 
-- The driver snapshots the last-error state and returns it.
-- On success, the last-error state is cleared after the response payload is successfully encoded.
-- If last-error support is not compiled in, `getLastError` returns `{error, unsupported}` and `CAP_LAST_ERROR` must not be advertised.
+- the driver snapshots the last-error state and returns it
+- on success, the last-error state is cleared after the response payload is encoded
+- if last-error support is not built, `getLastError` returns `{error, unsupported}` and `CAP_LAST_ERROR` must not be advertised
 
----
+## Fonts
 
-## `pushImage` (RGB565)
+Two font-selection paths are exposed:
 
-### Request args
+- `setTextFont(FontIdU8)`
+  - direct LovyanGFX numeric font selection
+
+- `setFontPreset(PresetIdU8)`
+  - driver-defined stable preset selection
+
+### `setFontPreset`
+
+Preset IDs:
+
+- `0` = `ascii`
+  - select ASCII fallback
+  - normalize text size to `1`
+
+- `1` = `jp_small`
+  - Japanese-capable preset
+  - size `1`
+
+- `2` = `jp_medium`
+  - Japanese-capable preset
+  - size `2`
+
+- `3` = `jp_large`
+  - Japanese-capable preset
+  - size `3`
+
+Errors:
+
+- unknown preset => `{error, bad_args}`
+- preset compiled out => `{error, unsupported}`
+
+Notes:
+
+- JP preset availability is build-dependent
+- host wrappers may cache implied size, but device state is the source of truth
+
+## Flags
+
+`Flags` is op-specific unless documented otherwise.
+
+Current common case:
+
+### `setTextColor`
+
+- `F_TEXT_HAS_BG = 1 bsl 0`
+
+Semantics:
+
+- when present, the background color argument is enabled
+- the driver enforces the bitmask; host-side constant names are informational
+
+## Important op semantics
+
+### `pushImage`
+
+Request args:
 
 - `pushImage(Xi16, Yi16, Wu16, Hu16, StridePixelsU16, DataRgb565Binary)`
 
-### Rules
+Rules:
 
-- `StrideEff`:
-  - if `StridePixelsU16 == 0`, `StrideEff = W`
-  - else `StrideEff = StridePixelsU16`
+- if `StridePixelsU16 == 0`, effective stride is `W`
+- otherwise effective stride is `StridePixelsU16`
+- effective stride must be `>= W`
+- `byte_size(Data)` must be even
+- required minimum size is `StrideEff * H * 2`
+- trailing bytes may be present and are ignored
 
-- `StrideEff >= W`
+Ownership rule:
 
 - `byte_size(Data)` is even (2 bytes per pixel)
 
-- Required minimum:
-  - `byte_size(Data) >= StrideEff * H * 2`
+### `pushSprite`
 
-- Trailing bytes may be present and are ignored
+This is a whole-sprite blit.
 
-### Binary lifetime requirement
+Request-header `Target` is the source sprite handle:
 
 - If the underlying device path uses async DMA (or otherwise reads `Data` after the call returns), the driver must not pass a raw term-binary pointer directly unless it also guarantees completion before returning.
 - Acceptable implementations are:
@@ -609,7 +739,7 @@ This operation draws an existing sprite (named by request header `Target`) onto 
 - `pushSprite(DstTargetU8, DstXi16, DstYi16)`
 - `pushSprite(DstTargetU8, DstXi16, DstYi16, TransparentRgb565U16)` (optional transparent-key blit)
 
-### Rules
+Rules:
 
 - `DstTargetU8` is the destination target:
   - `0` => LCD
@@ -706,7 +836,7 @@ This operation draws an existing sprite (named by request header `Target`) onto 
 - `pushRotateZoom(DstTargetU8, DstXi16, DstYi16, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32)`
 - `pushRotateZoom(DstTargetU8, DstXi16, DstYi16, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32, TransparentRgb565U16)` (optional transparent-key blit)
 
-### Rules
+Rules:
 
 - `DstTargetU8` is the destination target:
   - `0` => LCD
@@ -724,7 +854,8 @@ This operation draws an existing sprite (named by request header `Target`) onto 
   - `512` = `0.5x`
   - `2048` = `2.0x`
 
-- `ZoomXX1024I32 > 0` and `ZoomYX1024I32 > 0`, else `{error, bad_args}`
+- set pivot first when stable rotation behavior matters
+- wrappers should expose helpers for centi-degree and x1024 conversions
 
 - The driver converts fixed-point values to the LovyanGFX/native representation using:
   - `angle_deg = AngleCentiDegI32 / 100.0`
@@ -741,22 +872,27 @@ This operation draws an existing sprite (named by request header `Target`) onto 
 
 - Edge clipping is allowed (off-screen destination pixels may be clipped by the device/LovyanGFX path)
 
-### Response
+- capability advertisement
+  - `pushImage` support should match `CAP_PUSHIMAGE`
+  - `getLastError` support should match `CAP_LAST_ERROR`
 
-- Success: `{ok, ok}`
-- Failure: `{error, Reason}`
+- sprite path
+  - valid `pushSprite` succeeds
+  - missing destination sprite fails
 
-### Host guidance
+- rotate/zoom path
+  - valid fixed-point call succeeds
+  - zero zoom fails with `bad_args`
 
 - Set sprite pivot via `setPivot` before calling `pushRotateZoom` if you need stable rotation behavior (for example center rotation used by demo-style motion)
 - Host wrappers should expose helpers for centi-degree / x1024 fixed-point conversion
 - If you need explicit destination selection, use a destination-aware wrapper (for example `LGFXPort.push_rotate_zoom_to/8` and friends).
 
----
+These checks catch drift between metadata, implementation, and host wrappers.
 
-## Planned / reserved features (not implemented yet)
+## Maintenance checklist
 
-The following sections describe intended protocol shapes. They are not implemented unless the corresponding capability bit is set in `FeatureBits`.
+When adding or changing an operation:
 
 ### `batchVoid()` (`CAP_BATCH_VOID`)
 
@@ -891,7 +1027,8 @@ When you add or change an operation:
 - Regenerate/sync protocol doc tables:
   - `elixir scripts/sync_lgfx_protocol_doc.exs`
 
-- Verify `getCaps` advertisement matches the new `feature_cap_bit`
+- verify `getCaps` matches the new `feature_cap_bit`
+- update this document only for semantics that are not obvious from the generated tables
 
 - If the change introduces a new public capability or behavior, update:
   - **Capabilities**
@@ -907,11 +1044,12 @@ When you add or change an operation:
 This repository is pre-release. Until the first tagged release, the protocol may
 change in breaking ways without bumping `LGFX_PORT_PROTO_VER`.
 
-Host and driver must be updated together.
+Until the first tagged release:
 
-After the first release, breaking changes must bump `LGFX_PORT_PROTO_VER`.
+- breaking protocol changes may happen without bumping `LGFX_PORT_PROTO_VER`
+- host and driver should be updated together
 
-### Allowed (compatible) changes
+After the first release:
 
 - Add new operations (`Op` atoms)
 - Add new capability bits
@@ -919,14 +1057,14 @@ After the first release, breaking changes must bump `LGFX_PORT_PROTO_VER`.
 - Tighten validation if it only rejects requests already invalid per this document
 - Add optional error detail tuples while preserving `{error, Reason}` outer shape
 
-### Not allowed (breaking) changes
+### Compatible changes
 
 - Change the request tuple shape `{lgfx, ProtoVer, Op, Target, Flags, ...}` for existing operations
 - Change argument order/meaning for existing operations
 - Reinterpret existing flags
 - Change RGB565 pixel byte order for `pushImage`
 
-Note:
+### Breaking changes
 
 - `pushRotateZoom` payload includes `DstTarget` (arity `11/12`) in current builds.
   Earlier builds used arity `10/11` and implied `DstTarget = 0` (LCD).

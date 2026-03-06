@@ -9,7 +9,6 @@
 #define LGFX_DEVICE_INTERNAL_HPP
 
 #include <stdint.h>
-#include <utility>
 
 #include <LovyanGFX.hpp>
 
@@ -69,10 +68,6 @@ lgfx::LGFXBase *resolve_target_locked(uint8_t target);
 
 // Resolve sprite handle only (1..MAX_HANDLE). Returns nullptr if invalid/missing.
 lgfx::LGFX_Sprite *resolve_sprite_locked(uint8_t handle);
-
-// Allocates a free sprite handle (1..MAX_HANDLE) while lock is held.
-// Returns 0 if no free handle is available.
-uint8_t alloc_sprite_handle_locked();
 
 // Sprite slot mutation helpers (for sprite create/delete split into sprites.cpp).
 void set_sprite_locked(uint8_t handle, lgfx::LGFX_Sprite *spr);

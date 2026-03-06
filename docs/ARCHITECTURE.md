@@ -1,6 +1,6 @@
 # Architecture
 
-This repository is an **ESP-IDF component** that exposes **LovyanGFX** to **AtomVM Elixir** through an **Erlang term (tuple) port protocol**.
+## Summary
 
 - Host ↔ driver messages are Erlang terms (tuples / atoms / integers / binaries).
 - Large payloads are carried as binaries for throughput.
@@ -8,9 +8,46 @@ This repository is an **ESP-IDF component** that exposes **LovyanGFX** to **Atom
 - Protocol-visible behavior is driven from metadata (`include/lgfx_port/ops.def`) to reduce drift.
 - Hardware wiring and LovyanGFX tuning are configured at build time via a generated config header.
 
-## Scope
+The protocol contract itself is documented in `docs/LGFX_PORT_PROTOCOL.md`.
 
-This repository focuses on the **port driver** and its protocol boundary.
+## Big picture
+
+```text
+Elixir / AtomVM
+    |
+    | {lgfx, ProtoVer, Op, Target, Flags, ...}
+    v
++------------------------------+
+| port thread                  |
+| - mailbox drain              |
+| - term decode                |
+| - metadata validation        |
+| - handler dispatch           |
+| - reply encode               |
++---------------+--------------+
+                |
+                | plain C job
+                v
++------------------------------+
+| worker task                  |
+| - execute lgfx_device_*      |
+| - free copied payloads       |
+| - notify waiting caller      |
++---------------+--------------+
+                |
+                v
++------------------------------+
+| src/ device adapter          |
+| - pinned LovyanGFX surface   |
++---------------+--------------+
+                |
+                v
+           LovyanGFX
+```
+
+## Repository map
+
+This repository focuses on the port driver and its protocol boundary.
 
 - `include/lgfx_port/`
   - Public headers for the ESP-IDF component (what other components include)
@@ -23,9 +60,9 @@ This repository focuses on the **port driver** and its protocol boundary.
 - `docs/`
   - Protocol and architecture documentation
 - `examples/elixir/`
-  - Example Elixir client for exercising the driver
+  - example Elixir client
 
-## Layout
+Minimal layout view:
 
 ```text
 .
@@ -71,7 +108,7 @@ consistent across the protocol layer (`lgfx_port/*`) and the device layer (`src/
 - Template (committed)
   - `include/lgfx_port/lgfx_port_config.h.in`
 
-- Generated output (build directory; not committed)
+- Generated output:
   - `<build>/esp-idf/atomlgfx/generated/lgfx_port/lgfx_port_config.h`
 
 How it works:
@@ -81,7 +118,7 @@ How it works:
 - The component adds the generated include directory as a **PUBLIC** include path so consumers that include
   `lgfx_port/lgfx_port.h` also see the config macros.
 
-Key properties:
+Important rule:
 
 - Deterministic capability gating
   - `CAP_TOUCH` advertisement is computed in CMake (`LGFX_PORT_SUPPORTS_TOUCH`) so protocol behavior does not depend on
@@ -143,11 +180,11 @@ This split keeps protocol logic deterministic while isolating hardware behavior 
 
 ## Metadata-driven protocol surface
 
-The protocol-visible operation surface is defined by a single x-macro list:
+The protocol-visible operation surface is defined by:
 
 - `include/lgfx_port/ops.def`
 
-That metadata is used to keep these in sync:
+That metadata drives:
 
 - Operation atoms (registered into the port’s atom table)
 - Dispatch table mapping Op → handler function
@@ -160,11 +197,51 @@ When `ops.def` changes, the expectation is that:
 - the implementation compiles with updated metadata, and
 - the protocol documentation is re-synchronized via the existing script.
 
-## Port lifecycle model
+## Execution model
+
+There are two C-side execution paths.
+
+### Port thread path
+
+Files:
+
+- `lgfx_port/lgfx_port.c`
+- `lgfx_port/handlers/*.c`
+- `lgfx_port/proto_term.c`
+
+Responsibilities:
+
+- run as the AtomVM native handler
+- drain mailbox messages
+- decode request tuples
+- apply metadata-driven validation
+- dispatch to handlers
+- encode `{ok, Result}` or `{error, Reason}`
+- own protocol-facing state such as `last_error`
+
+### Worker / device path
+
+Files:
+
+- `lgfx_port/lgfx_worker_core.c`
+- `lgfx_port/lgfx_worker_device.c`
+- `lgfx_port/lgfx_worker_mailbox.c`
+- `src/`
+
+Responsibilities:
+
+- execute device work through a worker task and queue
+- bridge handlers to plain C job payloads
+- call the device adapter in `src/`
+- keep protocol code separate from hardware code
+
+This split keeps protocol behavior deterministic while isolating device execution.
+
+## Port lifecycle
 
 ### Driver-global lifecycle
 
-`REGISTER_PORT_DRIVER(...)` registers driver-global hooks:
+`REGISTER_PORT_DRIVER(...)` registers driver-global hooks such as:
 
 - `init`
 - `destroy`
@@ -172,22 +249,26 @@ When `ops.def` changes, the expectation is that:
 
 Important distinction:
 
-- `init` / `destroy` are driver-global lifecycle hooks
-- they are not called once per port instance
+- `init` and `destroy` are driver-global hooks
+- they are not per-port-instance teardown hooks
 
 ### Per-context lifecycle
 
-Per-port-instance lifecycle is managed in `lgfx_port/lgfx_port.c`:
+Per-port-instance state lives in `ctx->platform_data` and is managed in `lgfx_port/lgfx_port.c`.
 
-- Port creation allocates:
-  - an AtomVM `Context`
-  - a per-port `lgfx_port_t` stored in `ctx->platform_data`
-  - worker task/queue state via `lgfx_worker_start(...)`
+Creation:
 
-- Teardown happens when AtomVM marks the context as `Killed`:
-  - per-context teardown runs from the native handler
-  - device close is attempted before stopping the worker
-  - worker is stopped and per-port state is freed
+- allocate AtomVM `Context`
+- allocate per-port `lgfx_port_t`
+- start worker state via `lgfx_worker_start(...)`
+
+Teardown:
+
+- happens when AtomVM marks the context as `Killed`
+- per-context teardown runs from the native handler
+- device close is attempted before worker stop
+- worker state is stopped and freed
+- per-port state is then released
 
 This avoids freeing per-port state from the driver-global `destroy` callback.
 
@@ -195,11 +276,11 @@ This avoids freeing per-port state from the driver-global `destroy` callback.
 
 Some operations carry binary payloads (pixel data, UTF-8 strings).
 
-Architecture-level rule:
+Architecture rule:
 
-- The driver must not retain pointers into Erlang binaries beyond the request handling boundary unless lifetime is explicitly managed.
+- The driver must not retain pointers into Erlang binaries past the request-handling boundary unless lifetime is explicitly managed.
 
-Current implementation approach:
+Current model:
 
 - Payloads are deep-copied into job-owned memory before enqueueing work to the worker.
 - The worker frees the copied payload after the device call completes (and after any required completion barrier).
@@ -208,22 +289,22 @@ Current implementation approach:
 
 Generated tables in `docs/LGFX_PORT_PROTOCOL.md` are synchronized from source metadata.
 
-- Script
+- script:
   - `scripts/sync_lgfx_protocol_doc.exs`
 
-- Typical usage
+- typical usage:
   - `elixir scripts/sync_lgfx_protocol_doc.exs`
   - `elixir scripts/sync_lgfx_protocol_doc.exs --check`
 
-## Where to find things
+## Where to look
 
-- Protocol specification
+- protocol spec:
   - `docs/LGFX_PORT_PROTOCOL.md`
 
 - Protocol metadata source of truth
   - `include/lgfx_port/ops.def`
 
-- Port entrypoint, lifecycle, dispatch, metadata validation
+- port entrypoint, lifecycle, dispatch:
   - `lgfx_port/lgfx_port.c`
 
 - Worker task/queue and device call bridge
@@ -232,8 +313,17 @@ Generated tables in `docs/LGFX_PORT_PROTOCOL.md` are synchronized from source me
 - Request decode + reply tuple constructors
   - `lgfx_port/proto_term.c`
 
-- Handlers grouped by feature
+- handlers:
   - `lgfx_port/handlers/*.c`
 
-- Device-facing LovyanGFX adapter layer
+- worker core:
+  - `lgfx_port/lgfx_worker_core.c`
+
+- worker wrappers:
+  - `lgfx_port/lgfx_worker_device.c`
+
+- mailbox drain bridge:
+  - `lgfx_port/lgfx_worker_mailbox.c`
+
+- device-facing adapter:
   - `src/`

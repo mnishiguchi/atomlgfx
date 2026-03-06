@@ -13,9 +13,6 @@
 #include "lgfx_port/proto_term.h"
 #include "lgfx_port/worker.h"
 
-// Request envelope validation (version/arity/flags/target/init-state) is
-// centralized in lgfx_port.c via ops.def metadata. Handlers only decode payload fields.
-//
 // Destination-aware sprite ops handled here:
 //
 // - pushSprite request shape:
@@ -56,7 +53,7 @@ typedef struct
 
 typedef struct
 {
-    uint8_t dst_target; // 0 => LCD, 1..254 => sprite
+    uint8_t dst_target;
     int16_t x;
     int16_t y;
     bool has_transparent;
@@ -65,7 +62,7 @@ typedef struct
 
 typedef struct
 {
-    uint8_t dst_target; // 0 => LCD, 1..254 => sprite
+    uint8_t dst_target;
     int16_t x;
     int16_t y;
     int32_t angle_x100;
@@ -77,12 +74,6 @@ typedef struct
 
 static bool decode_create_sprite_args(const lgfx_request_t *req, lgfx_create_sprite_args_t *out)
 {
-    // createSprite supports dual arity:
-    // - {lgfx, ver, createSprite, Target, Flags, W, H}
-    // - {lgfx, ver, createSprite, Target, Flags, W, H, Depth}
-    //
-    // Shared metadata already enforces arity range [7..8], but we still decode safely.
-
     uint32_t w32 = 0;
     uint32_t h32 = 0;
     uint32_t depth32 = (uint32_t) LGFX_PORT_SPRITE_DEFAULT_DEPTH;
@@ -99,7 +90,6 @@ static bool decode_create_sprite_args(const lgfx_request_t *req, lgfx_create_spr
             return false;
         }
     } else if (req->arity != 7) {
-        // Defensive only; shared validator should catch this earlier.
         return false;
     }
 
@@ -111,23 +101,12 @@ static bool decode_create_sprite_args(const lgfx_request_t *req, lgfx_create_spr
 
 static bool decode_set_pivot_args(const lgfx_request_t *req, lgfx_set_pivot_args_t *out)
 {
-    // setPivot:
-    // - {lgfx, ver, setPivot, Target, Flags, Px, Py}
-    //
-    // Shared metadata enforces exact arity 7.
-
     return lgfx_decode_i16_at(req, 5, &out->px)
         && lgfx_decode_i16_at(req, 6, &out->py);
 }
 
 static bool decode_push_sprite_args(const lgfx_request_t *req, lgfx_push_sprite_args_t *out)
 {
-    // pushSprite supports dual arity (destination-aware):
-    // - {lgfx, ver, pushSprite, SrcSprite, Flags, DstTarget, X, Y}
-    // - {lgfx, ver, pushSprite, SrcSprite, Flags, DstTarget, X, Y, Transparent565}
-    //
-    // Shared metadata enforces arity range [8..9].
-
     uint32_t dst_target32 = 0;
     uint32_t transparent32 = 0;
 
@@ -154,7 +133,6 @@ static bool decode_push_sprite_args(const lgfx_request_t *req, lgfx_push_sprite_
         out->has_transparent = true;
         out->transparent565 = (uint16_t) transparent32;
     } else if (req->arity != 8) {
-        // Defensive only; shared validator should catch this earlier.
         return false;
     }
 
@@ -163,12 +141,6 @@ static bool decode_push_sprite_args(const lgfx_request_t *req, lgfx_push_sprite_
 
 static bool decode_push_rotate_zoom_args(const lgfx_request_t *req, lgfx_push_rotate_zoom_args_t *out)
 {
-    // pushRotateZoom supports dual arity:
-    // - {lgfx, ver, pushRotateZoom, SrcSprite, Flags, DstTarget, X, Y, AngleX100I32, ZoomXX1024I32, ZoomYX1024I32}
-    // - {lgfx, ver, pushRotateZoom, SrcSprite, Flags, DstTarget, X, Y, AngleX100I32, ZoomXX1024I32, ZoomYX1024I32, Transparent565}
-    //
-    // Shared metadata enforces arity range [11..12].
-
     uint32_t dst_target32 = 0;
     uint32_t transparent32 = 0;
 
@@ -193,7 +165,6 @@ static bool decode_push_rotate_zoom_args(const lgfx_request_t *req, lgfx_push_ro
         return false;
     }
 
-    // x1024 zoom values must be positive (0 and negatives are invalid).
     if (out->zoom_x_x1024 <= 0) {
         return false;
     }
@@ -212,14 +183,13 @@ static bool decode_push_rotate_zoom_args(const lgfx_request_t *req, lgfx_push_ro
         out->has_transparent = true;
         out->transparent565 = (uint16_t) transparent32;
     } else if (req->arity != 11) {
-        // Defensive only; shared validator should catch this earlier.
         return false;
     }
 
     return true;
 }
 
-static term do_create_sprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_createSprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     lgfx_create_sprite_args_t args = { 0 };
 
@@ -241,13 +211,13 @@ static term do_create_sprite(Context *ctx, lgfx_port_t *port, const lgfx_request
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-static term do_delete_sprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_deleteSprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_delete_sprite(port, (uint8_t) req->target));
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-static term do_set_pivot(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_setPivot(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     lgfx_set_pivot_args_t args = { 0 };
 
@@ -268,7 +238,7 @@ static term do_set_pivot(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-static term do_push_sprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_pushSprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     lgfx_push_sprite_args_t args = { 0 };
 
@@ -276,11 +246,6 @@ static term do_push_sprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    // Protocol semantics:
-    // - SrcSprite (request header Target) must exist
-    // - DstTarget must exist when DstTarget != 0
-    //
-    // Use get_target_dims as the cheap existence probe.
     uint16_t src_w = 0;
     uint16_t src_h = 0;
     esp_err_t err = lgfx_worker_device_get_target_dims(port, (uint8_t) req->target, &src_w, &src_h);
@@ -305,8 +270,8 @@ static term do_push_sprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t
         req,
         lgfx_worker_device_push_sprite(
             port,
-            (uint8_t) req->target, // SrcSprite
-            args.dst_target, // DstTarget (0 => LCD, 1..254 => sprite)
+            (uint8_t) req->target,
+            args.dst_target,
             args.x,
             args.y,
             args.has_transparent,
@@ -315,7 +280,7 @@ static term do_push_sprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-static term do_push_rotate_zoom(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_pushRotateZoom(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     lgfx_push_rotate_zoom_args_t args = { 0 };
 
@@ -323,10 +288,6 @@ static term do_push_rotate_zoom(Context *ctx, lgfx_port_t *port, const lgfx_requ
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    // Worker wrapper currently accepts float degrees / float zoom.
-    // Convert from protocol wire format:
-    // - angle: centi-degrees i32 -> float degrees
-    // - zoom : x1024 scale i32   -> float scale
     const float angle_deg = ((float) args.angle_x100) / LGFX_ANGLE_X100_SCALE;
     const float zoom_x = ((float) args.zoom_x_x1024) / LGFX_ZOOM_X1024_SCALE;
     const float zoom_y = ((float) args.zoom_y_x1024) / LGFX_ZOOM_X1024_SCALE;
@@ -337,8 +298,8 @@ static term do_push_rotate_zoom(Context *ctx, lgfx_port_t *port, const lgfx_requ
         req,
         lgfx_worker_device_push_rotate_zoom(
             port,
-            (uint8_t) req->target, // SrcSprite
-            args.dst_target, // DstTarget (0 => LCD, 1..254 => sprite)
+            (uint8_t) req->target,
+            args.dst_target,
             args.x,
             args.y,
             angle_deg,
@@ -348,29 +309,4 @@ static term do_push_rotate_zoom(Context *ctx, lgfx_port_t *port, const lgfx_requ
             args.transparent565));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
-}
-
-term lgfx_handle_createSprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_create_sprite(ctx, port, req);
-}
-
-term lgfx_handle_deleteSprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_delete_sprite(ctx, port, req);
-}
-
-term lgfx_handle_setPivot(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_set_pivot(ctx, port, req);
-}
-
-term lgfx_handle_pushSprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_push_sprite(ctx, port, req);
-}
-
-term lgfx_handle_pushRotateZoom(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_push_rotate_zoom(ctx, port, req);
 }

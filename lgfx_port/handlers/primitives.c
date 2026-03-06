@@ -11,10 +11,27 @@
 #include "lgfx_port/proto_term.h"
 #include "lgfx_port/worker.h"
 
-// Request envelope validation (version/arity/flags/target/init-state) is
-// centralized in lgfx_port.c via ops.def metadata. Handlers only decode payload fields.
+typedef struct
+{
+    int16_t x0;
+    int16_t y0;
+    int16_t x1;
+    int16_t y1;
+    int16_t x2;
+    int16_t y2;
+} lgfx_triangle_i16_t;
 
-static term do_fill_screen(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+static bool decode_triangle_i16(const lgfx_request_t *req, lgfx_triangle_i16_t *out)
+{
+    return lgfx_decode_i16_at(req, 5, &out->x0)
+        && lgfx_decode_i16_at(req, 6, &out->y0)
+        && lgfx_decode_i16_at(req, 7, &out->x1)
+        && lgfx_decode_i16_at(req, 8, &out->y1)
+        && lgfx_decode_i16_at(req, 9, &out->x2)
+        && lgfx_decode_i16_at(req, 10, &out->y2);
+}
+
+term lgfx_handle_fillScreen(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     uint16_t color565 = 0;
     if (!lgfx_decode_color565_at(req, 5, &color565)) {
@@ -30,7 +47,7 @@ static term do_fill_screen(Context *ctx, lgfx_port_t *port, const lgfx_request_t
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-static term do_clear(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_clear(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     uint16_t color565 = 0;
     if (!lgfx_decode_color565_at(req, 5, &color565)) {
@@ -46,7 +63,7 @@ static term do_clear(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-static term do_draw_pixel(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_drawPixel(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     int16_t x = 0;
     int16_t y = 0;
@@ -76,7 +93,7 @@ static term do_draw_pixel(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-static term do_draw_fast_vline(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_drawFastVLine(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     int16_t x = 0;
     int16_t y = 0;
@@ -111,7 +128,7 @@ static term do_draw_fast_vline(Context *ctx, lgfx_port_t *port, const lgfx_reque
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-static term do_draw_fast_hline(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_drawFastHLine(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     int16_t x = 0;
     int16_t y = 0;
@@ -146,7 +163,7 @@ static term do_draw_fast_hline(Context *ctx, lgfx_port_t *port, const lgfx_reque
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-static term do_draw_line(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_drawLine(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     int16_t x0 = 0;
     int16_t y0 = 0;
@@ -186,7 +203,7 @@ static term do_draw_line(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-static term do_draw_rect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_drawRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     int16_t x = 0;
     int16_t y = 0;
@@ -226,7 +243,7 @@ static term do_draw_rect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-static term do_fill_rect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_fillRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     int16_t x = 0;
     int16_t y = 0;
@@ -266,7 +283,7 @@ static term do_fill_rect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-static term do_draw_circle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_drawCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     int16_t x = 0;
     int16_t y = 0;
@@ -301,7 +318,7 @@ static term do_draw_circle(Context *ctx, lgfx_port_t *port, const lgfx_request_t
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-static term do_fill_circle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_fillCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     int16_t x = 0;
     int16_t y = 0;
@@ -336,27 +353,7 @@ static term do_fill_circle(Context *ctx, lgfx_port_t *port, const lgfx_request_t
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-typedef struct
-{
-    int16_t x0;
-    int16_t y0;
-    int16_t x1;
-    int16_t y1;
-    int16_t x2;
-    int16_t y2;
-} lgfx_triangle_i16_t;
-
-static bool decode_triangle_i16(const lgfx_request_t *req, lgfx_triangle_i16_t *out)
-{
-    return lgfx_decode_i16_at(req, 5, &out->x0)
-        && lgfx_decode_i16_at(req, 6, &out->y0)
-        && lgfx_decode_i16_at(req, 7, &out->x1)
-        && lgfx_decode_i16_at(req, 8, &out->y1)
-        && lgfx_decode_i16_at(req, 9, &out->x2)
-        && lgfx_decode_i16_at(req, 10, &out->y2);
-}
-
-static term do_draw_triangle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_drawTriangle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     lgfx_triangle_i16_t tri = { 0 };
     uint16_t color565 = 0;
@@ -384,7 +381,7 @@ static term do_draw_triangle(Context *ctx, lgfx_port_t *port, const lgfx_request
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-static term do_fill_triangle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_fillTriangle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     lgfx_triangle_i16_t tri = { 0 };
     uint16_t color565 = 0;
@@ -410,64 +407,4 @@ static term do_fill_triangle(Context *ctx, lgfx_port_t *port, const lgfx_request
             color565));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
-}
-
-term lgfx_handle_fillScreen(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_fill_screen(ctx, port, req);
-}
-
-term lgfx_handle_clear(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_clear(ctx, port, req);
-}
-
-term lgfx_handle_drawPixel(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_draw_pixel(ctx, port, req);
-}
-
-term lgfx_handle_drawFastVLine(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_draw_fast_vline(ctx, port, req);
-}
-
-term lgfx_handle_drawFastHLine(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_draw_fast_hline(ctx, port, req);
-}
-
-term lgfx_handle_drawLine(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_draw_line(ctx, port, req);
-}
-
-term lgfx_handle_drawRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_draw_rect(ctx, port, req);
-}
-
-term lgfx_handle_fillRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_fill_rect(ctx, port, req);
-}
-
-term lgfx_handle_drawCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_draw_circle(ctx, port, req);
-}
-
-term lgfx_handle_fillCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_fill_circle(ctx, port, req);
-}
-
-term lgfx_handle_drawTriangle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_draw_triangle(ctx, port, req);
-}
-
-term lgfx_handle_fillTriangle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_fill_triangle(ctx, port, req);
 }

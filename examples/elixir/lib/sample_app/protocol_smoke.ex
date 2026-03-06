@@ -7,11 +7,13 @@ defmodule SampleApp.ProtocolSmoke do
   @t_short 5_000
   @proto_ver 1
 
-  # Protocol FeatureBits (LGFX_PORT_PROTOCOL.md)
+  # Protocol FeatureBits (must stay aligned with lgfx_port/include_internal/lgfx_port/protocol.h)
   @cap_sprite 1 <<< 0
   @cap_pushimage 1 <<< 1
-  @cap_last_error 1 <<< 4
-  @known_caps_mask @cap_sprite ||| @cap_pushimage ||| @cap_last_error
+  @cap_last_error 1 <<< 2
+  @cap_touch 1 <<< 3
+
+  @known_caps_mask @cap_sprite ||| @cap_pushimage ||| @cap_last_error ||| @cap_touch
 
   def run(port), do: run(port, &Port.raw_call/6)
 
@@ -39,8 +41,17 @@ defmodule SampleApp.ProtocolSmoke do
       not power_of_two?(@cap_last_error) ->
         {:error, {:bad_cap_constant_not_power_of_two, :cap_last_error, @cap_last_error}}
 
+      not power_of_two?(@cap_touch) ->
+        {:error, {:bad_cap_constant_not_power_of_two, :cap_touch, @cap_touch}}
+
       @cap_pushimage == @cap_last_error ->
         {:error, {:duplicate_cap_constants, @cap_pushimage}}
+
+      @cap_pushimage == @cap_touch ->
+        {:error, {:duplicate_cap_constants, @cap_pushimage}}
+
+      @cap_last_error == @cap_touch ->
+        {:error, {:duplicate_cap_constants, @cap_last_error}}
 
       true ->
         :ok

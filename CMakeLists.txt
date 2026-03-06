@@ -1,22 +1,18 @@
 # CMakeLists.txt
-#
+
 # -----------------------------------------------------------------------------
 # Paths
 # -----------------------------------------------------------------------------
 set(LGFX_ROOT     "${CMAKE_CURRENT_LIST_DIR}/third_party/LovyanGFX")
 set(LGFX_SRC_ROOT "${LGFX_ROOT}/src")
 
-# Config template location (moved out of public include/)
 set(LGFX_PORT_CONFIG_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/lgfx_port/cmake/lgfx_port_config.h.in")
 
-# Optional build knob (helps when flash is tight)
 option(LGFX_PORT_ENABLE_JP_FONTS "Enable Japanese font data for setFontPreset jp_*" ON)
-
-# Optional build knob: XPT2046 touch support (compile in Touch_XPT2046 only)
 option(LGFX_PORT_ENABLE_TOUCH "Enable XPT2046 touch driver (Touch_XPT2046)" ON)
 
 # -----------------------------------------------------------------------------
-# Extra LovyanGFX config knobs
+# LovyanGFX config knobs
 # -----------------------------------------------------------------------------
 
 # Panel geometry
@@ -47,21 +43,18 @@ option(LGFX_PORT_LCD_RGB_ORDER  "LCD rgb_order swap" OFF)
 option(LGFX_PORT_LCD_DLEN_16BIT "LCD dlen_16bit" OFF)
 option(LGFX_PORT_LCD_BUS_SHARED "LCD bus_shared" ON)
 
-# Touch bus sharing (Touch_XPT2046 cfg.bus_shared)
 option(LGFX_PORT_TOUCH_BUS_SHARED "Touch bus_shared" ON)
 
 # -----------------------------------------------------------------------------
 # Wiring defaults
 # -----------------------------------------------------------------------------
 #
-# Keep defaults aligned with src/lgfx_device_state.cpp:
+# Keep these aligned with src/lgfx_device_state.cpp:
 # - SPI:  SCLK=7 MOSI=9 MISO=8
 # - LCD:  CS=43 DC=3 RST=2
-# - Touch (XPT2046): CS=44 IRQ=-1 (not wired)
+# - Touch: CS=44 IRQ=-1
 #
-# If you set TOUCH CS to -1:
-# - touch code may still compile (LGFX_PORT_ENABLE_TOUCH=ON)
-# - touch will not be advertised via getCaps (LGFX_PORT_SUPPORTS_TOUCH_INT=0)
+# If TOUCH CS is -1, touch may still compile but will not be advertised.
 #
 set(LGFX_PORT_SPI_SCLK_GPIO     "7"         CACHE STRING "SPI SCLK GPIO")
 set(LGFX_PORT_SPI_MOSI_GPIO     "9"         CACHE STRING "SPI MOSI GPIO")
@@ -75,7 +68,6 @@ set(LGFX_PORT_LCD_RST_GPIO      "2"         CACHE STRING "LCD RST GPIO")
 set(LGFX_PORT_TOUCH_CS_GPIO     "44"        CACHE STRING "XPT2046 CS GPIO; -1 disables attach")
 set(LGFX_PORT_TOUCH_IRQ_GPIO    "-1"        CACHE STRING "XPT2046 IRQ GPIO; -1 disables IRQ")
 
-# Defaults should track LCD settings (keeps touch + display aligned unless you override explicitly).
 set(LGFX_PORT_TOUCH_SPI_HOST
     "${LGFX_PORT_LCD_SPI_HOST}"
     CACHE STRING "SPI host token for touch (defaults to LCD host)")
@@ -85,9 +77,7 @@ set(LGFX_PORT_TOUCH_OFFSET_ROTATION
     "${LGFX_PORT_LCD_OFFSET_ROTATION}"
     CACHE STRING "Touch offset_rotation (0..7); defaults to LCD offset_rotation")
 
-# Custom minimal JP font subset (generated .cpp)
-# - Keep this in-repo to avoid pulling the huge IPA font blob.
-# - You can rename/move the file as you like; update this path accordingly.
+# Custom minimal JP font subset
 set(LGFX_PORT_JP_FONT_CPP "${CMAKE_CURRENT_LIST_DIR}/src/fonts/generated/ui_font_ja_16_min.cpp"
     CACHE STRING "Path to custom JP font subset .cpp (compiled when LGFX_PORT_ENABLE_JP_FONTS=ON)")
 
@@ -99,7 +89,7 @@ idf_component_register(
     # Port entrypoint / lifecycle
     "lgfx_port/lgfx_port.c"
 
-    # Validation (moved out of public headers)
+    # Validation
     "lgfx_port/validate.c"
 
     # Worker split
@@ -107,10 +97,10 @@ idf_component_register(
     "lgfx_port/lgfx_worker_device.c"
     "lgfx_port/lgfx_worker_mailbox.c"
 
-    # Port protocol / dispatch / metadata
+    # Protocol / dispatch / metadata
     "lgfx_port/proto_term.c"
 
-    # Port handlers
+    # Handlers
     "lgfx_port/handlers/setup.c"
     "lgfx_port/handlers/primitives.c"
     "lgfx_port/handlers/text.c"
@@ -118,23 +108,17 @@ idf_component_register(
     "lgfx_port/handlers/sprites.c"
     "lgfx_port/handlers/touch.c"
 
-    # Device adapter core
+    # Device adapter
     "src/lgfx_device_state.cpp"
     "src/lgfx_device_api.cpp"
     "src/lgfx_device_draw.cpp"
     "src/lgfx_device_sprites.cpp"
   INCLUDE_DIRS
-    # Public API headers only
     "include"
   PRIV_INCLUDE_DIRS
-    # Private headers (not exported)
     "lgfx_port/include_internal"
-
-    # Local component-private includes
     "src"
     "lgfx_port"
-
-    # LovyanGFX headers
     "${LGFX_SRC_ROOT}"
   REQUIRES
     efuse
@@ -170,76 +154,29 @@ macro(lgfx_port_bool_to_int in_var out_var)
   endif()
 endmacro()
 
-lgfx_port_bool_to_int(LGFX_PORT_ENABLE_JP_FONTS     LGFX_PORT_ENABLE_JP_FONTS_INT)
-lgfx_port_bool_to_int(LGFX_PORT_ENABLE_TOUCH        LGFX_PORT_ENABLE_TOUCH_INT)
+lgfx_port_bool_to_int(LGFX_PORT_ENABLE_JP_FONTS  LGFX_PORT_ENABLE_JP_FONTS_INT)
+lgfx_port_bool_to_int(LGFX_PORT_ENABLE_TOUCH     LGFX_PORT_ENABLE_TOUCH_INT)
 
-lgfx_port_bool_to_int(LGFX_PORT_LCD_SPI_3WIRE       LGFX_PORT_LCD_SPI_3WIRE_INT)
-lgfx_port_bool_to_int(LGFX_PORT_LCD_USE_LOCK        LGFX_PORT_LCD_USE_LOCK_INT)
-lgfx_port_bool_to_int(LGFX_PORT_LCD_READABLE        LGFX_PORT_LCD_READABLE_INT)
-lgfx_port_bool_to_int(LGFX_PORT_LCD_INVERT          LGFX_PORT_LCD_INVERT_INT)
-lgfx_port_bool_to_int(LGFX_PORT_LCD_RGB_ORDER       LGFX_PORT_LCD_RGB_ORDER_INT)
-lgfx_port_bool_to_int(LGFX_PORT_LCD_DLEN_16BIT      LGFX_PORT_LCD_DLEN_16BIT_INT)
-lgfx_port_bool_to_int(LGFX_PORT_LCD_BUS_SHARED      LGFX_PORT_LCD_BUS_SHARED_INT)
-lgfx_port_bool_to_int(LGFX_PORT_TOUCH_BUS_SHARED    LGFX_PORT_TOUCH_BUS_SHARED_INT)
-
-# -----------------------------------------------------------------------------
-# Protocol advertisement / enable gates (numeric literals)
-#
-# These are substituted into lgfx_port_config.h and validated by protocol.h.
-# Keep them as CACHE STRING so callers can override with -D...=0/1.
-# -----------------------------------------------------------------------------
-set(LGFX_PORT_SUPPORTS_SPRITE_INT     "1" CACHE STRING "0/1: advertise sprite support")
-set(LGFX_PORT_SUPPORTS_LAST_ERROR_INT "1" CACHE STRING "0/1: advertise getLastError support")
-set(LGFX_PORT_SUPPORTS_PUSHIMAGE_INT  "1" CACHE STRING "0/1: advertise pushImage support")
-set(LGFX_PORT_SUPPORTS_JPG_FILE_INT   "0" CACHE STRING "0/1: advertise JPG file support")
-set(LGFX_PORT_SUPPORTS_PNG_FILE_INT   "0" CACHE STRING "0/1: advertise PNG file support")
-set(LGFX_PORT_SUPPORTS_BATCH_VOID_INT "0" CACHE STRING "0/1: advertise batch_void support")
-
-# Optional safe-yield capability advertisement.
-# Must be: 0/0u, (1u<<8), or (1u<<9). Emitted verbatim into the config header.
-set(LGFX_PORT_SAFE_YIELD_CAP_INT      "0u" CACHE STRING "0/0u, (1u<<8), or (1u<<9): safe-yield capability bit")
+lgfx_port_bool_to_int(LGFX_PORT_LCD_SPI_3WIRE    LGFX_PORT_LCD_SPI_3WIRE_INT)
+lgfx_port_bool_to_int(LGFX_PORT_LCD_USE_LOCK     LGFX_PORT_LCD_USE_LOCK_INT)
+lgfx_port_bool_to_int(LGFX_PORT_LCD_READABLE     LGFX_PORT_LCD_READABLE_INT)
+lgfx_port_bool_to_int(LGFX_PORT_LCD_INVERT       LGFX_PORT_LCD_INVERT_INT)
+lgfx_port_bool_to_int(LGFX_PORT_LCD_RGB_ORDER    LGFX_PORT_LCD_RGB_ORDER_INT)
+lgfx_port_bool_to_int(LGFX_PORT_LCD_DLEN_16BIT   LGFX_PORT_LCD_DLEN_16BIT_INT)
+lgfx_port_bool_to_int(LGFX_PORT_LCD_BUS_SHARED   LGFX_PORT_LCD_BUS_SHARED_INT)
+lgfx_port_bool_to_int(LGFX_PORT_TOUCH_BUS_SHARED LGFX_PORT_TOUCH_BUS_SHARED_INT)
 
 # -----------------------------------------------------------------------------
-# Protocol constants (numeric literals)
+# Protocol constants
 # -----------------------------------------------------------------------------
-# Max sprites supported by this build. Must be a numeric literal (recommend 'u').
-# Range: 0..254
 set(LGFX_PORT_MAX_SPRITES "8u" CACHE STRING "Max sprites (numeric literal, e.g. 8u; must be 0..254)")
 
 # -----------------------------------------------------------------------------
-# Validate protocol gate literals (avoid accidental -D...=ON, etc.)
+# Validate protocol literals
 # -----------------------------------------------------------------------------
-function(lgfx_port_validate_01_literal var_name)
-  string(STRIP "${${var_name}}" _v)
-  if(NOT (_v STREQUAL "0" OR _v STREQUAL "1"))
-    message(FATAL_ERROR
-      "${var_name} must be \"0\" or \"1\" (got: \"${${var_name}}\")\n"
-      "Hint: pass -D${var_name}=0 or -D${var_name}=1"
-    )
-  endif()
-endfunction()
-
-function(lgfx_port_validate_safe_yield_literal var_name)
-  string(STRIP "${${var_name}}" _v)
-  if(NOT (
-    _v STREQUAL "0" OR
-    _v STREQUAL "0u" OR
-    _v STREQUAL "(1u<<8)" OR
-    _v STREQUAL "(1u<<9)" OR
-    _v STREQUAL "1u<<8" OR
-    _v STREQUAL "1u<<9"
-  ))
-    message(FATAL_ERROR
-      "${var_name} must be 0/0u, (1u<<8), or (1u<<9) (got: \"${${var_name}}\")\n"
-      "Hint: pass -D${var_name}=0u  or  -D${var_name}=(1u<<8)  or  -D${var_name}=(1u<<9)"
-    )
-  endif()
-endfunction()
-
 function(lgfx_port_validate_u8_literal var_name)
   string(STRIP "${${var_name}}" _v)
 
-  # Accept: 0, 8, 254, 8u, 254u
   if(NOT _v MATCHES "^[0-9]+u?$")
     message(FATAL_ERROR
       "${var_name} must be a numeric literal like 8u (got: \"${${var_name}}\")\n"
@@ -247,7 +184,6 @@ function(lgfx_port_validate_u8_literal var_name)
     )
   endif()
 
-  # Strip optional trailing 'u' for numeric compare
   string(REGEX REPLACE "u$" "" _num "${_v}")
   if(_num GREATER 254)
     message(FATAL_ERROR
@@ -257,17 +193,10 @@ function(lgfx_port_validate_u8_literal var_name)
   endif()
 endfunction()
 
-lgfx_port_validate_01_literal(LGFX_PORT_SUPPORTS_SPRITE_INT)
-lgfx_port_validate_01_literal(LGFX_PORT_SUPPORTS_LAST_ERROR_INT)
-lgfx_port_validate_01_literal(LGFX_PORT_SUPPORTS_PUSHIMAGE_INT)
-lgfx_port_validate_01_literal(LGFX_PORT_SUPPORTS_JPG_FILE_INT)
-lgfx_port_validate_01_literal(LGFX_PORT_SUPPORTS_PNG_FILE_INT)
-lgfx_port_validate_01_literal(LGFX_PORT_SUPPORTS_BATCH_VOID_INT)
-lgfx_port_validate_safe_yield_literal(LGFX_PORT_SAFE_YIELD_CAP_INT)
 lgfx_port_validate_u8_literal(LGFX_PORT_MAX_SPRITES)
 
 # -----------------------------------------------------------------------------
-# Compute touch advertisement gate (LGFX_PORT_SUPPORTS_TOUCH_INT)
+# Compute touch advertisement gate
 # -----------------------------------------------------------------------------
 set(LGFX_PORT_SUPPORTS_TOUCH_INT 0)
 if(LGFX_PORT_ENABLE_TOUCH)
@@ -281,7 +210,7 @@ if(LGFX_PORT_ENABLE_TOUCH AND "${LGFX_PORT_TOUCH_CS_GPIO}" STREQUAL "-1")
 endif()
 
 # -----------------------------------------------------------------------------
-# Generate config header (build dir) from cache vars
+# Generate config header
 # -----------------------------------------------------------------------------
 set(LGFX_PORT_GEN_INC_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${LGFX_PORT_GEN_INC_DIR}/lgfx_port")
@@ -292,7 +221,6 @@ configure_file(
   @ONLY
 )
 
-# Public because public headers include lgfx_port_config.h
 target_include_directories(${COMPONENT_LIB} PUBLIC "${LGFX_PORT_GEN_INC_DIR}")
 
 # -----------------------------------------------------------------------------
@@ -329,21 +257,14 @@ set(LGFX_SRCS
   ${LGFX_V1_ESP32_SRCS}
 )
 
-# -----------------------------------------------------------------------------
-# JPEG decoder support (TJpgDec wrapper)
-# -----------------------------------------------------------------------------
+# JPEG decoder support
 list(APPEND LGFX_SRCS
   "${LGFX_SRC_ROOT}/lgfx/utility/lgfx_tjpgd.c"
 )
 
 # -----------------------------------------------------------------------------
-# Japanese font data (custom minimal subset)
+# Japanese font data
 # -----------------------------------------------------------------------------
-#
-# LovyanGFX ships a large IPA JapanGothic blob, which can easily exceed the
-# app partition budget on small ESP32 builds. This component compiles a
-# generated subset .cpp instead.
-#
 if(LGFX_PORT_ENABLE_JP_FONTS)
   if(NOT EXISTS "${LGFX_PORT_JP_FONT_CPP}")
     message(FATAL_ERROR
@@ -356,22 +277,14 @@ if(LGFX_PORT_ENABLE_JP_FONTS)
   target_sources(${COMPONENT_LIB} PRIVATE "${LGFX_PORT_JP_FONT_CPP}")
 endif()
 
-# Avoid double-compiling if any sources overlap
 list(REMOVE_DUPLICATES LGFX_SRCS)
 
 # -----------------------------------------------------------------------------
 # Reduce LovyanGFX build surface area
 # -----------------------------------------------------------------------------
 #
-# For this component we only need:
-# - SPI bus support
-# - our target LCD panel (ILI9488)
-# - optionally, a single touch driver (XPT2046)
-#
-# So we aggressively exclude:
-# - EPD/e-paper buses and panels
-# - I2C bus support
-# - all touch drivers (we add back only Touch_XPT2046 when enabled)
+# Keep SPI, ILI9488, and optionally XPT2046.
+# Exclude EPD, I2C, and other touch drivers.
 #
 list(FILTER LGFX_SRCS EXCLUDE REGEX ".*/Bus_EPD\\.(c|cpp)$")
 list(FILTER LGFX_SRCS EXCLUDE REGEX ".*/Panel_EPD\\.(c|cpp)$")
@@ -381,12 +294,10 @@ list(FILTER LGFX_SRCS EXCLUDE REGEX ".*/panel/Panel_GDEW.*\\.(c|cpp)$")
 list(FILTER LGFX_SRCS EXCLUDE REGEX ".*/Bus_I2C\\.(c|cpp)$")
 list(FILTER LGFX_SRCS EXCLUDE REGEX ".*/touch/.*\\.(c|cpp)$")
 list(FILTER LGFX_SRCS EXCLUDE REGEX ".*/Touch_.*\\.(c|cpp)$")
-
-# Extra safety: exclude any I2C-related compilation units
 list(FILTER LGFX_SRCS EXCLUDE REGEX ".*/[Ii]2[Cc].*\\.(c|cpp)$")
 
 # -----------------------------------------------------------------------------
-# Touch (XPT2046): re-add only the one driver we need
+# Touch: re-add only XPT2046
 # -----------------------------------------------------------------------------
 if(LGFX_PORT_ENABLE_TOUCH)
   list(APPEND LGFX_SRCS
@@ -394,7 +305,6 @@ if(LGFX_PORT_ENABLE_TOUCH)
   )
 endif()
 
-# Avoid double-compiling if any sources overlap (again, after touch re-add)
 list(REMOVE_DUPLICATES LGFX_SRCS)
 
 # -----------------------------------------------------------------------------
@@ -406,7 +316,6 @@ target_include_directories(${COMPONENT_LIB} PRIVATE
   "${LGFX_SRC_ROOT}"
 )
 
-# Keep only non-config macros here; config lives in generated header.
 target_compile_definitions(${COMPONENT_LIB} PRIVATE
   LGFX_USE_V1=1
 )
