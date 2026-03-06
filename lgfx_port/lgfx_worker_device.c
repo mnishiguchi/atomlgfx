@@ -1,20 +1,6 @@
 // lgfx_port/lgfx_worker_device.c
-//
-// Public device wrappers (called from handlers on the port thread)
-//
-// These wrappers do not decode AtomVM terms and do not touch the AtomVM mailbox.
-// They build plain C arguments, enqueue a job, and block until the worker task
-// completes the lgfx_device_* call.
-//
-// Payload ownership / lifetime (variable-length buffers such as draw_string / push_image):
-// - Wrappers deep-copy caller-provided bytes into job-owned memory before enqueueing
-// - The worker executes the device call using the copied buffer
-// - The worker frees the copied buffer before notifying the caller
-//
-// Synchronous completion is still required because jobs are currently stack-allocated
-// in the wrappers and queued by pointer. If timeouts or async completion are added
-// later, switch to heap/pool-owned jobs or queue-by-value and define explicit
-// ownership rules for both the job object and any payload buffers.
+// Port-thread worker wrappers.
+// Ownership and completion rules: see docs/WORKER_MODEL.md.
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -537,36 +523,6 @@ esp_err_t lgfx_worker_device_push_sprite(
             .dst_target = dst_target,
             .x = x,
             .y = y,
-            .has_transparent = has_transparent,
-            .transparent565 = transparent565 }
-    };
-    return lgfx_worker_call(port, &job);
-}
-
-esp_err_t lgfx_worker_device_push_sprite_region(
-    lgfx_port_t *port,
-    uint8_t src_target,
-    uint8_t dst_target,
-    int16_t dst_x,
-    int16_t dst_y,
-    int16_t src_x,
-    int16_t src_y,
-    uint16_t w,
-    uint16_t h,
-    bool has_transparent,
-    uint16_t transparent565)
-{
-    lgfx_job_t job = {
-        .kind = LGFX_JOB_PUSH_SPRITE_REGION,
-        .a.push_sprite_region = {
-            .src_target = src_target,
-            .dst_target = dst_target,
-            .dst_x = dst_x,
-            .dst_y = dst_y,
-            .src_x = src_x,
-            .src_y = src_y,
-            .w = w,
-            .h = h,
             .has_transparent = has_transparent,
             .transparent565 = transparent565 }
     };

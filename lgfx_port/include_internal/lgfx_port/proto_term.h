@@ -1,4 +1,4 @@
-// lgfx_port/include/lgfx_port/proto_term.h
+// /lgfx_port/include_internal/lgfx_port/proto_term.h
 #pragma once
 
 #include <limits.h>

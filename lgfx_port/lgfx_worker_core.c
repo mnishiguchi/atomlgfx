@@ -1,19 +1,6 @@
 // lgfx_port/lgfx_worker_core.c
-//
-// Concurrency model
-// -----------------
-// - Port thread (AtomVM native handler):
-//   - Drains the AtomVM mailbox (see lgfx_worker_mailbox.c)
-//   - Decodes terms
-//   - Builds plain C arguments
-//   - Calls lgfx_worker_device_* wrappers synchronously
-// - Worker task (FreeRTOS task):
-//   - Executes only lgfx_device_* calls with plain C arguments
-//   - Does not touch Context*, terms, or mailbox ownership
-//
-// Variable-length payloads (e.g. draw_string / push_image) are deep-copied by
-// wrappers into job-owned memory before enqueueing. The worker frees that memory
-// after the device call returns and before notifying the caller.
+// Worker task core.
+// Concurrency and ownership model: see docs/WORKER_MODEL.md.
 
 #include <math.h>
 #include <stdbool.h>
@@ -83,8 +70,8 @@ static esp_err_t lgfx_worker_exec_push_rotate_zoom(lgfx_job_t *job)
     const float zoom_x = job->a.push_rotate_zoom.zoom_x;
     const float zoom_y = job->a.push_rotate_zoom.zoom_y;
 
-    // Basic worker-side validation. Device layer will also validate and perform
-    // backend compatibility dispatch.
+    // Basic worker-side validation. Device layer will also validate and call
+    // the pinned LovyanGFX-backed sprite rotate/zoom path.
     if (!isfinite(angle_deg) || !isfinite(zoom_x) || !isfinite(zoom_y)) {
         return ESP_ERR_INVALID_ARG;
     }

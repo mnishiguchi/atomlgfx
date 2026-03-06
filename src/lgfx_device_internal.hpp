@@ -1,4 +1,4 @@
-// src/lgfx_device_internal.hpp
+// /src/lgfx_device_internal.hpp
 //
 // Internal-only shared contract for split lgfx_device implementation files.
 // Mutable state is owned by src/lgfx_device_state.cpp.
@@ -27,9 +27,6 @@ uint16_t panel_height_const();
 
 uint8_t max_handle_const();
 uint16_t max_sprites_const();
-
-// Optional: centralize feature bits truth in state file so caps file does not duplicate it.
-uint32_t feature_bits_const();
 
 // -----------------------------------------------------------------------------
 // Shared lock / lifecycle helpers (owned by lgfx_device_state.cpp)

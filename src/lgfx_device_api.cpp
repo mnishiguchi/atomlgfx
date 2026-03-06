@@ -1,5 +1,5 @@
-// src/lgfx_device_api.cpp
-// Caps + LCD-only control + size + touch + text APIs.
+// /src/lgfx_device_api.cpp
+// LCD-only control + size + touch + text APIs.
 
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"
@@ -7,20 +7,6 @@
 #include <algorithm>
 #include <string.h>
 #include <utility>
-
-// -----------------------------------------------------------------------------
-// Caps / feature discovery (LCD-only)
-// -----------------------------------------------------------------------------
-
-extern "C" uint32_t lgfx_device_feature_bits(void)
-{
-    return lgfx_dev::feature_bits_const();
-}
-
-extern "C" uint32_t lgfx_device_max_sprites(void)
-{
-    return static_cast<uint32_t>(lgfx_dev::max_sprites_const());
-}
 
 // -----------------------------------------------------------------------------
 // LCD-only control APIs (rotation, brightness, display).

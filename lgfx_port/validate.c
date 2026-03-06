@@ -1,4 +1,4 @@
-// lgfx_port/validate.c
+// /lgfx_port/validate.c
 #include "lgfx_port/validate.h"
 
 #include <stdint.h>
@@ -37,20 +37,6 @@ term lgfx_require_target_domain(Context *ctx, lgfx_port_t *port, const lgfx_requ
     return term_invalid_term();
 }
 
-term lgfx_require_arity_exact(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, int expected_arity)
-{
-    if (ctx == NULL || port == NULL || req == NULL) {
-        return term_invalid_term();
-    }
-
-    if (req->arity != expected_arity) {
-        lgfx_last_error_set(port, req->op, port->atoms.bad_args, req->flags, req->target, 0);
-        return lgfx_reply_error(ctx, port, port->atoms.bad_args);
-    }
-
-    return term_invalid_term();
-}
-
 term lgfx_require_arity_range(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, int min_arity, int max_arity)
 {
     if (ctx == NULL || port == NULL || req == NULL) {
@@ -65,20 +51,6 @@ term lgfx_require_arity_range(Context *ctx, lgfx_port_t *port, const lgfx_reques
     if (req->arity < min_arity || req->arity > max_arity) {
         lgfx_last_error_set(port, req->op, port->atoms.bad_args, req->flags, req->target, 0);
         return lgfx_reply_error(ctx, port, port->atoms.bad_args);
-    }
-
-    return term_invalid_term();
-}
-
-term lgfx_require_flags_zero(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    if (ctx == NULL || port == NULL || req == NULL) {
-        return term_invalid_term();
-    }
-
-    if (req->flags != 0u) {
-        lgfx_last_error_set(port, req->op, port->atoms.bad_flags, req->flags, req->target, 0);
-        return lgfx_reply_error(ctx, port, port->atoms.bad_flags);
     }
 
     return term_invalid_term();

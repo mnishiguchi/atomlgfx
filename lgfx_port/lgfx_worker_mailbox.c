@@ -1,12 +1,6 @@
 // lgfx_port/lgfx_worker_mailbox.c
-//
-// Port-thread mailbox drain:
-// - Pull messages from the AtomVM mailbox
-// - Forward NormalMessage payloads to the port handler
-// - Dispose mailbox messages on the port thread
-//
-// This file is the only worker compilation unit that includes AtomVM headers.
-// The worker task itself remains term-free.
+// Port-thread mailbox drain.
+// Mailbox ownership rules: see docs/WORKER_MODEL.md.
 
 #include <stdbool.h>
 

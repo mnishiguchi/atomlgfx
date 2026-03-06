@@ -1,4 +1,4 @@
-// lgfx_port/include/lgfx_port/ops.h
+// /lgfx_port/include_internal/lgfx_port/ops.h
 #pragma once
 
 #include <stdint.h>

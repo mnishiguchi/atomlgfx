@@ -19,10 +19,6 @@ defmodule SampleApp.SpriteProtocolSmoke do
   # - Non-transparent: [dst_target, x, y]
   # - Transparent:     [dst_target, x, y, transparent565]
   #
-  # pushSpriteRegion wire format (protocol v1, destination-aware):
-  # - Non-transparent: [dst_target, dst_x, dst_y, src_x, src_y, w, h]
-  # - Transparent:     [dst_target, dst_x, dst_y, src_x, src_y, w, h, transparent565]
-  #
   # pushRotateZoom wire format (protocol v1, destination-aware):
   # - Non-transparent: [dst_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024]
   # - Transparent:     [dst_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024, transparent565]
@@ -87,7 +83,6 @@ defmodule SampleApp.SpriteProtocolSmoke do
   defp check_sprite_only_ops_reject_target_zero(port, raw_call) do
     with :ok <- check_create_sprite_target_zero_bad_target(port, raw_call),
          :ok <- check_push_sprite_target_zero_bad_target(port, raw_call),
-         :ok <- check_push_sprite_region_target_zero_bad_target(port, raw_call),
          :ok <- check_push_rotate_zoom_target_zero_bad_target(port, raw_call) do
       :ok
     end
@@ -110,31 +105,6 @@ defmodule SampleApp.SpriteProtocolSmoke do
       {:error, :bad_target} -> :ok
       {:error, reason} -> {:error, {:pushSprite_target0_expected_bad_target, reason}}
       {:ok, result} -> {:error, {:pushSprite_target0_unexpected_ok, result}}
-    end
-  end
-
-  defp check_push_sprite_region_target_zero_bad_target(port, raw_call) do
-    # pushSpriteRegion is sprite-only: header target must be a sprite handle (1..254).
-    # args: [dst_target, dst_x, dst_y, src_x, src_y, w, h]
-    args = [0, 0, 0, 0, 0, 1, 1]
-
-    case raw_call.(port, :pushSpriteRegion, 0, 0, args, @t_short) do
-      {:error, :bad_target} ->
-        :ok
-
-      {:error, :bad_op} ->
-        note_once(
-          :push_sprite_region_unavailable,
-          "sprite protocol smoke note: pushSpriteRegion not available; skipping pushSpriteRegion checks"
-        )
-
-        :ok
-
-      {:error, reason} ->
-        {:error, {:pushSpriteRegion_target0_expected_bad_target, reason}}
-
-      {:ok, result} ->
-        {:error, {:pushSpriteRegion_target0_unexpected_ok, result}}
     end
   end
 
@@ -172,7 +142,7 @@ defmodule SampleApp.SpriteProtocolSmoke do
   end
 
   # -----------------------------------------------------------------------------
-  # 2) Create -> draw -> blit -> partial blit -> rotate/zoom -> delete
+  # 2) Create -> draw -> blit -> rotate/zoom -> delete
   # -----------------------------------------------------------------------------
   defp check_sprite_lifecycle_and_blits(port, raw_call) do
     with :ok <- check_create_sprite(port, raw_call, @sprite_target),
@@ -180,7 +150,6 @@ defmodule SampleApp.SpriteProtocolSmoke do
          :ok <- check_draw_into_sprite(port, raw_call, @sprite_target),
          :ok <- check_set_pivot(port, raw_call, @sprite_target),
          :ok <- check_push_sprite_to_lcd(port, raw_call, @sprite_target),
-         :ok <- check_push_sprite_region_to_lcd(port, raw_call, @sprite_target),
          :ok <- check_push_rotate_zoom_to_lcd(port, raw_call, @sprite_target),
          :ok <- check_delete_sprite(port, raw_call, @sprite_target) do
       :ok
@@ -284,26 +253,6 @@ defmodule SampleApp.SpriteProtocolSmoke do
     end
   end
 
-  defp check_push_sprite_region_to_lcd(port, raw_call, sprite_target) do
-    # Partial blit sprite -> LCD:
-    # args = [dst_target, dst_x, dst_y, src_x, src_y, w, h] with dst_target=0 => LCD
-    case raw_call.(port, :pushSpriteRegion, sprite_target, 0, [0, 16, 4, 1, 1, 4, 4], @t_short) do
-      {:error, :bad_op} ->
-        note_once(
-          :push_sprite_region_unavailable,
-          "sprite protocol smoke note: pushSpriteRegion not available; skipping pushSpriteRegion checks"
-        )
-
-        :ok
-
-      {:ok, _result} ->
-        :ok
-
-      {:error, reason} ->
-        {:error, {:pushSpriteRegion_failed, reason}}
-    end
-  end
-
   defp check_push_rotate_zoom_to_lcd(port, raw_call, sprite_target) do
     # args = [dst_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024] with dst_target=0 => LCD
     args = [0, 28, 4, 0, @zoom_1x, @zoom_1x]
@@ -351,7 +300,6 @@ defmodule SampleApp.SpriteProtocolSmoke do
   # One-time notes (avoid duplicate log lines in a single smoke run)
   # -----------------------------------------------------------------------------
   defp reset_note_once_flags do
-    :erlang.erase({__MODULE__, :note_once, :push_sprite_region_unavailable})
     :erlang.erase({__MODULE__, :note_once, :push_rotate_zoom_unavailable})
     :ok
   end

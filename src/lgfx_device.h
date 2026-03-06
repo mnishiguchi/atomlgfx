@@ -1,4 +1,4 @@
-// src/lgfx_device.h
+// /src/lgfx_device.h
 #ifndef __LGFX_DEVICE_H__
 #define __LGFX_DEVICE_H__
 
@@ -8,7 +8,7 @@
 
 #include "esp_err.h"
 
-// Build-time configuration (generated from include/lgfx_port/lgfx_port_config.h.in)
+// Build-time configuration (generated from lgfx_port/cmake/lgfx_port_config.h.in)
 #include "lgfx_port/lgfx_port_config.h"
 
 // Shared protocol-level constants (stable wire values, e.g., font preset IDs)
@@ -40,7 +40,7 @@ extern "C" {
 // Targets (shared by most APIs)
 // ----------------------------------------------------------------------------
 //
-// This is a thin C ABI around LovyanGFX:
+// This is a thin C ABI around the pinned LovyanGFX surface:
 //
 // - target == LGFX_DEVICE_TARGET_LCD (0)
 //     LCD device (singleton)
@@ -70,13 +70,6 @@ static inline bool lgfx_device_is_sprite_target(uint8_t target)
 }
 
 bool lgfx_device_is_valid_target(uint8_t target);
-
-// ----------------------------------------------------------------------------
-// Caps / feature discovery (LCD-only)
-// ----------------------------------------------------------------------------
-// Used by ports/handlers/control.c
-uint32_t lgfx_device_feature_bits(void);
-uint32_t lgfx_device_max_sprites(void);
 
 // ----------------------------------------------------------------------------
 // Lifecycle / LCD-only controls
@@ -257,48 +250,24 @@ esp_err_t lgfx_device_sprite_set_palette_color(uint8_t handle, uint8_t index, ui
 esp_err_t lgfx_device_sprite_set_pivot(uint8_t handle, int16_t px, int16_t py);
 
 /*
- * Sprite push (destination-aware).
+ * Sprite push (whole-sprite, destination-aware).
  *
  * Destination:
  * - dst_target == 0: LCD
  * - dst_target != 0: sprite handle (must exist)
  *
- * Transparent-color overload is optional in some LovyanGFX/M5GFX variants.
- * This API uses best-effort dispatch and returns ESP_ERR_NOT_SUPPORTED if no
- * compatible overload is available for the requested form.
+ * This is a thin wrapper over the pinned LovyanGFX destination-aware overloads:
+ * - pushSprite(dst, x, y)
+ * - pushSprite(dst, x, y, transparent565)
+ *
+ * For invalid protocol targets this returns ESP_ERR_INVALID_ARG.
+ * For missing source or destination sprites this returns ESP_ERR_NOT_FOUND.
  */
 esp_err_t lgfx_device_sprite_push_sprite(
     uint8_t src_handle,
     uint8_t dst_target,
     int16_t x,
     int16_t y,
-    bool has_transparent,
-    uint16_t transparent_rgb565);
-
-/*
- * Sprite region push (destination-aware).
- *
- * Destination:
- * - dst_target == 0: LCD
- * - dst_target != 0: sprite handle (must exist)
- *
- * Source rectangle validation policy is primarily enforced in the port handler.
- * This API may still return ESP_ERR_INVALID_ARG for obviously invalid inputs
- * (e.g. w/h == 0).
- *
- * Transparent-color overload is optional in some LovyanGFX/M5GFX variants.
- * This API uses best-effort dispatch and returns ESP_ERR_NOT_SUPPORTED if no
- * compatible overload is available for the requested form.
- */
-esp_err_t lgfx_device_sprite_push_sprite_region(
-    uint8_t src_handle,
-    uint8_t dst_target,
-    int16_t dst_x,
-    int16_t dst_y,
-    int16_t src_x,
-    int16_t src_y,
-    uint16_t w,
-    uint16_t h,
     bool has_transparent,
     uint16_t transparent_rgb565);
 
@@ -313,9 +282,9 @@ esp_err_t lgfx_device_sprite_push_sprite_region(
  * - dst_target == 0: LCD
  * - dst_target != 0: sprite handle (must exist)
  *
- * Transparent-color overload is optional in some LovyanGFX/M5GFX variants.
- * This API uses best-effort dispatch and returns ESP_ERR_NOT_SUPPORTED if no
- * compatible overload is available.
+ * This is a thin wrapper over the pinned LovyanGFX destination-aware overloads:
+ * - pushRotateZoom(dst, x, y, angle_deg, zoom_x, zoom_y)
+ * - pushRotateZoom(dst, x, y, angle_deg, zoom_x, zoom_y, transparent565)
  */
 esp_err_t lgfx_device_sprite_push_rotate_zoom(
     uint8_t src_handle,

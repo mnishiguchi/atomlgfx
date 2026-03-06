@@ -1,4 +1,4 @@
-// lgfx_port/lgfx_port.c
+// /lgfx_port/lgfx_port.c
 //
 // AtomVM port driver entry point for the LovyanGFX port.
 //
@@ -10,8 +10,8 @@
 // - Request decode -> metadata validation -> dispatch -> reply flow
 //
 // Non-responsibilities:
-// - Device calls (handled by lgfx_worker.c / lgfx_device.*)
-// - AtomVM term decoding details (handled by term_decode.*)
+// - Device calls (handled by lgfx_worker_*.c / src/lgfx_device*)
+// - AtomVM term decoding details (handled by proto_term.c)
 // - Reply encoding helpers (handled by proto_term.c)
 
 #include <limits.h>
@@ -49,7 +49,7 @@
 // -----------------------------------------------------------------------------
 
 /*
- * Canonical op list: lgfx_port/include/lgfx_port/ops.def
+ * Canonical op list: lgfx_port/include_internal/lgfx_port/ops.def
  * Protocol contract: docs/LGFX_PORT_PROTOCOL.md
  */
 void lgfx_atoms_init(GlobalContext *global, lgfx_atoms_t *atoms)
@@ -83,7 +83,7 @@ void lgfx_atoms_init(GlobalContext *global, lgfx_atoms_t *atoms)
     atoms->last_error = globalcontext_make_atom(global, ATOM_STR("\x0A", "last_error"));
     atoms->none = globalcontext_make_atom(global, ATOM_STR("\x04", "none"));
 
-    // Op atoms (generated from lgfx_port/include/lgfx_port/ops.def)
+    // Op atoms (generated from lgfx_port/include_internal/lgfx_port/ops.def)
 #define X(op, handler, atom_str, ...) atoms->op = globalcontext_make_atom(global, (atom_str));
 #include "lgfx_port/ops.def"
 #undef X
@@ -317,7 +317,7 @@ uint8_t lgfx_port_max_sprites(const lgfx_port_t *port)
     return (uint8_t) LGFX_PORT_MAX_SPRITES;
 }
 
-bool lgfx_port_op_is_enabled(const lgfx_port_t *port, term op_atom)
+static bool lgfx_port_op_is_enabled(const lgfx_port_t *port, term op_atom)
 {
     if (port == NULL) {
         return false;
@@ -328,7 +328,7 @@ bool lgfx_port_op_is_enabled(const lgfx_port_t *port, term op_atom)
         return false;
     }
 
-    // Public meaning: enabled by build/runtime gates (not dispatch wiring).
+    // Internal meaning: enabled by build/runtime gates (not dispatch wiring).
     return lgfx_op_gated_by_index(op_index);
 }
 

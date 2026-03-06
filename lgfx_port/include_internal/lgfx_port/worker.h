@@ -1,4 +1,4 @@
-// include/lgfx_port/worker.h
+// /lgfx_port/include_internal/lgfx_port/worker.h
 #pragma once
 
 #include <stdbool.h>
@@ -13,44 +13,20 @@
 extern "C" {
 #endif
 
-// Start the worker task for the given port.
+// Worker lifecycle
 bool lgfx_worker_start(lgfx_port_t *port);
-
-// Stop the worker task for the given port.
 void lgfx_worker_stop(lgfx_port_t *port);
 
-/*
- * Port-thread mailbox drain:
- * - Pull messages from the AtomVM mailbox
- * - Forward NormalMessage payloads to the port handler
- * - Dispose mailbox messages on the port thread
- *
- * The worker task itself remains term-free.
- */
+// Port-thread mailbox drain. Mailbox ownership stays on the port thread.
 void lgfx_worker_drain_mailbox(lgfx_port_t *port);
 
-/*
- * Worker wrappers (called on the port thread by command handlers).
- *
- * These wrappers do not decode AtomVM terms and do not touch the AtomVM mailbox.
- * They build plain C arguments, enqueue a job, and block until the worker task
- * completes the lgfx_device_* call.
- *
- * Payload ownership / lifetime (variable-length buffers such as draw_string / push_image):
- * - Wrappers deep-copy caller-provided bytes into job-owned memory before enqueueing
- * - The worker executes the device call using the copied buffer
- * - The worker frees the copied buffer before notifying the caller
- *
- * Synchronous completion is still required because jobs are currently stack-allocated
- * in the wrappers and queued by pointer. If timeouts or async completion are added
- * later, switch to heap/pool-owned jobs or queue-by-value and define explicit
- * ownership rules for both the job object and any payload buffers.
- */
+// Synchronous device wrappers called from handlers on the port thread.
+// They pass plain C arguments to the worker task and block until completion.
+// Variable-length payload wrappers deep-copy bytes before enqueueing.
+// See docs/WORKER_MODEL.md for concurrency and ownership rules.
 
-// Initialize the worker device task for the given port.
+// Device lifecycle
 esp_err_t lgfx_worker_device_init(lgfx_port_t *port);
-
-// Close the worker device task for the given port.
 esp_err_t lgfx_worker_device_close(lgfx_port_t *port);
 
 // Get the device dimensions (width and height).
@@ -258,20 +234,6 @@ esp_err_t lgfx_worker_device_push_sprite(
     uint8_t dst_target,
     int16_t x,
     int16_t y,
-    bool has_transparent,
-    uint16_t transparent565);
-
-// Push a region of a sprite to a destination target (LCD or sprite) with a given position (dst_x, dst_y) and optional transparency.
-esp_err_t lgfx_worker_device_push_sprite_region(
-    lgfx_port_t *port,
-    uint8_t src_target,
-    uint8_t dst_target,
-    int16_t dst_x,
-    int16_t dst_y,
-    int16_t src_x,
-    int16_t src_y,
-    uint16_t w,
-    uint16_t h,
     bool has_transparent,
     uint16_t transparent565);
 

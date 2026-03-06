@@ -16,15 +16,11 @@
 // Request envelope validation (version/arity/flags/target/init-state) is
 // centralized in lgfx_port.c via ops.def metadata. Handlers only decode payload fields.
 //
-// Destination-aware sprite blits (this handler):
+// Destination-aware sprite ops handled here:
 //
 // - pushSprite request shape:
 //   {lgfx, ver, pushSprite, SrcSprite, Flags,
 //      DstTarget, X, Y [, Transparent565]}
-//
-// - pushSpriteRegion request shape:
-//   {lgfx, ver, pushSpriteRegion, SrcSprite, Flags,
-//      DstTarget, DstX, DstY, SrcX, SrcY, W, H [, Transparent565]}
 //
 // - SrcSprite is the request header Target (sprite-only; 1..254)
 // - DstTarget is 0 (LCD) or 1..254 (sprite)
@@ -66,19 +62,6 @@ typedef struct
     bool has_transparent;
     uint16_t transparent565;
 } lgfx_push_sprite_args_t;
-
-typedef struct
-{
-    uint8_t dst_target; // 0 => LCD, 1..254 => sprite
-    int16_t dst_x;
-    int16_t dst_y;
-    int16_t src_x;
-    int16_t src_y;
-    uint16_t w;
-    uint16_t h;
-    bool has_transparent;
-    uint16_t transparent565;
-} lgfx_push_sprite_region_args_t;
 
 typedef struct
 {
@@ -171,64 +154,6 @@ static bool decode_push_sprite_args(const lgfx_request_t *req, lgfx_push_sprite_
         out->has_transparent = true;
         out->transparent565 = (uint16_t) transparent32;
     } else if (req->arity != 8) {
-        // Defensive only; shared validator should catch this earlier.
-        return false;
-    }
-
-    return true;
-}
-
-static bool decode_push_sprite_region_args(const lgfx_request_t *req, lgfx_push_sprite_region_args_t *out)
-{
-    // pushSpriteRegion supports dual arity (destination-aware):
-    // - {lgfx, ver, pushSpriteRegion, SrcSprite, Flags, DstTarget, DstX, DstY, SrcX, SrcY, W, H}
-    // - {lgfx, ver, pushSpriteRegion, SrcSprite, Flags, DstTarget, DstX, DstY, SrcX, SrcY, W, H, Transparent565}
-    //
-    // Shared metadata enforces arity range [12..13].
-
-    uint32_t dst_target32 = 0;
-    uint32_t w32 = 0;
-    uint32_t h32 = 0;
-    uint32_t transparent32 = 0;
-
-    if (!lgfx_decode_u32_at(req, 5, &dst_target32) || dst_target32 > 254u) {
-        return false;
-    }
-    out->dst_target = (uint8_t) dst_target32;
-
-    if (!lgfx_decode_i16_at(req, 6, &out->dst_x)) {
-        return false;
-    }
-    if (!lgfx_decode_i16_at(req, 7, &out->dst_y)) {
-        return false;
-    }
-    if (!lgfx_decode_i16_at(req, 8, &out->src_x)) {
-        return false;
-    }
-    if (!lgfx_decode_i16_at(req, 9, &out->src_y)) {
-        return false;
-    }
-
-    if (!lgfx_decode_u32_at(req, 10, &w32) || !lgfx_validate_u16(w32) || w32 == 0) {
-        return false;
-    }
-    if (!lgfx_decode_u32_at(req, 11, &h32) || !lgfx_validate_u16(h32) || h32 == 0) {
-        return false;
-    }
-
-    out->w = (uint16_t) w32;
-    out->h = (uint16_t) h32;
-    out->has_transparent = false;
-    out->transparent565 = 0;
-
-    if (req->arity == 13) {
-        if (!lgfx_decode_u32_at(req, 12, &transparent32) || !lgfx_validate_u16(transparent32)) {
-            return false;
-        }
-
-        out->has_transparent = true;
-        out->transparent565 = (uint16_t) transparent32;
-    } else if (req->arity != 12) {
         // Defensive only; shared validator should catch this earlier.
         return false;
     }
@@ -390,67 +315,6 @@ static term do_push_sprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-static term do_push_sprite_region(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    lgfx_push_sprite_region_args_t args = { 0 };
-
-    if (!decode_push_sprite_region_args(req, &args)) {
-        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
-    }
-
-    // Protocol semantics:
-    // - SrcSprite (request header Target) must exist
-    // - DstTarget must exist when DstTarget != 0
-    // - Source rectangle validation is strict and enforced here:
-    //   src_x/src_y must be >= 0 and src_x+w/src_y+h must be within sprite bounds.
-    uint16_t src_w = 0;
-    uint16_t src_h = 0;
-    esp_err_t err = lgfx_worker_device_get_target_dims(port, (uint8_t) req->target, &src_w, &src_h);
-    if (err == ESP_ERR_NOT_FOUND) {
-        return reply_error(ctx, port, req, port->atoms.bad_target, 0);
-    }
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, err);
-
-    if (args.src_x < 0 || args.src_y < 0) {
-        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
-    }
-
-    const int32_t x1 = (int32_t) args.src_x + (int32_t) args.w;
-    const int32_t y1 = (int32_t) args.src_y + (int32_t) args.h;
-    if (x1 > (int32_t) src_w || y1 > (int32_t) src_h) {
-        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
-    }
-
-    if (args.dst_target != 0) {
-        uint16_t dst_w = 0;
-        uint16_t dst_h = 0;
-        err = lgfx_worker_device_get_target_dims(port, args.dst_target, &dst_w, &dst_h);
-        if (err == ESP_ERR_NOT_FOUND) {
-            return reply_error(ctx, port, req, port->atoms.bad_target, 0);
-        }
-        LGFX_RETURN_IF_ESP_ERR(ctx, port, req, err);
-    }
-
-    LGFX_RETURN_IF_ESP_ERR(
-        ctx,
-        port,
-        req,
-        lgfx_worker_device_push_sprite_region(
-            port,
-            (uint8_t) req->target, // SrcSprite
-            args.dst_target, // DstTarget (0 => LCD, 1..254 => sprite)
-            args.dst_x,
-            args.dst_y,
-            args.src_x,
-            args.src_y,
-            args.w,
-            args.h,
-            args.has_transparent,
-            args.transparent565));
-
-    return reply_ok(ctx, port, req, port->atoms.ok);
-}
-
 static term do_push_rotate_zoom(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     lgfx_push_rotate_zoom_args_t args = { 0 };
@@ -504,11 +368,6 @@ term lgfx_handle_setPivot(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
 term lgfx_handle_pushSprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     return do_push_sprite(ctx, port, req);
-}
-
-term lgfx_handle_pushSpriteRegion(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    return do_push_sprite_region(ctx, port, req);
 }
 
 term lgfx_handle_pushRotateZoom(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)

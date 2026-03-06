@@ -70,11 +70,6 @@ X(setPivot, lgfx_handle_setPivot, ATOM_STR("\x08", "setPivot"), 7, 7, 0, LGFX_OP
 // - Target (header) is SrcSprite (sprite-only)
 X(pushSprite, lgfx_handle_pushSprite, ATOM_STR("\x0A", "pushSprite"), 8, 9, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
 
-// pushSpriteRegion payload semantics (destination-aware):
-// DstTarget, DstX, DstY, SrcX, SrcY, W, H [, Transparent565]
-// - Target (header) is SrcSprite (sprite-only)
-X(pushSpriteRegion, lgfx_handle_pushSpriteRegion, ATOM_STR("\x0E", "pushSpriteRegion"), 12, 13, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
-
 // pushRotateZoom payload semantics:
 // DstTarget, X, Y, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32 [, Transparent565]
 // - Target (header) is SrcSprite (sprite-only)
