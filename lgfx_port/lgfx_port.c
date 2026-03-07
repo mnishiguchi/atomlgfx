@@ -1,4 +1,4 @@
-// /lgfx_port/lgfx_port.c
+// lgfx_port/lgfx_port.c
 //
 // AtomVM port driver entry point for the LovyanGFX port.
 //

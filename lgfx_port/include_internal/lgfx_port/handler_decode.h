@@ -12,7 +12,7 @@
 #include "lgfx_port/protocol.h"
 
 // ----------------------------------------------------------------------------
-// Tiny decode helpers for handlers (low-risk LOC win)
+// Tiny decode helpers for handlers
 //
 // Handlers should only decode payload fields. Envelope validation is centralized
 // in lgfx_port.c via ops.def metadata.

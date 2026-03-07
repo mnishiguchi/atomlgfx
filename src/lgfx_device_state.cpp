@@ -5,7 +5,7 @@
 
 #include <LovyanGFX.hpp>
 
-// Build-time configuration (generated from include/lgfx_port/lgfx_port_config.h.in)
+// Build-time configuration generated
 #include "lgfx_port/lgfx_port_config.h"
 
 #if (LGFX_PORT_ENABLE_TOUCH == 1)
@@ -546,7 +546,7 @@ static esp_err_t lgfx_device_deinit(void)
     portEXIT_CRITICAL(&g_init_mux);
 
     if (to_delete) {
-        // Best-effort cleanup. If you distrust these calls, remove them.
+        // Best-effort cleanup of any in-flight write/transaction state.
         to_delete->endWrite();
         to_delete->endTransaction();
         delete to_delete;

@@ -5,9 +5,8 @@
 #include "context.h"
 #include "term.h"
 
-// Device-side preset IDs live in the device ABI header.
-// This keeps the preset enum stable across handlers, worker payloads, and
-// src/lgfx_device_api.cpp.
+// Device-side preset IDs live in lgfx_device.h so handlers and the device ABI
+// stay aligned.
 #include "lgfx_device.h"
 
 #include "lgfx_port/handler_decode.h"

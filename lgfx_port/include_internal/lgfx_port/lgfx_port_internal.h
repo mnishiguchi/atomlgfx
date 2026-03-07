@@ -1,5 +1,4 @@
 // lgfx_port/include_internal/lgfx_port/lgfx_port_internal.h
-// lgfx_port/lgfx_port_internal.h
 #pragma once
 
 #include <stdbool.h>
@@ -9,7 +8,7 @@
 #include "globalcontext.h"
 #include "term.h"
 
-#include "lgfx_port/protocol.h" // if you need protocol constants here
+#include "lgfx_port/protocol.h"
 
 #ifdef __cplusplus
 extern "C" {

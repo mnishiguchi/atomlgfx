@@ -1,10 +1,6 @@
 # LovyanGFX AtomVM Port Driver
 
-ESP-IDF component that exposes **LovyanGFX** to **AtomVM Elixir** through an **Erlang term (tuple) port protocol**.
-
-- Host and driver communicate using Erlang terms (tuples / atoms / integers / binaries).
-- Large payloads (pixel data, text strings) use binaries for throughput.
-- The protocol surface is documented and kept aligned with source metadata.
+ESP-IDF component that exposes LovyanGFX to AtomVM Elixir through an Erlang term (tuple) port protocol.
 
 ## Documentation
 
@@ -64,9 +60,14 @@ Configuration is build-time and driven by CMake cache variables set by the paren
 
 Common options:
 
-  - `LGFX_PORT_ENABLE_TOUCH` (default `ON`)
-    - When `ON`, compiles in `Touch_XPT2046` support.
-    - Touch capability is advertised only when touch is attached (see below).
+- `LGFX_PORT_ENABLE_JP_FONTS` (default `ON`)
+- `LGFX_PORT_ENABLE_TOUCH` (default `ON`)
+- `LGFX_PORT_PANEL_WIDTH` (default `320`)
+- `LGFX_PORT_PANEL_HEIGHT` (default `480`)
+- `LGFX_PORT_LCD_CS_GPIO` (default `43`)
+- `LGFX_PORT_LCD_DC_GPIO` (default `3`)
+- `LGFX_PORT_LCD_RST_GPIO` (default `2`)
+- `LGFX_PORT_TOUCH_CS_GPIO` (default `44`)
 
 If `LGFX_PORT_TOUCH_CS_GPIO=-1`, touch code may still compile when enabled, but touch is not attached and `CAP_TOUCH` is not advertised.
 
@@ -89,31 +90,22 @@ idf.py \
 - `include/lgfx_port/`
   - Public headers for this ESP-IDF component
 
+- `lgfx_port/include_internal/lgfx_port/`
+  - Internal protocol metadata, validation helpers, and worker definitions
+  - Includes `ops.def` and `worker_jobs.def`
+
 - `lgfx_port/`
-  - Port driver implementation (protocol decode/validation/dispatch + worker integration)
+  - Port-facing implementation
+  - Mailbox drain, request decode, validation, dispatch, reply handling, worker bridge
 
 - `src/`
-  - Device-facing LovyanGFX adapter layer (protocol-agnostic)
+  - Device-facing LovyanGFX adapter layer
 
 - `docs/`
   - Protocol, architecture, and worker model documentation
 
 - `examples/elixir/`
-  - Example Elixir client for exercising the port driver
-
-## Protocol overview
-
-The wire contract is tuple-based and synchronous (`port:call` style).
-
-- Request
-  - `{lgfx, ProtoVer, Op, Target, Flags, ...}`
-
-- Response
-  - `{ok, Result}` or `{error, Reason}`
-
-See the full contract and operation matrix in:
-
-- [docs/LGFX_PORT_PROTOCOL.md](docs/LGFX_PORT_PROTOCOL.md)
+  - Example Elixir client
 
 ## Protocol doc sync
 
@@ -128,4 +120,4 @@ elixir scripts/sync_lgfx_protocol_doc.exs --check
 
 This repository is under active development.
 
-The term protocol is usable and intended to be the stable integration boundary for host-side Elixir code.
+The protocol is usable, but the project is still pre-release. Until the first tagged release, host and driver should be updated together.

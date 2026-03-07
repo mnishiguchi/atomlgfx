@@ -1,4 +1,4 @@
-// /src/lgfx_device.h
+// src/lgfx_device.h
 #ifndef __LGFX_DEVICE_H__
 #define __LGFX_DEVICE_H__
 
