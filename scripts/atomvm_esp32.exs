@@ -14,22 +14,11 @@ defmodule Main do
   @idf_export_sh_filename "export.sh"
 
   @boot_avm_rel_path "build/libs/esp32boot/elixir_esp32boot.avm"
-
   @default_host_build_dirname "build"
   @default_platform_build_rel_path Path.join(@atomvm_esp32_rel_path, "build")
 
   @atomvm_git_url "https://github.com/atomvm/AtomVM.git"
-
-  # Used only for the initial shallow clone.
   @atomvm_clone_branch "main"
-
-  # Default AtomVM version (branch name, tag name, or full commit SHA).
-  # Override with: --atomvm-ref REF or ATOMVM_REF=REF
-  #
-  # Examples:
-  #   @atomvm_default_ref "main"
-  #   @atomvm_default_ref "v0.6.6"
-  #   @atomvm_default_ref "209835dce092c12afce6e520f30c1dece9483708"
   @atomvm_default_ref @atomvm_clone_branch
 
   @sdkconfig_managed_settings [
@@ -85,72 +74,38 @@ defmodule Main do
   end
 
   defp run_command(command, options, extra_args) do
-    this_repo_root = repo_root()
-
-    atomvm_repo_override = Keyword.get(options, :atomvm_repo, "")
-    allow_dirty = Keyword.get(options, :allow_dirty, false) or truthy_env?("ATOMVM_ALLOW_DIRTY")
-    idf_dir_override = Keyword.get(options, :idf_dir, "")
+    repo_root = repo_root()
+    atomvm_root = resolve_atomvm_root(repo_root, Keyword.get(options, :atomvm_repo, ""))
+    esp32_dir = Path.join(atomvm_root, @atomvm_esp32_rel_path)
+    idf_dir = resolve_idf_dir(Keyword.get(options, :idf_dir, ""))
     target = Keyword.get(options, :target, @default_target)
     port = Keyword.get(options, :port, "")
-    override_was_set = atomvm_repo_override != ""
-
-    idf_dir = resolve_idf_dir(idf_dir_override)
-    {atomvm_root, esp32_dir} = resolve_atomvm_paths(this_repo_root, atomvm_repo_override)
-    {atomvm_ref, atomvm_ref_source} = resolve_atomvm_ref(options)
     port_display = if port == "", do: "(not set)", else: port
+    override_was_set = present?(Keyword.get(options, :atomvm_repo, ""))
+    allow_dirty = Keyword.get(options, :allow_dirty, false) or truthy_env?("ATOMVM_ALLOW_DIRTY")
+    {atomvm_ref, atomvm_ref_source} = resolve_atomvm_ref(options)
+
+    shared = %{
+      repo_root: repo_root,
+      atomvm_root: atomvm_root,
+      esp32_dir: esp32_dir,
+      idf_dir: idf_dir,
+      target: target,
+      port: port,
+      port_display: port_display,
+      override_was_set: override_was_set,
+      atomvm_ref: atomvm_ref,
+      atomvm_ref_source: atomvm_ref_source,
+      allow_dirty: allow_dirty
+    }
 
     case command do
-      "info" ->
-        info_cmd(
-          this_repo_root,
-          atomvm_root,
-          esp32_dir,
-          idf_dir,
-          target,
-          port_display,
-          override_was_set,
-          atomvm_ref,
-          atomvm_ref_source,
-          allow_dirty
-        )
-
-      "install" ->
-        install_cmd(
-          this_repo_root,
-          atomvm_root,
-          esp32_dir,
-          idf_dir,
-          target,
-          port,
-          override_was_set,
-          atomvm_ref,
-          atomvm_ref_source,
-          allow_dirty
-        )
-
-      "monitor" ->
-        monitor_cmd(esp32_dir, idf_dir, port)
-
-      "mkimage" ->
-        mkimage_cmd(
-          this_repo_root,
-          atomvm_root,
-          esp32_dir,
-          idf_dir,
-          target,
-          override_was_set,
-          atomvm_ref,
-          atomvm_ref_source,
-          allow_dirty,
-          extra_args
-        )
-
-      "clean" ->
-        clean_cmd(atomvm_root, esp32_dir)
-
-      _ ->
-        usage()
-        die("Unknown command: #{command}")
+      "info" -> info_cmd(shared)
+      "install" -> install_cmd(shared)
+      "monitor" -> monitor_cmd(shared)
+      "mkimage" -> mkimage_cmd(shared, extra_args)
+      "clean" -> clean_cmd(shared)
+      _ -> usage(); die("Unknown command: #{command}")
     end
   end
 
@@ -213,194 +168,252 @@ defmodule Main do
     """)
   end
 
-  defp die(message) do
-    IO.puts(:stderr, colorize(:red, "✖ #{message}", bold: true))
-    System.halt(1)
-  end
+  defp info_cmd(shared) do
+    component_path = Path.join([shared.esp32_dir, @components_dirname, Path.basename(shared.repo_root)])
 
-  defp say(message) do
-    cond do
-      String.starts_with?(message, "✔") -> IO.puts(colorize(:green, message))
-      String.starts_with?(message, "Next:") -> IO.puts(colorize(:yellow, message))
-      true -> IO.puts(message)
-    end
-  end
+    say("")
+    say("Paths")
+    say("- repo_root:   #{shared.repo_root}")
+    say("- atomvm_root: #{shared.atomvm_root}")
+    say("- esp32_dir:   #{shared.esp32_dir}")
+    say("- idf_dir:     #{shared.idf_dir}")
 
-  defp run!(cmd, args, opts \\ []) do
-    display_override = Keyword.get(opts, :display)
-    display = display_override || [cmd | Enum.map(args, &shell_display/1)] |> Enum.join(" ")
-    IO.puts(colorize(:cyan, "+ #{display}", bold: true))
-    clean_opts = Keyword.drop(opts, [:display])
+    say("")
+    say("Config")
+    say("- target:      #{shared.target}")
+    say("- port:        #{shared.port_display}")
+    say("- atomvm_ref:  #{shared.atomvm_ref}")
+    say("- ref_source:  #{shared.atomvm_ref_source}")
+    say("- allow_dirty: #{shared.allow_dirty}")
 
-    system_opts =
-      [stderr_to_stdout: true, into: IO.stream(:stdio, :line)]
-      |> Keyword.merge(clean_opts)
+    say("")
+    say("Checks")
+    say("- ESP-IDF:     #{if File.regular?(Path.join(shared.idf_dir, @idf_export_sh_filename)), do: "export.sh found", else: "missing export.sh"}")
 
-    {_result, status} = System.cmd(cmd, args, system_opts)
+    if File.dir?(Path.join(shared.atomvm_root, ".git")) do
+      say("- AtomVM:      ok")
+      say("- AtomVM HEAD: #{git_head(shared.atomvm_root)}")
+      say("- AtomVM dirty(tracked): #{yes_no(git_tracked_dirty?(shared.atomvm_root))}")
+      say("- AtomVM dirty(any): #{yes_no(git_dirty?(shared.atomvm_root))}")
+    else
+      say("- AtomVM:      #{if shared.override_was_set, do: "missing at --atomvm-repo", else: "missing at default (install will clone)"}")
 
-    if status != 0 do
-      die("Command failed (exit #{status}): #{display}")
-    end
+      case maybe_resolve_atomvm_ref_without_repo(shared.atomvm_ref) do
+        {:ok, sha, note} when is_binary(sha) and sha != "" ->
+          say("- AtomVM would use: #{sha}  (#{note})")
 
-    :ok
-  end
+        {:ok, nil, note} ->
+          say("- AtomVM would use: (not resolved)  (#{note})")
 
-  defp require_cmd!(cmd) do
-    case System.find_executable(cmd) do
-      nil -> die("Missing dependency: #{cmd}")
-      _ -> :ok
-    end
-  end
-
-  defp ensure_regular_file!(path, label) do
-    if not File.regular?(path) do
-      die("#{label} not found: #{path}")
-    end
-  end
-
-  defp ensure_serial_port_ready!(port) do
-    if !File.exists?(port) do
-      die("Serial port not found: #{port}")
+        {:error, reason} ->
+          say("- AtomVM would use: (not resolved)  (#{reason})")
+      end
     end
 
-    case serial_port_busy_details(port) do
+    say("- ESP32 dir:   #{if File.dir?(shared.esp32_dir), do: "ok", else: "missing"}")
+    say("- Component:   #{if File.exists?(component_path), do: "present (#{component_path})", else: "not present under esp32/components"}")
+
+    if shared.port_display != "(not set)" do
+      say("- Port:        #{if File.exists?(shared.port_display), do: "ok", else: "not found (#{shared.port_display})"}")
+    end
+
+    say("")
+    say("Inspect")
+
+    components_dir = Path.join(shared.esp32_dir, @components_dirname)
+
+    if File.dir?(components_dir) do
+      say("- components:   #{components_dir}")
+
+      case File.ls(components_dir) do
+        {:ok, entries} -> entries |> Enum.sort() |> Enum.each(&IO.puts/1)
+        {:error, reason} -> say("- (failed to list components: #{inspect(reason)})")
+      end
+    else
+      say("- components:   missing (#{components_dir})")
+    end
+
+    say("")
+
+    sdkconfig_defaults = Path.join(shared.esp32_dir, @sdkconfig_defaults_filename)
+
+    if File.regular?(sdkconfig_defaults) do
+      say("- sdkconfig.defaults: #{sdkconfig_defaults}")
+      content = File.read!(sdkconfig_defaults)
+      IO.write(content)
+      if not String.ends_with?(content, "\n"), do: IO.puts("")
+    else
+      say("- sdkconfig.defaults: missing (#{sdkconfig_defaults})")
+    end
+
+    say("")
+  end
+
+  defp install_cmd(shared) do
+    if shared.port == "", do: die("--port is required for install (e.g. --port /dev/ttyACM0)")
+
+    ensure_serial_port_ready!(shared.port)
+    ensure_atomvm_repo!(shared)
+    ensure_atomvm_layout!(shared.atomvm_root, shared.esp32_dir)
+    ensure_component_link!(shared.repo_root, shared.esp32_dir)
+    patch_sdkconfig_defaults!(shared.esp32_dir, Path.basename(shared.repo_root))
+    build_boot_avm_if_needed!(shared.atomvm_root)
+
+    say("Building AtomVM firmware")
+
+    with_idf_env!(
+      shared.idf_dir,
+      shared.esp32_dir,
+      """
+      echo "+ idf.py fullclean"
+      idf.py fullclean
+
+      echo "+ idf.py set-target #{shared.target}"
+      idf.py set-target #{sh_escape(shared.target)}
+
+      echo "+ idf.py reconfigure"
+      idf.py reconfigure
+
+      echo "+ idf.py build"
+      idf.py build
+      """
+    )
+
+    ensure_serial_port_ready!(shared.port)
+    say("Flashing AtomVM firmware")
+
+    boot_avm = Path.join(shared.atomvm_root, @boot_avm_rel_path)
+
+    with_idf_env!(
+      shared.idf_dir,
+      shared.esp32_dir,
+      """
+      PORT=#{sh_escape(shared.port)}
+      BOOT_AVM=#{sh_escape(boot_avm)}
+
+      echo "+ idf.py -p $PORT flash"
+      idf.py -p "$PORT" flash
+
+      if [ ! -f "$BOOT_AVM" ]; then
+        echo "boot AVM not found: $BOOT_AVM" >&2
+        exit 1
+      fi
+
+      if [ -z "${IDF_PATH:-}" ]; then
+        echo "IDF_PATH not set (ESP-IDF env not loaded?)" >&2
+        exit 1
+      fi
+
+      PARTTOOL="$IDF_PATH/components/partition_table/parttool.py"
+      if [ ! -f "$PARTTOOL" ]; then
+        echo "parttool.py not found: $PARTTOOL" >&2
+        exit 1
+      fi
+
+      PYTHON="python"
+      if ! command -v "$PYTHON" >/dev/null 2>&1; then
+        PYTHON="python3"
+      fi
+      if ! command -v "$PYTHON" >/dev/null 2>&1; then
+        echo "python not found in PATH (need python or python3)" >&2
+        exit 1
+      fi
+
+      PT_BIN="build/partition_table/partition-table.bin"
+      if [ ! -f "$PT_BIN" ]; then
+        echo "partition table bin not found: $PT_BIN" >&2
+        exit 1
+      fi
+
+      echo "+ parttool.py write_partition boot.avm"
+      "$PYTHON" "$PARTTOOL" \\
+        -p "$PORT" \\
+        --partition-table-file "$PT_BIN" \\
+        write_partition \\
+        --partition-name boot.avm \\
+        --input "$BOOT_AVM"
+      """
+    )
+
+    say("✔ install complete")
+    say("Next: flash the Elixir app from examples/elixir (mix do clean + atomvm.esp32.flash ...)")
+  end
+
+  defp monitor_cmd(shared) do
+    if shared.port == "", do: die("--port is required for monitor (e.g. --port /dev/ttyACM0)")
+    ensure_serial_port_ready!(shared.port)
+    say("Starting serial monitor")
+
+    with_idf_env!(
+      shared.idf_dir,
+      shared.esp32_dir,
+      """
+      idf.py -p #{sh_escape(shared.port)} monitor
+      """
+    )
+  end
+
+  defp mkimage_cmd(shared, mkimage_extra_args) do
+    host_build_dir = Path.join(shared.atomvm_root, @default_host_build_dirname)
+    platform_build_dir = Path.join(shared.atomvm_root, @default_platform_build_rel_path)
+    boot_avm_path = Path.join(shared.atomvm_root, @boot_avm_rel_path)
+    mkimage_script = Path.join(platform_build_dir, "mkimage.sh")
+
+    ensure_atomvm_repo!(shared)
+    ensure_atomvm_layout!(shared.atomvm_root, shared.esp32_dir)
+    ensure_component_link!(shared.repo_root, shared.esp32_dir)
+    patch_sdkconfig_defaults!(shared.esp32_dir, Path.basename(shared.repo_root))
+    ensure_regular_file!(Path.join(shared.idf_dir, @idf_export_sh_filename), "ESP-IDF export.sh")
+
+    say("Building AtomVM host tree")
+    build_host_tree!(shared.atomvm_root, host_build_dir)
+
+    say("Building AtomVM ESP32 platform")
+    build_platform_tree!(shared.idf_dir, shared.esp32_dir, shared.target, platform_build_dir)
+
+    ensure_regular_file!(boot_avm_path, "boot AVM")
+    ensure_regular_file!(mkimage_script, "mkimage.sh")
+
+    say("Creating release image")
+    run_mkimage!(shared.esp32_dir, mkimage_script, host_build_dir, boot_avm_path, mkimage_extra_args)
+
+    case newest_image_path(platform_build_dir) do
       nil ->
-        :ok
+        die("mkimage.sh finished, but no .img file was found in #{platform_build_dir}")
 
-      details ->
-        die("""
-        Serial port is busy: #{port}
-
-        #{details}
-
-        Tip:
-          Close any serial monitor/tool using the port (idf.py monitor, screen, minicom, picocom, etc.)
-          Then retry.
-        """)
+      image_path ->
+        say("✔ release image ready")
+        IO.puts(image_path)
     end
   end
 
-  defp serial_port_busy_details(port) do
-    lsof_output = serial_port_lsof_output(port)
-    fuser_output = serial_port_fuser_output(port)
+  defp clean_cmd(shared) do
+    platform_build_dir = Path.join(shared.atomvm_root, @default_platform_build_rel_path)
+    ensure_atomvm_layout!(shared.atomvm_root, shared.esp32_dir)
 
-    cond do
-      present?(lsof_output) ->
-        "Detected by lsof:\n" <> lsof_output
-
-      present?(fuser_output) ->
-        "Detected by fuser:\n" <> fuser_output
-
-      true ->
-        nil
-    end
-  end
-
-  defp serial_port_lsof_output(port) do
-    if System.find_executable("lsof") do
-      case System.cmd("lsof", ["-n", "-w", port], stderr_to_stdout: true) do
-        {output, 0} ->
-          String.trim(output)
-
-        {_output, _status} ->
-          ""
-      end
+    if File.dir?(platform_build_dir) do
+      say("Removing ESP32 build dir: #{platform_build_dir}")
+      File.rm_rf!(platform_build_dir)
+      say("✔ clean complete")
     else
-      ""
+      say("ESP32 build dir not present: #{platform_build_dir}")
     end
   end
 
-  defp serial_port_fuser_output(port) do
-    if System.find_executable("fuser") do
-      case System.cmd("fuser", [port], stderr_to_stdout: true) do
-        {output, 0} ->
-          String.trim(output)
-
-        {_output, _status} ->
-          ""
-      end
-    else
-      ""
-    end
+  defp ensure_atomvm_repo!(shared) do
+    ensure_atomvm_repo!(
+      shared.atomvm_root,
+      shared.override_was_set,
+      shared.atomvm_ref,
+      shared.atomvm_ref_source,
+      shared.allow_dirty
+    )
   end
 
-  defp script_dir do
-    Path.dirname(@script_file)
-  end
-
-  defp repo_root do
-    Path.expand("..", script_dir())
-  end
-
-  defp resolve_idf_dir(""), do: resolve_idf_dir(nil)
-
-  defp resolve_idf_dir(nil) do
+  defp ensure_atomvm_repo!(atomvm_root, override_was_set, atomvm_ref, atomvm_ref_source, allow_dirty) do
     cond do
-      present?(System.get_env("ESP_IDF_DIR")) -> Path.expand(System.get_env("ESP_IDF_DIR"))
-      present?(System.get_env("IDF_PATH")) -> Path.expand(System.get_env("IDF_PATH"))
-      true -> Path.join(System.user_home!(), @default_idf_rel_path)
-    end
-  end
-
-  defp resolve_idf_dir(override) do
-    Path.expand(override)
-  end
-
-  defp resolve_atomvm_paths(_this_repo_root, override)
-       when is_binary(override) and override != "" do
-    override = Path.expand(override)
-
-    cond do
-      File.dir?(Path.join(override, @atomvm_esp32_rel_path)) ->
-        {override, Path.join(override, @atomvm_esp32_rel_path)}
-
-      File.dir?(Path.join(override, Path.join("AtomVM", @atomvm_esp32_rel_path))) ->
-        atomvm_root = Path.join(override, "AtomVM")
-        {atomvm_root, Path.join(atomvm_root, @atomvm_esp32_rel_path)}
-
-      true ->
-        die("Could not find AtomVM under --atomvm-repo: #{override}")
-    end
-  end
-
-  defp resolve_atomvm_paths(this_repo_root, _override) do
-    normalized = Path.expand(this_repo_root)
-
-    if String.match?(normalized, ~r|/src/platforms/esp32/components/[^/]+$|) do
-      esp32_dir = Path.expand("../..", normalized)
-      atomvm_root = Path.expand("../../..", esp32_dir)
-      {atomvm_root, esp32_dir}
-    else
-      atomvm_root = Path.join(System.user_home!(), @default_atomvm_rel_path)
-      {atomvm_root, Path.join(atomvm_root, @atomvm_esp32_rel_path)}
-    end
-  end
-
-  defp resolve_atomvm_ref(options) do
-    cli = Keyword.get(options, :atomvm_ref, "") |> to_string() |> String.trim()
-    env = (System.get_env("ATOMVM_REF") || "") |> String.trim()
-
-    cond do
-      present?(cli) -> {cli, "--atomvm-ref"}
-      present?(env) -> {env, "ATOMVM_REF"}
-      true -> {@atomvm_default_ref, "default(@atomvm_default_ref)"}
-    end
-  end
-
-  defp ensure_atomvm_repo!(
-         atomvm_root,
-         override_was_set,
-         atomvm_ref,
-         atomvm_ref_source,
-         allow_dirty
-       ) do
-    cond do
-      override_was_set ->
-        if File.dir?(Path.join(atomvm_root, ".git")) do
-          :ok
-        else
-          die("AtomVM repo not found at --atomvm-repo location: #{atomvm_root}")
-        end
+      override_was_set and not File.dir?(Path.join(atomvm_root, ".git")) ->
+        die("AtomVM repo not found at --atomvm-repo location: #{atomvm_root}")
 
       File.dir?(Path.join(atomvm_root, ".git")) ->
         say("✔ AtomVM repo exists: #{atomvm_root}")
@@ -429,15 +442,13 @@ defmodule Main do
   end
 
   defp ensure_atomvm_ref!(atomvm_root, atomvm_ref, atomvm_ref_source, allow_dirty) do
-    ref = to_string(atomvm_ref) |> String.trim()
+    ref = String.trim(to_string(atomvm_ref))
 
-    if ref == "" do
-      say("✔ AtomVM ref: tracking #{@atomvm_clone_branch} (no pin configured)")
-      :ok
-    else
-      require_cmd!("git")
+    cond do
+      ref == "" ->
+        say("✔ AtomVM ref: tracking #{@atomvm_clone_branch} (no pin configured)")
 
-      if not allow_dirty and git_tracked_dirty?(atomvm_root) do
+      not allow_dirty and git_tracked_dirty?(atomvm_root) ->
         die("""
         AtomVM repo has tracked local changes and cannot be pinned safely:
           #{atomvm_root}
@@ -450,41 +461,23 @@ defmodule Main do
             --allow-dirty
             ATOMVM_ALLOW_DIRTY=1
         """)
-      end
 
-      current_sha = git_rev_parse!(atomvm_root, "HEAD")
-      desired_sha = resolve_ref_to_commit!(atomvm_root, ref)
+      true ->
+        require_cmd!("git")
+        current_sha = git_rev_parse!(atomvm_root, "HEAD")
+        desired_sha = resolve_ref_to_commit!(atomvm_root, ref)
 
-      if current_sha == desired_sha do
-        say(
-          "✔ AtomVM pinned: #{ref} (#{String.slice(desired_sha, 0, 12)}) via #{atomvm_ref_source}"
-        )
-      else
-        say(
-          "Pinning AtomVM to: #{ref} (#{String.slice(desired_sha, 0, 12)}) via #{atomvm_ref_source}"
-        )
-
-        run!("git", ["checkout", "--detach", desired_sha], cd: atomvm_root)
-      end
-
-      :ok
+        if current_sha == desired_sha do
+          say("✔ AtomVM pinned: #{ref} (#{String.slice(desired_sha, 0, 12)}) via #{atomvm_ref_source}")
+        else
+          say("Pinning AtomVM to: #{ref} (#{String.slice(desired_sha, 0, 12)}) via #{atomvm_ref_source}")
+          run!("git", ["checkout", "--detach", desired_sha], cd: atomvm_root)
+        end
     end
   end
 
   defp resolve_ref_to_commit!(repo_dir, ref) do
-    cond do
-      sha40?(ref) ->
-        resolve_sha!(repo_dir, ref)
-
-      true ->
-        resolve_name_ref!(repo_dir, ref)
-    end
-  end
-
-  defp sha40?(ref), do: String.match?(ref, ~r/^[0-9a-f]{40}$/)
-
-  defp looks_like_version_tag?(ref) do
-    String.match?(ref, ~r/^v?\d+\.\d+(\.\d+)?/)
+    if sha40?(ref), do: resolve_sha!(repo_dir, ref), else: resolve_name_ref!(repo_dir, ref)
   end
 
   defp resolve_sha!(repo_dir, sha) do
@@ -505,121 +498,104 @@ defmodule Main do
   end
 
   defp resolve_name_ref!(repo_dir, ref) do
-    if looks_like_version_tag?(ref) do
-      cond do
-        fetch_tag(repo_dir, ref) ->
-          git_rev_parse!(repo_dir, "refs/tags/#{ref}^{commit}")
+    cond do
+      looks_like_version_tag?(ref) and fetch_tag(repo_dir, ref) ->
+        git_rev_parse!(repo_dir, "refs/tags/#{ref}^{commit}")
 
-        fetch_branch(repo_dir, ref) ->
-          git_rev_parse!(repo_dir, "refs/remotes/origin/#{ref}^{commit}")
+      fetch_branch(repo_dir, ref) ->
+        git_rev_parse!(repo_dir, "refs/remotes/origin/#{ref}^{commit}")
 
-        match?({:ok, _}, git_try_rev_parse(repo_dir, "#{ref}^{commit}")) ->
-          git_rev_parse!(repo_dir, "#{ref}^{commit}")
+      fetch_tag(repo_dir, ref) ->
+        git_rev_parse!(repo_dir, "refs/tags/#{ref}^{commit}")
 
-        true ->
-          die_unknown_ref!(ref)
-      end
-    else
-      cond do
-        fetch_branch(repo_dir, ref) ->
-          git_rev_parse!(repo_dir, "refs/remotes/origin/#{ref}^{commit}")
+      match?({:ok, _}, git_try_rev_parse(repo_dir, "#{ref}^{commit}")) ->
+        git_rev_parse!(repo_dir, "#{ref}^{commit}")
 
-        fetch_tag(repo_dir, ref) ->
-          git_rev_parse!(repo_dir, "refs/tags/#{ref}^{commit}")
-
-        match?({:ok, _}, git_try_rev_parse(repo_dir, "#{ref}^{commit}")) ->
-          git_rev_parse!(repo_dir, "#{ref}^{commit}")
-
-        true ->
-          die_unknown_ref!(ref)
-      end
+      true ->
+        die_unknown_ref!(ref)
     end
   end
 
   defp fetch_tag(repo_dir, tag) do
     refspec = "refs/tags/#{tag}:refs/tags/#{tag}"
 
-    {_, status} =
-      System.cmd("git", ["fetch", "--depth", "1", "origin", refspec],
-        cd: repo_dir,
-        stderr_to_stdout: true
-      )
-
-    status == 0
+    case System.cmd("git", ["fetch", "--depth", "1", "origin", refspec],
+           cd: repo_dir,
+           stderr_to_stdout: true
+         ) do
+      {_, 0} -> true
+      _ -> false
+    end
   end
 
   defp fetch_branch(repo_dir, branch) do
     refspec = "refs/heads/#{branch}:refs/remotes/origin/#{branch}"
 
-    {_, status} =
-      System.cmd("git", ["fetch", "--depth", "1", "origin", refspec],
-        cd: repo_dir,
-        stderr_to_stdout: true
-      )
-
-    status == 0
-  end
-
-  defp die_unknown_ref!(ref) do
-    die("""
-    Could not resolve AtomVM ref: #{ref}
-
-    Expected one of:
-      - branch name (e.g. main)
-      - tag name (e.g. v0.6.6)
-      - full SHA (40 hex chars)
-    """)
-  end
-
-  defp git_dirty?(repo_dir) do
-    {out, status} =
-      System.cmd("git", ["status", "--porcelain"],
-        cd: repo_dir,
-        stderr_to_stdout: true
-      )
-
-    status == 0 and String.trim(out) != ""
-  end
-
-  defp git_tracked_dirty?(repo_dir) do
-    {out, status} =
-      System.cmd("git", ["status", "--porcelain=v1", "--untracked-files=no"],
-        cd: repo_dir,
-        stderr_to_stdout: true
-      )
-
-    status == 0 and String.trim(out) != ""
-  end
-
-  defp git_try_rev_parse(repo_dir, rev) do
-    case System.cmd("git", ["rev-parse", "--verify", rev], cd: repo_dir, stderr_to_stdout: true) do
-      {out, 0} -> {:ok, String.trim(out)}
-      {_out, _} -> :error
+    case System.cmd("git", ["fetch", "--depth", "1", "origin", refspec],
+           cd: repo_dir,
+           stderr_to_stdout: true
+         ) do
+      {_, 0} -> true
+      _ -> false
     end
   end
 
-  defp git_rev_parse!(repo_dir, rev) do
-    case System.cmd("git", ["rev-parse", "--verify", rev], cd: repo_dir, stderr_to_stdout: true) do
-      {out, 0} ->
-        String.trim(out)
+  defp resolve_atomvm_ref(options) do
+    cli = options |> Keyword.get(:atomvm_ref, "") |> to_string() |> String.trim()
+    env = System.get_env("ATOMVM_REF", "") |> String.trim()
 
-      {out, status} ->
-        die("git rev-parse failed (#{status}) for #{rev}:\n#{String.trim(out)}")
+    cond do
+      present?(cli) -> {cli, "--atomvm-ref"}
+      present?(env) -> {env, "ATOMVM_REF"}
+      true -> {@atomvm_default_ref, "default(@atomvm_default_ref)"}
+    end
+  end
+
+  defp resolve_idf_dir(""), do: resolve_idf_dir(nil)
+
+  defp resolve_idf_dir(nil) do
+    cond do
+      present?(System.get_env("ESP_IDF_DIR")) -> Path.expand(System.get_env("ESP_IDF_DIR"))
+      present?(System.get_env("IDF_PATH")) -> Path.expand(System.get_env("IDF_PATH"))
+      true -> Path.join(System.user_home!(), @default_idf_rel_path)
+    end
+  end
+
+  defp resolve_idf_dir(path), do: Path.expand(path)
+
+  defp resolve_atomvm_root(_repo_root, override) when is_binary(override) and override != "" do
+    override = Path.expand(override)
+
+    cond do
+      File.dir?(Path.join(override, @atomvm_esp32_rel_path)) ->
+        override
+
+      File.dir?(Path.join(override, Path.join("AtomVM", @atomvm_esp32_rel_path))) ->
+        Path.join(override, "AtomVM")
+
+      true ->
+        die("Could not find AtomVM under --atomvm-repo: #{override}")
+    end
+  end
+
+  defp resolve_atomvm_root(repo_root, _override) do
+    normalized = Path.expand(repo_root)
+
+    if String.match?(normalized, ~r|/src/platforms/esp32/components/[^/]+$|) do
+      esp32_dir = Path.expand("../..", normalized)
+      Path.expand("../../..", esp32_dir)
+    else
+      Path.join(System.user_home!(), @default_atomvm_rel_path)
     end
   end
 
   defp ensure_atomvm_layout!(atomvm_root, esp32_dir) do
-    if not File.dir?(atomvm_root) do
-      die("AtomVM repo directory not found: #{atomvm_root}")
-    end
-
-    if not File.dir?(esp32_dir) do
-      die("AtomVM ESP32 platform dir not found: #{esp32_dir}")
-    end
+    if not File.dir?(atomvm_root), do: die("AtomVM repo directory not found: #{atomvm_root}")
+    if not File.dir?(esp32_dir), do: die("AtomVM ESP32 platform dir not found: #{esp32_dir}")
   end
 
-  defp ensure_component_link!(this_repo_root, esp32_dir) do
-    name = Path.basename(this_repo_root)
+  defp ensure_component_link!(repo_root, esp32_dir) do
+    name = Path.basename(repo_root)
     want = Path.join([esp32_dir, @components_dirname, name])
 
     File.mkdir_p!(Path.join(esp32_dir, @components_dirname))
@@ -627,7 +603,7 @@ defmodule Main do
     cond do
       symlink?(want) ->
         want_real = canonical_path(want)
-        repo_real = canonical_path(this_repo_root)
+        repo_real = canonical_path(repo_root)
 
         cond do
           present?(want_real) and present?(repo_real) and want_real == repo_real ->
@@ -646,7 +622,7 @@ defmodule Main do
       true ->
         say("Linking component into: #{want}")
 
-        case File.ln_s(this_repo_root, want) do
+        case File.ln_s(repo_root, want) do
           :ok -> :ok
           {:error, reason} -> die("Failed to create symlink: #{want} (#{inspect(reason)})")
         end
@@ -655,57 +631,36 @@ defmodule Main do
 
   defp patch_sdkconfig_defaults!(esp32_dir, tag) do
     path = Path.join(esp32_dir, @sdkconfig_defaults_filename)
-
-    if !File.regular?(path) do
-      die("sdkconfig.defaults not found: #{path}")
-    end
+    ensure_regular_file!(path, "sdkconfig.defaults")
 
     begin_marker = "# --- BEGIN #{tag} defaults (managed) ---"
     end_marker = "# --- END #{tag} defaults ---"
 
-    original_content = File.read!(path)
-
     lines =
-      original_content
+      path
+      |> File.read!()
       |> split_lines_preserve_empty()
       |> remove_managed_block_lines(begin_marker, end_marker)
       |> trim_trailing_blank_lines()
 
     managed_block = [begin_marker | @sdkconfig_managed_settings] ++ [end_marker]
-
-    new_lines =
-      if lines == [] do
-        managed_block
-      else
-        lines ++ [""] ++ managed_block
-      end
-
-    new_content = Enum.join(new_lines, "\n") <> "\n"
-
+    new_lines = if(lines == [], do: managed_block, else: lines ++ [""] ++ managed_block)
     File.cp!(path, "#{path}.bak")
-    File.write!(path, new_content)
-
+    File.write!(path, Enum.join(new_lines, "\n") <> "\n")
     say("✔ patched: #{path}")
   end
 
   defp build_boot_avm_if_needed!(atomvm_root) do
     boot_avm = Path.join(atomvm_root, @boot_avm_rel_path)
 
-    if File.regular?(boot_avm) do
-      :ok
-    else
+    unless File.regular?(boot_avm) do
       require_cmd!("cmake")
       say("Generating boot AVM (Generic UNIX build)")
-
       build_dir = Path.join(atomvm_root, "build")
       File.mkdir_p!(build_dir)
-
       run!("cmake", [".."], cd: build_dir)
       run!("cmake", ["--build", "."], cd: build_dir)
-
-      if !File.regular?(boot_avm) do
-        die("boot AVM missing after build: #{boot_avm}")
-      end
+      ensure_regular_file!(boot_avm, "boot AVM")
     end
   end
 
@@ -764,29 +719,10 @@ defmodule Main do
     end
   end
 
-  defp clean_cmd(atomvm_root, esp32_dir) do
-    platform_build_dir = Path.join(atomvm_root, @default_platform_build_rel_path)
-
-    ensure_atomvm_layout!(atomvm_root, esp32_dir)
-
-    if File.dir?(platform_build_dir) do
-      say("Removing ESP32 build dir: #{platform_build_dir}")
-      File.rm_rf!(platform_build_dir)
-      say("✔ clean complete")
-    else
-      say("ESP32 build dir not present: #{platform_build_dir}")
-    end
-  end
-
-  # Keep ESP-IDF/Python env isolated in a non-login Bash subshell.
   defp with_idf_env!(idf_dir, workdir, shell_body) do
     export_sh = Path.join(idf_dir, @idf_export_sh_filename)
-
     ensure_regular_file!(export_sh, "ESP-IDF export.sh")
-
-    if !File.dir?(workdir) do
-      die("Workdir not found: #{workdir}")
-    end
+    if not File.dir?(workdir), do: die("Workdir not found: #{workdir}")
 
     script = """
     source #{sh_escape(export_sh)} >/dev/null 2>&1
@@ -807,317 +743,45 @@ defmodule Main do
     )
   end
 
-  defp info_cmd(
-         this_repo_root,
-         atomvm_root,
-         esp32_dir,
-         idf_dir,
-         target,
-         port_display,
-         override_was_set,
-         atomvm_ref,
-         atomvm_ref_source,
-         allow_dirty
-       ) do
-    component_name = Path.basename(this_repo_root)
-    component_path = Path.join([esp32_dir, @components_dirname, component_name])
+  defp ensure_serial_port_ready!(port) do
+    if not File.exists?(port), do: die("Serial port not found: #{port}")
 
-    say("")
-    say("Paths")
-    say("- repo_root:   #{this_repo_root}")
-    say("- atomvm_root: #{atomvm_root}")
-    say("- esp32_dir:   #{esp32_dir}")
-    say("- idf_dir:     #{idf_dir}")
+    case serial_port_busy_details(port) do
+      nil ->
+        :ok
 
-    say("")
-    say("Config")
-    say("- target:      #{target}")
-    say("- port:        #{port_display}")
-    say("- atomvm_ref:  #{atomvm_ref}")
-    say("- ref_source:  #{atomvm_ref_source}")
-    say("- allow_dirty: #{allow_dirty}")
+      details ->
+        die("""
+        Serial port is busy: #{port}
 
-    say("")
-    say("Checks")
+        #{details}
 
-    if File.regular?(Path.join(idf_dir, @idf_export_sh_filename)) do
-      say("- ESP-IDF:     export.sh found")
-    else
-      say("- ESP-IDF:     missing export.sh")
+        Tip:
+          Close any serial monitor/tool using the port (idf.py monitor, screen, minicom, picocom, etc.)
+          Then retry.
+        """)
     end
-
-    if File.dir?(Path.join(atomvm_root, ".git")) do
-      say("- AtomVM:      ok")
-
-      head =
-        case System.cmd("git", ["rev-parse", "HEAD"], cd: atomvm_root, stderr_to_stdout: true) do
-          {out, 0} -> String.trim(out)
-          _ -> "(unknown)"
-        end
-
-      dirty_any = if git_dirty?(atomvm_root), do: "yes", else: "no"
-      dirty_tracked = if git_tracked_dirty?(atomvm_root), do: "yes", else: "no"
-
-      say("- AtomVM HEAD: #{head}")
-      say("- AtomVM dirty(tracked): #{dirty_tracked}")
-      say("- AtomVM dirty(any): #{dirty_any}")
-    else
-      if override_was_set do
-        say("- AtomVM:      missing at --atomvm-repo")
-      else
-        say("- AtomVM:      missing at default (install will clone)")
-      end
-
-      case maybe_resolve_atomvm_ref_without_repo(atomvm_ref) do
-        {:ok, sha, note} when is_binary(sha) and sha != "" ->
-          say("- AtomVM would use: #{sha}  (#{note})")
-
-        {:ok, nil, note} ->
-          say("- AtomVM would use: (not resolved)  (#{note})")
-
-        {:error, reason} ->
-          say("- AtomVM would use: (not resolved)  (#{reason})")
-      end
-    end
-
-    if File.dir?(esp32_dir) do
-      say("- ESP32 dir:   ok")
-    else
-      say("- ESP32 dir:   missing")
-    end
-
-    if File.exists?(component_path) do
-      say("- Component:   present (#{component_path})")
-    else
-      say("- Component:   not present under esp32/components")
-    end
-
-    if port_display != "(not set)" do
-      if File.exists?(port_display) do
-        say("- Port:        ok")
-      else
-        say("- Port:        not found (#{port_display})")
-      end
-    end
-
-    say("")
-    say("Inspect")
-
-    components_dir = Path.join(esp32_dir, @components_dirname)
-
-    if File.dir?(components_dir) do
-      say("- components:   #{components_dir}")
-
-      case File.ls(components_dir) do
-        {:ok, entries} ->
-          entries
-          |> Enum.sort()
-          |> Enum.each(&IO.puts/1)
-
-        {:error, reason} ->
-          say("- (failed to list components: #{inspect(reason)})")
-      end
-    else
-      say("- components:   missing (#{components_dir})")
-    end
-
-    say("")
-
-    sdkconfig_defaults = Path.join(esp32_dir, @sdkconfig_defaults_filename)
-
-    if File.regular?(sdkconfig_defaults) do
-      say("- sdkconfig.defaults: #{sdkconfig_defaults}")
-      content = File.read!(sdkconfig_defaults)
-      IO.write(content)
-
-      if not String.ends_with?(content, "\n") do
-        IO.puts("")
-      end
-    else
-      say("- sdkconfig.defaults: missing (#{sdkconfig_defaults})")
-    end
-
-    say("")
   end
 
-  defp install_cmd(
-         this_repo_root,
-         atomvm_root,
-         esp32_dir,
-         idf_dir,
-         target,
-         port,
-         override_was_set,
-         atomvm_ref,
-         atomvm_ref_source,
-         allow_dirty
-       ) do
-    if port == "" do
-      die("--port is required for install (e.g. --port /dev/ttyACM0)")
-    end
-
-    ensure_serial_port_ready!(port)
-
-    ensure_atomvm_repo!(atomvm_root, override_was_set, atomvm_ref, atomvm_ref_source, allow_dirty)
-
-    if !File.dir?(esp32_dir) do
-      die("AtomVM ESP32 platform dir missing: #{esp32_dir}")
-    end
-
-    ensure_component_link!(this_repo_root, esp32_dir)
-    patch_sdkconfig_defaults!(esp32_dir, Path.basename(this_repo_root))
-    build_boot_avm_if_needed!(atomvm_root)
-
-    say("Building AtomVM firmware")
-
-    with_idf_env!(
-      idf_dir,
-      esp32_dir,
-      """
-      echo "+ idf.py fullclean"
-      idf.py fullclean
-
-      echo "+ idf.py set-target #{target}"
-      idf.py set-target #{sh_escape(target)}
-
-      echo "+ idf.py reconfigure"
-      idf.py reconfigure
-
-      echo "+ idf.py build"
-      idf.py build
-      """
-    )
-
-    ensure_serial_port_ready!(port)
-
-    say("Flashing AtomVM firmware")
-
-    boot_avm = Path.join(atomvm_root, @boot_avm_rel_path)
-
-    with_idf_env!(
-      idf_dir,
-      esp32_dir,
-      """
-      PORT=#{sh_escape(port)}
-      BOOT_AVM=#{sh_escape(boot_avm)}
-
-      echo "+ idf.py -p $PORT flash"
-      idf.py -p "$PORT" flash
-
-      if [ ! -f "$BOOT_AVM" ]; then
-        echo "boot AVM not found: $BOOT_AVM" >&2
-        exit 1
-      fi
-
-      if [ -z "${IDF_PATH:-}" ]; then
-        echo "IDF_PATH not set (ESP-IDF env not loaded?)" >&2
-        exit 1
-      fi
-
-      PARTTOOL="$IDF_PATH/components/partition_table/parttool.py"
-      if [ ! -f "$PARTTOOL" ]; then
-        echo "parttool.py not found: $PARTTOOL" >&2
-        exit 1
-      fi
-
-      PYTHON="python"
-      if ! command -v "$PYTHON" >/dev/null 2>&1; then
-        PYTHON="python3"
-      fi
-      if ! command -v "$PYTHON" >/dev/null 2>&1; then
-        echo "python not found in PATH (need python or python3)" >&2
-        exit 1
-      fi
-
-      PT_BIN="build/partition_table/partition-table.bin"
-      if [ ! -f "$PT_BIN" ]; then
-        echo "partition table bin not found: $PT_BIN" >&2
-        exit 1
-      fi
-
-      echo "+ parttool.py write_partition boot.avm"
-      "$PYTHON" "$PARTTOOL" \\
-        -p "$PORT" \\
-        --partition-table-file "$PT_BIN" \\
-        write_partition \\
-        --partition-name boot.avm \\
-        --input "$BOOT_AVM"
-      """
-    )
-
-    say("✔ install complete")
-    say("Next: flash the Elixir app from examples/elixir (mix do clean + atomvm.esp32.flash ...)")
-  end
-
-  defp monitor_cmd(esp32_dir, idf_dir, port) do
-    if port == "" do
-      die("--port is required for monitor (e.g. --port /dev/ttyACM0)")
-    end
-
-    ensure_serial_port_ready!(port)
-
-    say("Starting serial monitor")
-
-    with_idf_env!(
-      idf_dir,
-      esp32_dir,
-      """
-      idf.py -p #{sh_escape(port)} monitor
-      """
-    )
-  end
-
-  defp mkimage_cmd(
-         this_repo_root,
-         atomvm_root,
-         esp32_dir,
-         idf_dir,
-         target,
-         override_was_set,
-         atomvm_ref,
-         atomvm_ref_source,
-         allow_dirty,
-         mkimage_extra_args
-       ) do
-    host_build_dir = Path.join(atomvm_root, @default_host_build_dirname)
-    platform_build_dir = Path.join(atomvm_root, @default_platform_build_rel_path)
-    boot_avm_path = Path.join(atomvm_root, @boot_avm_rel_path)
-    mkimage_script = Path.join(platform_build_dir, "mkimage.sh")
-
-    ensure_atomvm_repo!(atomvm_root, override_was_set, atomvm_ref, atomvm_ref_source, allow_dirty)
-    ensure_atomvm_layout!(atomvm_root, esp32_dir)
-    ensure_component_link!(this_repo_root, esp32_dir)
-    patch_sdkconfig_defaults!(esp32_dir, Path.basename(this_repo_root))
-    ensure_regular_file!(Path.join(idf_dir, @idf_export_sh_filename), "ESP-IDF export.sh")
-
-    say("Building AtomVM host tree")
-    build_host_tree!(atomvm_root, host_build_dir)
-
-    say("Building AtomVM ESP32 platform")
-    build_platform_tree!(idf_dir, esp32_dir, target, platform_build_dir)
-
-    ensure_regular_file!(boot_avm_path, "boot AVM")
-    ensure_regular_file!(mkimage_script, "mkimage.sh")
-
-    say("Creating release image")
-
-    run_mkimage!(
-      esp32_dir,
-      mkimage_script,
-      host_build_dir,
-      boot_avm_path,
-      mkimage_extra_args
-    )
-
-    image_path = newest_image_path(platform_build_dir)
-
+  defp serial_port_busy_details(port) do
     cond do
-      image_path == nil ->
-        die("mkimage.sh finished, but no .img file was found in #{platform_build_dir}")
+      present?(serial_port_lsof_output(port)) -> "Detected by lsof:\n" <> serial_port_lsof_output(port)
+      present?(serial_port_fuser_output(port)) -> "Detected by fuser:\n" <> serial_port_fuser_output(port)
+      true -> nil
+    end
+  end
 
-      true ->
-        say("✔ release image ready")
-        IO.puts(image_path)
+  defp serial_port_lsof_output(port), do: maybe_tool_output("lsof", ["-n", "-w", port])
+  defp serial_port_fuser_output(port), do: maybe_tool_output("fuser", [port])
+
+  defp maybe_tool_output(cmd, args) do
+    if System.find_executable(cmd) do
+      case System.cmd(cmd, args, stderr_to_stdout: true) do
+        {output, 0} -> String.trim(output)
+        _ -> ""
+      end
+    else
+      ""
     end
   end
 
@@ -1149,10 +813,7 @@ defmodule Main do
         end
       end)
 
-    if in_block? do
-      die("Managed block start found without end marker in sdkconfig.defaults")
-    end
-
+    if in_block?, do: die("Managed block start found without end marker in sdkconfig.defaults")
     Enum.reverse(result)
   end
 
@@ -1163,99 +824,52 @@ defmodule Main do
     |> Enum.reverse()
   end
 
-  defp canonical_path(path) do
-    cond do
-      System.find_executable("realpath") ->
-        case System.cmd("realpath", [path], stderr_to_stdout: true) do
-          {output, 0} -> String.trim(output)
-          _ -> ""
-        end
+  defp script_dir, do: Path.dirname(@script_file)
+  defp repo_root, do: Path.expand("..", script_dir())
+  defp present?(value), do: is_binary(value) and String.trim(value) != ""
+  defp sha40?(ref), do: String.match?(ref, ~r/^[0-9a-f]{40}$/)
+  defp looks_like_version_tag?(ref), do: String.match?(ref, ~r/^v?\d+\.\d+(\.\d+)?/)
+  defp yes_no(true), do: "yes"
+  defp yes_no(false), do: "no"
 
-      System.find_executable("readlink") ->
-        case System.cmd("readlink", ["-f", path], stderr_to_stdout: true) do
-          {output, 0} -> String.trim(output)
-          _ -> ""
-        end
-
-      true ->
-        ""
+  defp git_head(repo_dir) do
+    case System.cmd("git", ["rev-parse", "HEAD"], cd: repo_dir, stderr_to_stdout: true) do
+      {out, 0} -> String.trim(out)
+      _ -> "(unknown)"
     end
   end
 
-  defp symlink?(path) do
-    case File.lstat(path) do
-      {:ok, %File.Stat{type: :symlink}} -> true
+  defp git_dirty?(repo_dir) do
+    case System.cmd("git", ["status", "--porcelain"], cd: repo_dir, stderr_to_stdout: true) do
+      {out, 0} -> String.trim(out) != ""
       _ -> false
     end
   end
 
-  defp present?(value), do: is_binary(value) and String.trim(value) != ""
-
-  defp shell_display(arg) do
-    arg = to_string(arg)
-
-    if String.contains?(arg, [" ", "\t", "\n", "'", "\"", "$", "`", "\\"]) do
-      sh_escape(arg)
-    else
-      arg
+  defp git_tracked_dirty?(repo_dir) do
+    case System.cmd("git", ["status", "--porcelain=v1", "--untracked-files=no"],
+           cd: repo_dir,
+           stderr_to_stdout: true
+         ) do
+      {out, 0} -> String.trim(out) != ""
+      _ -> false
     end
   end
 
-  defp sh_escape(value) do
-    "'" <> String.replace(to_string(value), "'", ~s('"'"')) <> "'"
-  end
-
-  defp colorize(color, text, opts \\ [])
-
-  defp colorize(_color, text, _opts) when not is_binary(text) do
-    IO.iodata_to_binary(text)
-  end
-
-  defp colorize(color, text, opts) do
-    if ansi_enabled?() do
-      maybe_bold =
-        if Keyword.get(opts, :bold, false) do
-          [IO.ANSI.bright()]
-        else
-          []
-        end
-
-      color_code =
-        case color do
-          :red -> IO.ANSI.red()
-          :green -> IO.ANSI.green()
-          :yellow -> IO.ANSI.yellow()
-          :cyan -> IO.ANSI.cyan()
-          _ -> ""
-        end
-
-      IO.iodata_to_binary([maybe_bold, color_code, text, IO.ANSI.reset()])
-    else
-      text
+  defp git_try_rev_parse(repo_dir, rev) do
+    case System.cmd("git", ["rev-parse", "--verify", rev], cd: repo_dir, stderr_to_stdout: true) do
+      {out, 0} -> {:ok, String.trim(out)}
+      _ -> :error
     end
   end
 
-  defp ansi_enabled? do
-    IO.ANSI.enabled?() and is_nil(System.get_env("NO_COLOR"))
-  end
-
-  defp truthy_env?(name) do
-    case System.get_env(name) do
-      nil ->
-        false
-
-      value ->
-        value
-        |> String.trim()
-        |> String.downcase()
-        |> then(&(&1 in ["1", "true", "yes", "y", "on"]))
+  defp git_rev_parse!(repo_dir, rev) do
+    case System.cmd("git", ["rev-parse", "--verify", rev], cd: repo_dir, stderr_to_stdout: true) do
+      {out, 0} -> String.trim(out)
+      {out, status} -> die("git rev-parse failed (#{status}) for #{rev}:\n#{String.trim(out)}")
     end
   end
 
-  # Resolve a ref to a commit SHA without a local repo (info-only).
-  # - Branch: uses ls-remote --heads
-  # - Tag: uses ls-remote --tags (prefers peeled ^{} when present)
-  # - SHA: returns the SHA as-is (not validated)
   defp maybe_resolve_atomvm_ref_without_repo(ref) do
     ref = to_string(ref) |> String.trim()
 
@@ -1302,8 +916,8 @@ defmodule Main do
   end
 
   defp ls_remote_tag_sha(tag) do
-    patterns = ["refs/tags/#{tag}^{}", "refs/tags/#{tag}"]
-    args = ["ls-remote", "--tags", @atomvm_git_url] ++ patterns
+    peeled_tag = "#{tag}^{}"
+    args = ["ls-remote", "--tags", @atomvm_git_url, "refs/tags/#{peeled_tag}", "refs/tags/#{tag}"]
 
     case System.cmd("git", args, stderr_to_stdout: true) do
       {out, 0} ->
@@ -1313,7 +927,7 @@ defmodule Main do
           Enum.find_value(lines, fn line ->
             case String.split(line, "\t") do
               [sha, "refs/tags/" <> rest] ->
-                if rest == "#{tag}^{}", do: sha, else: nil
+                if rest == peeled_tag, do: sha, else: nil
 
               _ ->
                 nil
@@ -1332,14 +946,131 @@ defmodule Main do
           end)
 
         cond do
-          is_binary(peeled) and peeled != "" -> {:ok, peeled}
-          is_binary(direct) and direct != "" -> {:ok, direct}
+          present?(peeled) -> {:ok, peeled}
+          present?(direct) -> {:ok, direct}
           true -> :error
         end
 
       _ ->
         :error
     end
+  end
+
+  defp require_cmd!(cmd) do
+    if System.find_executable(cmd), do: :ok, else: die("Missing dependency: #{cmd}")
+  end
+
+  defp ensure_regular_file!(path, label) do
+    if File.regular?(path), do: :ok, else: die("#{label} not found: #{path}")
+  end
+
+  defp canonical_path(path) do
+    cond do
+      System.find_executable("realpath") ->
+        case System.cmd("realpath", [path], stderr_to_stdout: true) do
+          {output, 0} -> String.trim(output)
+          _ -> ""
+        end
+
+      System.find_executable("readlink") ->
+        case System.cmd("readlink", ["-f", path], stderr_to_stdout: true) do
+          {output, 0} -> String.trim(output)
+          _ -> ""
+        end
+
+      true ->
+        ""
+    end
+  end
+
+  defp symlink?(path) do
+    case File.lstat(path) do
+      {:ok, %File.Stat{type: :symlink}} -> true
+      _ -> false
+    end
+  end
+
+  defp run!(cmd, args, opts \\ []) do
+    display = Keyword.get(opts, :display) || Enum.join([cmd | Enum.map(args, &shell_display/1)], " ")
+    IO.puts(colorize(:cyan, "+ #{display}", bold: true))
+    system_opts = [stderr_to_stdout: true, into: IO.stream(:stdio, :line)] |> Keyword.merge(Keyword.drop(opts, [:display]))
+
+    case System.cmd(cmd, args, system_opts) do
+      {_result, 0} -> :ok
+      {_result, status} -> die("Command failed (exit #{status}): #{display}")
+    end
+  end
+
+  defp shell_display(arg) do
+    arg = to_string(arg)
+
+    if String.contains?(arg, [" ", "\t", "\n", "'", "\"", "$", "`", "\\"]) do
+      sh_escape(arg)
+    else
+      arg
+    end
+  end
+
+  defp sh_escape(value), do: "'" <> String.replace(to_string(value), "'", ~s('"'"')) <> "'"
+
+  defp die(message) do
+    IO.puts(:stderr, colorize(:red, "✖ #{message}", bold: true))
+    System.halt(1)
+  end
+
+  defp say(message) do
+    cond do
+      String.starts_with?(message, "✔") -> IO.puts(colorize(:green, message))
+      String.starts_with?(message, "Next:") -> IO.puts(colorize(:yellow, message))
+      true -> IO.puts(message)
+    end
+  end
+
+  defp colorize(color, text, opts \\ [])
+  defp colorize(_color, text, _opts) when not is_binary(text), do: IO.iodata_to_binary(text)
+
+  defp colorize(color, text, opts) do
+    if ansi_enabled?() do
+      maybe_bold = if Keyword.get(opts, :bold, false), do: [IO.ANSI.bright()], else: []
+
+      color_code =
+        case color do
+          :red -> IO.ANSI.red()
+          :green -> IO.ANSI.green()
+          :yellow -> IO.ANSI.yellow()
+          :cyan -> IO.ANSI.cyan()
+          _ -> ""
+        end
+
+      IO.iodata_to_binary([maybe_bold, color_code, text, IO.ANSI.reset()])
+    else
+      text
+    end
+  end
+
+  defp ansi_enabled?, do: IO.ANSI.enabled?() and is_nil(System.get_env("NO_COLOR"))
+
+  defp truthy_env?(name) do
+    case System.get_env(name) do
+      nil -> false
+
+      value ->
+        value
+        |> String.trim()
+        |> String.downcase()
+        |> then(&(&1 in ["1", "true", "yes", "y", "on"]))
+    end
+  end
+
+  defp die_unknown_ref!(ref) do
+    die("""
+    Could not resolve AtomVM ref: #{ref}
+
+    Expected one of:
+      - branch name (e.g. main)
+      - tag name (e.g. v0.6.6)
+      - full SHA (40 hex chars)
+    """)
   end
 end
 
