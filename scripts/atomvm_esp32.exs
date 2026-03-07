@@ -12,7 +12,11 @@ defmodule Main do
   @components_dirname "components"
   @sdkconfig_defaults_filename "sdkconfig.defaults"
   @idf_export_sh_filename "export.sh"
+
   @boot_avm_rel_path "build/libs/esp32boot/elixir_esp32boot.avm"
+
+  @default_host_build_dirname "build"
+  @default_platform_build_rel_path Path.join(@atomvm_esp32_rel_path, "build")
 
   @atomvm_git_url "https://github.com/atomvm/AtomVM.git"
 
@@ -67,7 +71,7 @@ defmodule Main do
             {flag, _value} = List.first(invalid)
             die("Unknown option: #{flag} (use --help)")
 
-          extra_args != [] ->
+          extra_args != [] and command != "mkimage" ->
             die("Unexpected positional arguments: #{Enum.join(extra_args, " ")}")
 
           Keyword.get(options, :help, false) ->
@@ -75,12 +79,12 @@ defmodule Main do
             System.halt(0)
 
           true ->
-            run_command(command, options)
+            run_command(command, options, extra_args)
         end
     end
   end
 
-  defp run_command(command, options) do
+  defp run_command(command, options, extra_args) do
     this_repo_root = repo_root()
 
     atomvm_repo_override = Keyword.get(options, :atomvm_repo, "")
@@ -127,6 +131,20 @@ defmodule Main do
       "monitor" ->
         monitor_cmd(esp32_dir, idf_dir, port)
 
+      "mkimage" ->
+        mkimage_cmd(
+          this_repo_root,
+          atomvm_root,
+          esp32_dir,
+          idf_dir,
+          target,
+          override_was_set,
+          atomvm_ref,
+          atomvm_ref_source,
+          allow_dirty,
+          extra_args
+        )
+
       _ ->
         usage()
         die("Unknown command: #{command}")
@@ -137,23 +155,31 @@ defmodule Main do
     IO.puts("""
     Usage:
       #{@script_name} <command> [options]
+      #{@script_name} mkimage [options] [-- mkimage args...]
 
     Commands:
       info      Print resolved paths and basic checks (no changes)
       install   Ensure AtomVM exists, pin version, link component, patch config, build + flash firmware
       monitor   Attach serial monitor (idf.py monitor)
+      mkimage   Build a custom AtomVM release image for this project
 
-    Options:
-      --atomvm-repo PATH   AtomVM repo root (or wrapper containing AtomVM/)
-      --atomvm-ref REF     AtomVM ref: branch/tag/full SHA
-                          default: #{@atomvm_default_ref}
-                          env: ATOMVM_REF
-      --allow-dirty        Allow pinning even if AtomVM repo has tracked local changes
-                          env: ATOMVM_ALLOW_DIRTY=1
-      --idf-dir PATH       ESP-IDF root (contains export.sh). Optional.
-      --target TARGET      esp32 / esp32s3 / etc (default: #{@default_target})
-      --port PORT          Serial device (required for install/monitor)
-      -h, --help           Show help
+    Common options:
+      --atomvm-repo PATH       AtomVM repo root (or wrapper containing AtomVM/)
+      --atomvm-ref REF         AtomVM ref: branch/tag/full SHA
+                              default: #{@atomvm_default_ref}
+                              env: ATOMVM_REF
+      --allow-dirty            Allow pinning even if AtomVM repo has tracked local changes
+                              env: ATOMVM_ALLOW_DIRTY=1
+      --idf-dir PATH           ESP-IDF root (contains export.sh). Optional.
+      --target TARGET          esp32 / esp32s3 / etc (default: #{@default_target})
+      --port PORT              Serial device (required for install/monitor)
+      -h, --help               Show help
+
+    mkimage notes:
+      - Host build dir is inferred as: <atomvm_repo>/#{@default_host_build_dirname}
+      - Platform build dir is inferred as: <atomvm_repo>/#{@default_platform_build_rel_path}
+      - Boot AVM is inferred as: <atomvm_repo>/#{@boot_avm_rel_path}
+      - Extra positional arguments are forwarded to mkimage.sh unchanged.
 
     Examples:
       #{@script_name} info
@@ -162,6 +188,10 @@ defmodule Main do
       #{@script_name} install --atomvm-ref v0.6.6 --target esp32s3 --port /dev/ttyACM0
       #{@script_name} install --atomvm-ref 209835dce092c12afce6e520f30c1dece9483708 --target esp32s3 --port /dev/ttyACM0
       #{@script_name} monitor --port /dev/ttyACM0
+      #{@script_name} mkimage
+      #{@script_name} mkimage --target esp32s3
+      #{@script_name} mkimage -- --main build/my_app.avm
+      #{@script_name} mkimage -- --main build/my_app.avm --data build/assets.avm
 
     ESP-IDF discovery (if --idf-dir not provided):
       Uses ESP_IDF_DIR, then IDF_PATH, else defaults to: $HOME/#{@default_idf_rel_path}
@@ -209,6 +239,12 @@ defmodule Main do
     case System.find_executable(cmd) do
       nil -> die("Missing dependency: #{cmd}")
       _ -> :ok
+    end
+  end
+
+  defp ensure_regular_file!(path, label) do
+    if not File.regular?(path) do
+      die("#{label} not found: #{path}")
     end
   end
 
@@ -341,7 +377,13 @@ defmodule Main do
     end
   end
 
-  defp ensure_atomvm_repo!(atomvm_root, override_was_set, atomvm_ref, atomvm_ref_source, allow_dirty) do
+  defp ensure_atomvm_repo!(
+         atomvm_root,
+         override_was_set,
+         atomvm_ref,
+         atomvm_ref_source,
+         allow_dirty
+       ) do
     cond do
       override_was_set ->
         if File.dir?(Path.join(atomvm_root, ".git")) do
@@ -404,9 +446,14 @@ defmodule Main do
       desired_sha = resolve_ref_to_commit!(atomvm_root, ref)
 
       if current_sha == desired_sha do
-        say("✔ AtomVM pinned: #{ref} (#{String.slice(desired_sha, 0, 12)}) via #{atomvm_ref_source}")
+        say(
+          "✔ AtomVM pinned: #{ref} (#{String.slice(desired_sha, 0, 12)}) via #{atomvm_ref_source}"
+        )
       else
-        say("Pinning AtomVM to: #{ref} (#{String.slice(desired_sha, 0, 12)}) via #{atomvm_ref_source}")
+        say(
+          "Pinning AtomVM to: #{ref} (#{String.slice(desired_sha, 0, 12)}) via #{atomvm_ref_source}"
+        )
+
         run!("git", ["checkout", "--detach", desired_sha], cd: atomvm_root)
       end
 
@@ -449,7 +496,6 @@ defmodule Main do
 
   defp resolve_name_ref!(repo_dir, ref) do
     if looks_like_version_tag?(ref) do
-      # Tag-first path (v0.6.6, etc.)
       cond do
         fetch_tag(repo_dir, ref) ->
           git_rev_parse!(repo_dir, "refs/tags/#{ref}^{commit}")
@@ -464,7 +510,6 @@ defmodule Main do
           die_unknown_ref!(ref)
       end
     else
-      # Branch-first path (main, feature/foo, etc.) with guaranteed refresh.
       cond do
         fetch_branch(repo_dir, ref) ->
           git_rev_parse!(repo_dir, "refs/remotes/origin/#{ref}^{commit}")
@@ -482,7 +527,6 @@ defmodule Main do
   end
 
   defp fetch_tag(repo_dir, tag) do
-    # Fetch exactly this tag ref into local tags, without fetching all tags.
     refspec = "refs/tags/#{tag}:refs/tags/#{tag}"
 
     {_, status} =
@@ -495,7 +539,6 @@ defmodule Main do
   end
 
   defp fetch_branch(repo_dir, branch) do
-    # Always refresh exactly this branch tip into origin/<branch>
     refspec = "refs/heads/#{branch}:refs/remotes/origin/#{branch}"
 
     {_, status} =
@@ -528,7 +571,6 @@ defmodule Main do
     status == 0 and String.trim(out) != ""
   end
 
-  # Tracked changes only (ignores untracked files).
   defp git_tracked_dirty?(repo_dir) do
     {out, status} =
       System.cmd("git", ["status", "--porcelain=v1", "--untracked-files=no"],
@@ -553,6 +595,16 @@ defmodule Main do
 
       {out, status} ->
         die("git rev-parse failed (#{status}) for #{rev}:\n#{String.trim(out)}")
+    end
+  end
+
+  defp ensure_atomvm_layout!(atomvm_root, esp32_dir) do
+    if not File.dir?(atomvm_root) do
+      die("AtomVM repo directory not found: #{atomvm_root}")
+    end
+
+    if not File.dir?(esp32_dir) do
+      die("AtomVM ESP32 platform dir not found: #{esp32_dir}")
     end
   end
 
@@ -647,13 +699,66 @@ defmodule Main do
     end
   end
 
+  defp build_host_tree!(atomvm_root, host_build_dir) do
+    require_cmd!("cmake")
+    File.mkdir_p!(host_build_dir)
+    run!("cmake", ["-S", atomvm_root, "-B", host_build_dir])
+    run!("cmake", ["--build", host_build_dir])
+  end
+
+  defp build_platform_tree!(idf_dir, esp32_dir, target, platform_build_dir) do
+    with_idf_env!(
+      idf_dir,
+      esp32_dir,
+      """
+      echo "+ idf.py -B #{sh_escape(platform_build_dir)} set-target #{target}"
+      idf.py -B #{sh_escape(platform_build_dir)} set-target #{sh_escape(target)}
+
+      echo "+ idf.py -B #{sh_escape(platform_build_dir)} build"
+      idf.py -B #{sh_escape(platform_build_dir)} build
+      """
+    )
+  end
+
+  defp run_mkimage!(esp32_dir, mkimage_script, host_build_dir, boot_avm_path, mkimage_extra_args) do
+    args =
+      [
+        sh_escape(mkimage_script),
+        "--build_dir",
+        sh_escape(host_build_dir),
+        "--boot",
+        sh_escape(boot_avm_path)
+      ] ++ Enum.map(mkimage_extra_args, &sh_escape/1)
+
+    command = Enum.join(args, " ")
+
+    run!(
+      "bash",
+      ["-Eeuo", "pipefail", "-c", "cd #{sh_escape(esp32_dir)}\n#{command}"],
+      display: "bash -c #{shell_display(command)}"
+    )
+  end
+
+  defp newest_image_path(platform_build_dir) do
+    pattern = Path.join(platform_build_dir, "*.img")
+
+    case Path.wildcard(pattern) do
+      [] ->
+        nil
+
+      paths ->
+        paths
+        |> Enum.map(fn path -> {path, File.stat!(path).mtime} end)
+        |> Enum.max_by(fn {_path, mtime} -> mtime end)
+        |> elem(0)
+    end
+  end
+
   # Keep ESP-IDF/Python env isolated in a non-login Bash subshell.
   defp with_idf_env!(idf_dir, workdir, shell_body) do
     export_sh = Path.join(idf_dir, @idf_export_sh_filename)
 
-    if !File.regular?(export_sh) do
-      die("ESP-IDF export.sh not found: #{export_sh}")
-    end
+    ensure_regular_file!(export_sh, "ESP-IDF export.sh")
 
     if !File.dir?(workdir) do
       die("Workdir not found: #{workdir}")
@@ -859,7 +964,6 @@ defmodule Main do
       """
     )
 
-    # Another process may grab the port while the build is running.
     ensure_serial_port_ready!(port)
 
     say("Flashing AtomVM firmware")
@@ -876,7 +980,6 @@ defmodule Main do
       echo "+ idf.py -p $PORT flash"
       idf.py -p "$PORT" flash
 
-      # Ensure boot.avm partition is written (idf.py flash does not always include data partitions).
       if [ ! -f "$BOOT_AVM" ]; then
         echo "boot AVM not found: $BOOT_AVM" >&2
         exit 1
@@ -938,6 +1041,60 @@ defmodule Main do
       idf.py -p #{sh_escape(port)} monitor
       """
     )
+  end
+
+  defp mkimage_cmd(
+         this_repo_root,
+         atomvm_root,
+         esp32_dir,
+         idf_dir,
+         target,
+         override_was_set,
+         atomvm_ref,
+         atomvm_ref_source,
+         allow_dirty,
+         mkimage_extra_args
+       ) do
+    host_build_dir = Path.join(atomvm_root, @default_host_build_dirname)
+    platform_build_dir = Path.join(atomvm_root, @default_platform_build_rel_path)
+    boot_avm_path = Path.join(atomvm_root, @boot_avm_rel_path)
+    mkimage_script = Path.join(platform_build_dir, "mkimage.sh")
+
+    ensure_atomvm_repo!(atomvm_root, override_was_set, atomvm_ref, atomvm_ref_source, allow_dirty)
+    ensure_atomvm_layout!(atomvm_root, esp32_dir)
+    ensure_component_link!(this_repo_root, esp32_dir)
+    patch_sdkconfig_defaults!(esp32_dir, Path.basename(this_repo_root))
+    ensure_regular_file!(Path.join(idf_dir, @idf_export_sh_filename), "ESP-IDF export.sh")
+
+    say("Building AtomVM host tree")
+    build_host_tree!(atomvm_root, host_build_dir)
+
+    say("Building AtomVM ESP32 platform")
+    build_platform_tree!(idf_dir, esp32_dir, target, platform_build_dir)
+
+    ensure_regular_file!(boot_avm_path, "boot AVM")
+    ensure_regular_file!(mkimage_script, "mkimage.sh")
+
+    say("Creating release image")
+
+    run_mkimage!(
+      esp32_dir,
+      mkimage_script,
+      host_build_dir,
+      boot_avm_path,
+      mkimage_extra_args
+    )
+
+    image_path = newest_image_path(platform_build_dir)
+
+    cond do
+      image_path == nil ->
+        die("mkimage.sh finished, but no .img file was found in #{platform_build_dir}")
+
+      true ->
+        say("✔ release image ready")
+        IO.puts(image_path)
+    end
   end
 
   defp split_lines_preserve_empty(content) do
