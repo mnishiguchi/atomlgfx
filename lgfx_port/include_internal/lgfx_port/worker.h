@@ -265,15 +265,19 @@ esp_err_t lgfx_worker_device_push_sprite(
     uint16_t transparent565);
 
 // Push a sprite with rotation and zoom to an LCD or sprite destination target.
+//
+// Fixed-point units are kept wire-aligned through the worker ABI:
+// - angle_x100: centi-degrees (9000 == 90.00°)
+// - zoom_*_x1024: x1024 scale (1024 == 1.0x)
 esp_err_t lgfx_worker_device_push_rotate_zoom(
     lgfx_port_t *port,
     uint8_t src_target,
     uint8_t dst_target,
     int16_t x,
     int16_t y,
-    float angle_deg,
-    float zoom_x,
-    float zoom_y,
+    int32_t angle_x100,
+    int32_t zoom_x_x1024,
+    int32_t zoom_y_x1024,
     bool has_transparent,
     uint16_t transparent565);
 

@@ -183,6 +183,7 @@ extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
         return ESP_ERR_INVALID_ARG;
     }
 
+    // Semantic validation for rotate/zoom lives here.
     if (!std::isfinite(angle_deg) || !std::isfinite(zoom_x) || !std::isfinite(zoom_y)) {
         return ESP_ERR_INVALID_ARG;
     }

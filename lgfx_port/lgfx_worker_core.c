@@ -2,7 +2,6 @@
 // Worker task core.
 // Concurrency and ownership model: see docs/WORKER_MODEL.md.
 
-#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -46,7 +45,6 @@ typedef struct
 } lgfx_worker_t;
 
 static void lgfx_worker_task_main(void *arg);
-static esp_err_t lgfx_worker_exec_push_rotate_zoom(lgfx_job_t *job);
 
 static void lgfx_worker_cleanup_job_payload(lgfx_job_t *job)
 {
@@ -58,38 +56,6 @@ static void lgfx_worker_cleanup_job_payload(lgfx_job_t *job)
         free(job->owned_payload);
         job->owned_payload = NULL;
     }
-}
-
-static esp_err_t lgfx_worker_exec_push_rotate_zoom(lgfx_job_t *job)
-{
-    if (!job) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    const float angle_deg = job->a.push_rotate_zoom.angle_deg;
-    const float zoom_x = job->a.push_rotate_zoom.zoom_x;
-    const float zoom_y = job->a.push_rotate_zoom.zoom_y;
-
-    // Basic worker-side validation. The device layer also validates and then
-    // calls the pinned LovyanGFX-backed sprite rotate/zoom path.
-    if (!isfinite(angle_deg) || !isfinite(zoom_x) || !isfinite(zoom_y)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    if (zoom_x <= 0.0f || zoom_y <= 0.0f) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    return lgfx_device_sprite_push_rotate_zoom(
-        job->a.push_rotate_zoom.src_target,
-        job->a.push_rotate_zoom.dst_target,
-        job->a.push_rotate_zoom.x,
-        job->a.push_rotate_zoom.y,
-        angle_deg,
-        zoom_x,
-        zoom_y,
-        job->a.push_rotate_zoom.has_transparent,
-        job->a.push_rotate_zoom.transparent565);
 }
 
 // Queue a job pointer from the port thread and block until the worker completes.

@@ -5,8 +5,6 @@
 #include "context.h"
 #include "term.h"
 
-#include "esp_err.h"
-
 #include "lgfx_port/handler_decode.h"
 #include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
@@ -33,10 +31,9 @@
 // - Angle uses centi-degrees (i32; 9000 == 90.00°)
 // - Zoom uses x1024 fixed-point scale (i32; 1024 == 1.0x)
 //
-// Current worker wrapper still accepts float angle/zoom values, so this handler
-// decodes the wire format (i32/i32) and converts to float at the worker call site.
-#define LGFX_ANGLE_X100_SCALE 100.0f
-#define LGFX_ZOOM_X1024_SCALE 1024.0f
+// Keep the handler wire-oriented: decode fixed-point integers here and carry them
+// unchanged into the worker ABI. Conversion to float happens later at the device
+// call boundary.
 
 typedef struct
 {
@@ -165,13 +162,6 @@ static bool decode_push_rotate_zoom_args(const lgfx_request_t *req, lgfx_push_ro
         return false;
     }
 
-    if (out->zoom_x_x1024 <= 0) {
-        return false;
-    }
-    if (out->zoom_y_x1024 <= 0) {
-        return false;
-    }
-
     out->has_transparent = false;
     out->transparent565 = 0;
 
@@ -246,24 +236,6 @@ term lgfx_handle_pushSprite(Context *ctx, lgfx_port_t *port, const lgfx_request_
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    uint16_t src_w = 0;
-    uint16_t src_h = 0;
-    esp_err_t err = lgfx_worker_device_get_target_dims(port, (uint8_t) req->target, &src_w, &src_h);
-    if (err == ESP_ERR_NOT_FOUND) {
-        return reply_error(ctx, port, req, port->atoms.bad_target, 0);
-    }
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, err);
-
-    if (args.dst_target != 0) {
-        uint16_t dst_w = 0;
-        uint16_t dst_h = 0;
-        err = lgfx_worker_device_get_target_dims(port, args.dst_target, &dst_w, &dst_h);
-        if (err == ESP_ERR_NOT_FOUND) {
-            return reply_error(ctx, port, req, port->atoms.bad_target, 0);
-        }
-        LGFX_RETURN_IF_ESP_ERR(ctx, port, req, err);
-    }
-
     LGFX_RETURN_IF_ESP_ERR(
         ctx,
         port,
@@ -288,10 +260,6 @@ term lgfx_handle_pushRotateZoom(Context *ctx, lgfx_port_t *port, const lgfx_requ
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    const float angle_deg = ((float) args.angle_x100) / LGFX_ANGLE_X100_SCALE;
-    const float zoom_x = ((float) args.zoom_x_x1024) / LGFX_ZOOM_X1024_SCALE;
-    const float zoom_y = ((float) args.zoom_y_x1024) / LGFX_ZOOM_X1024_SCALE;
-
     LGFX_RETURN_IF_ESP_ERR(
         ctx,
         port,
@@ -302,9 +270,9 @@ term lgfx_handle_pushRotateZoom(Context *ctx, lgfx_port_t *port, const lgfx_requ
             args.dst_target,
             args.x,
             args.y,
-            angle_deg,
-            zoom_x,
-            zoom_y,
+            args.angle_x100,
+            args.zoom_x_x1024,
+            args.zoom_y_x1024,
             args.has_transparent,
             args.transparent565));
 

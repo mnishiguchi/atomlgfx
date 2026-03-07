@@ -519,9 +519,9 @@ esp_err_t lgfx_worker_device_push_rotate_zoom(
     uint8_t dst_target,
     int16_t x,
     int16_t y,
-    float angle_deg,
-    float zoom_x,
-    float zoom_y,
+    int32_t angle_x100,
+    int32_t zoom_x_x1024,
+    int32_t zoom_y_x1024,
     bool has_transparent,
     uint16_t transparent565)
 {
@@ -532,9 +532,9 @@ esp_err_t lgfx_worker_device_push_rotate_zoom(
         .dst_target = dst_target,
         .x = x,
         .y = y,
-        .angle_deg = angle_deg,
-        .zoom_x = zoom_x,
-        .zoom_y = zoom_y,
+        .angle_x100 = angle_x100,
+        .zoom_x_x1024 = zoom_x_x1024,
+        .zoom_y_x1024 = zoom_y_x1024,
         .has_transparent = has_transparent,
         .transparent565 = transparent565);
 }

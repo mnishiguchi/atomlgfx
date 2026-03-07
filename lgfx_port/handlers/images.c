@@ -15,6 +15,15 @@
 term lgfx_handle_pushImage(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     // {lgfx, ver, pushImage, target, flags, X, Y, W, H, StridePixels, DataRgb565Binary}
+    //
+    // Handler responsibility here is limited to wire decode.
+    // Binary-size capping stays in lgfx_decode_binary_at().
+    // Device code remains authoritative for:
+    // - stride == 0 normalization
+    // - stride >= w
+    // - even byte length
+    // - overflow / required byte count
+    // - insufficient payload size
 
     int16_t x = 0;
     int16_t y = 0;
@@ -28,10 +37,10 @@ term lgfx_handle_pushImage(Context *ctx, lgfx_port_t *port, const lgfx_request_t
     if (!lgfx_decode_i16_at(req, 6, &y)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_decode_u16_at(req, 7, &w) || w == 0) {
+    if (!lgfx_decode_u16_at(req, 7, &w)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_decode_u16_at(req, 8, &h) || h == 0) {
+    if (!lgfx_decode_u16_at(req, 8, &h)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
     if (!lgfx_decode_u16_at(req, 9, &stride)) {
@@ -41,25 +50,6 @@ term lgfx_handle_pushImage(Context *ctx, lgfx_port_t *port, const lgfx_request_t
     const uint8_t *bytes = NULL;
     size_t len = 0;
     if (!lgfx_decode_binary_at(req, 10, &bytes, &len)) {
-        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
-    }
-
-    uint32_t stride_eff = (stride == 0) ? (uint32_t) w : (uint32_t) stride;
-    if (stride_eff < (uint32_t) w) {
-        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
-    }
-
-    if ((len & 1u) != 0u) {
-        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
-    }
-
-    uint64_t needed64 = (uint64_t) stride_eff * (uint64_t) h * 2u;
-    if (needed64 > (uint64_t) SIZE_MAX) {
-        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
-    }
-    size_t needed = (size_t) needed64;
-
-    if (len < needed) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
