@@ -145,6 +145,9 @@ defmodule Main do
           extra_args
         )
 
+      "clean" ->
+        clean_cmd(atomvm_root, esp32_dir)
+
       _ ->
         usage()
         die("Unknown command: #{command}")
@@ -162,6 +165,7 @@ defmodule Main do
       install   Ensure AtomVM exists, pin version, link component, patch config, build + flash firmware
       monitor   Attach serial monitor (idf.py monitor)
       mkimage   Build a custom AtomVM release image for this project
+      clean     Remove AtomVM ESP32 platform build directory
 
     Common options:
       --atomvm-repo PATH       AtomVM repo root (or wrapper containing AtomVM/)
@@ -181,6 +185,11 @@ defmodule Main do
       - Boot AVM is inferred as: <atomvm_repo>/#{@boot_avm_rel_path}
       - Extra positional arguments are forwarded to mkimage.sh unchanged.
 
+    clean notes:
+      - Removes only the ESP32 platform build directory:
+          <atomvm_repo>/#{@default_platform_build_rel_path}
+      - Does not remove the host build directory.
+
     Examples:
       #{@script_name} info
       #{@script_name} install --target esp32s3 --port /dev/ttyACM0
@@ -192,6 +201,7 @@ defmodule Main do
       #{@script_name} mkimage --target esp32s3
       #{@script_name} mkimage -- --main build/my_app.avm
       #{@script_name} mkimage -- --main build/my_app.avm --data build/assets.avm
+      #{@script_name} clean
 
     ESP-IDF discovery (if --idf-dir not provided):
       Uses ESP_IDF_DIR, then IDF_PATH, else defaults to: $HOME/#{@default_idf_rel_path}
@@ -751,6 +761,20 @@ defmodule Main do
         |> Enum.map(fn path -> {path, File.stat!(path).mtime} end)
         |> Enum.max_by(fn {_path, mtime} -> mtime end)
         |> elem(0)
+    end
+  end
+
+  defp clean_cmd(atomvm_root, esp32_dir) do
+    platform_build_dir = Path.join(atomvm_root, @default_platform_build_rel_path)
+
+    ensure_atomvm_layout!(atomvm_root, esp32_dir)
+
+    if File.dir?(platform_build_dir) do
+      say("Removing ESP32 build dir: #{platform_build_dir}")
+      File.rm_rf!(platform_build_dir)
+      say("✔ clean complete")
+    else
+      say("ESP32 build dir not present: #{platform_build_dir}")
     end
   end
 
