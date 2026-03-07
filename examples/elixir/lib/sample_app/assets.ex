@@ -12,15 +12,18 @@ defmodule SampleApp.Assets do
   @info_path Path.join(@icons_dir, "info.rgb565")
   @alert_path Path.join(@icons_dir, "alert.rgb565")
   @close_path Path.join(@icons_dir, "close.rgb565")
+  @piyopiyo_path Path.join(@icons_dir, "piyopiyo.rgb565")
 
   @external_resource @info_path
   @external_resource @alert_path
   @external_resource @close_path
+  @external_resource @piyopiyo_path
 
   # Compile-time embed: binaries end up inside the BEAM.
   @info File.read!(@info_path)
   @alert File.read!(@alert_path)
   @close File.read!(@close_path)
+  @piyopiyo File.read!(@piyopiyo_path)
 
   def icon_w, do: @icon_w
   def icon_h, do: @icon_h
@@ -28,4 +31,5 @@ defmodule SampleApp.Assets do
   def icon(:info), do: @info
   def icon(:alert), do: @alert
   def icon(:close), do: @close
+  def icon(:piyopiyo), do: @piyopiyo
 end

@@ -32,6 +32,7 @@ defmodule SampleApp.MovingIcons do
   @sprite_info 1
   @sprite_alert 2
   @sprite_close 3
+  @sprite_piyopiyo 4
 
   # Destination sprite handles (double-buffered strip renderer).
   @sprite_buf0 10
@@ -51,11 +52,17 @@ defmodule SampleApp.MovingIcons do
     icon_w = Assets.icon_w()
     icon_h = Assets.icon_h()
 
-    icons = {Assets.icon(:info), Assets.icon(:alert), Assets.icon(:close)}
+    icons = {
+      Assets.icon(:info),
+      Assets.icon(:alert),
+      Assets.icon(:close),
+      Assets.icon(:piyopiyo)
+    }
+
     log_icon_sizes(icons, icon_w, icon_h)
 
     with {:ok, caps} <- Port.get_caps(port),
-         :ok <- ensure_sprite_support(caps, 5),
+         :ok <- ensure_sprite_support(caps, 6),
          :ok <- Port.fill_screen(port, @bg),
          {:ok, icon_handles} <- prepare_icon_sprites(port, icons, icon_w, icon_h),
          {:ok, strip_h} <- prepare_frame_sprites(port, w, h) do
@@ -102,11 +109,13 @@ defmodule SampleApp.MovingIcons do
     info_bin = elem(icons, 0)
     alert_bin = elem(icons, 1)
     close_bin = elem(icons, 2)
+    piyopiyo_bin = elem(icons, 3)
 
     with :ok <- create_and_load_icon_sprite(port, @sprite_info, icon_w, icon_h, info_bin),
          :ok <- create_and_load_icon_sprite(port, @sprite_alert, icon_w, icon_h, alert_bin),
-         :ok <- create_and_load_icon_sprite(port, @sprite_close, icon_w, icon_h, close_bin) do
-      {:ok, {@sprite_info, @sprite_alert, @sprite_close}}
+         :ok <- create_and_load_icon_sprite(port, @sprite_close, icon_w, icon_h, close_bin),
+         :ok <- create_and_load_icon_sprite(port, @sprite_piyopiyo, icon_w, icon_h, piyopiyo_bin) do
+      {:ok, {@sprite_info, @sprite_alert, @sprite_close, @sprite_piyopiyo}}
     else
       {:error, _} = err ->
         cleanup_icon_sprites(port)
@@ -159,6 +168,7 @@ defmodule SampleApp.MovingIcons do
     _ = safe_delete_sprite(port, @sprite_info)
     _ = safe_delete_sprite(port, @sprite_alert)
     _ = safe_delete_sprite(port, @sprite_close)
+    _ = safe_delete_sprite(port, @sprite_piyopiyo)
     :ok
   end
 
@@ -205,7 +215,7 @@ defmodule SampleApp.MovingIcons do
     {seed, r4} = rand_u32(seed)
     {seed, r5} = rand_u32(seed)
 
-    img = rem(i, 3)
+    img = rem(i, 4)
 
     x = rem(r1, w)
     y = rem(r2, h)
@@ -378,7 +388,8 @@ defmodule SampleApp.MovingIcons do
       case img do
         0 -> elem(icon_handles, 0)
         1 -> elem(icon_handles, 1)
-        _ -> elem(icon_handles, 2)
+        2 -> elem(icon_handles, 2)
+        3 -> elem(icon_handles, 3)
       end
 
     # Strip-local coordinates: subtract the strip's top y-offset.
@@ -434,7 +445,9 @@ defmodule SampleApp.MovingIcons do
     i0 = byte_size(elem(icons, 0))
     i1 = byte_size(elem(icons, 1))
     i2 = byte_size(elem(icons, 2))
-    IO.puts("icon bytes info=#{i0} alert=#{i1} close=#{i2} expected=#{expected}")
+    i3 = byte_size(elem(icons, 3))
+
+    IO.puts("icon bytes info=#{i0} alert=#{i1} close=#{i2} piyopiyo=#{i3} expected=#{expected}")
   end
 
   defp div_ceil(a, b) when is_integer(a) and is_integer(b) and b > 0 do
