@@ -104,36 +104,21 @@
 #endif
 
 // -----------------------------------------------------------------------------
-// Computed capability gates (0/1)
+// Derived advertisement gates (0/1)
 // -----------------------------------------------------------------------------
-#ifndef LGFX_PORT_SUPPORTS_SPRITE
-#error "LGFX_PORT_SUPPORTS_SPRITE must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_SUPPORTS_LAST_ERROR
-#error "LGFX_PORT_SUPPORTS_LAST_ERROR must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_SUPPORTS_PUSHIMAGE
-#error "LGFX_PORT_SUPPORTS_PUSHIMAGE must be defined by lgfx_port_config.h"
-#endif
+//
+// Keep only real derived gates. Sprite / pushImage / lastError are always part
+// of the current compiled protocol surface.
 #ifndef LGFX_PORT_SUPPORTS_TOUCH
 #error "LGFX_PORT_SUPPORTS_TOUCH must be defined by lgfx_port_config.h"
 #endif
 
-#if (LGFX_PORT_SUPPORTS_SPRITE != 0) && (LGFX_PORT_SUPPORTS_SPRITE != 1)
-#error "LGFX_PORT_SUPPORTS_SPRITE must be 0 or 1"
-#endif
-#if (LGFX_PORT_SUPPORTS_LAST_ERROR != 0) && (LGFX_PORT_SUPPORTS_LAST_ERROR != 1)
-#error "LGFX_PORT_SUPPORTS_LAST_ERROR must be 0 or 1"
-#endif
-#if (LGFX_PORT_SUPPORTS_PUSHIMAGE != 0) && (LGFX_PORT_SUPPORTS_PUSHIMAGE != 1)
-#error "LGFX_PORT_SUPPORTS_PUSHIMAGE must be 0 or 1"
-#endif
 #if (LGFX_PORT_SUPPORTS_TOUCH != 0) && (LGFX_PORT_SUPPORTS_TOUCH != 1)
 #error "LGFX_PORT_SUPPORTS_TOUCH must be 0 or 1"
 #endif
 
 // -----------------------------------------------------------------------------
-// Cross-check: protocol support must not exceed compiled implementation
+// Cross-check: advertised protocol support must not exceed compiled implementation
 // -----------------------------------------------------------------------------
 #if (LGFX_PORT_SUPPORTS_TOUCH == 1) && (LGFX_PORT_ENABLE_TOUCH != 1)
 #error "LGFX_PORT_SUPPORTS_TOUCH=1 requires LGFX_PORT_ENABLE_TOUCH=1"
@@ -170,12 +155,14 @@ static inline bool lgfx_validate_color_depth(uint32_t d)
     (LGFX_CAP_SPRITE | LGFX_CAP_PUSHIMAGE | LGFX_CAP_LAST_ERROR | LGFX_CAP_TOUCH)
 
 // -----------------------------------------------------------------------------
-// Build capability mask
+// Build / advertised capability mask
 // -----------------------------------------------------------------------------
-#define LGFX_BUILD_CAP_MASK                                          \
-    ((uint32_t) ((LGFX_PORT_SUPPORTS_SPRITE ? LGFX_CAP_SPRITE : 0u)  \
-        | (LGFX_PORT_SUPPORTS_PUSHIMAGE ? LGFX_CAP_PUSHIMAGE : 0u)   \
-        | (LGFX_PORT_SUPPORTS_LAST_ERROR ? LGFX_CAP_LAST_ERROR : 0u) \
+//
+// Sprite / pushImage / lastError are always advertised by the current build.
+// Touch remains derived because it depends on both compile enable and effective
+// attachment/wiring configuration.
+#define LGFX_BUILD_CAP_MASK                                                 \
+    ((uint32_t) (LGFX_CAP_SPRITE | LGFX_CAP_PUSHIMAGE | LGFX_CAP_LAST_ERROR \
         | (LGFX_PORT_SUPPORTS_TOUCH ? LGFX_CAP_TOUCH : 0u)))
 
 // -----------------------------------------------------------------------------

@@ -14,13 +14,13 @@
 #define LGFX_PORT_ENABLE_TOUCH    @LGFX_PORT_ENABLE_TOUCH_INT@
 
 // ----------------------------------------------------------------------------
-// Computed capability gates (0/1)
+// Derived advertisement gates (0/1)
 // ----------------------------------------------------------------------------
 //
-#define LGFX_PORT_SUPPORTS_SPRITE      1
-#define LGFX_PORT_SUPPORTS_LAST_ERROR  1
-#define LGFX_PORT_SUPPORTS_PUSHIMAGE   1
-#define LGFX_PORT_SUPPORTS_TOUCH       @LGFX_PORT_SUPPORTS_TOUCH_INT@
+// Keep only gates that actually vary by build/runtime wiring.
+// Sprite / pushImage / lastError are always built and advertised by the current
+// protocol surface.
+#define LGFX_PORT_SUPPORTS_TOUCH  @LGFX_PORT_SUPPORTS_TOUCH_INT@
 
 // ----------------------------------------------------------------------------
 // Protocol constants (numeric literals)

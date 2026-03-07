@@ -89,9 +89,6 @@ idf_component_register(
     # Port entrypoint / lifecycle
     "lgfx_port/lgfx_port.c"
 
-    # Validation
-    "lgfx_port/validate.c"
-
     # Worker split
     "lgfx_port/lgfx_worker_core.c"
     "lgfx_port/lgfx_worker_device.c"
@@ -196,8 +193,12 @@ endfunction()
 lgfx_port_validate_u8_literal(LGFX_PORT_MAX_SPRITES)
 
 # -----------------------------------------------------------------------------
-# Compute touch advertisement gate
+# Derive touch advertisement gate
 # -----------------------------------------------------------------------------
+#
+# Keep only the gate that actually varies. Sprite / pushImage / lastError are
+# always part of the current compiled protocol surface, so they no longer need
+# generated 0/1 macros.
 set(LGFX_PORT_SUPPORTS_TOUCH_INT 0)
 if(LGFX_PORT_ENABLE_TOUCH)
   if(NOT "${LGFX_PORT_TOUCH_CS_GPIO}" STREQUAL "-1")

@@ -1,3 +1,4 @@
+// lgfx_port/include_internal/lgfx_port/lgfx_port_internal.h
 // lgfx_port/lgfx_port_internal.h
 #pragma once
 
@@ -70,6 +71,10 @@ typedef struct lgfx_port_t
 } lgfx_port_t;
 
 void lgfx_atoms_init(GlobalContext *global, lgfx_atoms_t *atoms);
+
+// Internal helpers used by getCaps / protocol reply assembly.
+uint32_t lgfx_port_feature_bits(const lgfx_port_t *port);
+uint8_t lgfx_port_max_sprites(const lgfx_port_t *port);
 
 static inline void lgfx_last_error_clear(lgfx_port_t *port)
 {

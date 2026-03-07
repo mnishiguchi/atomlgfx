@@ -8,7 +8,7 @@
 // Build-time configuration (generated from include/lgfx_port/lgfx_port_config.h.in)
 #include "lgfx_port/lgfx_port_config.h"
 
-#if defined(LGFX_PORT_ENABLE_TOUCH) && (LGFX_PORT_ENABLE_TOUCH == 1)
+#if (LGFX_PORT_ENABLE_TOUCH == 1)
 #include <lgfx/v1/touch/Touch_XPT2046.hpp>
 #endif
 
@@ -22,6 +22,46 @@
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"
 
+// ----------------------------------------------------------------------------
+// Semantic config validation
+// ----------------------------------------------------------------------------
+//
+// Missing generated macros already fail loudly at compile use sites.
+// Keep only checks that prevent silent misconfiguration or narrowing surprises.
+//
+
+#define LGFX_PORT_ASSERT_BOOL01(name) \
+    static_assert(((name) == 0) || ((name) == 1), #name " must be 0 or 1")
+
+LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_ENABLE_TOUCH);
+LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_SPI_3WIRE);
+LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_USE_LOCK);
+LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_READABLE);
+LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_INVERT);
+LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_RGB_ORDER);
+LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_DLEN_16BIT);
+LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_BUS_SHARED);
+
+#if (LGFX_PORT_ENABLE_TOUCH == 1)
+LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_TOUCH_BUS_SHARED);
+#endif
+
+#undef LGFX_PORT_ASSERT_BOOL01
+
+static_assert((LGFX_PORT_MAX_SPRITES) <= 254u, "LGFX_PORT_MAX_SPRITES must be <= 254");
+
+static_assert((LGFX_PORT_PANEL_WIDTH) > 0, "LGFX_PORT_PANEL_WIDTH must be > 0");
+static_assert((LGFX_PORT_PANEL_HEIGHT) > 0, "LGFX_PORT_PANEL_HEIGHT must be > 0");
+static_assert((LGFX_PORT_PANEL_WIDTH) <= 65535u, "LGFX_PORT_PANEL_WIDTH must fit in uint16_t");
+static_assert((LGFX_PORT_PANEL_HEIGHT) <= 65535u, "LGFX_PORT_PANEL_HEIGHT must fit in uint16_t");
+
+static_assert((LGFX_PORT_LCD_SPI_MODE) >= 0 && (LGFX_PORT_LCD_SPI_MODE) <= 3, "LGFX_PORT_LCD_SPI_MODE must be 0..3");
+static_assert((LGFX_PORT_LCD_OFFSET_ROTATION) <= 7u, "LGFX_PORT_LCD_OFFSET_ROTATION must be 0..7");
+
+#if (LGFX_PORT_ENABLE_TOUCH == 1)
+static_assert((LGFX_PORT_TOUCH_OFFSET_ROTATION) <= 7u, "LGFX_PORT_TOUCH_OFFSET_ROTATION must be 0..7");
+#endif
+
 namespace
 {
 
@@ -30,124 +70,6 @@ namespace
 // ----------------------------------------------------------------------------
 
 static constexpr const char *TAG = "lgfx_device";
-
-// ----------------------------------------------------------------------------
-// Configuration requirements (no silent defaults)
-// ----------------------------------------------------------------------------
-//
-// The port must include the generated config header and that header must define
-// all of the knobs used here. If any are missing, fail the build loudly.
-//
-// This eliminates nondeterministic "fallback defaults" when the config header is
-// missing, stale, or not included correctly.
-//
-#ifndef LGFX_PORT_MAX_SPRITES
-#error "LGFX_PORT_MAX_SPRITES must be defined by lgfx_port_config.h"
-#endif
-
-#ifndef LGFX_PORT_SPI_SCLK_GPIO
-#error "LGFX_PORT_SPI_SCLK_GPIO must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_SPI_MOSI_GPIO
-#error "LGFX_PORT_SPI_MOSI_GPIO must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_SPI_MISO_GPIO
-#error "LGFX_PORT_SPI_MISO_GPIO must be defined by lgfx_port_config.h"
-#endif
-
-#ifndef LGFX_PORT_LCD_CS_GPIO
-#error "LGFX_PORT_LCD_CS_GPIO must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_DC_GPIO
-#error "LGFX_PORT_LCD_DC_GPIO must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_RST_GPIO
-#error "LGFX_PORT_LCD_RST_GPIO must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_SPI_HOST
-#error "LGFX_PORT_LCD_SPI_HOST must be defined by lgfx_port_config.h"
-#endif
-
-#ifndef LGFX_PORT_PANEL_WIDTH
-#error "LGFX_PORT_PANEL_WIDTH must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_PANEL_HEIGHT
-#error "LGFX_PORT_PANEL_HEIGHT must be defined by lgfx_port_config.h"
-#endif
-
-#ifndef LGFX_PORT_LCD_SPI_MODE
-#error "LGFX_PORT_LCD_SPI_MODE must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_FREQ_WRITE_HZ
-#error "LGFX_PORT_LCD_FREQ_WRITE_HZ must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_FREQ_READ_HZ
-#error "LGFX_PORT_LCD_FREQ_READ_HZ must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_SPI_3WIRE
-#error "LGFX_PORT_LCD_SPI_3WIRE must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_USE_LOCK
-#error "LGFX_PORT_LCD_USE_LOCK must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_DMA_CHANNEL
-#error "LGFX_PORT_LCD_DMA_CHANNEL must be defined by lgfx_port_config.h"
-#endif
-
-#ifndef LGFX_PORT_LCD_PIN_BUSY
-#error "LGFX_PORT_LCD_PIN_BUSY must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_OFFSET_X
-#error "LGFX_PORT_LCD_OFFSET_X must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_OFFSET_Y
-#error "LGFX_PORT_LCD_OFFSET_Y must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_OFFSET_ROTATION
-#error "LGFX_PORT_LCD_OFFSET_ROTATION must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_DUMMY_READ_PIXEL
-#error "LGFX_PORT_LCD_DUMMY_READ_PIXEL must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_DUMMY_READ_BITS
-#error "LGFX_PORT_LCD_DUMMY_READ_BITS must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_READABLE
-#error "LGFX_PORT_LCD_READABLE must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_INVERT
-#error "LGFX_PORT_LCD_INVERT must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_RGB_ORDER
-#error "LGFX_PORT_LCD_RGB_ORDER must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_DLEN_16BIT
-#error "LGFX_PORT_LCD_DLEN_16BIT must be defined by lgfx_port_config.h"
-#endif
-#ifndef LGFX_PORT_LCD_BUS_SHARED
-#error "LGFX_PORT_LCD_BUS_SHARED must be defined by lgfx_port_config.h"
-#endif
-
-#if defined(LGFX_PORT_ENABLE_TOUCH) && (LGFX_PORT_ENABLE_TOUCH == 1)
-#ifndef LGFX_PORT_TOUCH_CS_GPIO
-#error "LGFX_PORT_TOUCH_CS_GPIO must be defined by lgfx_port_config.h when touch is enabled"
-#endif
-#ifndef LGFX_PORT_TOUCH_IRQ_GPIO
-#error "LGFX_PORT_TOUCH_IRQ_GPIO must be defined by lgfx_port_config.h when touch is enabled"
-#endif
-#ifndef LGFX_PORT_TOUCH_SPI_HOST
-#error "LGFX_PORT_TOUCH_SPI_HOST must be defined by lgfx_port_config.h when touch is enabled"
-#endif
-#ifndef LGFX_PORT_TOUCH_SPI_FREQ_HZ
-#error "LGFX_PORT_TOUCH_SPI_FREQ_HZ must be defined by lgfx_port_config.h when touch is enabled"
-#endif
-#ifndef LGFX_PORT_TOUCH_OFFSET_ROTATION
-#error "LGFX_PORT_TOUCH_OFFSET_ROTATION must be defined by lgfx_port_config.h when touch is enabled"
-#endif
-#ifndef LGFX_PORT_TOUCH_BUS_SHARED
-#error "LGFX_PORT_TOUCH_BUS_SHARED must be defined by lgfx_port_config.h when touch is enabled"
-#endif
-#endif
 
 // ----------------------------------------------------------------------------
 // Wiring / geometry / knobs (all sourced from generated config)
@@ -167,7 +89,7 @@ static constexpr int PIN_LCD_RST = (int) (LGFX_PORT_LCD_RST_GPIO);
 static constexpr uint16_t PANEL_W = (uint16_t) (LGFX_PORT_PANEL_WIDTH);
 static constexpr uint16_t PANEL_H = (uint16_t) (LGFX_PORT_PANEL_HEIGHT);
 
-#if defined(LGFX_PORT_ENABLE_TOUCH) && (LGFX_PORT_ENABLE_TOUCH == 1)
+#if (LGFX_PORT_ENABLE_TOUCH == 1)
 // XPT2046 touch (SPI).
 // Leave CS as -1 to compile touch but keep it unattached.
 static constexpr int PIN_TOUCH_CS = (int) (LGFX_PORT_TOUCH_CS_GPIO);
@@ -189,7 +111,7 @@ class PiyopiyoLGFX : public lgfx::LGFX_Device
     lgfx::Panel_ILI9488 panel_;
     lgfx::Bus_SPI bus_;
 
-#if defined(LGFX_PORT_ENABLE_TOUCH) && (LGFX_PORT_ENABLE_TOUCH == 1)
+#if (LGFX_PORT_ENABLE_TOUCH == 1)
     lgfx::Touch_XPT2046 touch_;
 #endif
 
@@ -248,7 +170,7 @@ public:
             panel_.config(cfg);
         }
 
-#if defined(LGFX_PORT_ENABLE_TOUCH) && (LGFX_PORT_ENABLE_TOUCH == 1)
+#if (LGFX_PORT_ENABLE_TOUCH == 1)
         // Touch config (XPT2046)
         // - shares SPI host + SCLK/MOSI/MISO with the LCD bus
         // - requires a dedicated CS pin for touch
@@ -574,7 +496,7 @@ extern "C" esp_err_t lgfx_device_init(void)
     }
 
     if (!is_initialized) {
-#if defined(LGFX_PORT_ENABLE_TOUCH) && (LGFX_PORT_ENABLE_TOUCH == 1)
+#if (LGFX_PORT_ENABLE_TOUCH == 1)
         if constexpr (PIN_TOUCH_CS < 0) {
             ESP_LOGW(TAG, "touch enabled (LGFX_PORT_ENABLE_TOUCH=1) but not attached (LGFX_PORT_TOUCH_CS_GPIO=-1)");
         }
