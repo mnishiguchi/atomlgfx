@@ -92,7 +92,6 @@ idf_component_register(
     # Worker split
     "lgfx_port/lgfx_worker_core.c"
     "lgfx_port/lgfx_worker_device.c"
-    "lgfx_port/lgfx_worker_mailbox.c"
 
     # Protocol / dispatch / metadata
     "lgfx_port/proto_term.c"
