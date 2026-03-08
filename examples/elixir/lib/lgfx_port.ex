@@ -12,8 +12,34 @@ defmodule LGFXPort do
       :ok = LGFXPort.init(port)
       :ok = LGFXPort.display(port)
 
+  Open-time config is also accepted:
+
+      port =
+        LGFXPort.open(
+          width: 240,
+          height: 320,
+          offset_rotation: 4,
+          invert: true,
+          rgb_order: false,
+          lcd_spi_host: :spi2_host,
+          touch_cs_gpio: 44
+        )
+
   Notes:
 
+  - `open/1` validates and normalizes config, then passes it to the native driver at port-open time.
+  - Omitted open-time keys keep the build-time defaults.
+  - Duplicate open-time keys are allowed; the last value wins.
+  - The public Elixir API accepts a few friendly aliases for SPI host / DMA values and normalizes
+    them to the canonical wire values expected by the native driver.
+  - The native driver currently uses a singleton device model.
+  - Open-time config is stored per port context and applied when that same port calls `init/1`.
+  - At most one port can own the live native device at a time, so overlapping live init/ownership is not supported.
+  - `close/1` performs full device teardown and clears this module's runtime caches for that port.
+  - `close/1` does not close the port handle itself.
+  - `close/1` also does not forget the remembered open-time config for that port.
+  - After `close/1`, calling `init/1` again on the same port reuses that port's remembered overrides.
+  - `:panel_driver` is not accepted by `open/1` because panel-family selection is still compile-time.
   - `getTouch/getTouchRaw` returns `{:ok, :none}` or `{:ok, {x, y, size}}`.
   - Sprite compositing transparent keys for `pushSprite*` / `pushRotateZoom` are RGB565 `u16`
     (0x0000..0xFFFF), not RGB888 (0x00RRGGBB).
@@ -22,12 +48,14 @@ defmodule LGFXPort do
     - zoom: x1024 fixed-point (1.0x = 1024)
     - dst_target: 0 (LCD) or 1..254 (sprite)
   """
+
   @compile {:no_warn_undefined, :port}
 
   import Bitwise
 
   @port_name "lgfx_port"
   @proto_ver 1
+  @max_open_config_i32 0x7FFF_FFFF
 
   # Timeouts
   @t_short 5_000
@@ -49,6 +77,86 @@ defmodule LGFXPort do
   @font_preset_jp_medium 2
   @font_preset_jp_large 3
 
+  @valid_color_depths [1, 2, 4, 8, 16, 24]
+
+  # Canonical open-time config inventory.
+  #
+  # Keep this aligned with:
+  # - lgfx_port/lgfx_port.c (native open_port/2 parser)
+  # - src/lgfx_device.h (lgfx_open_config_overrides_t contract)
+  #
+  # Rules:
+  # - keys are emitted to the native driver in this order
+  # - duplicate keys are allowed; last value wins
+  # - SPI host aliases normalize to :spi2_host / :spi3_host
+  # - DMA aliases normalize to :spi_dma_ch_auto / 1 / 2
+  #
+  @open_option_rules [
+    width: :positive_u16,
+    height: :positive_u16,
+    offset_x: :i32,
+    offset_y: :i32,
+    offset_rotation: :rotation,
+    readable: :boolean,
+    invert: :boolean,
+    rgb_order: :boolean,
+    dlen_16bit: :boolean,
+    lcd_spi_mode: :spi_mode,
+    lcd_freq_write_hz: :positive_i32,
+    lcd_freq_read_hz: :positive_i32,
+    lcd_dma_channel: :dma_channel,
+    lcd_spi_3wire: :boolean,
+    lcd_use_lock: :boolean,
+    lcd_bus_shared: :boolean,
+    spi_sclk_gpio: :gpio,
+    spi_mosi_gpio: :gpio,
+    spi_miso_gpio: :gpio_or_disabled,
+    lcd_spi_host: :spi_host,
+    lcd_cs_gpio: :gpio,
+    lcd_dc_gpio: :gpio,
+    lcd_rst_gpio: :gpio_or_disabled,
+    lcd_pin_busy: :gpio_or_disabled,
+    touch_cs_gpio: :gpio_or_disabled,
+    touch_irq_gpio: :gpio_or_disabled,
+    touch_spi_host: :spi_host,
+    touch_spi_freq_hz: :positive_i32,
+    touch_offset_rotation: :rotation,
+    touch_bus_shared: :boolean
+  ]
+
+  @supported_open_config_keys [
+    :width,
+    :height,
+    :offset_x,
+    :offset_y,
+    :offset_rotation,
+    :readable,
+    :invert,
+    :rgb_order,
+    :dlen_16bit,
+    :lcd_spi_mode,
+    :lcd_freq_write_hz,
+    :lcd_freq_read_hz,
+    :lcd_dma_channel,
+    :lcd_spi_3wire,
+    :lcd_use_lock,
+    :lcd_bus_shared,
+    :spi_sclk_gpio,
+    :spi_mosi_gpio,
+    :spi_miso_gpio,
+    :lcd_spi_host,
+    :lcd_cs_gpio,
+    :lcd_dc_gpio,
+    :lcd_rst_gpio,
+    :lcd_pin_busy,
+    :touch_cs_gpio,
+    :touch_irq_gpio,
+    :touch_spi_host,
+    :touch_spi_freq_hz,
+    :touch_offset_rotation,
+    :touch_bus_shared
+  ]
+
   # -----------------------------------------------------------------------------
   # Protocol numeric types (guards)
   # -----------------------------------------------------------------------------
@@ -56,6 +164,7 @@ defmodule LGFXPort do
   defguardp u16(v) when is_integer(v) and v >= 0 and v <= 0xFFFF
   defguardp i32(v) when is_integer(v) and v >= -0x8000_0000 and v <= 0x7FFF_FFFF
   defguardp u8(v) when is_integer(v) and v >= 0 and v <= 0xFF
+  defguardp positive_i32(v) when is_integer(v) and v >= 1 and v <= 0x7FFF_FFFF
 
   defguardp target_any(v) when is_integer(v) and v >= 0 and v <= 254
   defguardp sprite_handle(v) when is_integer(v) and v >= 1 and v <= 254
@@ -66,8 +175,33 @@ defmodule LGFXPort do
   # -----------------------------------------------------------------------------
   # Port lifecycle
   # -----------------------------------------------------------------------------
-  def open do
-    :erlang.open_port({:spawn_driver, @port_name}, [])
+  def open, do: open([])
+
+  def open(options) when is_list(options) do
+    open_with(options, &:erlang.open_port/2)
+  end
+
+  def open(other) do
+    raise ArgumentError,
+          "LGFXPort.open/1 expects a keyword list or proplist, got: #{inspect(other)}"
+  end
+
+  @doc false
+  def open_with(options, open_port_fun)
+      when is_list(options) and is_function(open_port_fun, 2) do
+    normalized_open_config = normalize_open_options!(options)
+    port = open_port_fun.({:spawn_driver, @port_name}, normalized_open_config)
+    remember_open_config(port, normalized_open_config)
+    port
+  end
+
+  @doc false
+  def normalize_open_config(options) when is_list(options) do
+    normalize_open_options(options)
+  end
+
+  def normalize_open_config(other) do
+    {:error, {:bad_open_options_shape, other}}
   end
 
   # Exposes the raw protocol call for smoke tests and protocol checks.
@@ -89,6 +223,13 @@ defmodule LGFXPort do
     end
   end
 
+  def get_open_config(port) do
+    case cache_get(open_config_cache_key(port)) do
+      value when is_list(value) -> {:ok, value}
+      _ -> {:ok, []}
+    end
+  end
+
   def get_last_error(port) do
     with {:ok, payload} <- call(port, :getLastError, 0, 0, [], @t_short) do
       decode_last_error(payload)
@@ -96,60 +237,29 @@ defmodule LGFXPort do
   end
 
   def width(port, target \\ 0) when target_any(target) do
-    with {:ok, value} <- call(port, :width, target, 0, [], @t_short),
-         true <- is_integer(value) do
-      {:ok, value}
-    else
-      false -> {:error, {:bad_reply_value, :width}}
-      {:error, reason} -> {:error, reason}
-    end
+    integer_query(port, :width, :width, target)
   end
 
   def height(port, target \\ 0) when target_any(target) do
-    with {:ok, value} <- call(port, :height, target, 0, [], @t_short),
-         true <- is_integer(value) do
-      {:ok, value}
-    else
-      false -> {:error, {:bad_reply_value, :height}}
-      {:error, reason} -> {:error, reason}
-    end
+    integer_query(port, :height, :height, target)
   end
 
-  def supports_sprite?(port) do
-    with {:ok, %{feature_bits: feature_bits}} <- get_caps(port) do
-      {:ok, (feature_bits &&& @cap_sprite) != 0}
-    end
-  end
-
-  def supports_pushimage?(port) do
-    with {:ok, %{feature_bits: feature_bits}} <- get_caps(port) do
-      {:ok, (feature_bits &&& @cap_pushimage) != 0}
-    end
-  end
-
-  def supports_last_error?(port) do
-    with {:ok, %{feature_bits: feature_bits}} <- get_caps(port) do
-      {:ok, (feature_bits &&& @cap_last_error) != 0}
-    end
-  end
-
-  def supports_touch?(port) do
-    with {:ok, %{feature_bits: feature_bits}} <- get_caps(port) do
-      {:ok, (feature_bits &&& @cap_touch) != 0}
-    end
-  end
+  def supports_sprite?(port), do: supports_cap?(port, @cap_sprite)
+  def supports_pushimage?(port), do: supports_cap?(port, @cap_pushimage)
+  def supports_last_error?(port), do: supports_cap?(port, @cap_last_error)
+  def supports_touch?(port), do: supports_cap?(port, @cap_touch)
 
   # Cache helper for MaxBinaryBytes (AtomVM-friendly)
   def max_binary_bytes(port) do
-    key = {:lgfx_max_binary_bytes, port}
+    key = max_binary_bytes_cache_key(port)
 
-    case :erlang.get(key) do
+    case cache_get(key) do
       value when is_integer(value) and value > 0 ->
         {:ok, value}
 
       _ ->
         with {:ok, %{max_binary_bytes: max_binary_bytes}} <- get_caps(port) do
-          :erlang.put(key, max_binary_bytes)
+          cache_put(key, max_binary_bytes)
           {:ok, max_binary_bytes}
         end
     end
@@ -161,13 +271,8 @@ defmodule LGFXPort do
   def init(port), do: call_ok(port, :init, 0, 0, [], @t_long)
 
   def close(port) do
-    result = call_ok(port, :close, 0, 0, [], @t_long)
-
-    if result == :ok do
-      reset_port_cache(port)
-    end
-
-    result
+    call_ok(port, :close, 0, 0, [], @t_long)
+    |> after_ok(fn -> reset_runtime_cache(port) end)
   end
 
   def display(port), do: call_ok(port, :display, 0, 0, [], @t_long)
@@ -181,7 +286,7 @@ defmodule LGFXPort do
   end
 
   def set_color_depth(port, depth, target \\ 0)
-      when is_integer(depth) and depth in [1, 2, 4, 8, 16, 24] and target_any(target) do
+      when is_integer(depth) and depth in @valid_color_depths and target_any(target) do
     call_ok(port, :setColorDepth, target, 0, [depth], @t_long)
   end
 
@@ -198,7 +303,7 @@ defmodule LGFXPort do
   def create_sprite(port, width, height, color_depth, target)
       when u16(width) and width >= 1 and
              u16(height) and height >= 1 and
-             is_integer(color_depth) and color_depth in [1, 2, 4, 8, 16, 24] and
+             is_integer(color_depth) and color_depth in @valid_color_depths and
              sprite_handle(target) do
     call_ok(port, :createSprite, target, 0, [width, height, color_depth], @t_long)
   end
@@ -471,26 +576,16 @@ defmodule LGFXPort do
   # -----------------------------------------------------------------------------
   def set_text_size(port, size, target \\ 0)
       when is_integer(size) and size in 1..255 and target_any(target) do
-    result = call_ok(port, :setTextSize, target, 0, [size], @t_long)
-
-    if result == :ok do
-      :erlang.put({:lgfx_text_size, port, target}, {size, size})
-    end
-
-    result
+    call_ok(port, :setTextSize, target, 0, [size], @t_long)
+    |> after_ok(fn -> cache_put(text_size_cache_key(port, target), {size, size}) end)
   end
 
   def set_text_size_xy(port, sx, sy, target \\ 0)
       when is_integer(sx) and sx in 1..255 and
              is_integer(sy) and sy in 1..255 and
              target_any(target) do
-    result = call_ok(port, :setTextSize, target, 0, [sx, sy], @t_long)
-
-    if result == :ok do
-      :erlang.put({:lgfx_text_size, port, target}, {sx, sy})
-    end
-
-    result
+    call_ok(port, :setTextSize, target, 0, [sx, sy], @t_long)
+    |> after_ok(fn -> cache_put(text_size_cache_key(port, target), {sx, sy}) end)
   end
 
   def set_text_datum(port, datum, target \\ 0)
@@ -512,71 +607,46 @@ defmodule LGFXPort do
 
   def set_text_font(port, font_id, target \\ 0)
       when u8(font_id) and target_any(target) do
-    result = call_ok(port, :setTextFont, target, 0, [font_id], @t_long)
-
-    if result == :ok do
-      :erlang.put({:lgfx_text_font_selection, port, target}, {:font_id, font_id})
+    call_ok(port, :setTextFont, target, 0, [font_id], @t_long)
+    |> after_ok(fn ->
+      cache_put(text_font_selection_cache_key(port, target), {:font_id, font_id})
       # setTextFont does not change size on device, so do not touch cached text_size here.
-    end
-
-    result
+    end)
   end
 
   # Font preset helper (driver-defined names mapped to wire preset IDs).
   # Note: preset selection may also change text size on the device (single-font strategy).
   def set_font_preset(port, preset, target \\ 0)
       when target_any(target) do
-    case font_preset_to_wire(preset) do
-      {:ok, preset_id, canonical_preset} ->
-        result = call_ok(port, :setFontPreset, target, 0, [preset_id], @t_long)
+    with {:ok, preset_id, canonical_preset} <- font_preset_to_wire(preset) do
+      call_ok(port, :setFontPreset, target, 0, [preset_id], @t_long)
+      |> after_ok(fn ->
+        cache_put(text_font_selection_cache_key(port, target), {:preset, canonical_preset})
 
-        if result == :ok do
-          :erlang.put({:lgfx_text_font_selection, port, target}, {:preset, canonical_preset})
+        cache_put(
+          text_size_cache_key(port, target),
+          implied_text_size_for_preset(canonical_preset)
+        )
+      end)
+    end
+  end
 
-          :erlang.put(
-            {:lgfx_text_size, port, target},
-            implied_text_size_for_preset(canonical_preset)
-          )
-        end
-
-        result
+  def set_text_color(port, fg888, bg888 \\ nil, target \\ 0)
+      when color888(fg888) and target_any(target) do
+    case normalize_text_color_args(fg888, bg888) do
+      {:ok, flags, args, desired} ->
+        call_ok(port, :setTextColor, target, flags, args, @t_long)
+        |> after_ok(fn -> cache_put(text_color_cache_key(port, target), desired) end)
 
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  def set_text_color(port, fg888, bg888 \\ nil, target \\ 0)
-      when color888(fg888) and target_any(target) do
-    case bg888 do
-      nil ->
-        result = call_ok(port, :setTextColor, target, 0, [fg888], @t_long)
-
-        if result == :ok do
-          :erlang.put({:lgfx_text_color, port, target}, {fg888, nil})
-        end
-
-        result
-
-      bg when color888(bg) ->
-        result = call_ok(port, :setTextColor, target, @f_text_has_bg, [fg888, bg], @t_long)
-
-        if result == :ok do
-          :erlang.put({:lgfx_text_color, port, target}, {fg888, bg})
-        end
-
-        result
-
-      _ ->
-        {:error, {:bad_text_color, bg888}}
-    end
-  end
-
   def draw_string(port, x, y, text, target \\ 0)
       when i16(x) and i16(y) and is_binary(text) and target_any(target) do
-    case validate_text_binary(text) do
-      :ok -> call_ok(port, :drawString, target, 0, [x, y, text], @t_long)
-      {:error, reason} -> {:error, reason}
+    with :ok <- validate_text_binary(text) do
+      call_ok(port, :drawString, target, 0, [x, y, text], @t_long)
     end
   end
 
@@ -598,9 +668,7 @@ defmodule LGFXPort do
 
   # Minimal convenience: clears host-side cached text state.
   def reset_text_state(port, target \\ 0) when target_any(target) do
-    :erlang.erase({:lgfx_text_color, port, target})
-    :erlang.erase({:lgfx_text_size, port, target})
-    :erlang.erase({:lgfx_text_font_selection, port, target})
+    erase_text_cache(port, target)
     :ok
   end
 
@@ -614,63 +682,24 @@ defmodule LGFXPort do
              is_binary(pixels) and
              u16(stride_pixels) and
              target_any(target) do
-    cond do
-      width == 0 or height == 0 ->
-        :ok
-
-      rem(byte_size(pixels), 2) != 0 ->
-        {:error, {:pixels_size_not_even, byte_size(pixels)}}
-
-      true ->
-        stride =
-          case stride_pixels do
-            0 -> width
-            value -> value
-          end
-
-        cond do
-          stride < width ->
-            {:error, {:bad_stride, stride, width}}
-
-          true ->
-            min_bytes = stride * height * 2
-
-            if byte_size(pixels) < min_bytes do
-              {:error, {:pixels_size_too_small, min_bytes, byte_size(pixels)}}
-            else
-              case max_binary_bytes(port) do
-                {:ok, max_binary_bytes}
-                when is_integer(max_binary_bytes) and max_binary_bytes > 0 ->
-                  if min_bytes <= max_binary_bytes do
-                    push_image_rgb565_raw(
-                      port,
-                      x,
-                      y,
-                      width,
-                      height,
-                      pixels,
-                      stride_pixels,
-                      target
-                    )
-                  else
-                    push_image_rgb565_chunked(
-                      port,
-                      x,
-                      y,
-                      width,
-                      height,
-                      pixels,
-                      stride,
-                      max_binary_bytes,
-                      target
-                    )
-                  end
-
-                _ ->
-                  push_image_rgb565_raw(port, x, y, width, height, pixels, stride_pixels, target)
-              end
-            end
-        end
+    with :ok <- validate_non_empty_image_dims(width, height),
+         :ok <- validate_even_pixel_binary(pixels),
+         {:ok, stride} <- normalize_stride_pixels(width, stride_pixels),
+         :ok <- validate_pixel_binary_size(pixels, stride, height) do
+      push_image_rgb565_transfer(
+        port,
+        x,
+        y,
+        width,
+        height,
+        pixels,
+        stride_pixels,
+        stride,
+        target
+      )
+    else
+      :skip -> :ok
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -777,16 +806,214 @@ defmodule LGFXPort do
   # -----------------------------------------------------------------------------
   # Internal helpers
   # -----------------------------------------------------------------------------
+  defp remember_open_config(port, normalized_open_config) when is_list(normalized_open_config) do
+    cache_put(open_config_cache_key(port), normalized_open_config)
+    :ok
+  end
+
+  defp normalize_open_options!(options) do
+    case normalize_open_config(options) do
+      {:ok, normalized_options} ->
+        normalized_options
+
+      {:error, reason} ->
+        raise ArgumentError, format_open_option_error(reason)
+    end
+  end
+
+  defp normalize_open_options(options) when is_list(options) do
+    with {:ok, normalized_map} <- normalize_open_option_entries(options, %{}, options) do
+      {:ok, open_config_map_to_keyword(normalized_map)}
+    end
+  end
+
+  defp normalize_open_option_entries([], normalized_map, _original_options) do
+    {:ok, normalized_map}
+  end
+
+  defp normalize_open_option_entries(
+         [{key, _value} = entry | rest],
+         normalized_map,
+         original_options
+       )
+       when is_atom(key) do
+    case normalize_open_option_entry(entry, original_options) do
+      {:ok, {normalized_key, normalized_value}} ->
+        normalize_open_option_entries(
+          rest,
+          Map.put(normalized_map, normalized_key, normalized_value),
+          original_options
+        )
+
+      {:error, _reason} = err ->
+        err
+    end
+  end
+
+  defp normalize_open_option_entries(_entries, _normalized_map, original_options) do
+    {:error, {:bad_open_options_shape, original_options}}
+  end
+
+  defp normalize_open_option_entry({:panel_driver, value}, _original_options) do
+    {:error, {:unsupported_open_option, :panel_driver, value}}
+  end
+
+  defp normalize_open_option_entry({key, value}, _original_options) when is_atom(key) do
+    case normalize_open_option_value(key, value) do
+      {:ok, normalized_value} -> {:ok, {key, normalized_value}}
+      {:error, _reason} = err -> err
+    end
+  end
+
+  defp normalize_open_option_entry(_entry, original_options) do
+    {:error, {:bad_open_options_shape, original_options}}
+  end
+
+  defp normalize_open_option_value(key, value) do
+    case fetch_open_option_rule(key) do
+      {:ok, rule} -> normalize_open_option_by_rule(rule, key, value)
+      :error -> {:error, {:unknown_open_option, key}}
+    end
+  end
+
+  defp fetch_open_option_rule(key) do
+    fetch_open_option_rule(@open_option_rules, key)
+  end
+
+  defp fetch_open_option_rule([{key, rule} | _rest], key), do: {:ok, rule}
+  defp fetch_open_option_rule([_entry | rest], key), do: fetch_open_option_rule(rest, key)
+  defp fetch_open_option_rule([], _key), do: :error
+
+  defp normalize_open_option_by_rule(:positive_u16, _key, value) when u16(value) and value > 0,
+    do: {:ok, value}
+
+  defp normalize_open_option_by_rule(:positive_u16, key, value) do
+    {:error, {:bad_open_option_value, key, value, "a positive integer in 1..65535"}}
+  end
+
+  defp normalize_open_option_by_rule(:positive_i32, _key, value) when positive_i32(value),
+    do: {:ok, value}
+
+  defp normalize_open_option_by_rule(:positive_i32, key, value) do
+    {:error,
+     {:bad_open_option_value, key, value, "a positive integer in 1..#{@max_open_config_i32}"}}
+  end
+
+  defp normalize_open_option_by_rule(:i32, _key, value) when i32(value), do: {:ok, value}
+
+  defp normalize_open_option_by_rule(:i32, key, value) do
+    {:error, {:bad_open_option_value, key, value, "a signed 32-bit integer"}}
+  end
+
+  defp normalize_open_option_by_rule(:rotation, _key, value)
+       when is_integer(value) and value in 0..7,
+       do: {:ok, value}
+
+  defp normalize_open_option_by_rule(:rotation, key, value) do
+    {:error, {:bad_open_option_value, key, value, "an integer in 0..7"}}
+  end
+
+  defp normalize_open_option_by_rule(:spi_mode, _key, value)
+       when is_integer(value) and value in 0..3,
+       do: {:ok, value}
+
+  defp normalize_open_option_by_rule(:spi_mode, key, value) do
+    {:error, {:bad_open_option_value, key, value, "an integer in 0..3"}}
+  end
+
+  defp normalize_open_option_by_rule(:boolean, _key, value) when is_boolean(value),
+    do: {:ok, value}
+
+  defp normalize_open_option_by_rule(:boolean, key, value) do
+    {:error, {:bad_open_option_value, key, value, "a boolean"}}
+  end
+
+  defp normalize_open_option_by_rule(:gpio, _key, value)
+       when is_integer(value) and value >= 0 and value <= 255,
+       do: {:ok, value}
+
+  defp normalize_open_option_by_rule(:gpio, key, value) do
+    {:error, {:bad_open_option_value, key, value, "a GPIO integer in 0..255"}}
+  end
+
+  defp normalize_open_option_by_rule(:gpio_or_disabled, _key, value)
+       when is_integer(value) and value >= -1 and value <= 255,
+       do: {:ok, value}
+
+  defp normalize_open_option_by_rule(:gpio_or_disabled, key, value) do
+    {:error, {:bad_open_option_value, key, value, "a GPIO integer in -1..255 (-1 disables)"}}
+  end
+
+  defp normalize_open_option_by_rule(:spi_host, _key, value)
+       when value in [:spi2_host, :spi2, "SPI2_HOST", "spi2_host"],
+       do: {:ok, :spi2_host}
+
+  defp normalize_open_option_by_rule(:spi_host, _key, value)
+       when value in [:spi3_host, :spi3, "SPI3_HOST", "spi3_host"],
+       do: {:ok, :spi3_host}
+
+  defp normalize_open_option_by_rule(:spi_host, key, value) do
+    {:error,
+     {:bad_open_option_value, key, value,
+      ":spi2_host, :spi3_host, \"SPI2_HOST\", or \"SPI3_HOST\""}}
+  end
+
+  defp normalize_open_option_by_rule(:dma_channel, _key, value) when value in [1, 2],
+    do: {:ok, value}
+
+  defp normalize_open_option_by_rule(:dma_channel, _key, value)
+       when value in [:spi_dma_ch_auto, :auto, "SPI_DMA_CH_AUTO", "spi_dma_ch_auto"],
+       do: {:ok, :spi_dma_ch_auto}
+
+  defp normalize_open_option_by_rule(:dma_channel, key, value) do
+    {:error, {:bad_open_option_value, key, value, ":spi_dma_ch_auto, :auto, 1, or 2"}}
+  end
+
+  defp open_config_map_to_keyword(normalized_map) when is_map(normalized_map) do
+    open_config_map_to_keyword(@supported_open_config_keys, normalized_map, [])
+  end
+
+  defp open_config_map_to_keyword([], _normalized_map, acc) do
+    :lists.reverse(acc)
+  end
+
+  defp open_config_map_to_keyword([key | rest], normalized_map, acc) do
+    case Map.fetch(normalized_map, key) do
+      {:ok, value} ->
+        open_config_map_to_keyword(rest, normalized_map, [{key, value} | acc])
+
+      :error ->
+        open_config_map_to_keyword(rest, normalized_map, acc)
+    end
+  end
+
+  defp format_open_option_error({:bad_open_options_shape, options}) do
+    "LGFXPort.open/1 expects a keyword list or proplist with atom keys, got: #{inspect(options)}"
+  end
+
+  defp format_open_option_error({:unsupported_open_option, :panel_driver, value}) do
+    "LGFXPort.open/1 does not support :panel_driver yet because panel-family selection is still compile-time, got: #{inspect(value)}"
+  end
+
+  defp format_open_option_error({:unsupported_open_option, key, value}) do
+    "LGFXPort.open/1 does not support #{inspect(key)} yet, got: #{inspect(value)}"
+  end
+
+  defp format_open_option_error({:unknown_open_option, key}) do
+    "unknown LGFXPort.open/1 option #{inspect(key)}; supported keys: #{inspect(@supported_open_config_keys)}"
+  end
+
+  defp format_open_option_error({:bad_open_option_value, key, value, expected}) do
+    "bad LGFXPort.open/1 value for #{inspect(key)}: #{inspect(value)} (expected #{expected})"
+  end
+
+  defp validate_text_binary(<<>>), do: {:error, :empty_text}
+
   defp validate_text_binary(text) when is_binary(text) do
-    cond do
-      byte_size(text) == 0 ->
-        {:error, :empty_text}
-
-      contains_nul?(text) ->
-        {:error, :text_contains_nul}
-
-      true ->
-        :ok
+    if contains_nul?(text) do
+      {:error, :text_contains_nul}
+    else
+      :ok
     end
   end
 
@@ -804,8 +1031,9 @@ defmodule LGFXPort do
     normalize_u16_8([p0, p1, p2, p3, p4, p5, p6, p7])
   end
 
-  defp normalize_u16_8(list) when is_list(list) and length(list) == 8 do
-    if Enum.all?(list, &u16?/1) do
+  defp normalize_u16_8([p0, p1, p2, p3, p4, p5, p6, p7] = list) do
+    if u16?(p0) and u16?(p1) and u16?(p2) and u16?(p3) and
+         u16?(p4) and u16?(p5) and u16?(p6) and u16?(p7) do
       {:ok, list}
     else
       {:error, {:bad_touch_calibrate_params, list}}
@@ -831,22 +1059,91 @@ defmodule LGFXPort do
   defp implied_text_size_for_preset(:jp_large), do: {3, 3}
 
   defp maybe_set_text_color(port, fg888, bg888, target) do
-    key = {:lgfx_text_color, port, target}
     desired = {fg888, bg888}
 
-    case :erlang.get(key) do
+    case cache_get(text_color_cache_key(port, target)) do
       ^desired -> :ok
       _ -> set_text_color(port, fg888, bg888, target)
     end
   end
 
   defp maybe_set_text_size(port, size, target) do
-    key = {:lgfx_text_size, port, target}
     desired = {size, size}
 
-    case :erlang.get(key) do
+    case cache_get(text_size_cache_key(port, target)) do
       ^desired -> :ok
       _ -> set_text_size(port, size, target)
+    end
+  end
+
+  defp normalize_text_color_args(fg888, nil), do: {:ok, 0, [fg888], {fg888, nil}}
+
+  defp normalize_text_color_args(fg888, bg888) when color888(bg888) do
+    {:ok, @f_text_has_bg, [fg888, bg888], {fg888, bg888}}
+  end
+
+  defp normalize_text_color_args(_fg888, bg888), do: {:error, {:bad_text_color, bg888}}
+
+  defp validate_non_empty_image_dims(width, height) when width == 0 or height == 0, do: :skip
+  defp validate_non_empty_image_dims(_width, _height), do: :ok
+
+  defp validate_even_pixel_binary(pixels) when rem(byte_size(pixels), 2) != 0 do
+    {:error, {:pixels_size_not_even, byte_size(pixels)}}
+  end
+
+  defp validate_even_pixel_binary(_pixels), do: :ok
+
+  defp normalize_stride_pixels(width, 0), do: {:ok, width}
+
+  defp normalize_stride_pixels(width, stride) when stride < width do
+    {:error, {:bad_stride, stride, width}}
+  end
+
+  defp normalize_stride_pixels(_width, stride), do: {:ok, stride}
+
+  defp validate_pixel_binary_size(pixels, stride, height) do
+    min_bytes = stride * height * 2
+
+    if byte_size(pixels) < min_bytes do
+      {:error, {:pixels_size_too_small, min_bytes, byte_size(pixels)}}
+    else
+      :ok
+    end
+  end
+
+  defp push_image_rgb565_transfer(
+         port,
+         x,
+         y,
+         width,
+         height,
+         pixels,
+         stride_pixels,
+         stride,
+         target
+       ) do
+    min_bytes = stride * height * 2
+
+    case max_binary_bytes(port) do
+      {:ok, max_binary_bytes} when is_integer(max_binary_bytes) and max_binary_bytes > 0 ->
+        if min_bytes <= max_binary_bytes do
+          push_image_rgb565_raw(port, x, y, width, height, pixels, stride_pixels, target)
+        else
+          push_image_rgb565_chunked(
+            port,
+            x,
+            y,
+            width,
+            height,
+            pixels,
+            stride,
+            max_binary_bytes,
+            target
+          )
+        end
+
+      _ ->
+        push_image_rgb565_raw(port, x, y, width, height, pixels, stride_pixels, target)
     end
   end
 
@@ -868,18 +1165,11 @@ defmodule LGFXPort do
     row_bytes = width * 2
     stride_bytes = stride * 2
 
-    cond do
-      max_binary_bytes < row_bytes ->
-        {:error, {:push_image_max_binary_too_small, max_binary_bytes, row_bytes}}
-
-      true ->
-        rows_per_chunk =
-          case div(max_binary_bytes, row_bytes) do
-            0 -> 1
-            rows -> rows
-          end
-
-        do_push_chunks(port, x, y, width, height, pixels, stride_bytes, rows_per_chunk, target, 0)
+    if max_binary_bytes < row_bytes do
+      {:error, {:push_image_max_binary_too_small, max_binary_bytes, row_bytes}}
+    else
+      rows_per_chunk = max(1, div(max_binary_bytes, row_bytes))
+      do_push_chunks(port, x, y, width, height, pixels, stride_bytes, rows_per_chunk, target, 0)
     end
   end
 
@@ -910,12 +1200,7 @@ defmodule LGFXPort do
          target,
          row
        ) do
-    chunk_height =
-      case height - row do
-        remaining when remaining < rows_per_chunk -> remaining
-        _ -> rows_per_chunk
-      end
-
+    chunk_height = min(height - row, rows_per_chunk)
     chunk = pack_rows(pixels, stride_bytes, width * 2, row, chunk_height)
 
     with :ok <- push_image_rgb565_raw(port, x, y + row, width, chunk_height, chunk, 0, target) do
@@ -950,17 +1235,56 @@ defmodule LGFXPort do
     pack_rows_iolist(pixels, stride_bytes, row_bytes, row + 1, row_end, [part | acc])
   end
 
-  defp reset_port_cache(port) do
-    :erlang.erase({:lgfx_max_binary_bytes, port})
-
-    for target <- 0..254 do
-      :erlang.erase({:lgfx_text_color, port, target})
-      :erlang.erase({:lgfx_text_size, port, target})
-      :erlang.erase({:lgfx_text_font_selection, port, target})
+  defp integer_query(port, op, name, target) do
+    with {:ok, value} <- call(port, op, target, 0, [], @t_short),
+         true <- is_integer(value) do
+      {:ok, value}
+    else
+      false -> {:error, {:bad_reply_value, name}}
+      {:error, reason} -> {:error, reason}
     end
-
-    :ok
   end
+
+  defp supports_cap?(port, cap_bit) do
+    with {:ok, %{feature_bits: feature_bits}} <- get_caps(port) do
+      {:ok, (feature_bits &&& cap_bit) != 0}
+    end
+  end
+
+  defp after_ok(:ok = result, fun) do
+    fun.()
+    result
+  end
+
+  defp after_ok(result, _fun), do: result
+
+  defp reset_runtime_cache(port) do
+    cache_erase(max_binary_bytes_cache_key(port))
+    reset_runtime_cache_targets(port, 0)
+  end
+
+  defp reset_runtime_cache_targets(_port, target) when target > 254, do: :ok
+
+  defp reset_runtime_cache_targets(port, target) do
+    erase_text_cache(port, target)
+    reset_runtime_cache_targets(port, target + 1)
+  end
+
+  defp erase_text_cache(port, target) do
+    cache_erase(text_color_cache_key(port, target))
+    cache_erase(text_size_cache_key(port, target))
+    cache_erase(text_font_selection_cache_key(port, target))
+  end
+
+  defp cache_get(key), do: :erlang.get(key)
+  defp cache_put(key, value), do: :erlang.put(key, value)
+  defp cache_erase(key), do: :erlang.erase(key)
+
+  defp open_config_cache_key(port), do: {:lgfx_open_config, port}
+  defp max_binary_bytes_cache_key(port), do: {:lgfx_max_binary_bytes, port}
+  defp text_color_cache_key(port, target), do: {:lgfx_text_color, port, target}
+  defp text_size_cache_key(port, target), do: {:lgfx_text_size, port, target}
+  defp text_font_selection_cache_key(port, target), do: {:lgfx_text_font_selection, port, target}
 
   # -----------------------------------------------------------------------------
   # Error formatting

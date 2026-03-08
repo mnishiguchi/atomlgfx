@@ -13,6 +13,21 @@ defmodule SampleApp.MovingIcons do
 
   @obj_count 5
 
+  # Strip-buffer mode gives nicer composition.
+  # Direct-LCD mode is simpler and useful for bring-up when sprite buffering is unstable.
+  #
+  # - :auto
+  #     Try strip buffers first, then fall back to direct LCD.
+  #
+  # - :strip_buffers
+  #     Require strip-buffer rendering.
+  #
+  # - :direct_lcd
+  #     Render directly to LCD every frame.
+  @frame_render_mode :auto
+
+  @initial_split_factor 2
+
   # Icon sprites are authored with a solid background color. Use a transparent-color key so
   # that background pixels do not overwrite what is already in the destination.
   #
@@ -65,7 +80,7 @@ defmodule SampleApp.MovingIcons do
          :ok <- ensure_sprite_support(caps, 6),
          :ok <- Port.fill_screen(port, @bg),
          {:ok, icon_handles} <- prepare_icon_sprites(port, icons, icon_w, icon_h),
-         {:ok, strip_h} <- prepare_frame_sprites(port, w, h) do
+         {:ok, render_target} <- prepare_render_target(port, w, h) do
       try do
         {_seed, objects} = init_objects(1, @obj_count, w, h)
 
@@ -73,8 +88,8 @@ defmodule SampleApp.MovingIcons do
         sec = div(now_ms, 1000)
 
         # State tuple:
-        # {w, h, strip_h, buf0, buf1, flip, objects, fps, frame_count, prev_sec, icon_handles}
-        state = {w, h, strip_h, @sprite_buf0, @sprite_buf1, 0, objects, 0, 0, sec, icon_handles}
+        # {w, h, render_target, flip, objects, fps, frame_count, prev_sec, icon_handles}
+        state = {w, h, render_target, 0, objects, 0, 0, sec, icon_handles}
 
         loop(port, state)
       after
@@ -139,22 +154,55 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
+  defp prepare_render_target(port, w, h) do
+    case @frame_render_mode do
+      :direct_lcd ->
+        IO.puts("moving_icons render mode=direct_lcd")
+        {:ok, :direct_lcd}
+
+      :strip_buffers ->
+        with {:ok, strip_h} <- prepare_frame_sprites(port, w, h) do
+          IO.puts("moving_icons render mode=strip_buffers strip_h=#{strip_h}")
+          {:ok, {:strip_buffers, strip_h, @sprite_buf0, @sprite_buf1}}
+        end
+
+      :auto ->
+        case prepare_frame_sprites(port, w, h) do
+          {:ok, strip_h} ->
+            IO.puts("moving_icons render mode=strip_buffers strip_h=#{strip_h}")
+            {:ok, {:strip_buffers, strip_h, @sprite_buf0, @sprite_buf1}}
+
+          {:error, reason} ->
+            IO.puts(
+              "moving_icons strip buffers unavailable: #{format_local_error(reason)}; falling back to direct_lcd"
+            )
+
+            {:ok, :direct_lcd}
+        end
+    end
+  end
+
   defp prepare_frame_sprites(port, w, h) do
-    prepare_frame_sprites_i(port, w, h, 2)
+    prepare_frame_sprites_i(port, w, h, @initial_split_factor)
   end
 
   # Allocate two frame sprites used as strip buffers. If allocation fails, reduce strip height
-  # by increasing split_factor until it fits.
+  # by increasing split_factor until it fits. Stop once strip_h reaches 1.
   defp prepare_frame_sprites_i(port, w, h, split_factor) do
-    strip_h = div_ceil(h, split_factor)
+    strip_h = max(1, div_ceil(h, split_factor))
 
     with :ok <- create_frame_sprite(port, @sprite_buf0, w, strip_h),
          :ok <- create_frame_sprite(port, @sprite_buf1, w, strip_h) do
       {:ok, strip_h}
     else
-      {:error, _reason} ->
+      {:error, reason} ->
         cleanup_frame_sprites(port)
-        prepare_frame_sprites_i(port, w, h, split_factor + 1)
+
+        if strip_h == 1 do
+          {:error, {:frame_sprite_alloc_failed, w, h, split_factor, reason}}
+        else
+          prepare_frame_sprites_i(port, w, h, split_factor + 1)
+        end
     end
   end
 
@@ -292,11 +340,11 @@ defmodule SampleApp.MovingIcons do
 
   defp loop(
          port,
-         {w, h, strip_h, buf0, buf1, flip0, objects0, fps0, frame_count0, prev_sec0, icon_handles}
+         {w, h, render_target, flip0, objects0, fps0, frame_count0, prev_sec0, icon_handles}
        ) do
     objects = move_objects(objects0, w, h)
 
-    case render_strips(port, h, strip_h, buf0, buf1, flip0, objects, fps0, icon_handles) do
+    case render_frame(port, h, render_target, flip0, objects, fps0, icon_handles) do
       {:ok, flip1} ->
         now_ms = :erlang.monotonic_time(:millisecond)
         sec = div(now_ms, 1000)
@@ -312,13 +360,37 @@ defmodule SampleApp.MovingIcons do
 
         loop(
           port,
-          {w, h, strip_h, buf0, buf1, flip1, objects, fps, frame_count, prev_sec, icon_handles}
+          {w, h, render_target, flip1, objects, fps, frame_count, prev_sec, icon_handles}
         )
 
       {:error, reason} ->
         IO.puts("moving_icons render failed: #{Port.format_error(reason)}")
         {:error, reason}
     end
+  end
+
+  defp render_frame(port, _h, :direct_lcd, _flip0, objects, fps, icon_handles) do
+    with :ok <- Port.fill_screen(port, @bg),
+         :ok <- draw_all_objects_to_target(port, objects, icon_handles, 0, 0),
+         :ok <- maybe_draw_hud(port, 0, 0, fps),
+         :ok <- Port.display(port) do
+      {:ok, 0}
+    else
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp render_frame(
+         port,
+         h,
+         {:strip_buffers, strip_h, buf0, buf1},
+         flip0,
+         objects,
+         fps,
+         icon_handles
+       ) do
+    render_strips(port, h, strip_h, buf0, buf1, flip0, objects, fps, icon_handles)
   end
 
   defp render_strips(port, h, strip_h, buf0, buf1, flip0, objects, fps, icon_handles) do
@@ -350,7 +422,7 @@ defmodule SampleApp.MovingIcons do
       end
 
     with :ok <- Port.clear(port, @bg, buf),
-         :ok <- draw_all_objects_to_strip(port, objects, icon_handles, buf, y0),
+         :ok <- draw_all_objects_to_target(port, objects, icon_handles, buf, y0),
          :ok <- maybe_draw_hud(port, y0, buf, fps),
          :ok <- Port.push_sprite(port, buf, 0, y0) do
       render_strips_i(
@@ -371,17 +443,17 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp draw_all_objects_to_strip(port, objects, icon_handles, dst_strip_sprite, y0) do
-    draw_all_objects_to_strip_i(port, objects, icon_handles, dst_strip_sprite, y0)
+  defp draw_all_objects_to_target(port, objects, icon_handles, dst_target, y0) do
+    draw_all_objects_to_target_i(port, objects, icon_handles, dst_target, y0)
   end
 
-  defp draw_all_objects_to_strip_i(_port, [], _icons, _dst, _y0), do: :ok
+  defp draw_all_objects_to_target_i(_port, [], _icons, _dst_target, _y0), do: :ok
 
-  defp draw_all_objects_to_strip_i(
+  defp draw_all_objects_to_target_i(
          port,
          [{x, y, _dx, _dy, img, r_cdeg, z_x1024, _dr, _dz} | rest],
          icon_handles,
-         dst_strip_sprite,
+         dst_target,
          y0
        ) do
     src =
@@ -392,7 +464,8 @@ defmodule SampleApp.MovingIcons do
         3 -> elem(icon_handles, 3)
       end
 
-    # Strip-local coordinates: subtract the strip's top y-offset.
+    # Target-local coordinates: subtract the current strip's top y-offset.
+    # For direct LCD mode, y0 is 0.
     dst_x = x
     dst_y = y - y0
 
@@ -401,7 +474,7 @@ defmodule SampleApp.MovingIcons do
         Port.push_rotate_zoom_to(
           port,
           src,
-          dst_strip_sprite,
+          dst_target,
           dst_x,
           dst_y,
           r_cdeg,
@@ -413,7 +486,7 @@ defmodule SampleApp.MovingIcons do
         Port.push_rotate_zoom_to(
           port,
           src,
-          dst_strip_sprite,
+          dst_target,
           dst_x,
           dst_y,
           r_cdeg,
@@ -423,18 +496,18 @@ defmodule SampleApp.MovingIcons do
       end
 
     case result do
-      :ok -> draw_all_objects_to_strip_i(port, rest, icon_handles, dst_strip_sprite, y0)
+      :ok -> draw_all_objects_to_target_i(port, rest, icon_handles, dst_target, y0)
       {:error, reason} -> {:error, reason}
     end
   end
 
   # Draw a tiny HUD only on the first strip, similar to the upstream demo.
-  defp maybe_draw_hud(port, 0, dst_strip_sprite, fps) do
+  defp maybe_draw_hud(port, 0, dst_target, fps) do
     text = <<"obj:", i2b(@obj_count)::binary, "  fps:", i2b(fps)::binary>>
-    Port.draw_string_bg(port, 0, 0, 0xFFFFFF, @bg, 2, text, dst_strip_sprite)
+    Port.draw_string_bg(port, 0, 0, 0xFFFFFF, @bg, 2, text, dst_target)
   end
 
-  defp maybe_draw_hud(_port, _y0, _dst, _fps), do: :ok
+  defp maybe_draw_hud(_port, _y0, _dst_target, _fps), do: :ok
 
   # -----------------------------------------------------------------------------
   # Misc
@@ -455,4 +528,10 @@ defmodule SampleApp.MovingIcons do
   end
 
   defp i2b(i), do: :erlang.integer_to_binary(i)
+
+  defp format_local_error({:frame_sprite_alloc_failed, w, h, split_factor, reason}) do
+    "frame sprite alloc failed w=#{w} h=#{h} split_factor=#{split_factor} reason=#{Port.format_error(reason)}"
+  end
+
+  defp format_local_error(reason), do: inspect(reason)
 end

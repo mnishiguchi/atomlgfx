@@ -1,7 +1,7 @@
 // src/lgfx_device_internal.hpp
 //
 // Internal-only shared contract for split lgfx_device implementation files.
-// Mutable state is owned by src/lgfx_device_state.cpp.
+// Mutable singleton state is owned by src/lgfx_device_state.cpp.
 //
 // This header is C++-only and must not be exposed as public API.
 
@@ -30,8 +30,22 @@ uint16_t max_sprites_const();
 // -----------------------------------------------------------------------------
 // Shared lock / lifecycle helpers (owned by lgfx_device_state.cpp)
 // -----------------------------------------------------------------------------
+//
+// Lifecycle terms used internally:
+//
+// - published
+//     A singleton LGFX device object exists and has an owner token.
+//     This is stronger than "some port opened", but weaker than "ready".
+//
+// - ready
+//     The published singleton completed begin() successfully and may be used for
+//     drawing / touch / sprite operations.
+//
+// Per-port open_config persistence lives on the port side (`lgfx_port_t`).
+// This header only exposes process-global singleton helpers.
+//
 
-esp_err_t ensure_allocated();
+esp_err_t ensure_published();
 
 bool lock_lcd();
 void unlock_lcd();
@@ -51,6 +65,8 @@ private:
     bool locked_ = false;
 };
 
+// Acquires the LCD mutex and requires the singleton to be both published and
+// ready (`begin()` completed).
 esp_err_t lock_ready(ScopedLcdLock &lock);
 
 // -----------------------------------------------------------------------------
@@ -60,7 +76,7 @@ esp_err_t lock_ready(ScopedLcdLock &lock);
 // Returns LCD singleton as a generic LGFX device pointer (or nullptr).
 lgfx::LGFX_Device *lcd_device_locked();
 
-// Returns true iff init/begin has completed successfully.
+// Returns true iff begin() completed successfully for the current singleton.
 bool is_initialized_locked();
 
 // Resolve target 0 => LCD, 1..MAX_HANDLE => sprite. Returns nullptr if invalid/missing.

@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "esp_err.h"
+#include "lgfx_device.h"
 
 // This header is intentionally FreeRTOS-free and AtomVM-free.
 // It is used internally by worker compilation units.

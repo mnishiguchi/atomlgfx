@@ -8,6 +8,7 @@
 #include "globalcontext.h"
 #include "term.h"
 
+#include "lgfx_device.h"
 #include "lgfx_port/protocol.h"
 
 #ifdef __cplusplus
@@ -65,6 +66,10 @@ typedef struct lgfx_port_t
 
     uint32_t width;
     uint32_t height;
+
+    // Per-port persisted open-time config snapshot.
+    // This survives close/init cycles for the same port handle.
+    lgfx_open_config_overrides_t open_config_overrides;
 
     bool initialized;
 } lgfx_port_t;

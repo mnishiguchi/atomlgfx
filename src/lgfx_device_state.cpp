@@ -30,10 +30,17 @@
 // Keep only checks that prevent silent misconfiguration or narrowing surprises.
 //
 
+#ifndef LGFX_PORT_PANEL_DRIVER_ILI9341_2
+#error "LGFX_PORT_PANEL_DRIVER_ILI9341_2 must be defined by lgfx_port_config.h"
+#endif
+
 #define LGFX_PORT_ASSERT_BOOL01(name) \
     static_assert(((name) == 0) || ((name) == 1), #name " must be 0 or 1")
 
 LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_ENABLE_TOUCH);
+LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_PANEL_DRIVER_ILI9488);
+LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_PANEL_DRIVER_ILI9341);
+LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_PANEL_DRIVER_ILI9341_2);
 LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_SPI_3WIRE);
 LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_USE_LOCK);
 LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_READABLE);
@@ -47,6 +54,10 @@ LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_TOUCH_BUS_SHARED);
 #endif
 
 #undef LGFX_PORT_ASSERT_BOOL01
+
+static_assert(
+    (LGFX_PORT_PANEL_DRIVER_ILI9488 + LGFX_PORT_PANEL_DRIVER_ILI9341 + LGFX_PORT_PANEL_DRIVER_ILI9341_2) == 1,
+    "Exactly one panel driver must be selected");
 
 static_assert((LGFX_PORT_MAX_SPRITES) <= 254u, "LGFX_PORT_MAX_SPRITES must be <= 254");
 
@@ -71,44 +82,429 @@ namespace
 
 static constexpr const char *TAG = "lgfx_device";
 
+// Protects publication of the process-global singleton pointer, owner token,
+// and ready flag. Keep critical sections short and allocation-free.
+static portMUX_TYPE g_publication_mux = portMUX_INITIALIZER_UNLOCKED;
+
+// Singleton device instance.
+class PiyopiyoLGFX;
+static PiyopiyoLGFX *g_lcd_device = nullptr;
+static SemaphoreHandle_t g_lcd_mutex = nullptr;
+
+// Live singleton owner token (currently the owning lgfx_port_t *).
+// Null means no port currently owns a published singleton device.
+static const void *g_device_owner_token = nullptr;
+
+// True only after begin() completed successfully for the currently published
+// singleton device.
+static bool g_device_ready = false;
+
 // ----------------------------------------------------------------------------
-// Wiring / geometry / knobs (all sourced from generated config)
+// Panel driver selection
 // ----------------------------------------------------------------------------
 
-// SPI pins
-static constexpr int PIN_SCLK = (int) (LGFX_PORT_SPI_SCLK_GPIO);
-static constexpr int PIN_MOSI = (int) (LGFX_PORT_SPI_MOSI_GPIO);
-static constexpr int PIN_MISO = (int) (LGFX_PORT_SPI_MISO_GPIO);
+enum class PanelDriverId : uint8_t
+{
+    ILI9488 = 1,
+    ILI9341 = 2,
+    ILI9341_2 = 3,
+};
 
-// LCD pins / host
-static constexpr int PIN_LCD_CS = (int) (LGFX_PORT_LCD_CS_GPIO);
-static constexpr int PIN_LCD_DC = (int) (LGFX_PORT_LCD_DC_GPIO);
-static constexpr int PIN_LCD_RST = (int) (LGFX_PORT_LCD_RST_GPIO);
-
-// Panel geometry
-static constexpr uint16_t PANEL_W = (uint16_t) (LGFX_PORT_PANEL_WIDTH);
-static constexpr uint16_t PANEL_H = (uint16_t) (LGFX_PORT_PANEL_HEIGHT);
-
-#if (LGFX_PORT_ENABLE_TOUCH == 1)
-// XPT2046 touch (SPI).
-// Leave CS as -1 to compile touch but keep it unattached.
-static constexpr int PIN_TOUCH_CS = (int) (LGFX_PORT_TOUCH_CS_GPIO);
-static constexpr int PIN_TOUCH_IRQ = (int) (LGFX_PORT_TOUCH_IRQ_GPIO);
-
-static constexpr int TOUCH_SPI_HOST = (int) (LGFX_PORT_TOUCH_SPI_HOST);
-static constexpr uint32_t TOUCH_SPI_FREQ_HZ = (uint32_t) (LGFX_PORT_TOUCH_SPI_FREQ_HZ);
-static constexpr uint8_t TOUCH_OFFSET_ROTATION = (uint8_t) (LGFX_PORT_TOUCH_OFFSET_ROTATION);
+#if (LGFX_PORT_PANEL_DRIVER_ILI9488 == 1)
+using LgfxPanelType = lgfx::Panel_ILI9488;
+static constexpr PanelDriverId PANEL_DRIVER_ID = PanelDriverId::ILI9488;
+static constexpr const char *PANEL_DRIVER_NAME = "ILI9488";
+#elif (LGFX_PORT_PANEL_DRIVER_ILI9341 == 1)
+using LgfxPanelType = lgfx::Panel_ILI9341;
+static constexpr PanelDriverId PANEL_DRIVER_ID = PanelDriverId::ILI9341;
+static constexpr const char *PANEL_DRIVER_NAME = "ILI9341";
+#elif (LGFX_PORT_PANEL_DRIVER_ILI9341_2 == 1)
+using LgfxPanelType = lgfx::Panel_ILI9341_2;
+static constexpr PanelDriverId PANEL_DRIVER_ID = PanelDriverId::ILI9341_2;
+static constexpr const char *PANEL_DRIVER_NAME = "ILI9341_2";
+#else
+#error "Unsupported LGFX panel driver selection"
 #endif
 
-// Lazily created to avoid C++ global ctors at boot
-static bool is_initialized = false;
+// ----------------------------------------------------------------------------
+// Compile-time constants still shared across split files
+// ----------------------------------------------------------------------------
+
+static constexpr uint16_t PANEL_W = (uint16_t) (LGFX_PORT_PANEL_WIDTH);
+static constexpr uint16_t PANEL_H = (uint16_t) (LGFX_PORT_PANEL_HEIGHT);
 
 static constexpr uint16_t MAX_SPRITES = static_cast<uint16_t>(LGFX_PORT_MAX_SPRITES);
 static constexpr uint8_t MAX_HANDLE = 254;
 
+// ----------------------------------------------------------------------------
+// Publication / ownership snapshots
+// ----------------------------------------------------------------------------
+
+struct DevicePublicationSnapshot
+{
+    PiyopiyoLGFX *lcd;
+    const void *owner_token;
+    bool ready;
+};
+
+static DevicePublicationSnapshot snapshot_device_publication()
+{
+    DevicePublicationSnapshot snapshot = {};
+
+    portENTER_CRITICAL(&g_publication_mux);
+    snapshot.lcd = g_lcd_device;
+    snapshot.owner_token = g_device_owner_token;
+    snapshot.ready = g_device_ready;
+    portEXIT_CRITICAL(&g_publication_mux);
+
+    return snapshot;
+}
+
+static inline bool snapshot_has_published_device(const DevicePublicationSnapshot &snapshot)
+{
+    return snapshot.lcd != nullptr;
+}
+
+static inline bool snapshot_is_owned_by(const DevicePublicationSnapshot &snapshot, const void *owner_token)
+{
+    return owner_token != nullptr && snapshot.owner_token == owner_token;
+}
+
+static inline bool snapshot_is_owned_live_device(const DevicePublicationSnapshot &snapshot, const void *owner_token)
+{
+    return snapshot_has_published_device(snapshot) && snapshot_is_owned_by(snapshot, owner_token);
+}
+
+static inline bool snapshot_is_fully_unpublished(const DevicePublicationSnapshot &snapshot)
+{
+    return snapshot.lcd == nullptr && snapshot.owner_token == nullptr && !snapshot.ready;
+}
+
+// ----------------------------------------------------------------------------
+// Native runtime config
+// ----------------------------------------------------------------------------
+
+struct LgfxRuntimeConfig
+{
+    struct SpiBusConfig
+    {
+        int host;
+        uint8_t mode;
+        uint32_t freq_write_hz;
+        uint32_t freq_read_hz;
+        int dma_channel;
+        bool spi_3wire;
+        bool use_lock;
+        int pin_sclk;
+        int pin_mosi;
+        int pin_miso;
+        int pin_dc;
+    };
+
+    struct PanelConfig
+    {
+        PanelDriverId driver_id;
+        const char *driver_name;
+        uint16_t width;
+        uint16_t height;
+        int pin_cs;
+        int pin_rst;
+        int pin_busy;
+        int offset_x;
+        int offset_y;
+        uint8_t offset_rotation;
+        uint8_t dummy_read_pixel;
+        uint8_t dummy_read_bits;
+        bool readable;
+        bool invert;
+        bool rgb_order;
+        bool dlen_16bit;
+        bool bus_shared;
+    };
+
+    struct TouchConfig
+    {
+        bool compiled;
+        bool attached;
+        int pin_cs;
+        int pin_irq;
+        int spi_host;
+        uint32_t spi_freq_hz;
+        uint8_t offset_rotation;
+        bool bus_shared;
+    };
+
+    SpiBusConfig lcd_bus;
+    PanelConfig lcd_panel;
+    TouchConfig touch;
+};
+
+static LgfxRuntimeConfig runtime_config_from_build_defaults()
+{
+    LgfxRuntimeConfig config = {};
+
+    config.lcd_bus.host = (int) (LGFX_PORT_LCD_SPI_HOST);
+    config.lcd_bus.mode = (uint8_t) (LGFX_PORT_LCD_SPI_MODE);
+    config.lcd_bus.freq_write_hz = (uint32_t) (LGFX_PORT_LCD_FREQ_WRITE_HZ);
+    config.lcd_bus.freq_read_hz = (uint32_t) (LGFX_PORT_LCD_FREQ_READ_HZ);
+    config.lcd_bus.dma_channel = (int) (LGFX_PORT_LCD_DMA_CHANNEL);
+    config.lcd_bus.spi_3wire = ((LGFX_PORT_LCD_SPI_3WIRE) != 0);
+    config.lcd_bus.use_lock = ((LGFX_PORT_LCD_USE_LOCK) != 0);
+    config.lcd_bus.pin_sclk = (int) (LGFX_PORT_SPI_SCLK_GPIO);
+    config.lcd_bus.pin_mosi = (int) (LGFX_PORT_SPI_MOSI_GPIO);
+    config.lcd_bus.pin_miso = (int) (LGFX_PORT_SPI_MISO_GPIO);
+    config.lcd_bus.pin_dc = (int) (LGFX_PORT_LCD_DC_GPIO);
+
+    config.lcd_panel.driver_id = PANEL_DRIVER_ID;
+    config.lcd_panel.driver_name = PANEL_DRIVER_NAME;
+    config.lcd_panel.width = (uint16_t) (LGFX_PORT_PANEL_WIDTH);
+    config.lcd_panel.height = (uint16_t) (LGFX_PORT_PANEL_HEIGHT);
+    config.lcd_panel.pin_cs = (int) (LGFX_PORT_LCD_CS_GPIO);
+    config.lcd_panel.pin_rst = (int) (LGFX_PORT_LCD_RST_GPIO);
+    config.lcd_panel.pin_busy = (int) (LGFX_PORT_LCD_PIN_BUSY);
+    config.lcd_panel.offset_x = (int) (LGFX_PORT_LCD_OFFSET_X);
+    config.lcd_panel.offset_y = (int) (LGFX_PORT_LCD_OFFSET_Y);
+    config.lcd_panel.offset_rotation = (uint8_t) (LGFX_PORT_LCD_OFFSET_ROTATION);
+    config.lcd_panel.dummy_read_pixel = (uint8_t) (LGFX_PORT_LCD_DUMMY_READ_PIXEL);
+    config.lcd_panel.dummy_read_bits = (uint8_t) (LGFX_PORT_LCD_DUMMY_READ_BITS);
+    config.lcd_panel.readable = ((LGFX_PORT_LCD_READABLE) != 0);
+    config.lcd_panel.invert = ((LGFX_PORT_LCD_INVERT) != 0);
+    config.lcd_panel.rgb_order = ((LGFX_PORT_LCD_RGB_ORDER) != 0);
+    config.lcd_panel.dlen_16bit = ((LGFX_PORT_LCD_DLEN_16BIT) != 0);
+    config.lcd_panel.bus_shared = ((LGFX_PORT_LCD_BUS_SHARED) != 0);
+
+    config.touch.compiled = ((LGFX_PORT_ENABLE_TOUCH) != 0);
+    config.touch.pin_cs = (int) (LGFX_PORT_TOUCH_CS_GPIO);
+    config.touch.pin_irq = (int) (LGFX_PORT_TOUCH_IRQ_GPIO);
+    config.touch.spi_host = (int) (LGFX_PORT_TOUCH_SPI_HOST);
+    config.touch.spi_freq_hz = (uint32_t) (LGFX_PORT_TOUCH_SPI_FREQ_HZ);
+    config.touch.offset_rotation = (uint8_t) (LGFX_PORT_TOUCH_OFFSET_ROTATION);
+    config.touch.bus_shared = ((LGFX_PORT_TOUCH_BUS_SHARED) != 0);
+    config.touch.attached = config.touch.compiled && (config.touch.pin_cs >= 0);
+
+    return config;
+}
+
+static void apply_open_config_overrides(
+    LgfxRuntimeConfig &config,
+    const lgfx_open_config_overrides_t &overrides)
+{
+    if (overrides.has_width) {
+        config.lcd_panel.width = overrides.width;
+    }
+
+    if (overrides.has_height) {
+        config.lcd_panel.height = overrides.height;
+    }
+
+    if (overrides.has_offset_x) {
+        config.lcd_panel.offset_x = (int) overrides.offset_x;
+    }
+
+    if (overrides.has_offset_y) {
+        config.lcd_panel.offset_y = (int) overrides.offset_y;
+    }
+
+    if (overrides.has_offset_rotation) {
+        config.lcd_panel.offset_rotation = overrides.offset_rotation;
+    }
+
+    if (overrides.has_readable) {
+        config.lcd_panel.readable = (overrides.readable != 0);
+    }
+
+    if (overrides.has_invert) {
+        config.lcd_panel.invert = (overrides.invert != 0);
+    }
+
+    if (overrides.has_rgb_order) {
+        config.lcd_panel.rgb_order = (overrides.rgb_order != 0);
+    }
+
+    if (overrides.has_dlen_16bit) {
+        config.lcd_panel.dlen_16bit = (overrides.dlen_16bit != 0);
+    }
+
+    if (overrides.has_lcd_spi_mode) {
+        config.lcd_bus.mode = overrides.lcd_spi_mode;
+    }
+
+    if (overrides.has_lcd_freq_write_hz) {
+        config.lcd_bus.freq_write_hz = overrides.lcd_freq_write_hz;
+    }
+
+    if (overrides.has_lcd_freq_read_hz) {
+        config.lcd_bus.freq_read_hz = overrides.lcd_freq_read_hz;
+    }
+
+    if (overrides.has_lcd_dma_channel) {
+        config.lcd_bus.dma_channel = (int) overrides.lcd_dma_channel;
+    }
+
+    if (overrides.has_lcd_spi_3wire) {
+        config.lcd_bus.spi_3wire = (overrides.lcd_spi_3wire != 0);
+    }
+
+    if (overrides.has_lcd_use_lock) {
+        config.lcd_bus.use_lock = (overrides.lcd_use_lock != 0);
+    }
+
+    if (overrides.has_lcd_bus_shared) {
+        config.lcd_panel.bus_shared = (overrides.lcd_bus_shared != 0);
+    }
+
+    if (overrides.has_spi_sclk_gpio) {
+        config.lcd_bus.pin_sclk = (int) overrides.spi_sclk_gpio;
+    }
+
+    if (overrides.has_spi_mosi_gpio) {
+        config.lcd_bus.pin_mosi = (int) overrides.spi_mosi_gpio;
+    }
+
+    if (overrides.has_spi_miso_gpio) {
+        config.lcd_bus.pin_miso = (int) overrides.spi_miso_gpio;
+    }
+
+    if (overrides.has_lcd_spi_host) {
+        config.lcd_bus.host = (int) overrides.lcd_spi_host;
+    }
+
+    if (overrides.has_lcd_cs_gpio) {
+        config.lcd_panel.pin_cs = (int) overrides.lcd_cs_gpio;
+    }
+
+    if (overrides.has_lcd_dc_gpio) {
+        config.lcd_bus.pin_dc = (int) overrides.lcd_dc_gpio;
+    }
+
+    if (overrides.has_lcd_rst_gpio) {
+        config.lcd_panel.pin_rst = (int) overrides.lcd_rst_gpio;
+    }
+
+    if (overrides.has_lcd_pin_busy) {
+        config.lcd_panel.pin_busy = (int) overrides.lcd_pin_busy;
+    }
+
+    if (overrides.has_touch_cs_gpio) {
+        config.touch.pin_cs = (int) overrides.touch_cs_gpio;
+    }
+
+    if (overrides.has_touch_irq_gpio) {
+        config.touch.pin_irq = (int) overrides.touch_irq_gpio;
+    }
+
+    if (overrides.has_touch_spi_host) {
+        config.touch.spi_host = (int) overrides.touch_spi_host;
+    }
+
+    if (overrides.has_touch_spi_freq_hz) {
+        config.touch.spi_freq_hz = overrides.touch_spi_freq_hz;
+    }
+
+    if (overrides.has_touch_offset_rotation) {
+        config.touch.offset_rotation = overrides.touch_offset_rotation;
+    }
+
+    if (overrides.has_touch_bus_shared) {
+        config.touch.bus_shared = (overrides.touch_bus_shared != 0);
+    }
+
+    config.touch.attached = config.touch.compiled && (config.touch.pin_cs >= 0);
+}
+
+static bool validate_runtime_config(const LgfxRuntimeConfig &config, const char **reason)
+{
+    if (config.lcd_panel.width == 0) {
+        *reason = "width must be > 0";
+        return false;
+    }
+
+    if (config.lcd_panel.height == 0) {
+        *reason = "height must be > 0";
+        return false;
+    }
+
+    if (config.lcd_panel.offset_rotation > 7) {
+        *reason = "offset_rotation must be in 0..7";
+        return false;
+    }
+
+    if (config.lcd_bus.mode > 3) {
+        *reason = "lcd_spi_mode must be in 0..3";
+        return false;
+    }
+
+    if (config.touch.offset_rotation > 7) {
+        *reason = "touch_offset_rotation must be in 0..7";
+        return false;
+    }
+
+    return true;
+}
+
+static LgfxRuntimeConfig runtime_config_with_overrides(const lgfx_open_config_overrides_t *overrides)
+{
+    LgfxRuntimeConfig config = runtime_config_from_build_defaults();
+
+    if (overrides != nullptr) {
+        apply_open_config_overrides(config, *overrides);
+    }
+
+    return config;
+}
+
+static void log_runtime_config(const LgfxRuntimeConfig &config)
+{
+    ESP_LOGI(
+        TAG,
+        "effective config panel=%s size=%ux%u offset=(%d,%d) rot=%u readable=%u invert=%u rgb_order=%u dlen_16bit=%u bus_shared=%u",
+        config.lcd_panel.driver_name,
+        (unsigned) config.lcd_panel.width,
+        (unsigned) config.lcd_panel.height,
+        config.lcd_panel.offset_x,
+        config.lcd_panel.offset_y,
+        (unsigned) config.lcd_panel.offset_rotation,
+        (unsigned) config.lcd_panel.readable,
+        (unsigned) config.lcd_panel.invert,
+        (unsigned) config.lcd_panel.rgb_order,
+        (unsigned) config.lcd_panel.dlen_16bit,
+        (unsigned) config.lcd_panel.bus_shared);
+
+    ESP_LOGI(
+        TAG,
+        "effective bus host=%d mode=%u write_hz=%u read_hz=%u dma=%d sclk=%d mosi=%d miso=%d dc=%d spi_3wire=%u use_lock=%u",
+        config.lcd_bus.host,
+        (unsigned) config.lcd_bus.mode,
+        (unsigned) config.lcd_bus.freq_write_hz,
+        (unsigned) config.lcd_bus.freq_read_hz,
+        config.lcd_bus.dma_channel,
+        config.lcd_bus.pin_sclk,
+        config.lcd_bus.pin_mosi,
+        config.lcd_bus.pin_miso,
+        config.lcd_bus.pin_dc,
+        (unsigned) config.lcd_bus.spi_3wire,
+        (unsigned) config.lcd_bus.use_lock);
+
+    if (config.touch.compiled) {
+        ESP_LOGI(
+            TAG,
+            "effective touch compiled=1 attached=%u cs=%d irq=%d host=%d freq=%u offset_rotation=%u bus_shared=%u",
+            (unsigned) config.touch.attached,
+            config.touch.pin_cs,
+            config.touch.pin_irq,
+            config.touch.spi_host,
+            (unsigned) config.touch.spi_freq_hz,
+            (unsigned) config.touch.offset_rotation,
+            (unsigned) config.touch.bus_shared);
+    } else {
+        ESP_LOGI(TAG, "effective touch compiled=0");
+    }
+}
+
 class PiyopiyoLGFX : public lgfx::LGFX_Device
 {
-    lgfx::Panel_ILI9488 panel_;
+    LgfxRuntimeConfig runtime_config_;
+    LgfxPanelType panel_;
     lgfx::Bus_SPI bus_;
 
 #if (LGFX_PORT_ENABLE_TOUCH == 1)
@@ -116,27 +512,32 @@ class PiyopiyoLGFX : public lgfx::LGFX_Device
 #endif
 
 public:
-    PiyopiyoLGFX()
+    explicit PiyopiyoLGFX(const LgfxRuntimeConfig &runtime_config)
+        : runtime_config_(runtime_config)
     {
+        ESP_LOGI(
+            TAG,
+            "panel driver=%s size=%ux%u",
+            runtime_config_.lcd_panel.driver_name,
+            (unsigned) runtime_config_.lcd_panel.width,
+            (unsigned) runtime_config_.lcd_panel.height);
+
         // SPI bus config
         {
             auto cfg = bus_.config();
 
-            cfg.spi_host = LGFX_PORT_LCD_SPI_HOST;
-            cfg.spi_mode = (uint8_t) (LGFX_PORT_LCD_SPI_MODE);
+            cfg.spi_host = static_cast<spi_host_device_t>(runtime_config_.lcd_bus.host);
+            cfg.spi_mode = runtime_config_.lcd_bus.mode;
+            cfg.freq_write = runtime_config_.lcd_bus.freq_write_hz;
+            cfg.freq_read = runtime_config_.lcd_bus.freq_read_hz;
+            cfg.spi_3wire = runtime_config_.lcd_bus.spi_3wire;
+            cfg.use_lock = runtime_config_.lcd_bus.use_lock;
+            cfg.dma_channel = runtime_config_.lcd_bus.dma_channel;
 
-            // Parenthesize expression-ish macros before casting (avoids precedence footguns)
-            cfg.freq_write = (uint32_t) (LGFX_PORT_LCD_FREQ_WRITE_HZ);
-            cfg.freq_read = (uint32_t) (LGFX_PORT_LCD_FREQ_READ_HZ);
-
-            cfg.spi_3wire = ((LGFX_PORT_LCD_SPI_3WIRE) != 0);
-            cfg.use_lock = ((LGFX_PORT_LCD_USE_LOCK) != 0);
-            cfg.dma_channel = (LGFX_PORT_LCD_DMA_CHANNEL);
-
-            cfg.pin_sclk = PIN_SCLK;
-            cfg.pin_mosi = PIN_MOSI;
-            cfg.pin_miso = PIN_MISO;
-            cfg.pin_dc = PIN_LCD_DC;
+            cfg.pin_sclk = runtime_config_.lcd_bus.pin_sclk;
+            cfg.pin_mosi = runtime_config_.lcd_bus.pin_mosi;
+            cfg.pin_miso = runtime_config_.lcd_bus.pin_miso;
+            cfg.pin_dc = runtime_config_.lcd_bus.pin_dc;
 
             bus_.config(cfg);
             panel_.setBus(&bus_);
@@ -146,26 +547,26 @@ public:
         {
             auto cfg = panel_.config();
 
-            cfg.pin_cs = PIN_LCD_CS;
-            cfg.pin_rst = PIN_LCD_RST;
-            cfg.pin_busy = (int) (LGFX_PORT_LCD_PIN_BUSY);
+            cfg.pin_cs = runtime_config_.lcd_panel.pin_cs;
+            cfg.pin_rst = runtime_config_.lcd_panel.pin_rst;
+            cfg.pin_busy = runtime_config_.lcd_panel.pin_busy;
 
-            cfg.panel_width = PANEL_W;
-            cfg.panel_height = PANEL_H;
+            cfg.panel_width = runtime_config_.lcd_panel.width;
+            cfg.panel_height = runtime_config_.lcd_panel.height;
 
-            cfg.offset_x = (int) (LGFX_PORT_LCD_OFFSET_X);
-            cfg.offset_y = (int) (LGFX_PORT_LCD_OFFSET_Y);
-            cfg.offset_rotation = (uint8_t) (LGFX_PORT_LCD_OFFSET_ROTATION);
+            cfg.offset_x = runtime_config_.lcd_panel.offset_x;
+            cfg.offset_y = runtime_config_.lcd_panel.offset_y;
+            cfg.offset_rotation = runtime_config_.lcd_panel.offset_rotation;
 
-            cfg.dummy_read_pixel = (uint8_t) (LGFX_PORT_LCD_DUMMY_READ_PIXEL);
-            cfg.dummy_read_bits = (uint8_t) (LGFX_PORT_LCD_DUMMY_READ_BITS);
+            cfg.dummy_read_pixel = runtime_config_.lcd_panel.dummy_read_pixel;
+            cfg.dummy_read_bits = runtime_config_.lcd_panel.dummy_read_bits;
 
-            cfg.readable = ((LGFX_PORT_LCD_READABLE) != 0);
-            cfg.invert = ((LGFX_PORT_LCD_INVERT) != 0);
-            cfg.rgb_order = ((LGFX_PORT_LCD_RGB_ORDER) != 0);
-            cfg.dlen_16bit = ((LGFX_PORT_LCD_DLEN_16BIT) != 0);
+            cfg.readable = runtime_config_.lcd_panel.readable;
+            cfg.invert = runtime_config_.lcd_panel.invert;
+            cfg.rgb_order = runtime_config_.lcd_panel.rgb_order;
+            cfg.dlen_16bit = runtime_config_.lcd_panel.dlen_16bit;
 
-            cfg.bus_shared = ((LGFX_PORT_LCD_BUS_SHARED) != 0);
+            cfg.bus_shared = runtime_config_.lcd_panel.bus_shared;
 
             panel_.config(cfg);
         }
@@ -175,26 +576,21 @@ public:
         // - shares SPI host + SCLK/MOSI/MISO with the LCD bus
         // - requires a dedicated CS pin for touch
         // - optional IRQ pin reduces unnecessary reads when not touched
-        if constexpr (PIN_TOUCH_CS >= 0) {
+        if (runtime_config_.touch.attached) {
             auto cfg = touch_.config();
 
-            cfg.spi_host = TOUCH_SPI_HOST; // should match the LCD bus host
-            cfg.freq = TOUCH_SPI_FREQ_HZ; // start conservative for stability
+            cfg.spi_host = static_cast<spi_host_device_t>(runtime_config_.touch.spi_host);
+            cfg.freq = runtime_config_.touch.spi_freq_hz;
 
-            cfg.pin_sclk = PIN_SCLK;
-            cfg.pin_mosi = PIN_MOSI;
-            cfg.pin_miso = PIN_MISO;
+            cfg.pin_sclk = runtime_config_.lcd_bus.pin_sclk;
+            cfg.pin_mosi = runtime_config_.lcd_bus.pin_mosi;
+            cfg.pin_miso = runtime_config_.lcd_bus.pin_miso;
 
-            cfg.pin_cs = PIN_TOUCH_CS;
-            cfg.pin_int = PIN_TOUCH_IRQ; // -1 if not wired
+            cfg.pin_cs = runtime_config_.touch.pin_cs;
+            cfg.pin_int = runtime_config_.touch.pin_irq;
 
-            cfg.bus_shared = ((LGFX_PORT_TOUCH_BUS_SHARED) != 0);
-
-            // Touch coordinate alignment relative to the panel orientation.
-            // If left/right is swapped or rotation feels off, try adjusting:
-            //   -DLGFX_PORT_TOUCH_OFFSET_ROTATION=1/2/3/... (0..7)
-            // Then run SampleApp :touch_calibrate for best results.
-            cfg.offset_rotation = TOUCH_OFFSET_ROTATION;
+            cfg.bus_shared = runtime_config_.touch.bus_shared;
+            cfg.offset_rotation = runtime_config_.touch.offset_rotation;
 
             touch_.config(cfg);
             panel_.setTouch(&touch_);
@@ -202,13 +598,13 @@ public:
             ESP_LOGI(
                 TAG,
                 "touch attached: cs=%d irq=%d host=%d freq=%u offset_rotation=%u",
-                PIN_TOUCH_CS,
-                PIN_TOUCH_IRQ,
-                (int) TOUCH_SPI_HOST,
-                (unsigned) TOUCH_SPI_FREQ_HZ,
-                (unsigned) TOUCH_OFFSET_ROTATION);
-        } else {
-            ESP_LOGI(TAG, "touch compiled but unattached (LGFX_PORT_TOUCH_CS_GPIO=-1)");
+                runtime_config_.touch.pin_cs,
+                runtime_config_.touch.pin_irq,
+                runtime_config_.touch.spi_host,
+                (unsigned) runtime_config_.touch.spi_freq_hz,
+                (unsigned) runtime_config_.touch.offset_rotation);
+        } else if (runtime_config_.touch.compiled) {
+            ESP_LOGI(TAG, "touch compiled but unattached (effective touch_cs_gpio=-1)");
         }
 #endif
 
@@ -216,19 +612,13 @@ public:
     }
 };
 
-static PiyopiyoLGFX *lcd = nullptr;
-static SemaphoreHandle_t lcd_lock = nullptr;
-
-// Protects lazy init / pointer publication (kept very short; do not block while holding it).
-static portMUX_TYPE g_init_mux = portMUX_INITIALIZER_UNLOCKED;
-
 static constexpr size_t SPRITE_SLOTS = (size_t) MAX_HANDLE + 1u; // handle 0 reserved for LCD
 static lgfx::LGFX_Sprite *sprites[SPRITE_SLOTS] = { 0 };
 static uint16_t sprite_count = 0;
 
-static inline void ensure_lock_created()
+static inline void ensure_lcd_mutex_created()
 {
-    if (lcd_lock) {
+    if (g_lcd_mutex) {
         return;
     }
 
@@ -239,12 +629,12 @@ static inline void ensure_lock_created()
         return;
     }
 
-    portENTER_CRITICAL(&g_init_mux);
-    if (!lcd_lock) {
-        lcd_lock = created;
+    portENTER_CRITICAL(&g_publication_mux);
+    if (!g_lcd_mutex) {
+        g_lcd_mutex = created;
         created = nullptr;
     }
-    portEXIT_CRITICAL(&g_init_mux);
+    portEXIT_CRITICAL(&g_publication_mux);
 
 #if defined(INCLUDE_vSemaphoreDelete) && (INCLUDE_vSemaphoreDelete == 1)
     // If we lost the race, delete the extra mutex.
@@ -256,71 +646,101 @@ static inline void ensure_lock_created()
 #endif
 }
 
-static esp_err_t ensure_allocated()
+static bool acquire_lcd_mutex()
 {
-    ensure_lock_created();
-    if (!lcd_lock) {
-        return ESP_ERR_NO_MEM;
-    }
-
-    if (lcd) {
-        return ESP_OK;
-    }
-
-    // Allocate outside the critical section (new may allocate).
-    PiyopiyoLGFX *created = new (std::nothrow) PiyopiyoLGFX();
-    if (!created) {
-        ESP_LOGE(TAG, "failed to allocate LGFX device");
-        return ESP_ERR_NO_MEM;
-    }
-
-    portENTER_CRITICAL(&g_init_mux);
-    if (!lcd) {
-        lcd = created;
-        created = nullptr;
-    }
-    portEXIT_CRITICAL(&g_init_mux);
-
-    // If we lost the race, destroy the extra instance.
-    if (created) {
-        delete created;
-    }
-
-    return ESP_OK;
-}
-
-static bool lock_lcd()
-{
-    ensure_lock_created();
-    if (!lcd_lock) {
+    ensure_lcd_mutex_created();
+    if (!g_lcd_mutex) {
         return false;
     }
-    return xSemaphoreTake(lcd_lock, portMAX_DELAY) == pdTRUE;
+
+    return xSemaphoreTake(g_lcd_mutex, portMAX_DELAY) == pdTRUE;
 }
 
-static void unlock_lcd()
+static void release_lcd_mutex()
 {
-    if (lcd_lock) {
-        xSemaphoreGive(lcd_lock);
+    if (g_lcd_mutex) {
+        xSemaphoreGive(g_lcd_mutex);
     }
 }
 
 static inline lgfx::LGFXBase *resolve_target(uint8_t target)
 {
     if (target == 0) {
-        return lcd;
+        return g_lcd_device;
     }
+
     if (target > MAX_HANDLE) {
         return nullptr;
     }
+
     return sprites[target];
+}
+
+static esp_err_t ensure_published_device_for_owner(
+    const lgfx_open_config_overrides_t *overrides,
+    const void *owner_token)
+{
+    if (overrides == nullptr || owner_token == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    ensure_lcd_mutex_created();
+    if (!g_lcd_mutex) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    const DevicePublicationSnapshot snapshot = snapshot_device_publication();
+
+    if (snapshot.lcd != nullptr) {
+        return snapshot.owner_token == owner_token ? ESP_OK : ESP_ERR_INVALID_STATE;
+    }
+
+    if (snapshot.owner_token != nullptr && snapshot.owner_token != owner_token) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    LgfxRuntimeConfig config = runtime_config_with_overrides(overrides);
+
+    const char *validation_error = nullptr;
+    if (!validate_runtime_config(config, &validation_error)) {
+        ESP_LOGE(TAG, "invalid open-time runtime config: %s", validation_error);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    log_runtime_config(config);
+
+    // Allocate outside the critical section (new may allocate).
+    PiyopiyoLGFX *created = new (std::nothrow) PiyopiyoLGFX(config);
+    if (!created) {
+        ESP_LOGE(TAG, "failed to allocate LGFX device");
+        return ESP_ERR_NO_MEM;
+    }
+
+    esp_err_t publish_err = ESP_OK;
+
+    portENTER_CRITICAL(&g_publication_mux);
+    if (g_lcd_device == nullptr && (g_device_owner_token == nullptr || g_device_owner_token == owner_token)) {
+        g_lcd_device = created;
+        g_device_owner_token = owner_token;
+        created = nullptr;
+    } else if (g_device_owner_token != owner_token) {
+        publish_err = ESP_ERR_INVALID_STATE;
+    }
+    portEXIT_CRITICAL(&g_publication_mux);
+
+    // If we lost the race, destroy the extra instance.
+    if (created) {
+        delete created;
+    }
+
+    return publish_err;
 }
 
 } // namespace
 
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 // Internal shared API for split files (definitions)
-// -----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
 
 namespace lgfx_dev
 {
@@ -345,19 +765,19 @@ uint16_t max_sprites_const()
     return MAX_SPRITES;
 }
 
-esp_err_t ensure_allocated()
+esp_err_t ensure_published()
 {
-    return ::ensure_allocated();
+    return (g_lcd_device != nullptr) ? ESP_OK : ESP_ERR_INVALID_STATE;
 }
 
 bool lock_lcd()
 {
-    return ::lock_lcd();
+    return ::acquire_lcd_mutex();
 }
 
 void unlock_lcd()
 {
-    ::unlock_lcd();
+    ::release_lcd_mutex();
 }
 
 void ScopedLcdLock::lock()
@@ -379,7 +799,7 @@ ScopedLcdLock::~ScopedLcdLock()
 
 esp_err_t lock_ready(ScopedLcdLock &lock)
 {
-    esp_err_t err = lgfx_dev::ensure_allocated();
+    esp_err_t err = lgfx_dev::ensure_published();
     if (err != ESP_OK) {
         return err;
     }
@@ -389,7 +809,7 @@ esp_err_t lock_ready(ScopedLcdLock &lock)
         return ESP_ERR_NO_MEM;
     }
 
-    if (!is_initialized || !lcd) {
+    if (!g_device_ready || !g_lcd_device) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -398,12 +818,12 @@ esp_err_t lock_ready(ScopedLcdLock &lock)
 
 lgfx::LGFX_Device *lcd_device_locked()
 {
-    return lcd;
+    return g_lcd_device;
 }
 
 bool is_initialized_locked()
 {
-    return is_initialized;
+    return g_device_ready;
 }
 
 lgfx::LGFXBase *resolve_target_locked(uint8_t target)
@@ -416,6 +836,7 @@ lgfx::LGFX_Sprite *resolve_sprite_locked(uint8_t handle)
     if (handle == 0 || handle > MAX_HANDLE) {
         return nullptr;
     }
+
     return sprites[handle];
 }
 
@@ -424,6 +845,7 @@ void set_sprite_locked(uint8_t handle, lgfx::LGFX_Sprite *spr)
     if (handle == 0 || handle > MAX_HANDLE) {
         return;
     }
+
     sprites[handle] = spr;
 }
 
@@ -432,6 +854,7 @@ void clear_sprite_locked(uint8_t handle)
     if (handle == 0 || handle > MAX_HANDLE) {
         return;
     }
+
     sprites[handle] = nullptr;
 }
 
@@ -478,72 +901,143 @@ void destroy_all_sprites_locked()
 // API: setup / lifecycle
 // ----------------------------------------------------------------------------
 
-extern "C" esp_err_t lgfx_device_init(void)
+extern "C" esp_err_t lgfx_device_get_dims_for_open_config(
+    const lgfx_open_config_overrides_t *overrides,
+    const void *owner_token,
+    uint16_t *out_w,
+    uint16_t *out_h)
 {
-    esp_err_t err = ensure_allocated();
+    if (out_w == nullptr || out_h == nullptr || owner_token == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const DevicePublicationSnapshot snapshot = snapshot_device_publication();
+
+    if (snapshot_is_owned_live_device(snapshot, owner_token)) {
+        if (!acquire_lcd_mutex()) {
+            return ESP_ERR_NO_MEM;
+        }
+
+        const DevicePublicationSnapshot locked_snapshot = snapshot_device_publication();
+
+        if (snapshot_is_owned_live_device(locked_snapshot, owner_token)) {
+            *out_w = static_cast<uint16_t>(locked_snapshot.lcd->width());
+            *out_h = static_cast<uint16_t>(locked_snapshot.lcd->height());
+            release_lcd_mutex();
+            return ESP_OK;
+        }
+
+        release_lcd_mutex();
+    }
+
+    LgfxRuntimeConfig config = runtime_config_with_overrides(overrides);
+
+    const char *validation_error = nullptr;
+    if (!validate_runtime_config(config, &validation_error)) {
+        ESP_LOGE(TAG, "invalid open-time runtime config for get_dims: %s", validation_error);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *out_w = config.lcd_panel.width;
+    *out_h = config.lcd_panel.height;
+    return ESP_OK;
+}
+
+extern "C" esp_err_t lgfx_device_init_with_open_config(
+    const lgfx_open_config_overrides_t *overrides,
+    const void *owner_token)
+{
+    esp_err_t err = ensure_published_device_for_owner(overrides, owner_token);
     if (err != ESP_OK) {
         return err;
     }
 
-    if (!lock_lcd()) {
+    if (!acquire_lcd_mutex()) {
         return ESP_ERR_NO_MEM;
     }
 
-    // Defensive: close() may have raced after ensure_allocated() and before we got the lock.
-    if (!lcd) {
-        unlock_lcd();
+    const DevicePublicationSnapshot snapshot = snapshot_device_publication();
+
+    // Defensive: close() may have raced before we acquired the mutex.
+    if (!snapshot_is_owned_live_device(snapshot, owner_token)) {
+        release_lcd_mutex();
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (!is_initialized) {
+    if (!g_device_ready) {
+        LgfxRuntimeConfig config = runtime_config_with_overrides(overrides);
+
 #if (LGFX_PORT_ENABLE_TOUCH == 1)
-        if constexpr (PIN_TOUCH_CS < 0) {
-            ESP_LOGW(TAG, "touch enabled (LGFX_PORT_ENABLE_TOUCH=1) but not attached (LGFX_PORT_TOUCH_CS_GPIO=-1)");
+        if (config.touch.compiled && !config.touch.attached) {
+            ESP_LOGW(TAG, "touch enabled but not attached (effective touch_cs_gpio=-1)");
         }
 #endif
 
         ESP_LOGI(TAG, "init/begin");
-        lcd->begin();
-        is_initialized = true;
+        snapshot.lcd->begin();
+        g_device_ready = true;
 
-        // sane defaults
-        lcd->setTextSize(1);
-        lcd->setTextDatum(textdatum_t::top_left);
+        // Default text state after begin().
+        snapshot.lcd->setTextSize(1);
+        snapshot.lcd->setTextDatum(textdatum_t::top_left);
     }
 
-    unlock_lcd();
+    release_lcd_mutex();
     return ESP_OK;
 }
 
-static esp_err_t lgfx_device_deinit(void)
+static esp_err_t lgfx_device_deinit_for_owner(const void *owner_token)
 {
-    // Idempotent teardown.
-    // Allow deinit/close even if init never happened.
-    ensure_lock_created();
-    if (!lcd_lock) {
+    if (owner_token == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const DevicePublicationSnapshot snapshot = snapshot_device_publication();
+
+    if (!snapshot_is_owned_by(snapshot, owner_token)) {
+        return snapshot_is_fully_unpublished(snapshot) ? ESP_OK : ESP_ERR_INVALID_STATE;
+    }
+
+    // Idempotent teardown for the owning port.
+    // Allow close even if begin() never happened, as long as this owner owns the singleton.
+    ensure_lcd_mutex_created();
+    if (!g_lcd_mutex) {
         return ESP_ERR_NO_MEM;
     }
 
-    if (!lock_lcd()) {
+    if (!acquire_lcd_mutex()) {
         return ESP_ERR_NO_MEM;
+    }
+
+    const DevicePublicationSnapshot locked_snapshot = snapshot_device_publication();
+    if (!snapshot_is_owned_live_device(locked_snapshot, owner_token)) {
+        release_lcd_mutex();
+        return snapshot_is_fully_unpublished(locked_snapshot) ? ESP_OK : ESP_ERR_INVALID_STATE;
     }
 
     // Keep the held mutex handle so we can delete it at the end.
-    SemaphoreHandle_t lock_to_delete = lcd_lock;
+    SemaphoreHandle_t mutex_to_delete = g_lcd_mutex;
 
     lgfx_dev::destroy_all_sprites_locked();
 
-    // Tear down LCD device (swap pointers under init mux to avoid init/deinit races)
+    // Tear down LCD device (swap publication under mux to avoid publish/depublish races).
     PiyopiyoLGFX *to_delete = nullptr;
 
-    portENTER_CRITICAL(&g_init_mux);
-    to_delete = lcd;
-    lcd = nullptr;
-    is_initialized = false;
+    portENTER_CRITICAL(&g_publication_mux);
+    if (g_device_owner_token != owner_token) {
+        portEXIT_CRITICAL(&g_publication_mux);
+        release_lcd_mutex();
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    to_delete = g_lcd_device;
+    g_lcd_device = nullptr;
+    g_device_ready = false;
+    g_device_owner_token = nullptr;
 #if defined(INCLUDE_vSemaphoreDelete) && (INCLUDE_vSemaphoreDelete == 1)
-    lcd_lock = nullptr;
+    g_lcd_mutex = nullptr;
 #endif
-    portEXIT_CRITICAL(&g_init_mux);
+    portEXIT_CRITICAL(&g_publication_mux);
 
     if (to_delete) {
         // Best-effort cleanup of any in-flight write/transaction state.
@@ -553,18 +1047,18 @@ static esp_err_t lgfx_device_deinit(void)
     }
 
 #if defined(INCLUDE_vSemaphoreDelete) && (INCLUDE_vSemaphoreDelete == 1)
-    // Do not call unlock_lcd() after deleting the mutex.
-    vSemaphoreDelete(lock_to_delete);
+    // Do not call release_lcd_mutex() after deleting the mutex.
+    vSemaphoreDelete(mutex_to_delete);
 #else
     // Fallback: keep mutex alive if delete API is unavailable.
-    xSemaphoreGive(lock_to_delete);
+    xSemaphoreGive(mutex_to_delete);
 #endif
 
     return ESP_OK;
 }
 
-extern "C" esp_err_t lgfx_device_close(void)
+extern "C" esp_err_t lgfx_device_close_for_owner(const void *owner_token)
 {
-    // Protocol-level close maps to full teardown.
-    return lgfx_device_deinit();
+    // Protocol-level close maps to full teardown for the current owner.
+    return lgfx_device_deinit_for_owner(owner_token);
 }

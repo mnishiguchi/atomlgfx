@@ -10,6 +10,7 @@
 
 #include "esp_err.h"
 
+#include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/worker.h"
 
 // Canonical job layout (enum + job struct + union members)
@@ -17,12 +18,6 @@
 
 // Internal helper used by worker_device.c (lgfx_worker_call)
 #include "lgfx_port/worker_internal.h"
-
-#define LGFX_WORKER_CALL_NOARGS(job_kind)                 \
-    do {                                                  \
-        lgfx_job_t job = { .kind = LGFX_JOB_##job_kind }; \
-        return lgfx_worker_call(port, &job);              \
-    } while (0)
 
 #define LGFX_WORKER_CALL_ARGS(job_kind, member, ...) \
     do {                                             \
@@ -32,6 +27,22 @@
         };                                           \
         return lgfx_worker_call(port, &job);         \
     } while (0)
+
+/*
+ * Most wrappers in this file are boring pass-throughs:
+ * - build a fixed-size job
+ * - call the worker synchronously
+ *
+ * Keep the exceptional cases hand-written:
+ * - init/close use owner-token + persisted open-config snapshot
+ * - getters copy outputs back to caller pointers
+ * - variable-length payload calls deep-copy bytes before enqueueing
+ */
+#define LGFX_WORKER_DEFINE_SIMPLE_WRAPPER(fn_name, params, job_kind, member, ...) \
+    esp_err_t lgfx_worker_device_##fn_name params                                 \
+    {                                                                             \
+        LGFX_WORKER_CALL_ARGS(job_kind, member, __VA_ARGS__);                     \
+    }
 
 static esp_err_t lgfx_worker_copy_payload(lgfx_job_t *job, const uint8_t *bytes, size_t len)
 {
@@ -61,21 +72,50 @@ static esp_err_t lgfx_worker_copy_payload(lgfx_job_t *job, const uint8_t *bytes,
 
 esp_err_t lgfx_worker_device_init(lgfx_port_t *port)
 {
-    LGFX_WORKER_CALL_NOARGS(INIT);
+    if (!port) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_INIT,
+        .a.init = {
+            .owner_token = (const void *) port,
+            .open_config_overrides = port->open_config_overrides }
+    };
+
+    return lgfx_worker_call(port, &job);
 }
 
 esp_err_t lgfx_worker_device_close(lgfx_port_t *port)
 {
-    LGFX_WORKER_CALL_NOARGS(CLOSE);
+    if (!port) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_CLOSE,
+        .a.close = {
+            .owner_token = (const void *) port }
+    };
+
+    return lgfx_worker_call(port, &job);
 }
 
 esp_err_t lgfx_worker_device_get_dims(lgfx_port_t *port, uint16_t *out_w, uint16_t *out_h)
 {
-    if (!out_w || !out_h) {
+    if (!port || !out_w || !out_h) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    lgfx_job_t job = { .kind = LGFX_JOB_GET_DIMS };
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_GET_DIMS,
+        .a.get_dims = {
+            .owner_token = (const void *) port,
+            .open_config_overrides = port->open_config_overrides,
+            .w = 0,
+            .h = 0 }
+    };
+
     esp_err_t err = lgfx_worker_call(port, &job);
     if (err == ESP_OK) {
         *out_w = job.a.get_dims.w;
@@ -103,25 +143,7 @@ esp_err_t lgfx_worker_device_get_target_dims(lgfx_port_t *port, uint8_t target, 
     return err;
 }
 
-esp_err_t lgfx_worker_device_set_rotation(lgfx_port_t *port, uint8_t rot)
-{
-    LGFX_WORKER_CALL_ARGS(SET_ROTATION, set_rotation, .rot = rot);
-}
-
-esp_err_t lgfx_worker_device_set_brightness(lgfx_port_t *port, uint8_t b)
-{
-    LGFX_WORKER_CALL_ARGS(SET_BRIGHTNESS, set_brightness, .b = b);
-}
-
-esp_err_t lgfx_worker_device_set_color_depth(lgfx_port_t *port, uint8_t target, uint8_t depth)
-{
-    LGFX_WORKER_CALL_ARGS(SET_COLOR_DEPTH, set_color_depth, .target = target, .depth = depth);
-}
-
-esp_err_t lgfx_worker_device_display(lgfx_port_t *port)
-{
-    LGFX_WORKER_CALL_NOARGS(DISPLAY);
-}
+LGFX_WORKER_SIMPLE_DEVICE_WRAPPERS(LGFX_WORKER_DEFINE_SIMPLE_WRAPPER)
 
 esp_err_t lgfx_worker_device_get_touch(
     lgfx_port_t *port,
@@ -190,199 +212,6 @@ esp_err_t lgfx_worker_device_calibrate_touch(lgfx_port_t *port, uint16_t out_par
         memcpy(out_params, job.a.calibrate_touch.params, sizeof(job.a.calibrate_touch.params));
     }
     return err;
-}
-
-esp_err_t lgfx_worker_device_fill_screen(lgfx_port_t *port, uint8_t target, uint16_t color565)
-{
-    LGFX_WORKER_CALL_ARGS(FILL_SCREEN, fill_screen, .target = target, .color565 = color565);
-}
-
-esp_err_t lgfx_worker_device_clear(lgfx_port_t *port, uint8_t target, uint16_t color565)
-{
-    LGFX_WORKER_CALL_ARGS(CLEAR, clear, .target = target, .color565 = color565);
-}
-
-esp_err_t lgfx_worker_device_draw_pixel(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t color565)
-{
-    LGFX_WORKER_CALL_ARGS(
-        DRAW_PIXEL,
-        draw_pixel,
-        .target = target,
-        .x = x,
-        .y = y,
-        .color565 = color565);
-}
-
-esp_err_t lgfx_worker_device_draw_fast_vline(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t h, uint16_t color565)
-{
-    LGFX_WORKER_CALL_ARGS(
-        DRAW_FAST_VLINE,
-        draw_fast_vline,
-        .target = target,
-        .x = x,
-        .y = y,
-        .h = h,
-        .color565 = color565);
-}
-
-esp_err_t lgfx_worker_device_draw_fast_hline(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t color565)
-{
-    LGFX_WORKER_CALL_ARGS(
-        DRAW_FAST_HLINE,
-        draw_fast_hline,
-        .target = target,
-        .x = x,
-        .y = y,
-        .w = w,
-        .color565 = color565);
-}
-
-esp_err_t lgfx_worker_device_draw_line(lgfx_port_t *port, uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color565)
-{
-    LGFX_WORKER_CALL_ARGS(
-        DRAW_LINE,
-        draw_line,
-        .target = target,
-        .x0 = x0,
-        .y0 = y0,
-        .x1 = x1,
-        .y1 = y1,
-        .color565 = color565);
-}
-
-esp_err_t lgfx_worker_device_draw_rect(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t color565)
-{
-    LGFX_WORKER_CALL_ARGS(
-        DRAW_RECT,
-        draw_rect,
-        .target = target,
-        .x = x,
-        .y = y,
-        .w = w,
-        .h = h,
-        .color565 = color565);
-}
-
-esp_err_t lgfx_worker_device_fill_rect(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t color565)
-{
-    LGFX_WORKER_CALL_ARGS(
-        FILL_RECT,
-        fill_rect,
-        .target = target,
-        .x = x,
-        .y = y,
-        .w = w,
-        .h = h,
-        .color565 = color565);
-}
-
-esp_err_t lgfx_worker_device_draw_circle(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t r, uint16_t color565)
-{
-    LGFX_WORKER_CALL_ARGS(
-        DRAW_CIRCLE,
-        draw_circle,
-        .target = target,
-        .x = x,
-        .y = y,
-        .r = r,
-        .color565 = color565);
-}
-
-esp_err_t lgfx_worker_device_fill_circle(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, uint16_t r, uint16_t color565)
-{
-    LGFX_WORKER_CALL_ARGS(
-        FILL_CIRCLE,
-        fill_circle,
-        .target = target,
-        .x = x,
-        .y = y,
-        .r = r,
-        .color565 = color565);
-}
-
-esp_err_t lgfx_worker_device_draw_triangle(
-    lgfx_port_t *port, uint8_t target,
-    int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color565)
-{
-    LGFX_WORKER_CALL_ARGS(
-        DRAW_TRIANGLE,
-        draw_triangle,
-        .target = target,
-        .x0 = x0,
-        .y0 = y0,
-        .x1 = x1,
-        .y1 = y1,
-        .x2 = x2,
-        .y2 = y2,
-        .color565 = color565);
-}
-
-esp_err_t lgfx_worker_device_fill_triangle(
-    lgfx_port_t *port, uint8_t target,
-    int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color565)
-{
-    LGFX_WORKER_CALL_ARGS(
-        FILL_TRIANGLE,
-        fill_triangle,
-        .target = target,
-        .x0 = x0,
-        .y0 = y0,
-        .x1 = x1,
-        .y1 = y1,
-        .x2 = x2,
-        .y2 = y2,
-        .color565 = color565);
-}
-
-esp_err_t lgfx_worker_device_set_text_size(lgfx_port_t *port, uint8_t target, uint8_t size)
-{
-    LGFX_WORKER_CALL_ARGS(SET_TEXT_SIZE, set_text_size, .target = target, .size = size);
-}
-
-esp_err_t lgfx_worker_device_set_text_size_xy(lgfx_port_t *port, uint8_t target, uint8_t sx, uint8_t sy)
-{
-    LGFX_WORKER_CALL_ARGS(
-        SET_TEXT_SIZE_XY,
-        set_text_size_xy,
-        .target = target,
-        .sx = sx,
-        .sy = sy);
-}
-
-esp_err_t lgfx_worker_device_set_text_datum(lgfx_port_t *port, uint8_t target, uint8_t datum)
-{
-    LGFX_WORKER_CALL_ARGS(SET_TEXT_DATUM, set_text_datum, .target = target, .datum = datum);
-}
-
-esp_err_t lgfx_worker_device_set_text_wrap_xy(lgfx_port_t *port, uint8_t target, bool wrap_x, bool wrap_y)
-{
-    LGFX_WORKER_CALL_ARGS(
-        SET_TEXT_WRAP_XY,
-        set_text_wrap_xy,
-        .target = target,
-        .wrap_x = wrap_x,
-        .wrap_y = wrap_y);
-}
-
-esp_err_t lgfx_worker_device_set_text_font(lgfx_port_t *port, uint8_t target, uint8_t font)
-{
-    LGFX_WORKER_CALL_ARGS(SET_TEXT_FONT, set_text_font, .target = target, .font = font);
-}
-
-esp_err_t lgfx_worker_device_set_font_preset(lgfx_port_t *port, uint8_t target, uint8_t preset)
-{
-    LGFX_WORKER_CALL_ARGS(SET_FONT_PRESET, set_font_preset, .target = target, .preset = preset);
-}
-
-esp_err_t lgfx_worker_device_set_text_color(lgfx_port_t *port, uint8_t target, uint16_t fg565, bool has_bg, uint16_t bg565)
-{
-    LGFX_WORKER_CALL_ARGS(
-        SET_TEXT_COLOR,
-        set_text_color,
-        .target = target,
-        .fg565 = fg565,
-        .has_bg = has_bg,
-        .bg565 = bg565);
 }
 
 /*
@@ -463,81 +292,5 @@ esp_err_t lgfx_worker_device_push_image_rgb565_strided(
     return lgfx_worker_call(port, &job);
 }
 
-esp_err_t lgfx_worker_device_create_sprite(
-    lgfx_port_t *port,
-    uint8_t target,
-    uint16_t w,
-    uint16_t h,
-    uint8_t color_depth)
-{
-    LGFX_WORKER_CALL_ARGS(
-        CREATE_SPRITE,
-        create_sprite,
-        .target = target,
-        .w = w,
-        .h = h,
-        .color_depth = color_depth);
-}
-
-esp_err_t lgfx_worker_device_delete_sprite(lgfx_port_t *port, uint8_t target)
-{
-    LGFX_WORKER_CALL_ARGS(DELETE_SPRITE, delete_sprite, .target = target);
-}
-
-esp_err_t lgfx_worker_device_set_pivot(
-    lgfx_port_t *port,
-    uint8_t target,
-    int16_t x,
-    int16_t y)
-{
-    LGFX_WORKER_CALL_ARGS(SET_PIVOT, set_pivot, .target = target, .x = x, .y = y);
-}
-
-esp_err_t lgfx_worker_device_push_sprite(
-    lgfx_port_t *port,
-    uint8_t src_target,
-    uint8_t dst_target,
-    int16_t x,
-    int16_t y,
-    bool has_transparent,
-    uint16_t transparent565)
-{
-    LGFX_WORKER_CALL_ARGS(
-        PUSH_SPRITE,
-        push_sprite,
-        .src_target = src_target,
-        .dst_target = dst_target,
-        .x = x,
-        .y = y,
-        .has_transparent = has_transparent,
-        .transparent565 = transparent565);
-}
-
-esp_err_t lgfx_worker_device_push_rotate_zoom(
-    lgfx_port_t *port,
-    uint8_t src_target,
-    uint8_t dst_target,
-    int16_t x,
-    int16_t y,
-    int32_t angle_x100,
-    int32_t zoom_x_x1024,
-    int32_t zoom_y_x1024,
-    bool has_transparent,
-    uint16_t transparent565)
-{
-    LGFX_WORKER_CALL_ARGS(
-        PUSH_ROTATE_ZOOM,
-        push_rotate_zoom,
-        .src_target = src_target,
-        .dst_target = dst_target,
-        .x = x,
-        .y = y,
-        .angle_x100 = angle_x100,
-        .zoom_x_x1024 = zoom_x_x1024,
-        .zoom_y_x1024 = zoom_y_x1024,
-        .has_transparent = has_transparent,
-        .transparent565 = transparent565);
-}
-
-#undef LGFX_WORKER_CALL_NOARGS
+#undef LGFX_WORKER_DEFINE_SIMPLE_WRAPPER
 #undef LGFX_WORKER_CALL_ARGS
