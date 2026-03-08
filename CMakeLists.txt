@@ -98,7 +98,8 @@ idf_component_register(
     "lgfx_port/proto_term.c"
 
     # Handlers
-    "lgfx_port/handlers/setup.c"
+    "lgfx_port/handlers/control.c"
+    "lgfx_port/handlers/device.c"
     "lgfx_port/handlers/primitives.c"
     "lgfx_port/handlers/text.c"
     "lgfx_port/handlers/images.c"
@@ -107,8 +108,10 @@ idf_component_register(
 
     # Device adapter
     "src/lgfx_device_state.cpp"
-    "src/lgfx_device_api.cpp"
-    "src/lgfx_device_draw.cpp"
+    "src/lgfx_device_control.cpp"
+    "src/lgfx_device_text.cpp"
+    "src/lgfx_device_primitives.cpp"
+    "src/lgfx_device_images.cpp"
     "src/lgfx_device_sprites.cpp"
   INCLUDE_DIRS
     "include"

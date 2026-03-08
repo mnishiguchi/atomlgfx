@@ -16,9 +16,6 @@ extern "C" {
 bool lgfx_worker_start(lgfx_port_t *port);
 void lgfx_worker_stop(lgfx_port_t *port);
 
-// Port-thread mailbox drain. Mailbox ownership stays on the port thread.
-void lgfx_worker_drain_mailbox(lgfx_port_t *port);
-
 /*
  * Synchronous device wrappers called from handlers on the port thread.
  *
