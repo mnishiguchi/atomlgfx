@@ -10,7 +10,10 @@ defmodule Main do
 
   @atomvm_esp32_rel_path "src/platforms/esp32"
   @components_dirname "components"
+
   @sdkconfig_defaults_filename "sdkconfig.defaults"
+  @sdkconfig_defaults_template_filename "sdkconfig.defaults.in"
+  @project_sdkconfig_defaults_filename ".atomvm_esp32.sdkconfig.defaults"
   @idf_export_sh_filename "export.sh"
 
   @boot_avm_rel_path "build/libs/esp32boot/elixir_esp32boot.avm"
@@ -21,8 +24,7 @@ defmodule Main do
   @atomvm_clone_branch "main"
   @atomvm_default_ref @atomvm_clone_branch
 
-  @sdkconfig_managed_settings [
-    ~s(CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions-elixir.csv"),
+  @project_sdkconfig_defaults [
     "CONFIG_I2C_SKIP_LEGACY_CONFLICT_CHECK=y"
   ]
 
@@ -117,7 +119,7 @@ defmodule Main do
 
     Commands:
       info      Print resolved paths and basic checks (no changes)
-      install   Ensure AtomVM exists, pin version, link component, patch config, build + flash firmware
+      install   Ensure AtomVM exists, pin version, link component, write project config, build + flash firmware
       monitor   Attach serial monitor (idf.py monitor)
       mkimage   Build a custom AtomVM release image for this project
       clean     Remove AtomVM ESP32 platform build directory
@@ -137,7 +139,8 @@ defmodule Main do
     mkimage notes:
       - Host build dir is inferred as: <atomvm_repo>/#{@default_host_build_dirname}
       - Platform build dir is inferred as: <atomvm_repo>/#{@default_platform_build_rel_path}
-      - Boot AVM is inferred as: <atomvm_repo>/#{@boot_avm_rel_path}
+      - Project SDKCONFIG override file is written to:
+          <repo_root>/#{@project_sdkconfig_defaults_filename}
       - Extra positional arguments are forwarded to mkimage.sh unchanged.
 
     clean notes:
@@ -170,6 +173,13 @@ defmodule Main do
 
   defp info_cmd(shared) do
     component_path = Path.join([shared.esp32_dir, @components_dirname, Path.basename(shared.repo_root)])
+    sdkconfig_defaults = Path.join(shared.esp32_dir, @sdkconfig_defaults_filename)
+
+    sdkconfig_defaults_template =
+      Path.join(shared.esp32_dir, @sdkconfig_defaults_template_filename)
+
+    project_sdkconfig_overrides =
+      Path.join(shared.repo_root, @project_sdkconfig_defaults_filename)
 
     say("")
     say("Paths")
@@ -188,7 +198,10 @@ defmodule Main do
 
     say("")
     say("Checks")
-    say("- ESP-IDF:     #{if File.regular?(Path.join(shared.idf_dir, @idf_export_sh_filename)), do: "export.sh found", else: "missing export.sh"}")
+
+    say(
+      "- ESP-IDF:     #{if File.regular?(Path.join(shared.idf_dir, @idf_export_sh_filename)), do: "export.sh found", else: "missing export.sh"}"
+    )
 
     if File.dir?(Path.join(shared.atomvm_root, ".git")) do
       say("- AtomVM:      ok")
@@ -196,7 +209,9 @@ defmodule Main do
       say("- AtomVM dirty(tracked): #{yes_no(git_tracked_dirty?(shared.atomvm_root))}")
       say("- AtomVM dirty(any): #{yes_no(git_dirty?(shared.atomvm_root))}")
     else
-      say("- AtomVM:      #{if shared.override_was_set, do: "missing at --atomvm-repo", else: "missing at default (install will clone)"}")
+      say(
+        "- AtomVM:      #{if shared.override_was_set, do: "missing at --atomvm-repo", else: "missing at default (install will clone)"}"
+      )
 
       case maybe_resolve_atomvm_ref_without_repo(shared.atomvm_ref) do
         {:ok, sha, note} when is_binary(sha) and sha != "" ->
@@ -234,18 +249,11 @@ defmodule Main do
     end
 
     say("")
-
-    sdkconfig_defaults = Path.join(shared.esp32_dir, @sdkconfig_defaults_filename)
-
-    if File.regular?(sdkconfig_defaults) do
-      say("- sdkconfig.defaults: #{sdkconfig_defaults}")
-      content = File.read!(sdkconfig_defaults)
-      IO.write(content)
-      if not String.ends_with?(content, "\n"), do: IO.puts("")
-    else
-      say("- sdkconfig.defaults: missing (#{sdkconfig_defaults})")
-    end
-
+    print_file_if_present("sdkconfig.defaults.in", sdkconfig_defaults_template)
+    say("")
+    print_file_if_present("sdkconfig.defaults", sdkconfig_defaults)
+    say("")
+    print_file_if_present("project sdkconfig overrides", project_sdkconfig_overrides)
     say("")
   end
 
@@ -256,7 +264,7 @@ defmodule Main do
     ensure_atomvm_repo!(shared)
     ensure_atomvm_layout!(shared.atomvm_root, shared.esp32_dir)
     ensure_component_link!(shared.repo_root, shared.esp32_dir)
-    patch_sdkconfig_defaults!(shared.esp32_dir, Path.basename(shared.repo_root))
+    sdkconfig_overrides = ensure_project_sdkconfig_defaults!(shared.repo_root)
     build_boot_avm_if_needed!(shared.atomvm_root)
 
     say("Building AtomVM firmware")
@@ -265,14 +273,13 @@ defmodule Main do
       shared.idf_dir,
       shared.esp32_dir,
       """
+      export SDKCONFIG_DEFAULTS=#{sh_escape("sdkconfig.defaults;#{sdkconfig_overrides}")}
+
       echo "+ idf.py fullclean"
       idf.py fullclean
 
-      echo "+ idf.py set-target #{shared.target}"
-      idf.py set-target #{sh_escape(shared.target)}
-
-      echo "+ idf.py reconfigure"
-      idf.py reconfigure
+      echo "+ idf.py -DATOMVM_ELIXIR_SUPPORT=on set-target #{shared.target}"
+      idf.py -DATOMVM_ELIXIR_SUPPORT=on set-target #{sh_escape(shared.target)}
 
       echo "+ idf.py build"
       idf.py build
@@ -282,56 +289,16 @@ defmodule Main do
     ensure_serial_port_ready!(shared.port)
     say("Flashing AtomVM firmware")
 
-    boot_avm = Path.join(shared.atomvm_root, @boot_avm_rel_path)
-
     with_idf_env!(
       shared.idf_dir,
       shared.esp32_dir,
       """
+      export SDKCONFIG_DEFAULTS=#{sh_escape("sdkconfig.defaults;#{sdkconfig_overrides}")}
+
       PORT=#{sh_escape(shared.port)}
-      BOOT_AVM=#{sh_escape(boot_avm)}
 
       echo "+ idf.py -p $PORT flash"
       idf.py -p "$PORT" flash
-
-      if [ ! -f "$BOOT_AVM" ]; then
-        echo "boot AVM not found: $BOOT_AVM" >&2
-        exit 1
-      fi
-
-      if [ -z "${IDF_PATH:-}" ]; then
-        echo "IDF_PATH not set (ESP-IDF env not loaded?)" >&2
-        exit 1
-      fi
-
-      PARTTOOL="$IDF_PATH/components/partition_table/parttool.py"
-      if [ ! -f "$PARTTOOL" ]; then
-        echo "parttool.py not found: $PARTTOOL" >&2
-        exit 1
-      fi
-
-      PYTHON="python"
-      if ! command -v "$PYTHON" >/dev/null 2>&1; then
-        PYTHON="python3"
-      fi
-      if ! command -v "$PYTHON" >/dev/null 2>&1; then
-        echo "python not found in PATH (need python or python3)" >&2
-        exit 1
-      fi
-
-      PT_BIN="build/partition_table/partition-table.bin"
-      if [ ! -f "$PT_BIN" ]; then
-        echo "partition table bin not found: $PT_BIN" >&2
-        exit 1
-      fi
-
-      echo "+ parttool.py write_partition boot.avm"
-      "$PYTHON" "$PARTTOOL" \\
-        -p "$PORT" \\
-        --partition-table-file "$PT_BIN" \\
-        write_partition \\
-        --partition-name boot.avm \\
-        --input "$BOOT_AVM"
       """
     )
 
@@ -362,20 +329,28 @@ defmodule Main do
     ensure_atomvm_repo!(shared)
     ensure_atomvm_layout!(shared.atomvm_root, shared.esp32_dir)
     ensure_component_link!(shared.repo_root, shared.esp32_dir)
-    patch_sdkconfig_defaults!(shared.esp32_dir, Path.basename(shared.repo_root))
+    sdkconfig_overrides = ensure_project_sdkconfig_defaults!(shared.repo_root)
     ensure_regular_file!(Path.join(shared.idf_dir, @idf_export_sh_filename), "ESP-IDF export.sh")
 
     say("Building AtomVM host tree")
     build_host_tree!(shared.atomvm_root, host_build_dir)
 
     say("Building AtomVM ESP32 platform")
-    build_platform_tree!(shared.idf_dir, shared.esp32_dir, shared.target, platform_build_dir)
+
+    build_platform_tree!(
+      shared.idf_dir,
+      shared.esp32_dir,
+      shared.target,
+      platform_build_dir,
+      sdkconfig_overrides,
+      release: true
+    )
 
     ensure_regular_file!(boot_avm_path, "boot AVM")
     ensure_regular_file!(mkimage_script, "mkimage.sh")
 
     say("Creating release image")
-    run_mkimage!(shared.esp32_dir, mkimage_script, host_build_dir, boot_avm_path, mkimage_extra_args)
+    run_mkimage!(shared.esp32_dir, mkimage_script, mkimage_extra_args)
 
     case newest_image_path(platform_build_dir) do
       nil ->
@@ -629,25 +604,18 @@ defmodule Main do
     end
   end
 
-  defp patch_sdkconfig_defaults!(esp32_dir, tag) do
-    path = Path.join(esp32_dir, @sdkconfig_defaults_filename)
-    ensure_regular_file!(path, "sdkconfig.defaults")
+  defp ensure_project_sdkconfig_defaults!(repo_root) do
+    path = Path.join(repo_root, @project_sdkconfig_defaults_filename)
 
-    begin_marker = "# --- BEGIN #{tag} defaults (managed) ---"
-    end_marker = "# --- END #{tag} defaults ---"
+    content =
+      [
+        "# Generated by #{@script_name}",
+        "# Project-specific ESP-IDF config overrides for AtomVM ESP32 builds"
+      ] ++ @project_sdkconfig_defaults
 
-    lines =
-      path
-      |> File.read!()
-      |> split_lines_preserve_empty()
-      |> remove_managed_block_lines(begin_marker, end_marker)
-      |> trim_trailing_blank_lines()
-
-    managed_block = [begin_marker | @sdkconfig_managed_settings] ++ [end_marker]
-    new_lines = if(lines == [], do: managed_block, else: lines ++ [""] ++ managed_block)
-    File.cp!(path, "#{path}.bak")
-    File.write!(path, Enum.join(new_lines, "\n") <> "\n")
-    say("✔ patched: #{path}")
+    File.write!(path, Enum.join(content, "\n") <> "\n")
+    say("✔ wrote sdkconfig overrides: #{path}")
+    path
   end
 
   defp build_boot_avm_if_needed!(atomvm_root) do
@@ -658,8 +626,8 @@ defmodule Main do
       say("Generating boot AVM (Generic UNIX build)")
       build_dir = Path.join(atomvm_root, "build")
       File.mkdir_p!(build_dir)
-      run!("cmake", [".."], cd: build_dir)
-      run!("cmake", ["--build", "."], cd: build_dir)
+      run!("cmake", ["-S", atomvm_root, "-B", build_dir])
+      run!("cmake", ["--build", build_dir])
       ensure_regular_file!(boot_avm, "boot AVM")
     end
   end
@@ -671,13 +639,22 @@ defmodule Main do
     run!("cmake", ["--build", host_build_dir])
   end
 
-  defp build_platform_tree!(idf_dir, esp32_dir, target, platform_build_dir) do
+  defp build_platform_tree!(idf_dir, esp32_dir, target, platform_build_dir, sdkconfig_overrides, opts) do
+    cmake_args =
+      ["-DATOMVM_ELIXIR_SUPPORT=on"] ++
+        if Keyword.get(opts, :release, false), do: ["-DATOMVM_RELEASE=on"], else: []
+
+    cmake_args_shell = Enum.map_join(cmake_args, " ", &sh_escape/1)
+    cmake_args_display = Enum.join(cmake_args, " ")
+
     with_idf_env!(
       idf_dir,
       esp32_dir,
       """
-      echo "+ idf.py -B #{sh_escape(platform_build_dir)} set-target #{target}"
-      idf.py -B #{sh_escape(platform_build_dir)} set-target #{sh_escape(target)}
+      export SDKCONFIG_DEFAULTS=#{sh_escape("sdkconfig.defaults;#{sdkconfig_overrides}")}
+
+      echo "+ idf.py -B #{sh_escape(platform_build_dir)} #{cmake_args_display} set-target #{target}"
+      idf.py -B #{sh_escape(platform_build_dir)} #{cmake_args_shell} set-target #{sh_escape(target)}
 
       echo "+ idf.py -B #{sh_escape(platform_build_dir)} build"
       idf.py -B #{sh_escape(platform_build_dir)} build
@@ -685,15 +662,10 @@ defmodule Main do
     )
   end
 
-  defp run_mkimage!(esp32_dir, mkimage_script, host_build_dir, boot_avm_path, mkimage_extra_args) do
+  defp run_mkimage!(esp32_dir, mkimage_script, mkimage_extra_args) do
     args =
-      [
-        sh_escape(mkimage_script),
-        "--build_dir",
-        sh_escape(host_build_dir),
-        "--boot",
-        sh_escape(boot_avm_path)
-      ] ++ Enum.map(mkimage_extra_args, &sh_escape/1)
+      [sh_escape(mkimage_script)] ++
+        Enum.map(mkimage_extra_args, &sh_escape/1)
 
     command = Enum.join(args, " ")
 
@@ -785,43 +757,15 @@ defmodule Main do
     end
   end
 
-  defp split_lines_preserve_empty(content) do
-    content
-    |> String.split(~r/\R/, trim: false)
-    |> drop_final_empty_line_if_from_terminal_newline(content)
-  end
-
-  defp drop_final_empty_line_if_from_terminal_newline(lines, content) do
-    if String.ends_with?(content, "\n") or String.ends_with?(content, "\r\n") do
-      case Enum.reverse(lines) do
-        ["" | rest] -> Enum.reverse(rest)
-        _ -> lines
-      end
+  defp print_file_if_present(label, path) do
+    if File.regular?(path) do
+      say("- #{label}: #{path}")
+      content = File.read!(path)
+      IO.write(content)
+      if not String.ends_with?(content, "\n"), do: IO.puts("")
     else
-      lines
+      say("- #{label}: missing (#{path})")
     end
-  end
-
-  defp remove_managed_block_lines(lines, begin_marker, end_marker) do
-    {result, in_block?} =
-      Enum.reduce(lines, {[], false}, fn line, {acc, skipping?} ->
-        cond do
-          line == begin_marker -> {acc, true}
-          line == end_marker and skipping? -> {acc, false}
-          skipping? -> {acc, true}
-          true -> {[line | acc], false}
-        end
-      end)
-
-    if in_block?, do: die("Managed block start found without end marker in sdkconfig.defaults")
-    Enum.reverse(result)
-  end
-
-  defp trim_trailing_blank_lines(lines) do
-    lines
-    |> Enum.reverse()
-    |> Enum.drop_while(&(String.trim(&1) == ""))
-    |> Enum.reverse()
   end
 
   defp script_dir, do: Path.dirname(@script_file)
@@ -993,7 +937,10 @@ defmodule Main do
   defp run!(cmd, args, opts \\ []) do
     display = Keyword.get(opts, :display) || Enum.join([cmd | Enum.map(args, &shell_display/1)], " ")
     IO.puts(colorize(:cyan, "+ #{display}", bold: true))
-    system_opts = [stderr_to_stdout: true, into: IO.stream(:stdio, :line)] |> Keyword.merge(Keyword.drop(opts, [:display]))
+
+    system_opts =
+      [stderr_to_stdout: true, into: IO.stream(:stdio, :line)]
+      |> Keyword.merge(Keyword.drop(opts, [:display]))
 
     case System.cmd(cmd, args, system_opts) do
       {_result, 0} -> :ok
@@ -1052,7 +999,8 @@ defmodule Main do
 
   defp truthy_env?(name) do
     case System.get_env(name) do
-      nil -> false
+      nil ->
+        false
 
       value ->
         value
