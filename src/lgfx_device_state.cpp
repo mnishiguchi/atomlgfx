@@ -34,6 +34,10 @@
 #error "LGFX_PORT_PANEL_DRIVER_ILI9341_2 must be defined by lgfx_port_config.h"
 #endif
 
+#ifndef LGFX_PORT_PANEL_DRIVER_ST7789
+#error "LGFX_PORT_PANEL_DRIVER_ST7789 must be defined by lgfx_port_config.h"
+#endif
+
 #define LGFX_PORT_ASSERT_BOOL01(name) \
     static_assert(((name) == 0) || ((name) == 1), #name " must be 0 or 1")
 
@@ -41,6 +45,7 @@ LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_ENABLE_TOUCH);
 LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_PANEL_DRIVER_ILI9488);
 LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_PANEL_DRIVER_ILI9341);
 LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_PANEL_DRIVER_ILI9341_2);
+LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_PANEL_DRIVER_ST7789);
 LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_SPI_3WIRE);
 LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_USE_LOCK);
 LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_READABLE);
@@ -56,7 +61,11 @@ LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_TOUCH_BUS_SHARED);
 #undef LGFX_PORT_ASSERT_BOOL01
 
 static_assert(
-    (LGFX_PORT_PANEL_DRIVER_ILI9488 + LGFX_PORT_PANEL_DRIVER_ILI9341 + LGFX_PORT_PANEL_DRIVER_ILI9341_2) == 1,
+    (LGFX_PORT_PANEL_DRIVER_ILI9488
+        + LGFX_PORT_PANEL_DRIVER_ILI9341
+        + LGFX_PORT_PANEL_DRIVER_ILI9341_2
+        + LGFX_PORT_PANEL_DRIVER_ST7789)
+        == 1,
     "Exactly one panel driver must be selected");
 
 static_assert((LGFX_PORT_MAX_SPRITES) <= 254u, "LGFX_PORT_MAX_SPRITES must be <= 254");
@@ -109,6 +118,8 @@ static constexpr lgfx_panel_driver_id_t BUILD_PANEL_DRIVER_ID = LGFX_PANEL_DRIVE
 static constexpr lgfx_panel_driver_id_t BUILD_PANEL_DRIVER_ID = LGFX_PANEL_DRIVER_ID_ILI9341;
 #elif (LGFX_PORT_PANEL_DRIVER_ILI9341_2 == 1)
 static constexpr lgfx_panel_driver_id_t BUILD_PANEL_DRIVER_ID = LGFX_PANEL_DRIVER_ID_ILI9341_2;
+#elif (LGFX_PORT_PANEL_DRIVER_ST7789 == 1)
+static constexpr lgfx_panel_driver_id_t BUILD_PANEL_DRIVER_ID = LGFX_PANEL_DRIVER_ID_ST7789;
 #else
 #error "Unsupported LGFX panel driver selection"
 #endif
@@ -122,6 +133,8 @@ static inline const char *panel_driver_name(lgfx_panel_driver_id_t driver_id)
             return "ILI9341";
         case LGFX_PANEL_DRIVER_ID_ILI9341_2:
             return "ILI9341_2";
+        case LGFX_PANEL_DRIVER_ID_ST7789:
+            return "ST7789";
         default:
             return "unknown";
     }
@@ -133,6 +146,7 @@ static inline bool is_known_panel_driver_id(lgfx_panel_driver_id_t driver_id)
         case LGFX_PANEL_DRIVER_ID_ILI9488:
         case LGFX_PANEL_DRIVER_ID_ILI9341:
         case LGFX_PANEL_DRIVER_ID_ILI9341_2:
+        case LGFX_PANEL_DRIVER_ID_ST7789:
             return true;
         default:
             return false;
@@ -297,6 +311,19 @@ static void apply_panel_driver_baseline(
             config.lcd_panel.rgb_order = false;
             config.lcd_panel.dlen_16bit = false;
             config.touch.offset_rotation = 4;
+            break;
+
+        case LGFX_PANEL_DRIVER_ID_ST7789:
+            config.lcd_panel.width = 240;
+            config.lcd_panel.height = 240;
+            config.lcd_panel.offset_rotation = 0;
+            config.lcd_panel.dummy_read_pixel = 16;
+            config.lcd_panel.dummy_read_bits = 1;
+            config.lcd_panel.readable = false;
+            config.lcd_panel.invert = false;
+            config.lcd_panel.rgb_order = false;
+            config.lcd_panel.dlen_16bit = false;
+            config.touch.offset_rotation = 0;
             break;
 
         default:
@@ -484,7 +511,7 @@ static void apply_open_config_overrides(
 static bool validate_runtime_config(const LgfxRuntimeConfig &config, const char **reason)
 {
     if (!is_known_panel_driver_id(config.lcd_panel.driver_id)) {
-        *reason = "panel_driver must be ili9488, ili9341, or ili9341_2";
+        *reason = "panel_driver must be ili9488, ili9341, ili9341_2, or st7789";
         return false;
     }
 
@@ -658,6 +685,7 @@ class PiyopiyoLGFX : public lgfx::LGFX_Device
     lgfx::Panel_ILI9488 panel_ili9488_;
     lgfx::Panel_ILI9341 panel_ili9341_;
     lgfx::Panel_ILI9341_2 panel_ili9341_2_;
+    lgfx::Panel_ST7789 panel_st7789_;
 
 #if (LGFX_PORT_ENABLE_TOUCH == 1)
     lgfx::Touch_XPT2046 touch_;
@@ -717,6 +745,14 @@ public:
                 configure_touch_if_needed(panel_ili9341_2_, touch_, runtime_config_);
 #endif
                 selected_panel_ = &panel_ili9341_2_;
+                break;
+
+            case LGFX_PANEL_DRIVER_ID_ST7789:
+                configure_selected_panel(panel_st7789_, bus_, runtime_config_);
+#if (LGFX_PORT_ENABLE_TOUCH == 1)
+                configure_touch_if_needed(panel_st7789_, touch_, runtime_config_);
+#endif
+                selected_panel_ = &panel_st7789_;
                 break;
 
             default:

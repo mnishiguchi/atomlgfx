@@ -81,6 +81,7 @@ static inline bool lgfx_device_is_sprite_target(uint8_t target)
 // - :ili9488
 // - :ili9341
 // - :ili9341_2
+// - :st7789
 //
 // The Elixir side and the native parser both use the same canonical open_port/2
 // values. Callers must pass the exact lower-case atoms listed above.
@@ -90,6 +91,7 @@ typedef enum lgfx_panel_driver_id_t
     LGFX_PANEL_DRIVER_ID_ILI9488 = 1,
     LGFX_PANEL_DRIVER_ID_ILI9341 = 2,
     LGFX_PANEL_DRIVER_ID_ILI9341_2 = 3,
+    LGFX_PANEL_DRIVER_ID_ST7789 = 4,
 } lgfx_panel_driver_id_t;
 
 // ----------------------------------------------------------------------------
@@ -116,7 +118,7 @@ typedef enum lgfx_panel_driver_id_t
 // - lgfx_port/lgfx_port.c
 //
 // Inventory / accepted values:
-// - panel_driver: ili9488 | ili9341 | ili9341_2
+// - panel_driver: ili9488 | ili9341 | ili9341_2 | st7789
 // - width, height: 1..65535
 // - offset_x, offset_y: signed 32-bit integer
 // - offset_rotation, touch_offset_rotation: 0..7

@@ -26,7 +26,7 @@ defmodule LGFXPort do
   - Omitted keys keep build defaults.
   - Duplicate keys are allowed; the last value wins.
   - Exact atoms only:
-    - `panel_driver`: `:ili9488`, `:ili9341`, `:ili9341_2`
+    - `panel_driver`: `:ili9488`, `:ili9341`, `:ili9341_2`, `:st7789`
     - SPI host: `:spi2_host`, `:spi3_host`
     - DMA auto: `:spi_dma_ch_auto`
   - The native driver currently uses a singleton device model.
@@ -71,7 +71,7 @@ defmodule LGFXPort do
 
   @valid_color_depths [1, 2, 4, 8, 16, 24]
 
-  @panel_driver_atoms [:ili9488, :ili9341, :ili9341_2]
+  @panel_driver_atoms [:ili9488, :ili9341, :ili9341_2, :st7789]
   @spi_host_atoms [:spi2_host, :spi3_host]
 
   # Keep aligned with:
@@ -802,7 +802,7 @@ defmodule LGFXPort do
        do: {:ok, value}
 
   defp normalize_open_option_by_rule(:panel_driver, key, value) do
-    {:error, {:bad_open_option_value, key, value, ":ili9488, :ili9341, or :ili9341_2"}}
+    {:error, {:bad_open_option_value, key, value, ":ili9488, :ili9341, :ili9341_2, or :st7789"}}
   end
 
   defp normalize_open_option_by_rule(:positive_u16, _key, value)

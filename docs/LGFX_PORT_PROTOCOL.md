@@ -12,6 +12,7 @@ Key points:
 - Validation, dispatch, and capability advertisement are metadata-driven.
 - The implemented protocol surface is the one declared in `ops.def`.
 - Build knobs come from the generated config header shared by the protocol and device layers.
+- The driver also accepts open-time config through `open_port/2`; that config is outside the request tuple protocol documented here.
 - The current sprite surface includes deterministic handle-based `createSprite`, destination-aware whole-sprite blit via `pushSprite`, and destination-aware rotate/zoom blit via `pushRotateZoom`.
 - Touch is advertised only when touch support is both enabled and attached.
 - General filesystem ops are out of scope for this protocol.

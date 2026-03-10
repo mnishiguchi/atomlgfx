@@ -36,9 +36,12 @@ set(LGFX_PORT_ENABLE_TOUCH ON CACHE BOOL "Enable XPT2046 touch driver (Touch_XPT
 # - ILI9341_2
 #     Maps to LovyanGFX Panel_ILI9341_2 for mirrored 240x320 boards
 #     that need the alternate init sequence.
+# - ST7789
+#     Maps to LovyanGFX Panel_ST7789
+#     Common starting point for 240x240 SPI boards.
 #
-set(LGFX_PORT_PANEL_DRIVER "ILI9488" CACHE STRING "Build-default LCD panel driver preset (ILI9488, ILI9341, or ILI9341_2)")
-set_property(CACHE LGFX_PORT_PANEL_DRIVER PROPERTY STRINGS ILI9488 ILI9341 ILI9341_2)
+set(LGFX_PORT_PANEL_DRIVER "ILI9488" CACHE STRING "Build-default LCD panel driver preset (ILI9488, ILI9341, ILI9341_2, or ST7789)")
+set_property(CACHE LGFX_PORT_PANEL_DRIVER PROPERTY STRINGS ILI9488 ILI9341 ILI9341_2 ST7789)
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -172,6 +175,7 @@ function(lgfx_port_set_panel_driver_ints selected_driver)
   set(LGFX_PORT_PANEL_DRIVER_ILI9488_INT 0 PARENT_SCOPE)
   set(LGFX_PORT_PANEL_DRIVER_ILI9341_INT 0 PARENT_SCOPE)
   set(LGFX_PORT_PANEL_DRIVER_ILI9341_2_INT 0 PARENT_SCOPE)
+  set(LGFX_PORT_PANEL_DRIVER_ST7789_INT 0 PARENT_SCOPE)
 
   if("${selected_driver}" STREQUAL "ILI9488")
     set(LGFX_PORT_PANEL_DRIVER_ILI9488_INT 1 PARENT_SCOPE)
@@ -179,9 +183,11 @@ function(lgfx_port_set_panel_driver_ints selected_driver)
     set(LGFX_PORT_PANEL_DRIVER_ILI9341_INT 1 PARENT_SCOPE)
   elseif("${selected_driver}" STREQUAL "ILI9341_2")
     set(LGFX_PORT_PANEL_DRIVER_ILI9341_2_INT 1 PARENT_SCOPE)
+  elseif("${selected_driver}" STREQUAL "ST7789")
+    set(LGFX_PORT_PANEL_DRIVER_ST7789_INT 1 PARENT_SCOPE)
   else()
     message(FATAL_ERROR
-      "LGFX_PORT_PANEL_DRIVER must be one of: ILI9488, ILI9341, ILI9341_2 (got: \"${selected_driver}\")"
+      "LGFX_PORT_PANEL_DRIVER must be one of: ILI9488, ILI9341, ILI9341_2, ST7789 (got: \"${selected_driver}\")"
     )
   endif()
 endfunction()
@@ -264,9 +270,17 @@ elseif(LGFX_PORT_PANEL_DRIVER STREQUAL "ILI9341_2")
     OFF ON OFF OFF
   )
 
+elseif(LGFX_PORT_PANEL_DRIVER STREQUAL "ST7789")
+  lgfx_port_apply_panel_baseline(
+    "240" "240"
+    "0" "0"
+    "16" "1"
+    OFF OFF OFF OFF
+  )
+
 else()
   message(FATAL_ERROR
-    "LGFX_PORT_PANEL_DRIVER must be one of: ILI9488, ILI9341, ILI9341_2 (got: \"${LGFX_PORT_PANEL_DRIVER}\")"
+    "LGFX_PORT_PANEL_DRIVER must be one of: ILI9488, ILI9341, ILI9341_2, ST7789 (got: \"${LGFX_PORT_PANEL_DRIVER}\")"
   )
 endif()
 

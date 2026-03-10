@@ -448,7 +448,7 @@ static term lgfx_require_state_policy(Context *ctx, lgfx_port_t *port, const lgf
  * - opts is a proper list of {atom, value}
  * - duplicate keys are allowed; last value wins
  * - booleans use the atoms 'true' and 'false'
- * - panel_driver uses the lower-case atoms 'ili9488', 'ili9341', 'ili9341_2'
+ * - panel_driver uses the lower-case atoms 'ili9488', 'ili9341', 'ili9341_2', 'st7789'
  * - spi hosts use the canonical atoms 'spi2_host' and 'spi3_host'
  * - dma channel uses 'spi_dma_ch_auto', 1, or 2
  * - width/height: 1..65535
@@ -508,6 +508,11 @@ static bool lgfx_parse_panel_driver_value(
 
     if (value == LGFX_ATOM(global, "\x09", "ili9341_2")) {
         *out_value = LGFX_PANEL_DRIVER_ID_ILI9341_2;
+        return true;
+    }
+
+    if (value == LGFX_ATOM(global, "\x06", "st7789")) {
+        *out_value = LGFX_PANEL_DRIVER_ID_ST7789;
         return true;
     }
 
@@ -673,7 +678,7 @@ static bool lgfx_parse_open_option_tuple(
 
     if (key == LGFX_ATOM(global, "\x0C", "panel_driver")) {
         if (!lgfx_parse_panel_driver_value(global, value, &overrides->panel_driver)) {
-            *error_detail = "bad value for panel_driver (expected ili9488, ili9341, or ili9341_2)";
+            *error_detail = "bad value for panel_driver (expected ili9488, ili9341, ili9341_2, or st7789)";
             return false;
         }
         overrides->has_panel_driver = 1u;
