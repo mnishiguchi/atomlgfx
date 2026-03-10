@@ -71,6 +71,28 @@ static inline bool lgfx_device_is_sprite_target(uint8_t target)
 }
 
 // ----------------------------------------------------------------------------
+// Open-time panel driver override
+// ----------------------------------------------------------------------------
+//
+// These are the runtime/open-time panel_driver IDs accepted by the native parser.
+//
+// Wire-level canonical Elixir atoms are lower-case only:
+//
+// - :ili9488
+// - :ili9341
+// - :ili9341_2
+//
+// The Elixir side and the native parser both use the same canonical open_port/2
+// values. Callers must pass the exact lower-case atoms listed above.
+//
+typedef enum lgfx_panel_driver_id_t
+{
+    LGFX_PANEL_DRIVER_ID_ILI9488 = 1,
+    LGFX_PANEL_DRIVER_ID_ILI9341 = 2,
+    LGFX_PANEL_DRIVER_ID_ILI9341_2 = 3,
+} lgfx_panel_driver_id_t;
+
+// ----------------------------------------------------------------------------
 // Open-time runtime overrides
 // ----------------------------------------------------------------------------
 //
@@ -94,6 +116,7 @@ static inline bool lgfx_device_is_sprite_target(uint8_t target)
 // - lgfx_port/lgfx_port.c
 //
 // Inventory / accepted values:
+// - panel_driver: ili9488 | ili9341 | ili9341_2
 // - width, height: 1..65535
 // - offset_x, offset_y: signed 32-bit integer
 // - offset_rotation, touch_offset_rotation: 0..7
@@ -111,7 +134,6 @@ static inline bool lgfx_device_is_sprite_target(uint8_t target)
 // Additional rules:
 // - omitted keys keep build defaults
 // - duplicate keys are allowed; last value wins
-// - panel_driver is intentionally excluded here and remains compile-time only
 //
 // The public Elixir API may accept aliases and normalize them before calling
 // open_port/2. The native parser only accepts the canonical wire values listed
@@ -119,6 +141,9 @@ static inline bool lgfx_device_is_sprite_target(uint8_t target)
 //
 typedef struct lgfx_open_config_overrides_t
 {
+    uint8_t has_panel_driver;
+    lgfx_panel_driver_id_t panel_driver;
+
     uint8_t has_width;
     uint16_t width;
 

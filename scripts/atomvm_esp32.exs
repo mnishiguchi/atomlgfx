@@ -102,12 +102,24 @@ defmodule Main do
     }
 
     case command do
-      "info" -> info_cmd(shared)
-      "install" -> install_cmd(shared)
-      "monitor" -> monitor_cmd(shared)
-      "mkimage" -> mkimage_cmd(shared, extra_args)
-      "clean" -> clean_cmd(shared)
-      _ -> usage(); die("Unknown command: #{command}")
+      "info" ->
+        info_cmd(shared)
+
+      "install" ->
+        install_cmd(shared)
+
+      "monitor" ->
+        monitor_cmd(shared)
+
+      "mkimage" ->
+        mkimage_cmd(shared, extra_args)
+
+      "clean" ->
+        clean_cmd(shared)
+
+      _ ->
+        usage()
+        die("Unknown command: #{command}")
     end
   end
 
@@ -172,7 +184,9 @@ defmodule Main do
   end
 
   defp info_cmd(shared) do
-    component_path = Path.join([shared.esp32_dir, @components_dirname, Path.basename(shared.repo_root)])
+    component_path =
+      Path.join([shared.esp32_dir, @components_dirname, Path.basename(shared.repo_root)])
+
     sdkconfig_defaults = Path.join(shared.esp32_dir, @sdkconfig_defaults_filename)
 
     sdkconfig_defaults_template =
@@ -226,10 +240,15 @@ defmodule Main do
     end
 
     say("- ESP32 dir:   #{if File.dir?(shared.esp32_dir), do: "ok", else: "missing"}")
-    say("- Component:   #{if File.exists?(component_path), do: "present (#{component_path})", else: "not present under esp32/components"}")
+
+    say(
+      "- Component:   #{if File.exists?(component_path), do: "present (#{component_path})", else: "not present under esp32/components"}"
+    )
 
     if shared.port_display != "(not set)" do
-      say("- Port:        #{if File.exists?(shared.port_display), do: "ok", else: "not found (#{shared.port_display})"}")
+      say(
+        "- Port:        #{if File.exists?(shared.port_display), do: "ok", else: "not found (#{shared.port_display})"}"
+      )
     end
 
     say("")
@@ -385,7 +404,13 @@ defmodule Main do
     )
   end
 
-  defp ensure_atomvm_repo!(atomvm_root, override_was_set, atomvm_ref, atomvm_ref_source, allow_dirty) do
+  defp ensure_atomvm_repo!(
+         atomvm_root,
+         override_was_set,
+         atomvm_ref,
+         atomvm_ref_source,
+         allow_dirty
+       ) do
     cond do
       override_was_set and not File.dir?(Path.join(atomvm_root, ".git")) ->
         die("AtomVM repo not found at --atomvm-repo location: #{atomvm_root}")
@@ -443,9 +468,14 @@ defmodule Main do
         desired_sha = resolve_ref_to_commit!(atomvm_root, ref)
 
         if current_sha == desired_sha do
-          say("✔ AtomVM pinned: #{ref} (#{String.slice(desired_sha, 0, 12)}) via #{atomvm_ref_source}")
+          say(
+            "✔ AtomVM pinned: #{ref} (#{String.slice(desired_sha, 0, 12)}) via #{atomvm_ref_source}"
+          )
         else
-          say("Pinning AtomVM to: #{ref} (#{String.slice(desired_sha, 0, 12)}) via #{atomvm_ref_source}")
+          say(
+            "Pinning AtomVM to: #{ref} (#{String.slice(desired_sha, 0, 12)}) via #{atomvm_ref_source}"
+          )
+
           run!("git", ["checkout", "--detach", desired_sha], cd: atomvm_root)
         end
     end
@@ -639,7 +669,14 @@ defmodule Main do
     run!("cmake", ["--build", host_build_dir])
   end
 
-  defp build_platform_tree!(idf_dir, esp32_dir, target, platform_build_dir, sdkconfig_overrides, opts) do
+  defp build_platform_tree!(
+         idf_dir,
+         esp32_dir,
+         target,
+         platform_build_dir,
+         sdkconfig_overrides,
+         opts
+       ) do
     cmake_args =
       ["-DATOMVM_ELIXIR_SUPPORT=on"] ++
         if Keyword.get(opts, :release, false), do: ["-DATOMVM_RELEASE=on"], else: []
@@ -737,9 +774,14 @@ defmodule Main do
 
   defp serial_port_busy_details(port) do
     cond do
-      present?(serial_port_lsof_output(port)) -> "Detected by lsof:\n" <> serial_port_lsof_output(port)
-      present?(serial_port_fuser_output(port)) -> "Detected by fuser:\n" <> serial_port_fuser_output(port)
-      true -> nil
+      present?(serial_port_lsof_output(port)) ->
+        "Detected by lsof:\n" <> serial_port_lsof_output(port)
+
+      present?(serial_port_fuser_output(port)) ->
+        "Detected by fuser:\n" <> serial_port_fuser_output(port)
+
+      true ->
+        nil
     end
   end
 
@@ -935,7 +977,9 @@ defmodule Main do
   end
 
   defp run!(cmd, args, opts \\ []) do
-    display = Keyword.get(opts, :display) || Enum.join([cmd | Enum.map(args, &shell_display/1)], " ")
+    display =
+      Keyword.get(opts, :display) || Enum.join([cmd | Enum.map(args, &shell_display/1)], " ")
+
     IO.puts(colorize(:cyan, "+ #{display}", bold: true))
 
     system_opts =

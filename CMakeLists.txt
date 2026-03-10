@@ -15,30 +15,40 @@ set(LGFX_PORT_ENABLE_TOUCH ON CACHE BOOL "Enable XPT2046 touch driver (Touch_XPT
 # LovyanGFX config knobs
 # -----------------------------------------------------------------------------
 
-# Panel driver preset
+# Build-default panel driver preset
 #
+# This is the build-time default profile used to seed baseline cache values such as:
+# - panel width / height
+# - LCD offset_rotation
+# - touch offset_rotation
+# - dummy read settings
+# - readable / invert / rgb_order / dlen_16bit
+#
+# Runtime note:
+# - open_port/open-time config may still override panel_driver and related fields later.
+# - This cache value remains useful as the default panel profile for builds and examples.
+#
+# Supported LovyanGFX panel names:
 # - ILI9488
 #     Maps to LovyanGFX Panel_ILI9488
-#
 # - ILI9341
 #     Maps to LovyanGFX Panel_ILI9341
-#
 # - ILI9341_2
 #     Maps to LovyanGFX Panel_ILI9341_2 for mirrored 240x320 boards
 #     that need the alternate init sequence.
 #
-set(LGFX_PORT_PANEL_DRIVER "ILI9488" CACHE STRING "LCD panel driver preset (ILI9488, ILI9341, or ILI9341_2)")
+set(LGFX_PORT_PANEL_DRIVER "ILI9488" CACHE STRING "Build-default LCD panel driver preset (ILI9488, ILI9341, or ILI9341_2)")
 set_property(CACHE LGFX_PORT_PANEL_DRIVER PROPERTY STRINGS ILI9488 ILI9341 ILI9341_2)
 
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
 
-# Apply panel-family baseline defaults without clobbering user overrides.
+# Apply build-default panel baseline values without clobbering user overrides.
 #
 # Behavior:
 # - first configure:
-#     seed the cache with the selected panel preset
+#     seed the cache with the selected build-default panel preset
 # - later re-configure:
 #     if the current cache value still matches the last auto-applied preset,
 #     update it to the new preset
@@ -61,7 +71,7 @@ function(lgfx_port_apply_panel_preset cache_name cache_type docstring preset_val
   set(${_auto_key} "${preset_value}" CACHE INTERNAL "Last auto-applied default for ${cache_name}" FORCE)
 endfunction()
 
-# Apply the full panel-family baseline set in one place.
+# Apply the full build-default panel baseline set in one place.
 function(
   lgfx_port_apply_panel_baseline
   panel_width
@@ -157,7 +167,7 @@ function(lgfx_port_bool_to_int_many)
   endforeach()
 endfunction()
 
-# Derive one-hot panel driver selection ints for header substitution.
+# Derive one-hot build-default panel driver selection ints for header substitution.
 function(lgfx_port_set_panel_driver_ints selected_driver)
   set(LGFX_PORT_PANEL_DRIVER_ILI9488_INT 0 PARENT_SCOPE)
   set(LGFX_PORT_PANEL_DRIVER_ILI9341_INT 0 PARENT_SCOPE)
@@ -216,11 +226,11 @@ function(lgfx_port_filter_out var_name)
 endfunction()
 
 # -----------------------------------------------------------------------------
-# Panel-driver baseline defaults
+# Build-default panel baseline defaults
 # -----------------------------------------------------------------------------
 #
-# Keep these as the baseline profile for the selected panel family.
-# Module-specific quirks can still be adjusted below if needed.
+# Keep these as the baseline profile for the selected build-default panel family.
+# Runtime open-time config may override panel_driver and related values later.
 #
 if(LGFX_PORT_PANEL_DRIVER STREQUAL "ILI9488")
   lgfx_port_apply_panel_baseline(
@@ -399,7 +409,7 @@ set(LGFX_PORT_MAX_SPRITES "8u" CACHE STRING "Max sprites (numeric literal, e.g. 
 lgfx_port_validate_u8_literal(LGFX_PORT_MAX_SPRITES)
 
 # -----------------------------------------------------------------------------
-# Derive panel driver selection ints for header substitution (0/1)
+# Derive build-default panel driver selection ints for header substitution (0/1)
 # -----------------------------------------------------------------------------
 lgfx_port_set_panel_driver_ints("${LGFX_PORT_PANEL_DRIVER}")
 
@@ -538,7 +548,7 @@ target_include_directories(${COMPONENT_LIB} PRIVATE
   "${LGFX_SRC_ROOT}"
 )
 
-# Panel-driver selection macros come from the generated config header
+# Build-default panel-driver selection macros come from the generated config header
 # (lgfx_port/lgfx_port_config.h).
 target_compile_definitions(${COMPONENT_LIB} PRIVATE
   LGFX_USE_V1=1

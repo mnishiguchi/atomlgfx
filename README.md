@@ -31,6 +31,10 @@ cd ../..
 ./scripts/atomvm_esp32.exs monitor --port /dev/ttyACM0
 ```
 
+Before flashing the example app, adjust its `LGFXPort.open(...)` config in
+`examples/elixir/lib/lgfx_port.ex` if your board uses a different panel profile
+or pin assignment.
+
 ## Protocol overview
 
 The wire contract is synchronous and tuple-based.
@@ -56,14 +60,19 @@ See `docs/LGFX_PORT_PROTOCOL.md` for the full operation matrix and rules.
 
 LovyanGFX is vendored as a git submodule under `third_party/LovyanGFX` and compiled into this ESP-IDF component.
 
-Configuration is build-time and driven by CMake cache variables set by the parent ESP-IDF project or via `idf.py -D...`.
+Build defaults are driven by CMake cache variables set by the parent ESP-IDF
+project or via `idf.py -D...`.
 
-Common options:
+Some runtime values may also be overridden later at port-open time from the
+host. When open-time keys are omitted, the build defaults are used.
+
+Common build-default options:
 
 - `LGFX_PORT_ENABLE_JP_FONTS` (default `ON`)
 - `LGFX_PORT_ENABLE_TOUCH` (default `ON`)
-- `LGFX_PORT_PANEL_WIDTH` (default `320`)
-- `LGFX_PORT_PANEL_HEIGHT` (default `480`)
+- `LGFX_PORT_PANEL_DRIVER` (default `ILI9488`; supported: `ILI9488`, `ILI9341`, `ILI9341_2`)
+- `LGFX_PORT_PANEL_WIDTH` (default depends on the selected build-default panel profile)
+- `LGFX_PORT_PANEL_HEIGHT` (default depends on the selected build-default panel profile)
 - `LGFX_PORT_LCD_CS_GPIO` (default `43`)
 - `LGFX_PORT_LCD_DC_GPIO` (default `3`)
 - `LGFX_PORT_LCD_RST_GPIO` (default `2`)
@@ -75,6 +84,7 @@ Example override:
 
 ```bash
 idf.py \
+  -DLGFX_PORT_PANEL_DRIVER=ILI9341_2 \
   -DLGFX_PORT_LCD_CS_GPIO=10 \
   -DLGFX_PORT_LCD_DC_GPIO=9 \
   -DLGFX_PORT_LCD_RST_GPIO=8 \

@@ -11,7 +11,8 @@ Key ideas:
 - Protocol-visible behavior is metadata-driven from `ops.def`.
 - `getCaps` is derived from protocol metadata plus the enabled dispatch surface.
 - Protocol work and device work are split into separate C-side execution paths.
-- Build-time wiring and LovyanGFX tuning are shared through a generated config header.
+- Build-default wiring and LovyanGFX tuning are shared through a generated config header.
+- Open-time config may override selected runtime values per port before `init`.
 - The device layer is a thin C ABI around the pinned LovyanGFX surface used by this repository.
 - Touch is advertised only when touch support is both enabled and attached.
 
@@ -103,9 +104,10 @@ Minimal layout view:
 └── examples/elixir/
 ```
 
-## Build-time configuration
+## Build-default configuration
 
-This component uses a generated config header so the protocol layer and device layer see the same wiring, geometry, and LovyanGFX settings.
+This component uses a generated config header so the protocol layer and device
+layer see the same build-default wiring, geometry, and LovyanGFX settings.
 
 - Template:
   - `lgfx_port/cmake/lgfx_port_config.h.in`
@@ -120,9 +122,14 @@ How it works:
 - CMake runs `configure_file(... @ONLY)` to generate the header.
 - The generated include directory is exported so all component code sees the same build knobs.
 
+These values are build defaults. The host may later provide open-time overrides
+for selected fields such as `panel_driver`, geometry, rotation, SPI host, and
+touch-related settings. Those overrides are stored per port context and applied
+when that port initializes the device.
+
 Important rule:
 
-- The generated config header is the source of truth for build knobs used by this component.
+- The generated config header is the source of truth for build defaults used by this component.
 - Do not rewrite the `@VAR@` tokens in `lgfx_port_config.h.in`.
 - If a formatter changes them, CMake substitution breaks.
 

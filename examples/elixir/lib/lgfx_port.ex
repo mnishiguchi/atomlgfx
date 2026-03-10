@@ -2,20 +2,11 @@ defmodule LGFXPort do
   @moduledoc """
   Minimal Elixir client for the `lgfx_port` AtomVM port driver.
 
-  This module wraps the Erlang-term protocol documented in `docs/LGFX_PORT_PROTOCOL.md`
-  and provides small conveniences (timeouts, chunking for RGB565 pushes, and a bit of caching).
-
   Typical bring-up:
-
-      port = LGFXPort.open()
-      :ok = LGFXPort.ping(port)
-      :ok = LGFXPort.init(port)
-      :ok = LGFXPort.display(port)
-
-  Open-time config is also accepted:
 
       port =
         LGFXPort.open(
+          panel_driver: :ili9341_2,
           width: 240,
           height: 320,
           offset_rotation: 4,
@@ -25,24 +16,29 @@ defmodule LGFXPort do
           touch_cs_gpio: 44
         )
 
+      :ok = LGFXPort.ping(port)
+      :ok = LGFXPort.init(port)
+      :ok = LGFXPort.display(port)
+
   Notes:
 
-  - `open/1` validates and normalizes config, then passes it to the native driver at port-open time.
-  - Omitted open-time keys keep the build-time defaults.
-  - Duplicate open-time keys are allowed; the last value wins.
-  - The public Elixir API accepts a few friendly aliases for SPI host / DMA values and normalizes
-    them to the canonical wire values expected by the native driver.
+  - `open/1` validates and normalizes config, then passes it at port-open time.
+  - Omitted keys keep build defaults.
+  - Duplicate keys are allowed; the last value wins.
+  - Exact atoms only:
+    - `panel_driver`: `:ili9488`, `:ili9341`, `:ili9341_2`
+    - SPI host: `:spi2_host`, `:spi3_host`
+    - DMA auto: `:spi_dma_ch_auto`
   - The native driver currently uses a singleton device model.
-  - Open-time config is stored per port context and applied when that same port calls `init/1`.
-  - At most one port can own the live native device at a time, so overlapping live init/ownership is not supported.
-  - `close/1` performs full device teardown and clears this module's runtime caches for that port.
+  - Open-time config is stored per port and applied when that same port calls `init/1`.
+  - Only one port can own the live native device at a time.
+  - `close/1` performs full device teardown and clears this module's runtime caches.
   - `close/1` does not close the port handle itself.
-  - `close/1` also does not forget the remembered open-time config for that port.
-  - After `close/1`, calling `init/1` again on the same port reuses that port's remembered overrides.
-  - `:panel_driver` is not accepted by `open/1` because panel-family selection is still compile-time.
+  - `close/1` does not forget that port's remembered open-time config.
+  - After `close/1`, calling `init/1` again on the same port reuses those overrides.
+  - `panel_driver` should usually be set explicitly. When omitted, the build-default panel profile is used.
   - `getTouch/getTouchRaw` returns `{:ok, :none}` or `{:ok, {x, y, size}}`.
-  - Sprite compositing transparent keys for `pushSprite*` / `pushRotateZoom` are RGB565 `u16`
-    (0x0000..0xFFFF), not RGB888 (0x00RRGGBB).
+  - Transparent keys for `pushSprite*` / `pushRotateZoom` are RGB565 `u16` (`0x0000..0xFFFF`), not RGB888 (`0x00RRGGBB`).
   - `pushRotateZoom` uses protocol units:
     - angle: centi-degrees (1.00° = 100)
     - zoom: x1024 fixed-point (1.0x = 1024)
@@ -57,21 +53,17 @@ defmodule LGFXPort do
   @proto_ver 1
   @max_open_config_i32 0x7FFF_FFFF
 
-  # Timeouts
   @t_short 5_000
   @t_long 10_000
   @t_touch_calibrate 60_000
 
-  # Protocol flags
   @f_text_has_bg 1 <<< 0
 
-  # Protocol capability bits
   @cap_sprite 1 <<< 0
   @cap_pushimage 1 <<< 1
   @cap_last_error 1 <<< 2
   @cap_touch 1 <<< 3
 
-  # Font preset wire IDs (setFontPreset)
   @font_preset_ascii 0
   @font_preset_jp_small 1
   @font_preset_jp_medium 2
@@ -79,19 +71,14 @@ defmodule LGFXPort do
 
   @valid_color_depths [1, 2, 4, 8, 16, 24]
 
-  # Canonical open-time config inventory.
-  #
-  # Keep this aligned with:
-  # - lgfx_port/lgfx_port.c (native open_port/2 parser)
-  # - src/lgfx_device.h (lgfx_open_config_overrides_t contract)
-  #
-  # Rules:
-  # - keys are emitted to the native driver in this order
-  # - duplicate keys are allowed; last value wins
-  # - SPI host aliases normalize to :spi2_host / :spi3_host
-  # - DMA aliases normalize to :spi_dma_ch_auto / 1 / 2
-  #
+  @panel_driver_atoms [:ili9488, :ili9341, :ili9341_2]
+  @spi_host_atoms [:spi2_host, :spi3_host]
+
+  # Keep aligned with:
+  # - lgfx_port/lgfx_port.c
+  # - src/lgfx_device.h
   @open_option_rules [
+    panel_driver: :panel_driver,
     width: :positive_u16,
     height: :positive_u16,
     offset_x: :i32,
@@ -124,41 +111,10 @@ defmodule LGFXPort do
     touch_bus_shared: :boolean
   ]
 
-  @supported_open_config_keys [
-    :width,
-    :height,
-    :offset_x,
-    :offset_y,
-    :offset_rotation,
-    :readable,
-    :invert,
-    :rgb_order,
-    :dlen_16bit,
-    :lcd_spi_mode,
-    :lcd_freq_write_hz,
-    :lcd_freq_read_hz,
-    :lcd_dma_channel,
-    :lcd_spi_3wire,
-    :lcd_use_lock,
-    :lcd_bus_shared,
-    :spi_sclk_gpio,
-    :spi_mosi_gpio,
-    :spi_miso_gpio,
-    :lcd_spi_host,
-    :lcd_cs_gpio,
-    :lcd_dc_gpio,
-    :lcd_rst_gpio,
-    :lcd_pin_busy,
-    :touch_cs_gpio,
-    :touch_irq_gpio,
-    :touch_spi_host,
-    :touch_spi_freq_hz,
-    :touch_offset_rotation,
-    :touch_bus_shared
-  ]
+  @supported_open_config_keys Keyword.keys(@open_option_rules)
 
   # -----------------------------------------------------------------------------
-  # Protocol numeric types (guards)
+  # Protocol numeric types
   # -----------------------------------------------------------------------------
   defguardp i16(v) when is_integer(v) and v >= -0x8000 and v <= 0x7FFF
   defguardp u16(v) when is_integer(v) and v >= 0 and v <= 0xFFFF
@@ -204,8 +160,7 @@ defmodule LGFXPort do
     {:error, {:bad_open_options_shape, other}}
   end
 
-  # Exposes the raw protocol call for smoke tests and protocol checks.
-  # Intentionally allows any integer target so callers can test invalid targets (e.g. 255).
+  # Raw protocol call for smoke tests. Target is intentionally not range-checked.
   def raw_call(port, op, target, flags, args, timeout \\ @t_short)
       when is_atom(op) and is_integer(target) and is_integer(flags) and flags >= 0 and
              is_list(args) do
@@ -249,7 +204,7 @@ defmodule LGFXPort do
   def supports_last_error?(port), do: supports_cap?(port, @cap_last_error)
   def supports_touch?(port), do: supports_cap?(port, @cap_touch)
 
-  # Cache helper for MaxBinaryBytes (AtomVM-friendly)
+  # AtomVM-friendly cache for MaxBinaryBytes.
   def max_binary_bytes(port) do
     key = max_binary_bytes_cache_key(port)
 
@@ -291,7 +246,7 @@ defmodule LGFXPort do
   end
 
   # -----------------------------------------------------------------------------
-  # Sprite operations (LGFX_Sprite)
+  # Sprite operations
   # -----------------------------------------------------------------------------
   def create_sprite(port, width, height, target)
       when u16(width) and width >= 1 and
@@ -317,14 +272,7 @@ defmodule LGFXPort do
     call_ok(port, :setPivot, target, 0, [x, y], @t_long)
   end
 
-  # -----------------------------------------------------------------------------
-  # pushSprite (destination-aware)
-  #
-  # Wire payload:
-  #   [dst_target, x, y] or [dst_target, x, y, transparent565]
-  # Header Target is src sprite handle (1..254).
-  # dst_target: 0 (LCD) or 1..254 (sprite)
-  # -----------------------------------------------------------------------------
+  # pushSprite wire args: [dst_target, x, y] or [dst_target, x, y, transparent565]
   def push_sprite_to(port, src_target, dst_target, x, y)
       when sprite_handle(src_target) and
              target_any(dst_target) and
@@ -332,7 +280,6 @@ defmodule LGFXPort do
     call_ok(port, :pushSprite, src_target, 0, [dst_target, x, y], @t_long)
   end
 
-  # Transparent key is RGB565 u16 (protocol)
   def push_sprite_to(port, src_target, dst_target, x, y, transparent565)
       when sprite_handle(src_target) and
              target_any(dst_target) and
@@ -341,7 +288,6 @@ defmodule LGFXPort do
     call_ok(port, :pushSprite, src_target, 0, [dst_target, x, y, transparent565], @t_long)
   end
 
-  # Convenience: push to LCD (dst_target=0)
   def push_sprite(port, src_target, x, y)
       when sprite_handle(src_target) and i16(x) and i16(y) do
     push_sprite_to(port, src_target, 0, x, y)
@@ -354,16 +300,8 @@ defmodule LGFXPort do
     push_sprite_to(port, src_target, 0, x, y, transparent565)
   end
 
-  # -----------------------------------------------------------------------------
-  # Sprite rotate/zoom (protocol units)
-  # -----------------------------------------------------------------------------
-  # Wire shape:
-  #   {lgfx, ver, pushRotateZoom, SrcSprite, Flags,
-  #      DstTarget, X, Y, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32 [, Transparent565]}
-  #
-  # - AngleCentiDegI32: 100 = 1.00°
-  # - ZoomX1024I32:     1024 = 1.0x
-  # - DstTarget:        0 (LCD) or 1..254 (sprite)
+  # pushRotateZoom wire args:
+  # [dst_target, x, y, angle_centi_deg, zoom_x1024, zoom_y1024 [, transparent565]]
   def push_rotate_zoom_to(
         port,
         src_target,
@@ -390,7 +328,6 @@ defmodule LGFXPort do
     )
   end
 
-  # Transparent key is RGB565 u16 (protocol)
   def push_rotate_zoom_to(
         port,
         src_target,
@@ -419,7 +356,7 @@ defmodule LGFXPort do
     )
   end
 
-  # Convenience: accept degrees + float zoom; convert to protocol units (centi-deg / x1024)
+  # Convenience wrapper: degrees / float zoom -> protocol units.
   def push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom_x, zoom_y)
       when sprite_handle(src_target) and
              target_any(dst_target) and
@@ -430,6 +367,7 @@ defmodule LGFXPort do
     angle_centi_deg = round(angle_deg * 100)
     zx1024 = max(1, round(zoom_x * 1024))
     zy1024 = max(1, round(zoom_y * 1024))
+
     push_rotate_zoom_to(port, src_target, dst_target, x, y, angle_centi_deg, zx1024, zy1024)
   end
 
@@ -538,15 +476,8 @@ defmodule LGFXPort do
   end
 
   # -----------------------------------------------------------------------------
-  # Touch (LCD-only)
+  # Touch
   # -----------------------------------------------------------------------------
-  #
-  # getTouch/getTouchRaw reply:
-  # - {:ok, :none} or {:ok, {x, y, size}}
-  #
-  # calibrateTouch reply:
-  # - {:ok, {p0, p1, p2, p3, p4, p5, p6, p7}}
-  #
   def get_touch(port) do
     with {:ok, payload} <- call(port, :getTouch, 0, 0, [], @t_short) do
       decode_touch_payload(:getTouch, payload)
@@ -572,7 +503,7 @@ defmodule LGFXPort do
   end
 
   # -----------------------------------------------------------------------------
-  # Text (with simple caching for AtomVM)
+  # Text
   # -----------------------------------------------------------------------------
   def set_text_size(port, size, target \\ 0)
       when is_integer(size) and size in 1..255 and target_any(target) do
@@ -593,13 +524,11 @@ defmodule LGFXPort do
     call_ok(port, :setTextDatum, target, 0, [datum], @t_long)
   end
 
-  # Single-arg wrap form (applies to both axes).
   def set_text_wrap(port, wrap, target \\ 0)
       when is_boolean(wrap) and target_any(target) do
     call_ok(port, :setTextWrap, target, 0, [wrap], @t_long)
   end
 
-  # 2-arg wrap overload.
   def set_text_wrap_xy(port, wrap_x, wrap_y, target \\ 0)
       when is_boolean(wrap_x) and is_boolean(wrap_y) and target_any(target) do
     call_ok(port, :setTextWrap, target, 0, [wrap_x, wrap_y], @t_long)
@@ -610,12 +539,10 @@ defmodule LGFXPort do
     call_ok(port, :setTextFont, target, 0, [font_id], @t_long)
     |> after_ok(fn ->
       cache_put(text_font_selection_cache_key(port, target), {:font_id, font_id})
-      # setTextFont does not change size on device, so do not touch cached text_size here.
     end)
   end
 
-  # Font preset helper (driver-defined names mapped to wire preset IDs).
-  # Note: preset selection may also change text size on the device (single-font strategy).
+  # Preset selection may also change device-side text size.
   def set_font_preset(port, preset, target \\ 0)
       when target_any(target) do
     with {:ok, preset_id, canonical_preset} <- font_preset_to_wire(preset) do
@@ -650,7 +577,6 @@ defmodule LGFXPort do
     end
   end
 
-  # Minimal convenience helper used heavily by SampleApp.
   def draw_string_bg(port, x, y, fg888, bg888, size, text, target \\ 0)
       when i16(x) and i16(y) and
              color888(fg888) and
@@ -666,14 +592,13 @@ defmodule LGFXPort do
     end
   end
 
-  # Minimal convenience: clears host-side cached text state.
   def reset_text_state(port, target \\ 0) when target_any(target) do
     erase_text_cache(port, target)
     :ok
   end
 
   # -----------------------------------------------------------------------------
-  # Pixel/image transfer (RGB565)
+  # Pixel/image transfer
   # -----------------------------------------------------------------------------
   def push_image_rgb565(port, x, y, width, height, pixels, stride_pixels \\ 0, target \\ 0)
       when i16(x) and i16(y) and
@@ -704,7 +629,7 @@ defmodule LGFXPort do
   end
 
   # -----------------------------------------------------------------------------
-  # Request/response transport (term protocol)
+  # Request / response transport
   # -----------------------------------------------------------------------------
   defp call_ok(port, op, target, flags, args, timeout) do
     case call(port, op, target, flags, args, timeout) do
@@ -854,10 +779,6 @@ defmodule LGFXPort do
     {:error, {:bad_open_options_shape, original_options}}
   end
 
-  defp normalize_open_option_entry({:panel_driver, value}, _original_options) do
-    {:error, {:unsupported_open_option, :panel_driver, value}}
-  end
-
   defp normalize_open_option_entry({key, value}, _original_options) when is_atom(key) do
     case normalize_open_option_value(key, value) do
       {:ok, normalized_value} -> {:ok, {key, normalized_value}}
@@ -870,29 +791,31 @@ defmodule LGFXPort do
   end
 
   defp normalize_open_option_value(key, value) do
-    case fetch_open_option_rule(key) do
+    case Keyword.fetch(@open_option_rules, key) do
       {:ok, rule} -> normalize_open_option_by_rule(rule, key, value)
       :error -> {:error, {:unknown_open_option, key}}
     end
   end
 
-  defp fetch_open_option_rule(key) do
-    fetch_open_option_rule(@open_option_rules, key)
+  defp normalize_open_option_by_rule(:panel_driver, _key, value)
+       when value in @panel_driver_atoms,
+       do: {:ok, value}
+
+  defp normalize_open_option_by_rule(:panel_driver, key, value) do
+    {:error, {:bad_open_option_value, key, value, ":ili9488, :ili9341, or :ili9341_2"}}
   end
 
-  defp fetch_open_option_rule([{key, rule} | _rest], key), do: {:ok, rule}
-  defp fetch_open_option_rule([_entry | rest], key), do: fetch_open_option_rule(rest, key)
-  defp fetch_open_option_rule([], _key), do: :error
-
-  defp normalize_open_option_by_rule(:positive_u16, _key, value) when u16(value) and value > 0,
-    do: {:ok, value}
+  defp normalize_open_option_by_rule(:positive_u16, _key, value)
+       when u16(value) and value > 0,
+       do: {:ok, value}
 
   defp normalize_open_option_by_rule(:positive_u16, key, value) do
     {:error, {:bad_open_option_value, key, value, "a positive integer in 1..65535"}}
   end
 
-  defp normalize_open_option_by_rule(:positive_i32, _key, value) when positive_i32(value),
-    do: {:ok, value}
+  defp normalize_open_option_by_rule(:positive_i32, _key, value)
+       when positive_i32(value),
+       do: {:ok, value}
 
   defp normalize_open_option_by_rule(:positive_i32, key, value) do
     {:error,
@@ -945,58 +868,35 @@ defmodule LGFXPort do
   end
 
   defp normalize_open_option_by_rule(:spi_host, _key, value)
-       when value in [:spi2_host, :spi2, "SPI2_HOST", "spi2_host"],
-       do: {:ok, :spi2_host}
-
-  defp normalize_open_option_by_rule(:spi_host, _key, value)
-       when value in [:spi3_host, :spi3, "SPI3_HOST", "spi3_host"],
-       do: {:ok, :spi3_host}
+       when value in @spi_host_atoms,
+       do: {:ok, value}
 
   defp normalize_open_option_by_rule(:spi_host, key, value) do
-    {:error,
-     {:bad_open_option_value, key, value,
-      ":spi2_host, :spi3_host, \"SPI2_HOST\", or \"SPI3_HOST\""}}
+    {:error, {:bad_open_option_value, key, value, ":spi2_host or :spi3_host"}}
   end
 
   defp normalize_open_option_by_rule(:dma_channel, _key, value) when value in [1, 2],
     do: {:ok, value}
 
-  defp normalize_open_option_by_rule(:dma_channel, _key, value)
-       when value in [:spi_dma_ch_auto, :auto, "SPI_DMA_CH_AUTO", "spi_dma_ch_auto"],
-       do: {:ok, :spi_dma_ch_auto}
+  defp normalize_open_option_by_rule(:dma_channel, _key, :spi_dma_ch_auto),
+    do: {:ok, :spi_dma_ch_auto}
 
   defp normalize_open_option_by_rule(:dma_channel, key, value) do
-    {:error, {:bad_open_option_value, key, value, ":spi_dma_ch_auto, :auto, 1, or 2"}}
+    {:error, {:bad_open_option_value, key, value, ":spi_dma_ch_auto, 1, or 2"}}
   end
 
   defp open_config_map_to_keyword(normalized_map) when is_map(normalized_map) do
-    open_config_map_to_keyword(@supported_open_config_keys, normalized_map, [])
-  end
-
-  defp open_config_map_to_keyword([], _normalized_map, acc) do
-    :lists.reverse(acc)
-  end
-
-  defp open_config_map_to_keyword([key | rest], normalized_map, acc) do
-    case Map.fetch(normalized_map, key) do
-      {:ok, value} ->
-        open_config_map_to_keyword(rest, normalized_map, [{key, value} | acc])
-
-      :error ->
-        open_config_map_to_keyword(rest, normalized_map, acc)
-    end
+    Enum.reduce(@supported_open_config_keys, [], fn key, acc ->
+      case Map.fetch(normalized_map, key) do
+        {:ok, value} -> [{key, value} | acc]
+        :error -> acc
+      end
+    end)
+    |> :lists.reverse()
   end
 
   defp format_open_option_error({:bad_open_options_shape, options}) do
     "LGFXPort.open/1 expects a keyword list or proplist with atom keys, got: #{inspect(options)}"
-  end
-
-  defp format_open_option_error({:unsupported_open_option, :panel_driver, value}) do
-    "LGFXPort.open/1 does not support :panel_driver yet because panel-family selection is still compile-time, got: #{inspect(value)}"
-  end
-
-  defp format_open_option_error({:unsupported_open_option, key, value}) do
-    "LGFXPort.open/1 does not support #{inspect(key)} yet, got: #{inspect(value)}"
   end
 
   defp format_open_option_error({:unknown_open_option, key}) do
@@ -1052,7 +952,6 @@ defmodule LGFXPort do
   defp font_preset_to_wire(:jp), do: {:ok, @font_preset_jp_medium, :jp_medium}
   defp font_preset_to_wire(other), do: {:error, {:bad_font_preset, other}}
 
-  # Single-font strategy mapping (host cache only; device is source of truth).
   defp implied_text_size_for_preset(:ascii), do: {1, 1}
   defp implied_text_size_for_preset(:jp_small), do: {1, 1}
   defp implied_text_size_for_preset(:jp_medium), do: {2, 2}

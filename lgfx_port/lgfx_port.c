@@ -448,6 +448,7 @@ static term lgfx_require_state_policy(Context *ctx, lgfx_port_t *port, const lgf
  * - opts is a proper list of {atom, value}
  * - duplicate keys are allowed; last value wins
  * - booleans use the atoms 'true' and 'false'
+ * - panel_driver uses the lower-case atoms 'ili9488', 'ili9341', 'ili9341_2'
  * - spi hosts use the canonical atoms 'spi2_host' and 'spi3_host'
  * - dma channel uses 'spi_dma_ch_auto', 1, or 2
  * - width/height: 1..65535
@@ -484,6 +485,29 @@ static bool lgfx_parse_bool_value(GlobalContext *global, term value, uint8_t *ou
 
     if (value == false_atom) {
         *out_value = 0u;
+        return true;
+    }
+
+    return false;
+}
+
+static bool lgfx_parse_panel_driver_value(
+    GlobalContext *global,
+    term value,
+    lgfx_panel_driver_id_t *out_value)
+{
+    if (value == LGFX_ATOM(global, "\x07", "ili9488")) {
+        *out_value = LGFX_PANEL_DRIVER_ID_ILI9488;
+        return true;
+    }
+
+    if (value == LGFX_ATOM(global, "\x07", "ili9341")) {
+        *out_value = LGFX_PANEL_DRIVER_ID_ILI9341;
+        return true;
+    }
+
+    if (value == LGFX_ATOM(global, "\x09", "ili9341_2")) {
+        *out_value = LGFX_PANEL_DRIVER_ID_ILI9341_2;
         return true;
     }
 
@@ -645,6 +669,15 @@ static bool lgfx_parse_open_option_tuple(
     if (!term_is_atom(key)) {
         *error_detail = "open_port option key must be an atom";
         return false;
+    }
+
+    if (key == LGFX_ATOM(global, "\x0C", "panel_driver")) {
+        if (!lgfx_parse_panel_driver_value(global, value, &overrides->panel_driver)) {
+            *error_detail = "bad value for panel_driver (expected ili9488, ili9341, or ili9341_2)";
+            return false;
+        }
+        overrides->has_panel_driver = 1u;
+        return true;
     }
 
     if (key == LGFX_ATOM(global, "\x05", "width")) {
@@ -915,11 +948,6 @@ static bool lgfx_parse_open_option_tuple(
         }
         overrides->has_touch_bus_shared = 1u;
         return true;
-    }
-
-    if (key == LGFX_ATOM(global, "\x0C", "panel_driver")) {
-        *error_detail = "panel_driver is not supported at open time because panel-family selection is still compile-time";
-        return false;
     }
 
     *error_detail = "unknown open_port option key";

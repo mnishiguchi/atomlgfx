@@ -100,31 +100,44 @@ static const void *g_device_owner_token = nullptr;
 static bool g_device_ready = false;
 
 // ----------------------------------------------------------------------------
-// Panel driver selection
+// Build-default panel driver selection
 // ----------------------------------------------------------------------------
 
-enum class PanelDriverId : uint8_t
-{
-    ILI9488 = 1,
-    ILI9341 = 2,
-    ILI9341_2 = 3,
-};
-
 #if (LGFX_PORT_PANEL_DRIVER_ILI9488 == 1)
-using LgfxPanelType = lgfx::Panel_ILI9488;
-static constexpr PanelDriverId PANEL_DRIVER_ID = PanelDriverId::ILI9488;
-static constexpr const char *PANEL_DRIVER_NAME = "ILI9488";
+static constexpr lgfx_panel_driver_id_t BUILD_PANEL_DRIVER_ID = LGFX_PANEL_DRIVER_ID_ILI9488;
 #elif (LGFX_PORT_PANEL_DRIVER_ILI9341 == 1)
-using LgfxPanelType = lgfx::Panel_ILI9341;
-static constexpr PanelDriverId PANEL_DRIVER_ID = PanelDriverId::ILI9341;
-static constexpr const char *PANEL_DRIVER_NAME = "ILI9341";
+static constexpr lgfx_panel_driver_id_t BUILD_PANEL_DRIVER_ID = LGFX_PANEL_DRIVER_ID_ILI9341;
 #elif (LGFX_PORT_PANEL_DRIVER_ILI9341_2 == 1)
-using LgfxPanelType = lgfx::Panel_ILI9341_2;
-static constexpr PanelDriverId PANEL_DRIVER_ID = PanelDriverId::ILI9341_2;
-static constexpr const char *PANEL_DRIVER_NAME = "ILI9341_2";
+static constexpr lgfx_panel_driver_id_t BUILD_PANEL_DRIVER_ID = LGFX_PANEL_DRIVER_ID_ILI9341_2;
 #else
 #error "Unsupported LGFX panel driver selection"
 #endif
+
+static inline const char *panel_driver_name(lgfx_panel_driver_id_t driver_id)
+{
+    switch (driver_id) {
+        case LGFX_PANEL_DRIVER_ID_ILI9488:
+            return "ILI9488";
+        case LGFX_PANEL_DRIVER_ID_ILI9341:
+            return "ILI9341";
+        case LGFX_PANEL_DRIVER_ID_ILI9341_2:
+            return "ILI9341_2";
+        default:
+            return "unknown";
+    }
+}
+
+static inline bool is_known_panel_driver_id(lgfx_panel_driver_id_t driver_id)
+{
+    switch (driver_id) {
+        case LGFX_PANEL_DRIVER_ID_ILI9488:
+        case LGFX_PANEL_DRIVER_ID_ILI9341:
+        case LGFX_PANEL_DRIVER_ID_ILI9341_2:
+            return true;
+        default:
+            return false;
+    }
+}
 
 // ----------------------------------------------------------------------------
 // Compile-time constants still shared across split files
@@ -203,7 +216,7 @@ struct LgfxRuntimeConfig
 
     struct PanelConfig
     {
-        PanelDriverId driver_id;
+        lgfx_panel_driver_id_t driver_id;
         const char *driver_name;
         uint16_t width;
         uint16_t height;
@@ -239,6 +252,58 @@ struct LgfxRuntimeConfig
     TouchConfig touch;
 };
 
+static void apply_panel_driver_baseline(
+    LgfxRuntimeConfig &config,
+    lgfx_panel_driver_id_t driver_id)
+{
+    config.lcd_panel.driver_id = driver_id;
+    config.lcd_panel.driver_name = panel_driver_name(driver_id);
+
+    switch (driver_id) {
+        case LGFX_PANEL_DRIVER_ID_ILI9488:
+            config.lcd_panel.width = 320;
+            config.lcd_panel.height = 480;
+            config.lcd_panel.offset_rotation = 0;
+            config.lcd_panel.dummy_read_pixel = 8;
+            config.lcd_panel.dummy_read_bits = 1;
+            config.lcd_panel.readable = false;
+            config.lcd_panel.invert = false;
+            config.lcd_panel.rgb_order = false;
+            config.lcd_panel.dlen_16bit = false;
+            config.touch.offset_rotation = 0;
+            break;
+
+        case LGFX_PANEL_DRIVER_ID_ILI9341:
+            config.lcd_panel.width = 240;
+            config.lcd_panel.height = 320;
+            config.lcd_panel.offset_rotation = 0;
+            config.lcd_panel.dummy_read_pixel = 8;
+            config.lcd_panel.dummy_read_bits = 1;
+            config.lcd_panel.readable = false;
+            config.lcd_panel.invert = false;
+            config.lcd_panel.rgb_order = false;
+            config.lcd_panel.dlen_16bit = false;
+            config.touch.offset_rotation = 0;
+            break;
+
+        case LGFX_PANEL_DRIVER_ID_ILI9341_2:
+            config.lcd_panel.width = 240;
+            config.lcd_panel.height = 320;
+            config.lcd_panel.offset_rotation = 4;
+            config.lcd_panel.dummy_read_pixel = 8;
+            config.lcd_panel.dummy_read_bits = 1;
+            config.lcd_panel.readable = false;
+            config.lcd_panel.invert = true;
+            config.lcd_panel.rgb_order = false;
+            config.lcd_panel.dlen_16bit = false;
+            config.touch.offset_rotation = 4;
+            break;
+
+        default:
+            break;
+    }
+}
+
 static LgfxRuntimeConfig runtime_config_from_build_defaults()
 {
     LgfxRuntimeConfig config = {};
@@ -255,8 +320,8 @@ static LgfxRuntimeConfig runtime_config_from_build_defaults()
     config.lcd_bus.pin_miso = (int) (LGFX_PORT_SPI_MISO_GPIO);
     config.lcd_bus.pin_dc = (int) (LGFX_PORT_LCD_DC_GPIO);
 
-    config.lcd_panel.driver_id = PANEL_DRIVER_ID;
-    config.lcd_panel.driver_name = PANEL_DRIVER_NAME;
+    config.lcd_panel.driver_id = BUILD_PANEL_DRIVER_ID;
+    config.lcd_panel.driver_name = panel_driver_name(BUILD_PANEL_DRIVER_ID);
     config.lcd_panel.width = (uint16_t) (LGFX_PORT_PANEL_WIDTH);
     config.lcd_panel.height = (uint16_t) (LGFX_PORT_PANEL_HEIGHT);
     config.lcd_panel.pin_cs = (int) (LGFX_PORT_LCD_CS_GPIO);
@@ -289,6 +354,10 @@ static void apply_open_config_overrides(
     LgfxRuntimeConfig &config,
     const lgfx_open_config_overrides_t &overrides)
 {
+    if (overrides.has_panel_driver) {
+        apply_panel_driver_baseline(config, overrides.panel_driver);
+    }
+
     if (overrides.has_width) {
         config.lcd_panel.width = overrides.width;
     }
@@ -414,6 +483,11 @@ static void apply_open_config_overrides(
 
 static bool validate_runtime_config(const LgfxRuntimeConfig &config, const char **reason)
 {
+    if (!is_known_panel_driver_id(config.lcd_panel.driver_id)) {
+        *reason = "panel_driver must be ili9488, ili9341, or ili9341_2";
+        return false;
+    }
+
     if (config.lcd_panel.width == 0) {
         *reason = "width must be > 0";
         return false;
@@ -501,11 +575,89 @@ static void log_runtime_config(const LgfxRuntimeConfig &config)
     }
 }
 
+template <typename PanelT>
+static void configure_selected_panel(
+    PanelT &panel,
+    lgfx::Bus_SPI &bus,
+    const LgfxRuntimeConfig &runtime_config)
+{
+    panel.setBus(&bus);
+
+    auto cfg = panel.config();
+
+    cfg.pin_cs = runtime_config.lcd_panel.pin_cs;
+    cfg.pin_rst = runtime_config.lcd_panel.pin_rst;
+    cfg.pin_busy = runtime_config.lcd_panel.pin_busy;
+
+    cfg.panel_width = runtime_config.lcd_panel.width;
+    cfg.panel_height = runtime_config.lcd_panel.height;
+
+    cfg.offset_x = runtime_config.lcd_panel.offset_x;
+    cfg.offset_y = runtime_config.lcd_panel.offset_y;
+    cfg.offset_rotation = runtime_config.lcd_panel.offset_rotation;
+
+    cfg.dummy_read_pixel = runtime_config.lcd_panel.dummy_read_pixel;
+    cfg.dummy_read_bits = runtime_config.lcd_panel.dummy_read_bits;
+
+    cfg.readable = runtime_config.lcd_panel.readable;
+    cfg.invert = runtime_config.lcd_panel.invert;
+    cfg.rgb_order = runtime_config.lcd_panel.rgb_order;
+    cfg.dlen_16bit = runtime_config.lcd_panel.dlen_16bit;
+
+    cfg.bus_shared = runtime_config.lcd_panel.bus_shared;
+
+    panel.config(cfg);
+}
+
+#if (LGFX_PORT_ENABLE_TOUCH == 1)
+template <typename PanelT>
+static void configure_touch_if_needed(
+    PanelT &panel,
+    lgfx::Touch_XPT2046 &touch,
+    const LgfxRuntimeConfig &runtime_config)
+{
+    if (runtime_config.touch.attached) {
+        auto cfg = touch.config();
+
+        cfg.spi_host = static_cast<spi_host_device_t>(runtime_config.touch.spi_host);
+        cfg.freq = runtime_config.touch.spi_freq_hz;
+
+        cfg.pin_sclk = runtime_config.lcd_bus.pin_sclk;
+        cfg.pin_mosi = runtime_config.lcd_bus.pin_mosi;
+        cfg.pin_miso = runtime_config.lcd_bus.pin_miso;
+
+        cfg.pin_cs = runtime_config.touch.pin_cs;
+        cfg.pin_int = runtime_config.touch.pin_irq;
+
+        cfg.bus_shared = runtime_config.touch.bus_shared;
+        cfg.offset_rotation = runtime_config.touch.offset_rotation;
+
+        touch.config(cfg);
+        panel.setTouch(&touch);
+
+        ESP_LOGI(
+            TAG,
+            "touch attached: cs=%d irq=%d host=%d freq=%u offset_rotation=%u",
+            runtime_config.touch.pin_cs,
+            runtime_config.touch.pin_irq,
+            runtime_config.touch.spi_host,
+            (unsigned) runtime_config.touch.spi_freq_hz,
+            (unsigned) runtime_config.touch.offset_rotation);
+    } else if (runtime_config.touch.compiled) {
+        ESP_LOGI(TAG, "touch compiled but unattached (effective touch_cs_gpio=-1)");
+    }
+}
+#endif
+
 class PiyopiyoLGFX : public lgfx::LGFX_Device
 {
     LgfxRuntimeConfig runtime_config_;
-    LgfxPanelType panel_;
     lgfx::Bus_SPI bus_;
+    lgfx::Panel_Device *selected_panel_ = nullptr;
+
+    lgfx::Panel_ILI9488 panel_ili9488_;
+    lgfx::Panel_ILI9341 panel_ili9341_;
+    lgfx::Panel_ILI9341_2 panel_ili9341_2_;
 
 #if (LGFX_PORT_ENABLE_TOUCH == 1)
     lgfx::Touch_XPT2046 touch_;
@@ -540,75 +692,41 @@ public:
             cfg.pin_dc = runtime_config_.lcd_bus.pin_dc;
 
             bus_.config(cfg);
-            panel_.setBus(&bus_);
         }
 
-        // Panel config
-        {
-            auto cfg = panel_.config();
-
-            cfg.pin_cs = runtime_config_.lcd_panel.pin_cs;
-            cfg.pin_rst = runtime_config_.lcd_panel.pin_rst;
-            cfg.pin_busy = runtime_config_.lcd_panel.pin_busy;
-
-            cfg.panel_width = runtime_config_.lcd_panel.width;
-            cfg.panel_height = runtime_config_.lcd_panel.height;
-
-            cfg.offset_x = runtime_config_.lcd_panel.offset_x;
-            cfg.offset_y = runtime_config_.lcd_panel.offset_y;
-            cfg.offset_rotation = runtime_config_.lcd_panel.offset_rotation;
-
-            cfg.dummy_read_pixel = runtime_config_.lcd_panel.dummy_read_pixel;
-            cfg.dummy_read_bits = runtime_config_.lcd_panel.dummy_read_bits;
-
-            cfg.readable = runtime_config_.lcd_panel.readable;
-            cfg.invert = runtime_config_.lcd_panel.invert;
-            cfg.rgb_order = runtime_config_.lcd_panel.rgb_order;
-            cfg.dlen_16bit = runtime_config_.lcd_panel.dlen_16bit;
-
-            cfg.bus_shared = runtime_config_.lcd_panel.bus_shared;
-
-            panel_.config(cfg);
-        }
-
+        switch (runtime_config_.lcd_panel.driver_id) {
+            case LGFX_PANEL_DRIVER_ID_ILI9488:
+                configure_selected_panel(panel_ili9488_, bus_, runtime_config_);
 #if (LGFX_PORT_ENABLE_TOUCH == 1)
-        // Touch config (XPT2046)
-        // - shares SPI host + SCLK/MOSI/MISO with the LCD bus
-        // - requires a dedicated CS pin for touch
-        // - optional IRQ pin reduces unnecessary reads when not touched
-        if (runtime_config_.touch.attached) {
-            auto cfg = touch_.config();
-
-            cfg.spi_host = static_cast<spi_host_device_t>(runtime_config_.touch.spi_host);
-            cfg.freq = runtime_config_.touch.spi_freq_hz;
-
-            cfg.pin_sclk = runtime_config_.lcd_bus.pin_sclk;
-            cfg.pin_mosi = runtime_config_.lcd_bus.pin_mosi;
-            cfg.pin_miso = runtime_config_.lcd_bus.pin_miso;
-
-            cfg.pin_cs = runtime_config_.touch.pin_cs;
-            cfg.pin_int = runtime_config_.touch.pin_irq;
-
-            cfg.bus_shared = runtime_config_.touch.bus_shared;
-            cfg.offset_rotation = runtime_config_.touch.offset_rotation;
-
-            touch_.config(cfg);
-            panel_.setTouch(&touch_);
-
-            ESP_LOGI(
-                TAG,
-                "touch attached: cs=%d irq=%d host=%d freq=%u offset_rotation=%u",
-                runtime_config_.touch.pin_cs,
-                runtime_config_.touch.pin_irq,
-                runtime_config_.touch.spi_host,
-                (unsigned) runtime_config_.touch.spi_freq_hz,
-                (unsigned) runtime_config_.touch.offset_rotation);
-        } else if (runtime_config_.touch.compiled) {
-            ESP_LOGI(TAG, "touch compiled but unattached (effective touch_cs_gpio=-1)");
-        }
+                configure_touch_if_needed(panel_ili9488_, touch_, runtime_config_);
 #endif
+                selected_panel_ = &panel_ili9488_;
+                break;
 
-        setPanel(&panel_);
+            case LGFX_PANEL_DRIVER_ID_ILI9341:
+                configure_selected_panel(panel_ili9341_, bus_, runtime_config_);
+#if (LGFX_PORT_ENABLE_TOUCH == 1)
+                configure_touch_if_needed(panel_ili9341_, touch_, runtime_config_);
+#endif
+                selected_panel_ = &panel_ili9341_;
+                break;
+
+            case LGFX_PANEL_DRIVER_ID_ILI9341_2:
+                configure_selected_panel(panel_ili9341_2_, bus_, runtime_config_);
+#if (LGFX_PORT_ENABLE_TOUCH == 1)
+                configure_touch_if_needed(panel_ili9341_2_, touch_, runtime_config_);
+#endif
+                selected_panel_ = &panel_ili9341_2_;
+                break;
+
+            default:
+                ESP_LOGE(TAG, "unsupported runtime panel_driver=%d", (int) runtime_config_.lcd_panel.driver_id);
+                break;
+        }
+
+        if (selected_panel_ != nullptr) {
+            setPanel(selected_panel_);
+        }
     }
 };
 
