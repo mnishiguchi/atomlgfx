@@ -1175,20 +1175,20 @@ static void lgfx_port_drain_mailbox(lgfx_port_t *port)
     Mailbox *mailbox = &ctx->mailbox;
     Heap *heap = &ctx->heap;
 
-    while (true) {
-        MailboxMessage *message = mailbox_take_message(mailbox);
-        if (message == NULL) {
+    Message *message = mailbox_first(mailbox);
+    while (message != NULL) {
+        term message_term = message->message;
+
+        lgfx_port_handle_mailbox_message(ctx, port, message_term);
+
+        MailboxMessage *removed = mailbox_take_message(mailbox);
+        if (removed == NULL) {
             break;
         }
 
-        if (message->type == NormalMessage) {
-            Message *normal_message = (Message *) message;
-            term message_term = normal_message->message;
+        mailbox_message_dispose(removed, heap);
 
-            lgfx_port_handle_mailbox_message(ctx, port, message_term);
-        }
-
-        mailbox_message_dispose(message, heap);
+        message = mailbox_first(mailbox);
     }
 }
 
