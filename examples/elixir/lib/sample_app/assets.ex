@@ -4,32 +4,19 @@ defmodule SampleApp.Assets do
   @icon_w 32
   @icon_h 32
 
-  # Assumes this file lives at: lib/sample_app/assets.ex
-  # So: __DIR__ = .../lib/sample_app
-  # And priv is at project root: ../../priv/...
-  @icons_dir Path.expand("../../priv/assets/icons", __DIR__)
+  @icons_dir Application.app_dir(:sample_app, "priv/assets/icons")
+  @icon_names [:info, :alert, :close, :piyopiyo]
 
-  @info_path Path.join(@icons_dir, "info.rgb565")
-  @alert_path Path.join(@icons_dir, "alert.rgb565")
-  @close_path Path.join(@icons_dir, "close.rgb565")
-  @piyopiyo_path Path.join(@icons_dir, "piyopiyo.rgb565")
+  @icon_paths Map.new(@icon_names, &{&1, Path.join(@icons_dir, "#{&1}.rgb565")})
 
-  @external_resource @info_path
-  @external_resource @alert_path
-  @external_resource @close_path
-  @external_resource @piyopiyo_path
+  Enum.each(Map.values(@icon_paths), fn path ->
+    Module.put_attribute(__MODULE__, :external_resource, path)
+  end)
 
-  # Compile-time embed: binaries end up inside the BEAM.
-  @info File.read!(@info_path)
-  @alert File.read!(@alert_path)
-  @close File.read!(@close_path)
-  @piyopiyo File.read!(@piyopiyo_path)
+  @icons Map.new(@icon_names, fn name -> {name, File.read!(Map.fetch!(@icon_paths, name))} end)
 
   def icon_w, do: @icon_w
   def icon_h, do: @icon_h
 
-  def icon(:info), do: @info
-  def icon(:alert), do: @alert
-  def icon(:close), do: @close
-  def icon(:piyopiyo), do: @piyopiyo
+  def icon(name), do: Map.fetch!(@icons, name)
 end
