@@ -84,12 +84,9 @@ defmodule SampleApp.MovingIcons do
       try do
         {_seed, objects} = init_objects(1, @obj_count, w, h)
 
-        now_ms = :erlang.monotonic_time(:millisecond)
-        sec = div(now_ms, 1000)
-
         # State tuple:
-        # {w, h, render_target, flip, objects, fps, frame_count, prev_sec, icon_handles}
-        state = {w, h, render_target, 0, objects, 0, 0, sec, icon_handles}
+        # {w, h, render_target, flip, objects, icon_handles}
+        state = {w, h, render_target, 0, objects, icon_handles}
 
         loop(port, state)
       after
@@ -340,28 +337,15 @@ defmodule SampleApp.MovingIcons do
 
   defp loop(
          port,
-         {w, h, render_target, flip0, objects0, fps0, frame_count0, prev_sec0, icon_handles}
+         {w, h, render_target, flip0, objects0, icon_handles}
        ) do
     objects = move_objects(objects0, w, h)
 
-    case render_frame(port, h, render_target, flip0, objects, fps0, icon_handles) do
+    case render_frame(port, h, render_target, flip0, objects, icon_handles) do
       {:ok, flip1} ->
-        now_ms = :erlang.monotonic_time(:millisecond)
-        sec = div(now_ms, 1000)
-
-        {fps, frame_count, prev_sec} =
-          if sec == prev_sec0 do
-            {fps0, frame_count0 + 1, prev_sec0}
-          else
-            {frame_count0 + 1, 0, sec}
-          end
-
         yield()
 
-        loop(
-          port,
-          {w, h, render_target, flip1, objects, fps, frame_count, prev_sec, icon_handles}
-        )
+        loop(port, {w, h, render_target, flip1, objects, icon_handles})
 
       {:error, reason} ->
         IO.puts("moving_icons render failed: #{Port.format_error(reason)}")
@@ -369,10 +353,9 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp render_frame(port, _h, :direct_lcd, _flip0, objects, fps, icon_handles) do
+  defp render_frame(port, _h, :direct_lcd, _flip0, objects, icon_handles) do
     with :ok <- Port.fill_screen(port, @bg),
          :ok <- draw_all_objects_to_target(port, objects, icon_handles, 0, 0),
-         :ok <- maybe_draw_hud(port, 0, 0, fps),
          :ok <- Port.display(port) do
       {:ok, 0}
     else
@@ -387,14 +370,13 @@ defmodule SampleApp.MovingIcons do
          {:strip_buffers, strip_h, buf0, buf1},
          flip0,
          objects,
-         fps,
          icon_handles
        ) do
-    render_strips(port, h, strip_h, buf0, buf1, flip0, objects, fps, icon_handles)
+    render_strips(port, h, strip_h, buf0, buf1, flip0, objects, icon_handles)
   end
 
-  defp render_strips(port, h, strip_h, buf0, buf1, flip0, objects, fps, icon_handles) do
-    case render_strips_i(port, h, strip_h, 0, buf0, buf1, flip0, objects, fps, icon_handles) do
+  defp render_strips(port, h, strip_h, buf0, buf1, flip0, objects, icon_handles) do
+    case render_strips_i(port, h, strip_h, 0, buf0, buf1, flip0, objects, icon_handles) do
       {:ok, flip1} ->
         case Port.display(port) do
           :ok -> {:ok, flip1}
@@ -406,14 +388,14 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp render_strips_i(_port, h, _strip_h, y, _buf0, _buf1, flip, _objects, _fps, _icons)
+  defp render_strips_i(_port, h, _strip_h, y, _buf0, _buf1, flip, _objects, _icons)
        when y >= h do
     {:ok, flip}
   end
 
   # Render the frame in vertical strips into a sprite buffer, then blit each strip to the LCD.
   # This avoids per-object "erase then redraw" artifacts when objects overlap.
-  defp render_strips_i(port, h, strip_h, y0, buf0, buf1, flip0, objects, fps, icon_handles) do
+  defp render_strips_i(port, h, strip_h, y0, buf0, buf1, flip0, objects, icon_handles) do
     {flip1, buf} =
       if flip0 == 0 do
         {1, buf0}
@@ -423,7 +405,6 @@ defmodule SampleApp.MovingIcons do
 
     with :ok <- Port.clear(port, @bg, buf),
          :ok <- draw_all_objects_to_target(port, objects, icon_handles, buf, y0),
-         :ok <- maybe_draw_hud(port, y0, buf, fps),
          :ok <- Port.push_sprite(port, buf, 0, y0) do
       render_strips_i(
         port,
@@ -434,7 +415,6 @@ defmodule SampleApp.MovingIcons do
         buf1,
         flip1,
         objects,
-        fps,
         icon_handles
       )
     else
@@ -501,14 +481,6 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  # Draw a tiny HUD only on the first strip, similar to the upstream demo.
-  defp maybe_draw_hud(port, 0, dst_target, fps) do
-    text = <<"obj:", i2b(@obj_count)::binary, "  fps:", i2b(fps)::binary>>
-    Port.draw_string_bg(port, 0, 0, 0xFFFFFF, @bg, 2, text, dst_target)
-  end
-
-  defp maybe_draw_hud(_port, _y0, _dst_target, _fps), do: :ok
-
   # -----------------------------------------------------------------------------
   # Misc
   # -----------------------------------------------------------------------------
@@ -526,8 +498,6 @@ defmodule SampleApp.MovingIcons do
   defp div_ceil(a, b) when is_integer(a) and is_integer(b) and b > 0 do
     div(a + b - 1, b)
   end
-
-  defp i2b(i), do: :erlang.integer_to_binary(i)
 
   defp format_local_error({:frame_sprite_alloc_failed, w, h, split_factor, reason}) do
     "frame sprite alloc failed w=#{w} h=#{h} split_factor=#{split_factor} reason=#{Port.format_error(reason)}"
