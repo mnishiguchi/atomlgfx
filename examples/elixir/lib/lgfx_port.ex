@@ -38,6 +38,9 @@ defmodule LGFXPort do
     - angle: centi-degrees (`1.00° = 100`)
     - zoom: x1024 fixed-point (`1.0x = 1024`)
     - `dst_target`: `0` for LCD or `1..254` for sprite
+  - `set_text_datum/3` is a numeric passthrough. It accepts `0..255` and forwards the raw value to the pinned native driver.
+  - `set_text_font/3` is a numeric passthrough. It accepts `0..255` and forwards the raw value to the pinned native driver.
+  - For stable protocol-owned font selection, prefer `set_font_preset/3`.
   """
 
   @compile {:no_warn_undefined, :port}
@@ -486,6 +489,11 @@ defmodule LGFXPort do
     |> after_ok(fn -> cache_put(text_size_cache_key(port, target), {sx, sy}) end)
   end
 
+  @doc """
+  Sets the text datum as a raw driver-facing `u8` passthrough.
+
+  Accepted range is `0..255`. This API does not define a smaller stable subset.
+  """
   def set_text_datum(port, datum, target \\ 0)
       when u8(datum) and target_any(target) do
     call_ok(port, :setTextDatum, target, 0, [datum], @t_long)
@@ -501,6 +509,12 @@ defmodule LGFXPort do
     call_ok(port, :setTextWrap, target, 0, [wrap_x, wrap_y], @t_long)
   end
 
+  @doc """
+  Sets the text font as a raw driver-facing `u8` passthrough.
+
+  Accepted range is `0..255`. For stable protocol-owned font choices, prefer
+  `set_font_preset/3`.
+  """
   def set_text_font(port, font_id, target \\ 0)
       when u8(font_id) and target_any(target) do
     call_ok(port, :setTextFont, target, 0, [font_id], @t_long)

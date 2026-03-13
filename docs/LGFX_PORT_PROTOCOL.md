@@ -401,10 +401,45 @@ Behavior:
 Two font-selection paths are exposed:
 
 - `setTextFont(FontIdU8)`
-  - direct LovyanGFX numeric font selection
+  - raw numeric passthrough to the pinned LovyanGFX API
+  - accepts `0..255`
+  - for stable protocol-owned font selection, prefer `setFontPreset`
 
 - `setFontPreset(PresetIdU8)`
   - driver-defined stable preset selection
+
+### `setTextDatum`
+
+Args:
+
+- `setTextDatum(DatumU8)`
+
+Rules:
+
+- `DatumU8` must be an integer in `0..255`
+- forwarded as a raw numeric passthrough to the pinned LovyanGFX text-datum API
+- this protocol does not define a smaller stable subset of datum values
+
+Errors:
+
+- out-of-range value => `{error, bad_args}`
+
+### `setTextFont`
+
+Args:
+
+- `setTextFont(FontIdU8)`
+
+Rules:
+
+- `FontIdU8` must be an integer in `0..255`
+- forwarded as a raw numeric passthrough to the pinned LovyanGFX API
+- this protocol does not define a smaller stable subset of font IDs
+- for stable protocol-owned font selection, prefer `setFontPreset`
+
+Errors:
+
+- out-of-range value => `{error, bad_args}`
 
 ### `setFontPreset`
 

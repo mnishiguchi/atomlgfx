@@ -226,6 +226,17 @@ esp_err_t lgfx_device_set_color_depth(uint8_t target, uint8_t depth);
 // Text config (LCD or sprite target)
 // ----------------------------------------------------------------------------
 // Font preset IDs are protocol-level constants defined in lgfx_port/lgfx_port.h.
+//
+// setTextDatum(datum):
+// - accepts raw u8 values in 0..255
+// - forwarded as a numeric passthrough to the pinned LovyanGFX text datum API
+// - protocol does not define a smaller stable subset
+//
+// setTextFont(font):
+// - accepts raw u8 values in 0..255
+// - forwarded as a numeric passthrough to the pinned LovyanGFX text font API
+// - protocol does not define a smaller stable subset
+// - for stable protocol-owned font selection, prefer setFontPreset()
 esp_err_t lgfx_device_set_text_size(uint8_t target, uint8_t size);
 esp_err_t lgfx_device_set_text_size_xy(uint8_t target, uint8_t sx, uint8_t sy);
 esp_err_t lgfx_device_set_text_datum(uint8_t target, uint8_t datum);

@@ -49,6 +49,7 @@ extern "C" esp_err_t lgfx_device_set_text_size_xy(uint8_t target, uint8_t sx, ui
 
 extern "C" esp_err_t lgfx_device_set_text_datum(uint8_t target, uint8_t datum)
 {
+    // Numeric passthrough. Protocol/domain validation is limited to u8.
     return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextDatum((textdatum_t) datum); });
 }
 
@@ -59,6 +60,7 @@ extern "C" esp_err_t lgfx_device_set_text_wrap(uint8_t target, bool wrap_x, bool
 
 extern "C" esp_err_t lgfx_device_set_text_font(uint8_t target, uint8_t font)
 {
+    // Numeric passthrough. Protocol/domain validation is limited to u8.
     return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextFont(font); });
 }
 

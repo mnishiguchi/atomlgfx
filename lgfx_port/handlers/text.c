@@ -33,6 +33,21 @@ static bool decode_font_preset(term preset_t, uint8_t *out_preset)
     return true;
 }
 
+static bool decode_u8_passthrough_at(const lgfx_request_t *req, int index, uint8_t *out_value)
+{
+    if (!req || !out_value) {
+        return false;
+    }
+
+    uint32_t value = 0;
+    if (!lgfx_decode_u32_at(req, index, &value) || value > 255u) {
+        return false;
+    }
+
+    *out_value = (uint8_t) value;
+    return true;
+}
+
 term lgfx_handle_setTextSize(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     const int arity = req->arity;
@@ -78,8 +93,8 @@ term lgfx_handle_setTextSize(Context *ctx, lgfx_port_t *port, const lgfx_request
 
 term lgfx_handle_setTextDatum(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    uint32_t datum = 0;
-    if (!lgfx_decode_u32_at(req, 5, &datum) || datum > 255u) {
+    uint8_t datum = 0;
+    if (!decode_u8_passthrough_at(req, 5, &datum)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -87,7 +102,7 @@ term lgfx_handle_setTextDatum(Context *ctx, lgfx_port_t *port, const lgfx_reques
         ctx,
         port,
         req,
-        lgfx_worker_device_set_text_datum(port, (uint8_t) req->target, (uint8_t) datum));
+        lgfx_worker_device_set_text_datum(port, (uint8_t) req->target, datum));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -122,8 +137,8 @@ term lgfx_handle_setTextWrap(Context *ctx, lgfx_port_t *port, const lgfx_request
 
 term lgfx_handle_setTextFont(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    uint32_t font = 0;
-    if (!lgfx_decode_u32_at(req, 5, &font) || font > 255u) {
+    uint8_t font = 0;
+    if (!decode_u8_passthrough_at(req, 5, &font)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -131,7 +146,7 @@ term lgfx_handle_setTextFont(Context *ctx, lgfx_port_t *port, const lgfx_request
         ctx,
         port,
         req,
-        lgfx_worker_device_set_text_font(port, (uint8_t) req->target, (uint8_t) font));
+        lgfx_worker_device_set_text_font(port, (uint8_t) req->target, font));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
