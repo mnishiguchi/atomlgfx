@@ -65,6 +65,7 @@ static_assert(
         == 1,
     "Exactly one panel driver must be selected");
 
+static_assert((LGFX_PORT_MAX_SPRITES) > 0u, "LGFX_PORT_MAX_SPRITES must be > 0");
 static_assert((LGFX_PORT_MAX_SPRITES) <= 254u, "LGFX_PORT_MAX_SPRITES must be <= 254");
 
 static_assert((LGFX_PORT_PANEL_WIDTH) > 0, "LGFX_PORT_PANEL_WIDTH must be > 0");
