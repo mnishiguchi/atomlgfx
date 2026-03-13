@@ -21,10 +21,6 @@ namespace lgfx_dev
 // Shared constants / metadata (owned by lgfx_device_state.cpp)
 // -----------------------------------------------------------------------------
 
-uint16_t panel_width_const();
-uint16_t panel_height_const();
-
-uint8_t max_handle_const();
 uint16_t max_sprites_const();
 
 // -----------------------------------------------------------------------------
@@ -75,9 +71,6 @@ esp_err_t lock_ready(ScopedLcdLock &lock);
 
 // Returns LCD singleton as a generic LGFX device pointer (or nullptr).
 lgfx::LGFX_Device *lcd_device_locked();
-
-// Returns true iff begin() completed successfully for the current singleton.
-bool is_initialized_locked();
 
 // Resolve target 0 => LCD, 1..MAX_HANDLE => sprite. Returns nullptr if invalid/missing.
 lgfx::LGFXBase *resolve_target_locked(uint8_t target);

@@ -892,21 +892,6 @@ static esp_err_t ensure_published_device_for_owner(
 namespace lgfx_dev
 {
 
-uint16_t panel_width_const()
-{
-    return PANEL_W;
-}
-
-uint16_t panel_height_const()
-{
-    return PANEL_H;
-}
-
-uint8_t max_handle_const()
-{
-    return MAX_HANDLE;
-}
-
 uint16_t max_sprites_const()
 {
     return MAX_SPRITES;
@@ -966,11 +951,6 @@ esp_err_t lock_ready(ScopedLcdLock &lock)
 lgfx::LGFX_Device *lcd_device_locked()
 {
     return g_lcd_device;
-}
-
-bool is_initialized_locked()
-{
-    return g_device_ready;
 }
 
 lgfx::LGFXBase *resolve_target_locked(uint8_t target)

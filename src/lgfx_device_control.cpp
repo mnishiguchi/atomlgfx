@@ -9,21 +9,6 @@
 
 namespace
 {
-static inline void lgfx_assign_panel_default_dims(uint16_t *out_w, uint16_t *out_h)
-{
-    *out_w = lgfx_dev::panel_width_const();
-    *out_h = lgfx_dev::panel_height_const();
-}
-
-static inline uint16_t lgfx_dim_or_fallback(int32_t value, uint16_t fallback)
-{
-    if (value <= 0 || value > 65535) {
-        return fallback;
-    }
-
-    return static_cast<uint16_t>(value);
-}
-
 static inline bool lgfx_try_u16_dim(int32_t value, uint16_t *out_value)
 {
     if (!out_value || value < 0 || value > 65535) {
@@ -139,34 +124,6 @@ extern "C" esp_err_t lgfx_device_set_brightness(uint8_t brightness)
 extern "C" esp_err_t lgfx_device_display(void)
 {
     return lgfx_dev::with_lcd([&](lgfx::LGFX_Device *d) { d->display(); });
-}
-
-extern "C" esp_err_t lgfx_device_get_dims(uint16_t *out_w, uint16_t *out_h)
-{
-    if (!out_w || !out_h) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    if (!lgfx_dev::lock_lcd()) {
-        lgfx_assign_panel_default_dims(out_w, out_h);
-        return ESP_OK;
-    }
-
-    auto *lcd = lgfx_dev::lcd_device_locked();
-    if (!lcd || !lgfx_dev::is_initialized_locked()) {
-        lgfx_dev::unlock_lcd();
-        lgfx_assign_panel_default_dims(out_w, out_h);
-        return ESP_OK;
-    }
-
-    const uint16_t w = lgfx_dim_or_fallback(lcd->width(), lgfx_dev::panel_width_const());
-    const uint16_t h = lgfx_dim_or_fallback(lcd->height(), lgfx_dev::panel_height_const());
-
-    lgfx_dev::unlock_lcd();
-
-    *out_w = w;
-    *out_h = h;
-    return ESP_OK;
 }
 
 extern "C" esp_err_t lgfx_device_get_target_dims(uint8_t target, uint16_t *out_w, uint16_t *out_h)
