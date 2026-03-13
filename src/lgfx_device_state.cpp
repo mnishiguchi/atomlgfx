@@ -65,16 +65,16 @@ static_assert(
         == 1,
     "Exactly one panel driver must be selected");
 
-static_assert((LGFX_PORT_MAX_SPRITES) > 0u, "LGFX_PORT_MAX_SPRITES must be > 0");
-static_assert((LGFX_PORT_MAX_SPRITES) <= 254u, "LGFX_PORT_MAX_SPRITES must be <= 254");
-
-static_assert((LGFX_PORT_PANEL_WIDTH) > 0, "LGFX_PORT_PANEL_WIDTH must be > 0");
-static_assert((LGFX_PORT_PANEL_HEIGHT) > 0, "LGFX_PORT_PANEL_HEIGHT must be > 0");
-static_assert((LGFX_PORT_PANEL_WIDTH) <= 65535u, "LGFX_PORT_PANEL_WIDTH must fit in uint16_t");
-static_assert((LGFX_PORT_PANEL_HEIGHT) <= 65535u, "LGFX_PORT_PANEL_HEIGHT must fit in uint16_t");
-
-static_assert((LGFX_PORT_LCD_SPI_MODE) >= 0 && (LGFX_PORT_LCD_SPI_MODE) <= 3, "LGFX_PORT_LCD_SPI_MODE must be 0..3");
-static_assert((LGFX_PORT_LCD_OFFSET_ROTATION) <= 7u, "LGFX_PORT_LCD_OFFSET_ROTATION must be 0..7");
+static_assert((LGFX_PORT_MAX_SPRITES) >= 1u && (LGFX_PORT_MAX_SPRITES) <= 254u,
+    "LGFX_PORT_MAX_SPRITES must be in 1..254");
+static_assert((LGFX_PORT_PANEL_WIDTH) >= 1 && (LGFX_PORT_PANEL_WIDTH) <= 65535u,
+    "LGFX_PORT_PANEL_WIDTH must be in 1..65535");
+static_assert((LGFX_PORT_PANEL_HEIGHT) >= 1 && (LGFX_PORT_PANEL_HEIGHT) <= 65535u,
+    "LGFX_PORT_PANEL_HEIGHT must be in 1..65535");
+static_assert((LGFX_PORT_LCD_SPI_MODE) >= 0 && (LGFX_PORT_LCD_SPI_MODE) <= 3,
+    "LGFX_PORT_LCD_SPI_MODE must be in 0..3");
+static_assert((LGFX_PORT_LCD_OFFSET_ROTATION) <= 7u,
+    "LGFX_PORT_LCD_OFFSET_ROTATION must be in 0..7");
 
 #if (LGFX_PORT_ENABLE_TOUCH == 1)
 static_assert((LGFX_PORT_TOUCH_OFFSET_ROTATION) <= 7u, "LGFX_PORT_TOUCH_OFFSET_ROTATION must be 0..7");
