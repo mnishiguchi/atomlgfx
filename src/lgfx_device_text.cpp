@@ -31,16 +31,17 @@ static esp_err_t set_jp_font_scaled(uint8_t target, uint8_t text_size)
 
 extern "C" esp_err_t lgfx_device_set_text_size(uint8_t target, uint8_t size)
 {
+    if (size == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextSize(size); });
 }
 
 extern "C" esp_err_t lgfx_device_set_text_size_xy(uint8_t target, uint8_t sx, uint8_t sy)
 {
-    if (sx == 0) {
+    if (sx == 0 || sy == 0) {
         return ESP_ERR_INVALID_ARG;
-    }
-    if (sy == 0) {
-        sy = sx;
     }
 
     return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextSize(sx, sy); });

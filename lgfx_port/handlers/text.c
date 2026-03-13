@@ -59,7 +59,7 @@ term lgfx_handle_setTextSize(Context *ctx, lgfx_port_t *port, const lgfx_request
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    if (!lgfx_decode_u32_at(req, 6, &sy) || sy > 255u) {
+    if (!lgfx_decode_u32_at(req, 6, &sy) || sy == 0 || sy > 255u) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
