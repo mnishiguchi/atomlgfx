@@ -473,11 +473,17 @@ static term lgfx_require_state_policy(Context *ctx, lgfx_port_t *port, const lgf
 
 static bool lgfx_term_to_int32_checked(term value, int32_t *out_value)
 {
-    if (!term_is_integer(value)) {
+    if (!out_value || !term_is_integer(value)) {
         return false;
     }
 
-    *out_value = (int32_t) term_to_int(value);
+    avm_int_t parsed = term_to_int(value);
+
+    if (parsed < (avm_int_t) INT32_MIN || parsed > (avm_int_t) INT32_MAX) {
+        return false;
+    }
+
+    *out_value = (int32_t) parsed;
     return true;
 }
 
