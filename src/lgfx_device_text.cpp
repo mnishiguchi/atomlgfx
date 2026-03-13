@@ -1,5 +1,4 @@
 // src/lgfx_device_text.cpp
-// Text configuration and text drawing APIs that back the current protocol surface.
 
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"

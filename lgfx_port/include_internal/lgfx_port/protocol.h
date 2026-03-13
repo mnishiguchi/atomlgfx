@@ -1,30 +1,21 @@
 // lgfx_port/include_internal/lgfx_port/protocol.h
 /*
- * Protocol-level constants and wire contract definitions.
- *
- * - Protocol version + limits
- * - FeatureBits (wire)
- * - Build/runtime gate validation domains
- * - Op request flags (req->flags)
- * - Optional protocol-level string constants (doc/debug)
+ * Protocol constants and wire-level limits.
  */
 #pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
 
-// Build-time configuration (generated from lgfx_port/cmake/lgfx_port_config.h.in)
+// Build-time configuration generated from lgfx_port/cmake/lgfx_port_config.h.in.
 #include "lgfx_port/lgfx_port_config.h"
 
-#include "lgfx_port/lgfx_port.h" // for LGFX_FONT_PRESET_* and other wire constants
+#include "lgfx_port/lgfx_port.h" // LGFX_FONT_PRESET_* and other wire constants
 
 // -----------------------------------------------------------------------------
-// Optional: protocol-level string constants (doc/debug)
+// Optional debug string constants
 // -----------------------------------------------------------------------------
-//
-// Keep these off by default to avoid exporting extra public macros.
-// Enable with -DLGFX_PORT_PROTOCOL_DEBUG_STRINGS=1 if you want them.
-//
+
 #ifndef LGFX_PORT_PROTOCOL_DEBUG_STRINGS
 #define LGFX_PORT_PROTOCOL_DEBUG_STRINGS 0
 #endif
@@ -34,7 +25,7 @@
 #endif
 
 #if LGFX_PORT_PROTOCOL_DEBUG_STRINGS
-// Optional: protocol-level error atom string constants (doc/debug)
+// Error atom strings.
 #define LGFX_ERR_BAD_PROTO "bad_proto"
 #define LGFX_ERR_BAD_OP "bad_op"
 #define LGFX_ERR_BAD_FLAGS "bad_flags"
@@ -46,19 +37,14 @@
 #define LGFX_ERR_INTERNAL "internal"
 #define LGFX_ERR_UNSUPPORTED "unsupported"
 
-// Optional detail tuple reason tags
+// Detail reason tags.
 #define LGFX_ERR_BATCH_FAILED "batch_failed"
 #endif
 
 // -----------------------------------------------------------------------------
 // Protocol constants
 // -----------------------------------------------------------------------------
-//
-// Notes:
-// - Some constants have safe defaults here.
-// - LGFX_PORT_MAX_SPRITES must come from the generated config header so builds
-//   cannot silently fall back when the config is missing/stale.
-//
+
 #ifndef LGFX_PORT_PROTO_VER
 #define LGFX_PORT_PROTO_VER 1u
 #endif
@@ -87,6 +73,7 @@
 // -----------------------------------------------------------------------------
 // Feature toggles sanity (0/1)
 // -----------------------------------------------------------------------------
+
 #ifndef LGFX_PORT_ENABLE_TOUCH
 #error "LGFX_PORT_ENABLE_TOUCH must be defined by lgfx_port_config.h"
 #endif
@@ -106,9 +93,7 @@
 // -----------------------------------------------------------------------------
 // Derived advertisement gates (0/1)
 // -----------------------------------------------------------------------------
-//
-// Keep only real derived gates. Sprite / pushImage / lastError are always part
-// of the current compiled protocol surface.
+
 #ifndef LGFX_PORT_SUPPORTS_TOUCH
 #error "LGFX_PORT_SUPPORTS_TOUCH must be defined by lgfx_port_config.h"
 #endif
@@ -118,8 +103,9 @@
 #endif
 
 // -----------------------------------------------------------------------------
-// Cross-check: advertised protocol support must not exceed compiled implementation
+// Cross-check: advertised support must not exceed compiled support
 // -----------------------------------------------------------------------------
+
 #if (LGFX_PORT_SUPPORTS_TOUCH == 1) && (LGFX_PORT_ENABLE_TOUCH != 1)
 #error "LGFX_PORT_SUPPORTS_TOUCH=1 requires LGFX_PORT_ENABLE_TOUCH=1"
 #endif
@@ -127,6 +113,7 @@
 // -----------------------------------------------------------------------------
 // Validation domains
 // -----------------------------------------------------------------------------
+
 static inline bool lgfx_validate_color_depth(uint32_t d)
 {
     switch (d) {
@@ -145,7 +132,7 @@ static inline bool lgfx_validate_color_depth(uint32_t d)
 // -----------------------------------------------------------------------------
 // FeatureBits (wire)
 // -----------------------------------------------------------------------------
-// Dense current capability layout after removing dead capability vocabulary.
+
 #define LGFX_CAP_SPRITE (1u << 0)
 #define LGFX_CAP_PUSHIMAGE (1u << 1)
 #define LGFX_CAP_LAST_ERROR (1u << 2)
@@ -157,17 +144,16 @@ static inline bool lgfx_validate_color_depth(uint32_t d)
 // -----------------------------------------------------------------------------
 // Build / advertised capability mask
 // -----------------------------------------------------------------------------
-//
-// Sprite / pushImage / lastError are always advertised by the current build.
-// Touch remains derived because it depends on both compile enable and effective
-// attachment/wiring configuration.
+
+// Touch remains derived; the other current capability bits are always built in.
 #define LGFX_BUILD_CAP_MASK                                                 \
     ((uint32_t) (LGFX_CAP_SPRITE | LGFX_CAP_PUSHIMAGE | LGFX_CAP_LAST_ERROR \
         | (LGFX_PORT_SUPPORTS_TOUCH ? LGFX_CAP_TOUCH : 0u)))
 
 // -----------------------------------------------------------------------------
-// Op-specific request flags (req->flags)
+// Op-specific request flags
 // -----------------------------------------------------------------------------
+
 #define LGFX_F_TEXT_HAS_BG (1u << 0) // setTextColor: background color is provided
 
 #ifndef F_TEXT_HAS_BG

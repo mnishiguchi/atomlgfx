@@ -12,12 +12,8 @@
 
 #include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/worker.h"
-
-// Canonical job layout (enum + job struct + union members)
-#include "lgfx_port/worker_jobs.h"
-
-// Internal helper used by worker_device.c (lgfx_worker_call)
 #include "lgfx_port/worker_internal.h"
+#include "lgfx_port/worker_jobs.h"
 
 #define LGFX_WORKER_CALL_ARGS(job_kind, member, ...) \
     do {                                             \
@@ -29,14 +25,14 @@
     } while (0)
 
 /*
- * Most wrappers in this file are boring pass-throughs:
+ * Most wrappers here are simple pass-throughs:
  * - build a fixed-size job
  * - call the worker synchronously
  *
- * Keep the exceptional cases hand-written:
+ * Keep exceptional cases hand-written:
  * - init/close use owner-token + persisted open-config snapshot
  * - getters copy outputs back to caller pointers
- * - variable-length payload calls deep-copy bytes before enqueueing
+ * - variable-length payload calls deep-copy before enqueueing
  */
 #define LGFX_WORKER_DEFINE_SIMPLE_WRAPPER(fn_name, params, job_kind, member, ...) \
     esp_err_t lgfx_worker_device_##fn_name params                                 \
@@ -215,13 +211,10 @@ esp_err_t lgfx_worker_device_calibrate_touch(lgfx_port_t *port, uint16_t out_par
 }
 
 /*
- * Owned-payload contract (drawString):
- * - bytes may point into caller-owned memory (including Erlang binary memory)
- * - This wrapper deep-copies len bytes into job-owned heap memory before enqueueing
- * - The worker executes the device call using the copied buffer and frees it
- *   before notifying the caller
- * - After lgfx_worker_copy_payload() succeeds, the original caller buffer is no
- *   longer needed by the worker path
+ * Owned-payload contract (draw_string):
+ * - bytes may point into caller-owned memory
+ * - this wrapper deep-copies before enqueueing
+ * - the worker frees the copied payload after the device call and before notify
  */
 esp_err_t lgfx_worker_device_draw_string(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, const uint8_t *bytes, uint16_t len)
 {
@@ -243,18 +236,14 @@ esp_err_t lgfx_worker_device_draw_string(lgfx_port_t *port, uint8_t target, int1
 }
 
 /*
- * Owned-payload contract (pushImage RGB565 strided):
- * - bytes may point into caller-owned memory (including Erlang binary memory)
- * - This wrapper deep-copies len bytes into job-owned heap memory before enqueueing
- * - The worker executes the device call using the copied buffer and frees it
- *   before notifying the caller
+ * Owned-payload contract (push_image):
+ * - bytes may point into caller-owned memory
+ * - this wrapper deep-copies before enqueueing
+ * - the worker frees the copied payload after the device call and before notify
  *
- * Backend/DMA note:
- * - Current cleanup assumes the device path fully consumes the payload before
- *   the device call returns to the worker
- * - If a future backend starts DMA/asynchronous transfer that outlives the
- *   device call, move this path to an explicit DMA-safe ownership model and
- *   free only after the DMA completion barrier
+ * Current cleanup assumes the device path fully consumes the payload before the
+ * device call returns. If a future backend introduces async DMA, move this path
+ * to an explicit DMA-safe ownership model.
  */
 esp_err_t lgfx_worker_device_push_image_rgb565_strided(
     lgfx_port_t *port,

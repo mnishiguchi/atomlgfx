@@ -1,5 +1,4 @@
 // src/lgfx_device_sprites.cpp
-// Sprite subsystem APIs for the pinned LovyanGFX surface used by the current protocol.
 
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"
@@ -10,15 +9,13 @@
 namespace
 {
 
-// Supported LovyanGFX surface for this component:
-//
+// Supported pinned LovyanGFX surface:
 // - createSprite(w, h)
 // - pushSprite(dst, x, y [, transparent565])
 // - pushRotateZoom(dst, x, y, angle_deg, zoom_x, zoom_y [, transparent565])
 //
-// If the pinned LovyanGFX submodule changes these signatures, prefer an
-// explicit update here over reintroducing compile-time fallback probes.
-
+// If the pinned submodule changes these signatures, update this layer
+// explicitly instead of reintroducing fallback probes.
 static bool protocol_valid_target(uint8_t target)
 {
     return lgfx_device_is_lcd_target(target) || lgfx_device_is_sprite_target(target);
@@ -38,14 +35,12 @@ extern "C" esp_err_t lgfx_device_sprite_create_at(uint8_t handle, uint16_t w, ui
         return err;
     }
 
-    // Enforce the advertised protocol/runtime sprite capacity even when caller
-    // chooses a specific handle directly.
+    // Enforce advertised sprite capacity even with caller-selected handles.
     if (lgfx_dev::sprite_count_locked() >= static_cast<uint32_t>(lgfx_dev::max_sprites_const())) {
         return ESP_ERR_NO_MEM;
     }
 
-    // create_at is deterministic: caller chooses the sprite handle.
-    // Reject if the slot is already in use.
+    // Caller-selected handle; reject occupied slots.
     if (lgfx_dev::resolve_sprite_locked(handle) != nullptr) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -93,7 +88,7 @@ extern "C" esp_err_t lgfx_device_sprite_delete(uint8_t handle)
         return ESP_ERR_NOT_FOUND;
     }
 
-    // Be explicit about releasing internal buffers.
+    // Release internal sprite buffers before deleting the object.
     spr->deleteSprite();
     delete spr;
 
@@ -183,7 +178,7 @@ extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
         return ESP_ERR_INVALID_ARG;
     }
 
-    // Semantic validation for rotate/zoom lives here.
+    // Rotate/zoom semantic validation lives here.
     if (!std::isfinite(angle_deg) || !std::isfinite(zoom_x) || !std::isfinite(zoom_y)) {
         return ESP_ERR_INVALID_ARG;
     }

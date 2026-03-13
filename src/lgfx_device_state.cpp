@@ -5,7 +5,7 @@
 
 #include <LovyanGFX.hpp>
 
-// Build-time configuration generated
+// Generated build config
 #include "lgfx_port/lgfx_port_config.h"
 
 #if (LGFX_PORT_ENABLE_TOUCH == 1)
@@ -25,10 +25,7 @@
 // ----------------------------------------------------------------------------
 // Semantic config validation
 // ----------------------------------------------------------------------------
-//
-// Missing generated macros already fail loudly at compile use sites.
 // Keep only checks that prevent silent misconfiguration or narrowing surprises.
-//
 
 #ifndef LGFX_PORT_PANEL_DRIVER_ILI9341_2
 #error "LGFX_PORT_PANEL_DRIVER_ILI9341_2 must be defined by lgfx_port_config.h"
@@ -91,21 +88,17 @@ namespace
 
 static constexpr const char *TAG = "lgfx_device";
 
-// Protects publication of the process-global singleton pointer, owner token,
-// and ready flag. Keep critical sections short and allocation-free.
+// Protects singleton publication state. Keep critical sections short and allocation-free.
 static portMUX_TYPE g_publication_mux = portMUX_INITIALIZER_UNLOCKED;
 
-// Singleton device instance.
 class PiyopiyoLGFX;
 static PiyopiyoLGFX *g_lcd_device = nullptr;
 static SemaphoreHandle_t g_lcd_mutex = nullptr;
 
-// Live singleton owner token (currently the owning lgfx_port_t *).
-// Null means no port currently owns a published singleton device.
+// Live singleton owner token. Null means no current owner.
 static const void *g_device_owner_token = nullptr;
 
-// True only after begin() completed successfully for the currently published
-// singleton device.
+// True only after begin() succeeds for the currently published singleton.
 static bool g_device_ready = false;
 
 // ----------------------------------------------------------------------------
@@ -154,7 +147,7 @@ static inline bool is_known_panel_driver_id(lgfx_panel_driver_id_t driver_id)
 }
 
 // ----------------------------------------------------------------------------
-// Compile-time constants still shared across split files
+// Shared compile-time constants
 // ----------------------------------------------------------------------------
 
 static constexpr uint16_t PANEL_W = (uint16_t) (LGFX_PORT_PANEL_WIDTH);
@@ -702,7 +695,6 @@ public:
             (unsigned) runtime_config_.lcd_panel.width,
             (unsigned) runtime_config_.lcd_panel.height);
 
-        // SPI bus config
         {
             auto cfg = bus_.config();
 
@@ -776,7 +768,7 @@ static inline void ensure_lcd_mutex_created()
         return;
     }
 
-    // Create outside the critical section (xSemaphoreCreateMutex may allocate).
+    // Create outside the critical section because xSemaphoreCreateMutex may allocate.
     SemaphoreHandle_t created = xSemaphoreCreateMutex();
     if (!created) {
         ESP_LOGE(TAG, "failed to create mutex");
@@ -796,7 +788,7 @@ static inline void ensure_lcd_mutex_created()
         vSemaphoreDelete(created);
     }
 #else
-    (void) created; // best-effort: leak only on rare init race if delete not available
+    (void) created; // Best-effort leak only on a rare init race when delete is unavailable.
 #endif
 }
 
@@ -863,7 +855,7 @@ static esp_err_t ensure_published_device_for_owner(
 
     log_runtime_config(config);
 
-    // Allocate outside the critical section (new may allocate).
+    // Allocate outside the critical section because new may allocate.
     PiyopiyoLGFX *created = new (std::nothrow) PiyopiyoLGFX(config);
     if (!created) {
         ESP_LOGE(TAG, "failed to allocate LGFX device");
@@ -893,7 +885,7 @@ static esp_err_t ensure_published_device_for_owner(
 } // namespace
 
 // ----------------------------------------------------------------------------
-// Internal shared API for split files (definitions)
+// Internal shared API for split files
 // ----------------------------------------------------------------------------
 
 namespace lgfx_dev
@@ -1039,7 +1031,7 @@ void destroy_all_sprites_locked()
             continue;
         }
 
-        // Explicitly release sprite buffers before deleting the object.
+        // Release sprite buffers before deleting the object.
         spr->deleteSprite();
         delete spr;
 
@@ -1112,7 +1104,7 @@ extern "C" esp_err_t lgfx_device_init_with_open_config(
 
     const DevicePublicationSnapshot snapshot = snapshot_device_publication();
 
-    // Defensive: close() may have raced before we acquired the mutex.
+    // Defensive: close() may have raced before the mutex was acquired.
     if (!snapshot_is_owned_live_device(snapshot, owner_token)) {
         release_lcd_mutex();
         return ESP_ERR_INVALID_STATE;
@@ -1152,8 +1144,7 @@ static esp_err_t lgfx_device_deinit_for_owner(const void *owner_token)
         return snapshot_is_fully_unpublished(snapshot) ? ESP_OK : ESP_ERR_INVALID_STATE;
     }
 
-    // Idempotent teardown for the owning port.
-    // Allow close even if begin() never happened, as long as this owner owns the singleton.
+    // Idempotent teardown for the owning port. Allow close even if begin() never ran.
     ensure_lcd_mutex_created();
     if (!g_lcd_mutex) {
         return ESP_ERR_NO_MEM;
@@ -1169,12 +1160,12 @@ static esp_err_t lgfx_device_deinit_for_owner(const void *owner_token)
         return snapshot_is_fully_unpublished(locked_snapshot) ? ESP_OK : ESP_ERR_INVALID_STATE;
     }
 
-    // Keep the held mutex handle so we can delete it at the end.
+    // Keep the held mutex handle so it can be deleted at the end.
     SemaphoreHandle_t mutex_to_delete = g_lcd_mutex;
 
     lgfx_dev::destroy_all_sprites_locked();
 
-    // Tear down LCD device (swap publication under mux to avoid publish/depublish races).
+    // Swap publication state under mux to avoid publish/depublish races.
     PiyopiyoLGFX *to_delete = nullptr;
 
     portENTER_CRITICAL(&g_publication_mux);
@@ -1204,7 +1195,7 @@ static esp_err_t lgfx_device_deinit_for_owner(const void *owner_token)
     // Do not call release_lcd_mutex() after deleting the mutex.
     vSemaphoreDelete(mutex_to_delete);
 #else
-    // Fallback: keep mutex alive if delete API is unavailable.
+    // Fallback: keep the mutex alive if delete is unavailable.
     xSemaphoreGive(mutex_to_delete);
 #endif
 

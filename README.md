@@ -1,6 +1,6 @@
 # LovyanGFX AtomVM Port Driver
 
-ESP-IDF component that exposes LovyanGFX to AtomVM Elixir through an Erlang term (tuple) port protocol.
+`atomlgfx` is an ESP-IDF component that exposes LovyanGFX to AtomVM Elixir through a synchronous tuple-based port protocol.
 
 ## Documentation
 
@@ -11,17 +11,16 @@ ESP-IDF component that exposes LovyanGFX to AtomVM Elixir through an Erlang term
 ## Quickstart
 
 ```bash
-git clone https://github.com/mnishiguchi/atomlgfx.git
 cd atomlgfx
 
-# Before compiling, make sure the LovyanGFX submodule is present
+# Make sure the LovyanGFX submodule is present
 git submodule sync --recursive
 git submodule update --init --recursive
 
-# Build + flash AtomVM firmware (includes the port driver)
+# Build and flash AtomVM firmware (includes this port driver)
 ./scripts/atomvm_esp32.exs install --target esp32s3 --port /dev/ttyACM0
 
-# Build + flash the Elixir example app
+# Build and flash the Elixir example app
 cd examples/elixir
 mix deps.get
 mix do clean, atomvm.esp32.flash --port /dev/ttyACM0
@@ -31,56 +30,41 @@ cd ../..
 ./scripts/atomvm_esp32.exs monitor --port /dev/ttyACM0
 ```
 
-Before flashing the example app, adjust its `LGFXPort.open(...)` config in
-`examples/elixir/lib/lgfx_port.ex` if your board uses a different panel profile
-or pin assignment.
+Before flashing the example app, adjust `LGFXPort.open(...)` in `examples/elixir/lib/lgfx_port.ex` if your board uses different panel settings or pin assignments.
 
-## Protocol overview
+## Protocol at a glance
 
-The wire contract is synchronous and tuple-based.
+Requests and responses use this shape:
 
-- Request
-  - `{lgfx, ProtoVer, Op, Target, Flags, ...}`
+```erlang
+{lgfx, ProtoVer, Op, Target, Flags, ...}
+{ok, Result}
+{error, Reason}
+```
 
-- Response
-  - `{ok, Result}`
-  - `{error, Reason}`
-
-Current sprite protocol surface:
-
-- `createSprite`
-- `deleteSprite`
-- `setPivot`
-- `pushSprite`
-- `pushRotateZoom`
-
-See `docs/LGFX_PORT_PROTOCOL.md` for the full operation matrix and rules.
+See `docs/LGFX_PORT_PROTOCOL.md` for the full operation matrix, validation rules, capability bits, and operation semantics.
 
 ## Configuration
 
-LovyanGFX is vendored as a git submodule under `third_party/LovyanGFX` and compiled into this ESP-IDF component.
+LovyanGFX is vendored as a git submodule under `third_party/LovyanGFX` and compiled as part of this component.
 
-Build defaults are driven by CMake cache variables set by the parent ESP-IDF
-project or via `idf.py -D...`.
-
-Some runtime values may also be overridden later at port-open time from the
-host. When open-time keys are omitted, the build defaults are used.
+Build defaults come from CMake cache variables set by the parent ESP-IDF project or passed via `idf.py -D...`. Selected values may also be overridden later at port open time. When an open-time key is omitted, the build default is used.
 
 Common build-default options:
 
-- `LGFX_PORT_ENABLE_JP_FONTS` (default `ON`)
-- `LGFX_PORT_ENABLE_TOUCH` (default `ON`)
-- `LGFX_PORT_PANEL_DRIVER` (default `ILI9488`; supported: `ILI9488`, `ILI9341`, `ILI9341_2`)
-- `LGFX_PORT_PANEL_WIDTH` (default depends on the selected build-default panel profile)
-- `LGFX_PORT_PANEL_HEIGHT` (default depends on the selected build-default panel profile)
-- `LGFX_PORT_LCD_CS_GPIO` (default `43`)
-- `LGFX_PORT_LCD_DC_GPIO` (default `3`)
-- `LGFX_PORT_LCD_RST_GPIO` (default `2`)
-- `LGFX_PORT_TOUCH_CS_GPIO` (default `44`)
+- `LGFX_PORT_ENABLE_JP_FONTS` (`ON`)
+- `LGFX_PORT_ENABLE_TOUCH` (`ON`)
+- `LGFX_PORT_PANEL_DRIVER` (`ILI9488`; supported: `ILI9488`, `ILI9341`, `ILI9341_2`, `ST7789`)
+- `LGFX_PORT_PANEL_WIDTH`
+- `LGFX_PORT_PANEL_HEIGHT`
+- `LGFX_PORT_LCD_CS_GPIO` (`43`)
+- `LGFX_PORT_LCD_DC_GPIO` (`3`)
+- `LGFX_PORT_LCD_RST_GPIO` (`2`)
+- `LGFX_PORT_TOUCH_CS_GPIO` (`44`)
 
-If `LGFX_PORT_TOUCH_CS_GPIO=-1`, touch code may still compile when enabled, but touch is not attached and `CAP_TOUCH` is not advertised.
+If `LGFX_PORT_TOUCH_CS_GPIO=-1`, touch support may still compile, but touch is not attached and `CAP_TOUCH` is not advertised.
 
-Example override:
+Example:
 
 ```bash
 idf.py \
@@ -95,29 +79,7 @@ idf.py \
   build
 ```
 
-## Repository layout
-
-- `include/lgfx_port/`
-  - Public headers for this ESP-IDF component
-
-- `lgfx_port/include_internal/lgfx_port/`
-  - Internal protocol metadata, validation helpers, and worker definitions
-  - Includes `ops.def` and `worker_jobs.def`
-
-- `lgfx_port/`
-  - Port-facing implementation
-  - Mailbox drain, request decode, validation, dispatch, reply handling, worker bridge
-
-- `src/`
-  - Device-facing LovyanGFX adapter layer
-
-- `docs/`
-  - Protocol, architecture, and worker model documentation
-
-- `examples/elixir/`
-  - Example Elixir client
-
-## Protocol doc sync
+## Contributor note
 
 Generated tables inside `docs/LGFX_PORT_PROTOCOL.md` are synchronized from source metadata.
 

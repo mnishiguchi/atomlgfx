@@ -61,19 +61,15 @@ static const char *const TAG = "lgfx_port";
  */
 void lgfx_atoms_init(GlobalContext *global, lgfx_atoms_t *atoms)
 {
-    // Common reply atoms
     atoms->ok = globalcontext_make_atom(global, ATOM_STR("\x02", "ok"));
     atoms->error = globalcontext_make_atom(global, ATOM_STR("\x05", "error"));
 
-    // Namespace / misc
     atoms->lgfx = globalcontext_make_atom(global, ATOM_STR("\x04", "lgfx"));
 
-    // Common values
     atoms->pong = globalcontext_make_atom(global, ATOM_STR("\x04", "pong"));
     atoms->true_ = globalcontext_make_atom(global, ATOM_STR("\x04", "true"));
     atoms->false_ = globalcontext_make_atom(global, ATOM_STR("\x05", "false"));
 
-    // Error atoms
     atoms->bad_proto = globalcontext_make_atom(global, ATOM_STR("\x09", "bad_proto"));
     atoms->bad_op = globalcontext_make_atom(global, ATOM_STR("\x06", "bad_op"));
     atoms->bad_flags = globalcontext_make_atom(global, ATOM_STR("\x09", "bad_flags"));
@@ -85,12 +81,11 @@ void lgfx_atoms_init(GlobalContext *global, lgfx_atoms_t *atoms)
     atoms->unsupported = globalcontext_make_atom(global, ATOM_STR("\x0B", "unsupported"));
     atoms->not_initialized = globalcontext_make_atom(global, ATOM_STR("\x0F", "not_initialized"));
 
-    // Capability / info atoms
     atoms->caps = globalcontext_make_atom(global, ATOM_STR("\x04", "caps"));
     atoms->last_error = globalcontext_make_atom(global, ATOM_STR("\x0A", "last_error"));
     atoms->none = globalcontext_make_atom(global, ATOM_STR("\x04", "none"));
 
-    // Op atoms (generated from lgfx_port/include_internal/lgfx_port/ops.def)
+    // Generated from lgfx_port/include_internal/lgfx_port/ops.def.
 #define X(op, handler, atom_str, ...) atoms->op = globalcontext_make_atom(global, (atom_str));
 #include "lgfx_port/ops.def"
 #undef X
@@ -330,8 +325,7 @@ static term lgfx_require_target_domain(Context *ctx, lgfx_port_t *port, const lg
         return term_invalid_term();
     }
 
-    // Protocol target domain is always 0..254 (0 = LCD, 1..254 = sprite).
-    // This check is intentionally independent of per-op target_policy.
+    // Domain check only; per-op target_policy is validated later.
     if (req->target > 254u) {
         return reply_error(ctx, port, req, port->atoms.bad_target, 0);
     }
@@ -444,23 +438,12 @@ static term lgfx_require_state_policy(Context *ctx, lgfx_port_t *port, const lgf
  * - examples/elixir/lib/lgfx_port.ex
  * - src/lgfx_device.h
  *
- * Wire-level rules:
- * - opts is a proper list of {atom, value}
+ * Rules:
+ * - opts is a proper list of {key, value}
  * - duplicate keys are allowed; last value wins
- * - booleans use the atoms 'true' and 'false'
- * - panel_driver uses the lower-case atoms 'ili9488', 'ili9341', 'ili9341_2', 'st7789'
- * - spi hosts use the canonical atoms 'spi2_host' and 'spi3_host'
- * - dma channel uses 'spi_dma_ch_auto', 1, or 2
- * - width/height: 1..65535
- * - offset_x/offset_y: signed 32-bit integer
- * - *_freq_hz: 1..2147483647 (current parser range, due to term_to_int -> int32_t)
- * - lcd_spi_mode: 0..3
- * - *_rotation: 0..7
- * - disable-capable GPIOs accept -1
- *
- * The public Elixir API may accept aliases and normalize them before calling
- * open_port/2. This native parser intentionally accepts only the canonical wire
- * values described above.
+ * - parser accepts canonical normalized wire values only
+ * - parser does structural and value parsing only
+ * - public wrappers may normalize aliases before calling open_port/2
  */
 
 static bool lgfx_term_to_int32_checked(term value, int32_t *out_value)
@@ -1023,14 +1006,11 @@ static void lgfx_port_teardown(Context *ctx)
     /*
      * port->initialized is a port-local lifecycle flag.
      *
-     * It means this specific port successfully completed init() against the
-     * singleton device during its current ownership window.
+     * It means this port completed init() successfully during its current
+     * ownership window. It does not describe global singleton availability or
+     * current ownership outside that window.
      *
-     * It does NOT mean:
-     * - the singleton device is globally available to other ports
-     * - this port still owns the singleton unless native close/teardown has not run
-     *
-     * Global singleton publication / ownership / ready-state live in
+     * Global publication, ownership, and ready-state live in
      * src/lgfx_device_state.cpp.
      */
     if (port->initialized) {
@@ -1061,13 +1041,11 @@ void lgfx_port_handle_mailbox_message(Context *ctx, lgfx_port_t *port, term msg)
     term decode_error = term_invalid_term();
 
     if (!lgfx_term_decode_request(ctx, port, gen.req, &req, &decode_error)) {
-
         /*
-         * Decode failed before request metadata exists.
+         * Decode failed before full request metadata existed.
          *
-         * If decode_error is invalid, we likely failed while building the error
-         * reply, so treat it as no_memory. Otherwise default to bad_proto, but
-         * prefer the explicit reason when decode_error is already {error, Reason}.
+         * If decode_error is invalid, treat it as no_memory. Otherwise prefer an
+         * explicit {error, Reason} reply when one was already built.
          */
         term reason = term_is_invalid_term(decode_error) ? port->atoms.no_memory : port->atoms.bad_proto;
 
@@ -1252,19 +1230,15 @@ static Context *lgfx_port_create_port(GlobalContext *global, term opts)
     }
 
     /*
-     * Persist an explicit per-port config snapshot.
+     * Persist a per-port config snapshot.
      *
-     * This includes the all-default case (zeroed has_* flags), so each opened
-     * port has a deterministic config baseline for future init() calls.
+     * This includes the all-default case, so every opened port keeps a
+     * deterministic baseline for future init() calls.
      *
-     * This snapshot is configuration only. It is intentionally separate from:
-     * - singleton device publication/allocation
-     * - singleton ownership
-     * - begin()/ready state
-     *
-     * Unlike the old staging model, merely opening a second port does not
-     * overwrite some global pending snapshot. The native singleton constraint is
-     * enforced only when a port tries to own the live device via init().
+     * The snapshot is configuration only. It is separate from singleton
+     * publication, ownership, and begin()/ready state. Opening another port does
+     * not overwrite a global pending config; the singleton constraint is enforced
+     * only when a port tries to claim the live device via init().
      */
     port->open_config_overrides = open_config_overrides;
 

@@ -58,7 +58,6 @@ static void lgfx_worker_cleanup_job_payload(lgfx_job_t *job)
     }
 }
 
-// Queue a job pointer from the port thread and block until the worker completes.
 esp_err_t lgfx_worker_call(lgfx_port_t *port, lgfx_job_t *job)
 {
     if (!port || !job || !port->worker) {
@@ -72,7 +71,6 @@ esp_err_t lgfx_worker_call(lgfx_port_t *port, lgfx_job_t *job)
         return ESP_ERR_INVALID_STATE;
     }
 
-    // worker_jobs.h keeps this FreeRTOS-free; TaskHandle_t is pointer-like.
     job->notify_task = (void *) xTaskGetCurrentTaskHandle();
     job->err = ESP_FAIL;
 
@@ -90,13 +88,11 @@ esp_err_t lgfx_worker_call(lgfx_port_t *port, lgfx_job_t *job)
     /*
      * IMPORTANT:
      * Jobs are currently stack-allocated in lgfx_worker_device_* wrappers and
-     * enqueued by pointer. A timeout here would allow the wrapper to return and
-     * the worker to later dereference a dead stack frame (UAF).
+     * enqueued by pointer. A timeout here would let the wrapper return while the
+     * worker still holds a pointer into a dead stack frame.
      *
-     * Payload-bearing jobs may also carry job-owned heap buffers
-     * (job->owned_payload) that are freed by the worker after the device call
-     * and before notify. Blocking here preserves simple wrapper semantics and a
-     * clear completion boundary.
+     * Payload-bearing jobs may also carry job-owned heap buffers that the worker
+     * frees after the device call and before notify.
      *
      * If timeouts are needed later, switch to heap/pool-owned jobs or
      * queue-by-value and define explicit lifetime rules for both the job object
@@ -163,23 +159,19 @@ void lgfx_worker_stop(lgfx_port_t *port)
 
     worker->stopping = true;
 
-    // Prepare join notification before sending the stop sentinel to avoid races.
+    // Set join notification before enqueueing the stop sentinel.
     worker->stop_notify_task = xTaskGetCurrentTaskHandle();
 
-    // Stop sentinel: NULL job pointer.
     lgfx_job_t *stop = NULL;
     (void) xQueueSend(worker->queue, &stop, portMAX_DELAY);
 
-    // Wait for worker task shutdown acknowledgement.
     (void) ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    // Worker task exits via vTaskDelete(NULL) after sending the ack.
     vQueueDelete(worker->queue);
     port->worker = NULL;
     free(worker);
 }
 
-// Worker task: executes only device calls with plain C arguments.
 static void lgfx_worker_task_main(void *arg)
 {
     lgfx_worker_t *worker = (lgfx_worker_t *) arg;
@@ -197,10 +189,9 @@ static void lgfx_worker_task_main(void *arg)
         }
 
         if (!job) {
-            break; // stop sentinel
+            break;
         }
 
-        // The boring rule: worker_jobs.def owns the job->kind dispatch body.
         switch (job->kind) {
             case LGFX_JOB__INVALID:
                 job->err = ESP_ERR_INVALID_ARG;

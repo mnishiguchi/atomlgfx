@@ -1,5 +1,4 @@
 // src/lgfx_device_primitives.cpp
-// Drawing primitive APIs that back the current protocol surface.
 
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"

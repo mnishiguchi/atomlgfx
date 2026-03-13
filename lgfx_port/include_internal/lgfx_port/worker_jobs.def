@@ -1,16 +1,8 @@
 // include/lgfx_port/worker_jobs.def
 //
 // Canonical worker job list.
-//
-// Rule: each row must be of the form:
-//   X(KIND, union_member, union_fields, exec_body)
-// where exec_body sets job->err.
-//
-// Keep this file boring:
-// - no FreeRTOS types
-// - no AtomVM types
-// - no helper macros besides X
-// - union_fields must not contain commas (so it stays a single macro argument)
+// X(KIND, union_member, union_fields, exec_body)
+// exec_body must set job->err.
 
 X(INIT, init, const void *owner_token; lgfx_open_config_overrides_t open_config_overrides;, job->err = lgfx_device_init_with_open_config(&job->a.init.open_config_overrides, job->a.init.owner_token);)
 X(CLOSE, close, const void *owner_token;, job->err = lgfx_device_close_for_owner(job->a.close.owner_token);)
@@ -21,13 +13,11 @@ X(SET_BRIGHTNESS, set_brightness, uint8_t b;, job->err = lgfx_device_set_brightn
 X(SET_COLOR_DEPTH, set_color_depth, uint8_t target; uint8_t depth;, job->err = lgfx_device_set_color_depth(job->a.set_color_depth.target, job->a.set_color_depth.depth);)
 X(DISPLAY, display, uint8_t _;, job->err = lgfx_device_display();)
 
-// Touch (LCD-only)
 X(GET_TOUCH, get_touch, bool touched; int16_t x; int16_t y; uint16_t size;, job->err = lgfx_device_get_touch(&job->a.get_touch.touched, &job->a.get_touch.x, &job->a.get_touch.y, &job->a.get_touch.size);)
 X(GET_TOUCH_RAW, get_touch_raw, bool touched; int16_t x; int16_t y; uint16_t size;, job->err = lgfx_device_get_touch_raw(&job->a.get_touch_raw.touched, &job->a.get_touch_raw.x, &job->a.get_touch_raw.y, &job->a.get_touch_raw.size);)
 X(SET_TOUCH_CALIBRATE, set_touch_calibrate, uint16_t params[8];, job->err = lgfx_device_set_touch_calibrate(job->a.set_touch_calibrate.params);)
 X(CALIBRATE_TOUCH, calibrate_touch, uint16_t params[8];, job->err = lgfx_device_calibrate_touch(job->a.calibrate_touch.params);)
 
-// Primitives
 X(FILL_SCREEN, fill_screen, uint8_t target; uint16_t color565;, job->err = lgfx_device_fill_screen(job->a.fill_screen.target, job->a.fill_screen.color565);)
 X(CLEAR, clear, uint8_t target; uint16_t color565;, job->err = lgfx_device_clear(job->a.clear.target, job->a.clear.color565);)
 X(DRAW_PIXEL, draw_pixel, uint8_t target; int16_t x; int16_t y; uint16_t color565;, job->err = lgfx_device_draw_pixel(job->a.draw_pixel.target, job->a.draw_pixel.x, job->a.draw_pixel.y, job->a.draw_pixel.color565);)
@@ -41,7 +31,6 @@ X(FILL_CIRCLE, fill_circle, uint8_t target; int16_t x; int16_t y; uint16_t r; ui
 X(DRAW_TRIANGLE, draw_triangle, uint8_t target; int16_t x0; int16_t y0; int16_t x1; int16_t y1; int16_t x2; int16_t y2; uint16_t color565;, job->err = lgfx_device_draw_triangle(job->a.draw_triangle.target, job->a.draw_triangle.x0, job->a.draw_triangle.y0, job->a.draw_triangle.x1, job->a.draw_triangle.y1, job->a.draw_triangle.x2, job->a.draw_triangle.y2, job->a.draw_triangle.color565);)
 X(FILL_TRIANGLE, fill_triangle, uint8_t target; int16_t x0; int16_t y0; int16_t x1; int16_t y1; int16_t x2; int16_t y2; uint16_t color565;, job->err = lgfx_device_fill_triangle(job->a.fill_triangle.target, job->a.fill_triangle.x0, job->a.fill_triangle.y0, job->a.fill_triangle.x1, job->a.fill_triangle.y1, job->a.fill_triangle.x2, job->a.fill_triangle.y2, job->a.fill_triangle.color565);)
 
-// Text
 X(SET_TEXT_SIZE, set_text_size, uint8_t target; uint8_t size;, job->err = lgfx_device_set_text_size(job->a.set_text_size.target, job->a.set_text_size.size);)
 X(SET_TEXT_SIZE_XY, set_text_size_xy, uint8_t target; uint8_t sx; uint8_t sy;, job->err = lgfx_device_set_text_size_xy(job->a.set_text_size_xy.target, job->a.set_text_size_xy.sx, job->a.set_text_size_xy.sy);)
 X(SET_TEXT_DATUM, set_text_datum, uint8_t target; uint8_t datum;, job->err = lgfx_device_set_text_datum(job->a.set_text_datum.target, job->a.set_text_datum.datum);)
@@ -51,15 +40,12 @@ X(SET_FONT_PRESET, set_font_preset, uint8_t target; uint8_t preset;, job->err = 
 X(SET_TEXT_COLOR, set_text_color, uint8_t target; uint16_t fg565; bool has_bg; uint16_t bg565;, job->err = lgfx_device_set_text_color(job->a.set_text_color.target, job->a.set_text_color.fg565, job->a.set_text_color.has_bg, job->a.set_text_color.bg565);)
 X(DRAW_STRING, draw_string, uint8_t target; int16_t x; int16_t y; const uint8_t *bytes; uint16_t len;, job->err = lgfx_device_draw_string(job->a.draw_string.target, job->a.draw_string.x, job->a.draw_string.y, job->a.draw_string.bytes, job->a.draw_string.len);)
 
-// Images
 X(PUSH_IMAGE_RGB565_STRIDED, push_image, uint8_t target; int16_t x; int16_t y; uint16_t w; uint16_t h; uint16_t stride_pixels; const uint8_t *bytes; size_t len;, job->err = lgfx_device_push_image_rgb565_strided(job->a.push_image.target, job->a.push_image.x, job->a.push_image.y, job->a.push_image.w, job->a.push_image.h, job->a.push_image.stride_pixels, job->a.push_image.bytes, job->a.push_image.len);)
 
-// Sprites
 X(CREATE_SPRITE, create_sprite, uint8_t target; uint16_t w; uint16_t h; uint8_t color_depth;, job->err = lgfx_device_sprite_create_at(job->a.create_sprite.target, job->a.create_sprite.w, job->a.create_sprite.h, job->a.create_sprite.color_depth);)
 X(DELETE_SPRITE, delete_sprite, uint8_t target;, job->err = lgfx_device_sprite_delete(job->a.delete_sprite.target);)
 X(SET_PIVOT, set_pivot, uint8_t target; int16_t x; int16_t y;, job->err = lgfx_device_sprite_set_pivot(job->a.set_pivot.target, job->a.set_pivot.x, job->a.set_pivot.y);)
 X(PUSH_SPRITE, push_sprite, uint8_t src_target; uint8_t dst_target; int16_t x; int16_t y; bool has_transparent; uint16_t transparent565;, job->err = lgfx_device_sprite_push_sprite(job->a.push_sprite.src_target, job->a.push_sprite.dst_target, job->a.push_sprite.x, job->a.push_sprite.y, job->a.push_sprite.has_transparent, job->a.push_sprite.transparent565);)
 
-// Keep the worker ABI wire-aligned for rotate/zoom. Convert fixed-point values
-// to float only at the final device-call boundary.
+/* Keep worker ABI fixed-point; convert at the final device-call boundary. */
 X(PUSH_ROTATE_ZOOM, push_rotate_zoom, uint8_t src_target; uint8_t dst_target; int16_t x; int16_t y; int32_t angle_x100; int32_t zoom_x_x1024; int32_t zoom_y_x1024; bool has_transparent; uint16_t transparent565;, job->err = lgfx_device_sprite_push_rotate_zoom(job->a.push_rotate_zoom.src_target, job->a.push_rotate_zoom.dst_target, job->a.push_rotate_zoom.x, job->a.push_rotate_zoom.y, ((float) job->a.push_rotate_zoom.angle_x100) / 100.0f, ((float) job->a.push_rotate_zoom.zoom_x_x1024) / 1024.0f, ((float) job->a.push_rotate_zoom.zoom_y_x1024) / 1024.0f, job->a.push_rotate_zoom.has_transparent, job->a.push_rotate_zoom.transparent565);)

@@ -8,18 +8,15 @@ Key points:
 
 - Host and driver communicate using Erlang terms.
 - Large payloads such as text and pixel data use binaries.
-- Operation names are LovyanGFX-flavored atoms.
 - Validation, dispatch, and capability advertisement are metadata-driven.
-- The implemented protocol surface is the one declared in `ops.def`.
-- Build knobs come from the generated config header shared by the protocol and device layers.
-- The driver also accepts open-time config through `open_port/2`; that config is outside the request tuple protocol documented here.
+- The implemented operation surface is the one declared in `ops.def`.
+- Open-time config passed through `open_port/2` is outside the request tuple protocol documented here.
 - The current sprite surface includes deterministic handle-based `createSprite`, destination-aware whole-sprite blit via `pushSprite`, and destination-aware rotate/zoom blit via `pushRotateZoom`.
 - Touch is advertised only when touch support is both enabled and attached.
-- General filesystem ops are out of scope for this protocol.
 
 ## Source of truth
 
-The protocol contract is defined by these sources, with different roles:
+The protocol contract is defined by these sources, each with a different role:
 
 - `lgfx_port/include_internal/lgfx_port/ops.def`
   - normative operation surface
@@ -37,7 +34,7 @@ The protocol contract is defined by these sources, with different roles:
   - wire-level limits
 
 - generated `lgfx_port/lgfx_port_config.h`
-  - build knobs and derived build/runtime gates used by the component
+  - build knobs and derived gates used by the component
 
 - this document
   - human-readable wire contract
@@ -52,7 +49,7 @@ Important invariants:
 - Touch capability is advertised only when touch ops are both compiled in and attached.
 - Generated tables and implementation must agree.
 
-## Request / response model
+## Request and response model
 
 All requests use one tuple shape:
 
@@ -95,7 +92,7 @@ Conventions:
 - structured returns use tuples
 - `Reason` is an atom or detail tuple
 
-## Validation rules
+## Validation model
 
 Common failure mapping:
 
@@ -106,9 +103,7 @@ Common failure mapping:
 - invalid target => `bad_target`
 - invalid non-zero flags => `bad_flags`
 
-Policy details are driven by `ops.def`.
-
-Validation is intentionally layered:
+Validation is layered:
 
 - port-level validation handles request envelope and op metadata
 - handlers perform op-specific wire decode
@@ -123,18 +118,18 @@ Examples of device-layer semantic checks:
 
 ## Binary payload lifetime
 
-Binaries are used for throughput, but the driver must treat raw pointers from term binaries as request-scoped.
+Binaries are used for throughput, but raw pointers from term binaries are request-scoped.
 
 Rule:
 
 - The driver must not retain pointers into caller binaries past the request boundary unless it explicitly manages lifetime.
 
-Current implementation model:
+Current model:
 
 - deep-copy variable-length payloads before enqueueing worker jobs
 - free the copied payload after the device call completes
 
-That rule matters especially for `pushImage` and string-bearing operations.
+That matters especially for `pushImage` and string-bearing operations.
 
 ## Common data and encodings
 
@@ -193,7 +188,7 @@ Canonical protocol error atoms and detail tags:
 | `LGFX_ERR_NO_MEMORY` | `no_memory` | `canonical` |
 | `LGFX_ERR_INTERNAL` | `internal` | `canonical` |
 | `LGFX_ERR_UNSUPPORTED` | `unsupported` | `canonical` |
-| `LGFX_ERR_BATCH_FAILED` | `batch_failed` | `detail tag` |
+| `LGFX_ERR_BATCH_FAILED` | `batch_failed` | `canonical` |
 <!-- END:generated_error_reasons_table -->
 
 Optional detail forms:
@@ -243,7 +238,7 @@ This notation mirrors `ops.def`.
 
 ## Implemented operation matrix
 
-This table documents the entire implemented protocol surface.
+This table documents the implemented protocol surface.
 
 `ops.def` is the implementation source of truth. If this table and the built driver disagree, the built driver wins.
 
@@ -360,12 +355,10 @@ Current meaning:
 - `CAP_TOUCH`
   - touch operations are available
 
-Important note for touch:
+Touch note:
 
 - `CAP_TOUCH` is advertised only when touch support is enabled in the build and touch is attached
 - compiling touch support with `LGFX_PORT_TOUCH_CS_GPIO = -1` keeps touch unattached and unadvertised
-
-Reserved or future ideas are not protocol features unless they are declared in `ops.def`, implemented, and actually advertised by `getCaps`.
 
 ## Diagnostics
 
@@ -438,16 +431,9 @@ Errors:
 - unknown preset => `{error, bad_args}`
 - preset compiled out => `{error, unsupported}`
 
-Notes:
-
-- JP preset availability is build-dependent
-- host wrappers may cache implied size, but device state is the source of truth
-
 ## Flags
 
 `Flags` is op-specific unless documented otherwise.
-
-Current common case:
 
 ### `setTextColor`
 
@@ -456,7 +442,7 @@ Current common case:
 Semantics:
 
 - when present, the background color argument is enabled
-- the driver enforces the bitmask; host-side constant names are informational
+- the driver enforces the bitmask
 
 ## Important op semantics
 
@@ -532,9 +518,7 @@ Rules:
 - optional transparent color is RGB565
 - edge clipping is allowed
 
-Note:
-
-- there is no region-based sprite blit op in the current protocol
+There is no region-based sprite blit op in the current protocol.
 
 ### `pushRotateZoom`
 
@@ -574,14 +558,7 @@ Equivalent formulas:
 - `zoom_x = ZoomXX1024I32 / 1024.0`
 - `zoom_y = ZoomYX1024I32 / 1024.0`
 
-Host guidance:
-
-- set pivot first when stable rotation behavior matters
-- wrappers should expose helpers for centi-degree and x1024 conversions
-
 ## Recommended host smoke checks
-
-A small host-side smoke test is recommended in addition to driver unit tests.
 
 Useful checks:
 
@@ -607,24 +584,18 @@ Useful checks:
   - `getCaps` returns `{caps, ProtoVer, MaxBinaryBytes, MaxSprites, FeatureBits}`
   - host wrapper protocol version matches `ProtoVer`
 
-These checks catch drift between metadata, implementation, and host wrappers.
-
 ## Maintenance checklist
 
 When adding or changing an operation:
 
 - update `lgfx_port/include_internal/lgfx_port/ops.def`
-
 - implement or update the handler
-
-- update capability/error/protocol constants if needed
-
+- update capability, error, or protocol constants if needed
 - resync generated protocol tables
   - `elixir scripts/sync_lgfx_protocol_doc.exs`
 
 - verify `getCaps` matches the new `feature_cap_bit`
-
-- update this document only for semantics that are not obvious from the generated tables
+- update this document only for semantics not obvious from the generated tables
 
 ## Compatibility rules
 

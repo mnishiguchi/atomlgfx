@@ -4,19 +4,19 @@
 
 `atomlgfx` is an ESP-IDF component that exposes LovyanGFX to AtomVM Elixir through a tuple-based port protocol.
 
-Key ideas:
+Core ideas:
 
 - Host ↔ driver messages are Erlang terms.
 - Large payloads use binaries.
 - Protocol-visible behavior is metadata-driven from `ops.def`.
 - `getCaps` is derived from protocol metadata plus the enabled dispatch surface.
 - Protocol work and device work are split into separate C-side execution paths.
-- Build-default wiring and LovyanGFX tuning are shared through a generated config header.
+- Build defaults come from a generated config header shared by the port and device layers.
 - Open-time config may override selected runtime values per port before `init`.
 - The device layer is a thin C ABI around the pinned LovyanGFX surface used by this repository.
-- Touch is advertised only when touch support is both enabled and attached.
+- Touch is advertised only when support is both enabled and effectively attached.
 
-The protocol contract itself is documented in `docs/LGFX_PORT_PROTOCOL.md`.
+The wire contract itself is documented in `docs/LGFX_PORT_PROTOCOL.md`.
 
 ## Big picture
 
@@ -28,7 +28,7 @@ Elixir / AtomVM
 +------------------------------+
 | port thread                  |
 | - mailbox drain              |
-| - term decode                |
+| - request decode             |
 | - metadata validation        |
 | - handler wire decode        |
 | - reply encode               |
@@ -56,35 +56,30 @@ Elixir / AtomVM
 
 ## Repository map
 
-This repository focuses on the port driver and its protocol boundary.
+Main areas:
 
 - `include/lgfx_port/`
   - public ESP-IDF headers
-
-- `lgfx_port/cmake/lgfx_port_config.h.in`
-  - template for the generated config header
-
-- `lgfx_port/include_internal/lgfx_port/`
-  - internal protocol metadata and helper headers
-  - `ops.def`, `ops.h`
-  - protocol helpers
-  - capability/error headers
-  - worker headers and canonical job definitions
 
 - `lgfx_port/`
   - AtomVM-facing port implementation
   - request decode, metadata validation, dispatch
   - worker bridge
 
+- `lgfx_port/include_internal/lgfx_port/`
+  - internal metadata and helper headers
+  - protocol helpers
+  - worker job definitions
+
 - `src/`
   - device-facing adapter layer
   - protocol-agnostic C/C++ around the pinned LovyanGFX submodule
 
-- `docs/`
-  - protocol and architecture docs
-
 - `examples/elixir/`
   - example Elixir client
+
+- `docs/`
+  - protocol, worker, and architecture docs
 
 Minimal layout view:
 
@@ -92,7 +87,6 @@ Minimal layout view:
 .
 ├── include/lgfx_port/
 ├── lgfx_port/
-│   ├── cmake/
 │   ├── handlers/
 │   ├── include_internal/lgfx_port/
 │   ├── lgfx_port.c
@@ -104,47 +98,47 @@ Minimal layout view:
 └── examples/elixir/
 ```
 
-## Build-default configuration
+## Build defaults and open-time overrides
 
-This component uses a generated config header so the protocol layer and device
-layer see the same build-default wiring, geometry, and LovyanGFX settings.
+This component uses a generated config header so the protocol layer and device layer see the same build-default wiring, geometry, and LovyanGFX settings.
 
-- Template:
+Relevant files:
+
+- template:
   - `lgfx_port/cmake/lgfx_port_config.h.in`
 
-- Generated output:
+- generated output:
   - `<build>/.../generated/lgfx_port/lgfx_port_config.h`
 
 How it works:
 
 - `CMakeLists.txt` exposes cache variables and options.
 - The parent ESP-IDF project can set them directly or via `idf.py -D...`.
-- CMake runs `configure_file(... @ONLY)` to generate the header.
-- The generated include directory is exported so all component code sees the same build knobs.
+- CMake generates the header with `configure_file(... @ONLY)`.
+- The generated include directory is exported so all component code sees the same defaults.
 
-These values are build defaults. The host may later provide open-time overrides
-for selected fields such as `panel_driver`, geometry, rotation, SPI host, and
-touch-related settings. Those overrides are stored per port context and applied
-when that port initializes the device.
+Open-time overrides are separate from build defaults:
+
+- build defaults come from the generated config header
+- selected fields may be overridden per port at `open_port/2`
+- those overrides are stored on the port context
+- they are applied when that same port calls `init`
 
 Important rule:
 
-- The generated config header is the source of truth for build defaults used by this component.
+- The generated config header is the source of truth for build defaults.
 - Do not rewrite the `@VAR@` tokens in `lgfx_port_config.h.in`.
-- If a formatter changes them, CMake substitution breaks.
 
 ## Metadata-driven protocol surface
 
-The protocol-visible operation surface is defined by:
+The protocol-visible operation surface is declared in:
 
 - `lgfx_port/include_internal/lgfx_port/ops.def`
 
 That metadata drives:
 
-- operation atom registration
-
+- op atom registration
 - dispatch table entries
-
 - validation rules
   - arity
   - allowed flags
@@ -152,10 +146,7 @@ That metadata drives:
   - init-state policy
 
 - capability linkage used by `getCaps`
-
-- op gating based on real build/runtime support
-
-- generated documentation tables in `docs/LGFX_PORT_PROTOCOL.md`
+- generated tables in `docs/LGFX_PORT_PROTOCOL.md`
 
 Worker jobs follow the same pattern:
 
@@ -167,7 +158,7 @@ That job list drives:
 - union members in `lgfx_job_t`
 - worker dispatch bodies
 
-The goal is simple: one declarative list, many synchronized outputs.
+The design goal is simple: one declarative list, many synchronized outputs.
 
 ## Execution model
 
@@ -175,7 +166,7 @@ There are two C-side execution paths.
 
 ### Port thread path
 
-Files:
+Main files:
 
 - `lgfx_port/lgfx_port.c`
 - `lgfx_port/handlers/*.c`
@@ -191,15 +182,15 @@ Responsibilities:
 - encode `{ok, Result}` or `{error, Reason}`
 - own protocol-facing state such as `last_error`
 
-Handlers are intentionally narrow:
+Handlers stay intentionally narrow:
 
 - decode op-specific wire arguments
 - enforce obvious wire-level constraints
 - call synchronous `lgfx_worker_device_*` wrappers
 
-### Worker / device path
+### Worker and device path
 
-Files:
+Main files:
 
 - `lgfx_port/lgfx_worker_core.c`
 - `lgfx_port/lgfx_worker_device.c`
@@ -212,15 +203,13 @@ Responsibilities:
 - call the device adapter in `src/`
 - keep protocol code separate from hardware code
 
-The device layer is the authority for device-facing semantics such as:
+The device layer is authoritative for device-facing semantics such as:
 
 - target existence and resolution
 - deterministic sprite allocation at a chosen handle
 - destination-aware sprite push behavior
 - `pushImage` payload validity
 - rotate/zoom semantic validity
-
-This split keeps protocol behavior deterministic while isolating device execution.
 
 ## Port lifecycle
 
@@ -245,23 +234,37 @@ Creation:
 
 - allocate AtomVM `Context`
 - allocate per-port `lgfx_port_t`
+- parse and store open-time config snapshot
 - start worker state via `lgfx_worker_start(...)`
 
 Teardown:
 
-- happens when AtomVM marks the context as `Killed`
-- per-context teardown runs from the native handler
+- runs when AtomVM marks the context as `Killed`
 - device close is attempted before worker stop
 - worker state is stopped and freed
 - per-port state is then released
 
 This avoids freeing per-port state from the driver-global `destroy` callback.
 
+## Config persistence vs singleton ownership
+
+The current model separates configuration from live-device ownership.
+
+- multiple port contexts may each keep their own open-config snapshot
+- the LCD device remains singleton-backed
+- only one port may own the live singleton device at a time
+- each `init()` reuses the calling port's persisted snapshot
+
+In other words:
+
+- config persistence is per port
+- live device ownership is singleton-global
+
 ## Binary payload ownership
 
 Some operations carry binary payloads such as UTF-8 text or RGB565 pixel data.
 
-Architecture rule:
+Rule:
 
 - The driver must not retain pointers into Erlang binaries past the request-handling boundary unless lifetime is explicitly managed.
 
@@ -328,6 +331,9 @@ Generated tables in `docs/LGFX_PORT_PROTOCOL.md` are synchronized from source me
 
 - protocol spec:
   - `docs/LGFX_PORT_PROTOCOL.md`
+
+- worker/concurrency model:
+  - `docs/WORKER_MODEL.md`
 
 - protocol metadata:
   - `lgfx_port/include_internal/lgfx_port/ops.def`

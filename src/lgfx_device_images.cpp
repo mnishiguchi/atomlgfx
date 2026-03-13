@@ -1,5 +1,4 @@
 // src/lgfx_device_images.cpp
-// Image transfer APIs that back the current protocol surface.
 
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"
@@ -20,6 +19,7 @@ static inline void rgb565_be_to_host_u16(const uint8_t *src_be, uint16_t *dst, s
     }
 }
 
+// Reuse a static row buffer for common widths; fall back to heap allocation for wider rows.
 static constexpr size_t MAX_LINE_PIXELS = 480;
 static uint16_t linebuf[MAX_LINE_PIXELS];
 
@@ -69,6 +69,7 @@ extern "C" esp_err_t lgfx_device_push_image_rgb565_strided(
         return ESP_ERR_NOT_FOUND;
     }
 
+    // Input rows are RGB565 big-endian with optional stride padding.
     const size_t row_bytes = (size_t) stride_pixels * 2u;
 
     uint16_t *rowbuf = nullptr;

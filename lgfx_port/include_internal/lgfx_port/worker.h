@@ -15,9 +15,7 @@ extern "C" {
 /*
  * Simple synchronous wrappers.
  *
- * These are the boring pass-through cases that only:
- * - populate a fixed-size worker job union member
- * - call lgfx_worker_call()
+ * These wrappers only populate a fixed-size job and call lgfx_worker_call().
  *
  * Keep exceptional wrappers hand-written in lgfx_worker_device.c:
  * - init/close
@@ -96,34 +94,34 @@ extern "C" {
     LGFX_WORKER_SIMPLE_TEXT_WRAPPERS(X)         \
     LGFX_WORKER_SIMPLE_SPRITE_WRAPPERS(X)
 
-// Worker lifecycle.
 bool lgfx_worker_start(lgfx_port_t *port);
 void lgfx_worker_stop(lgfx_port_t *port);
 
 /*
- * Synchronous device wrappers called from handlers on the port thread.
+ * Synchronous worker wrappers called from handlers on the port thread.
  *
- * These wrappers:
- * - pass plain C arguments to the worker task
- * - block until the worker completes the device call
- * - deep-copy variable-length payloads before enqueueing when needed
- * - use the calling lgfx_port_t as the singleton owner token for init/close
- * - use the port's persisted open_config_overrides snapshot for init/get_dims
+ * These wrappers block until the worker finishes the device call.
+ * Variable-length payload wrappers deep-copy before enqueueing.
+ *
+ * Exceptional cases:
+ * - init/close use the calling lgfx_port_t as owner token
+ * - init/get_dims use the port's persisted open_config_overrides snapshot
+ * - getters copy outputs back to caller pointers
  *
  * See docs/WORKER_MODEL.md for concurrency and ownership rules.
  */
 
-// Device lifecycle.
 esp_err_t lgfx_worker_device_init(lgfx_port_t *port);
 esp_err_t lgfx_worker_device_close(lgfx_port_t *port);
 
-// Dimensions.
-// Before init, returns width/height implied by that port's persisted open-config snapshot.
-// If the same port already owns the live singleton device, returns current lcd->width/height.
+/*
+ * Before init, returns dimensions implied by that port's persisted
+ * open-config snapshot. If the same port already owns the live singleton,
+ * returns current lcd->width/height.
+ */
 esp_err_t lgfx_worker_device_get_dims(lgfx_port_t *port, uint16_t *out_w, uint16_t *out_h);
 
-// Get target dimensions (LCD target 0, sprite handle 1..254).
-// For sprite targets, returns ESP_ERR_NOT_FOUND when the handle is unallocated.
+/* LCD target 0, sprite handle 1..254. */
 esp_err_t lgfx_worker_device_get_target_dims(
     lgfx_port_t *port,
     uint8_t target,
@@ -145,7 +143,7 @@ esp_err_t lgfx_worker_device_draw_string(
     const uint8_t *bytes,
     uint16_t len);
 
-// Touch (LCD only).
+/* Touch is LCD-only. */
 esp_err_t lgfx_worker_device_get_touch(
     lgfx_port_t *port,
     bool *out_touched,
@@ -164,12 +162,11 @@ esp_err_t lgfx_worker_device_set_touch_calibrate(
     lgfx_port_t *port,
     const uint16_t params[8]);
 
-// Returns calibration data as 8 x u16.
+/* Returns 8 x u16 calibration values. */
 esp_err_t lgfx_worker_device_calibrate_touch(
     lgfx_port_t *port,
     uint16_t out_params[8]);
 
-// Images.
 esp_err_t lgfx_worker_device_push_image_rgb565_strided(
     lgfx_port_t *port,
     uint8_t target,

@@ -102,7 +102,7 @@ Handlers stay intentionally narrow:
 - reject clearly malformed wire input
 - avoid duplicating device-facing semantic checks
 
-Examples of checks that do **not** belong in handlers:
+Checks that do not belong in handlers:
 
 - sprite existence
 - destination sprite existence
@@ -276,7 +276,7 @@ The current cleanup model assumes the device path fully consumes the payload bef
 
 That matches the current implementation.
 
-If a future backend introduces DMA or any other async transfer that outlives the device call, this model must change. Payload release would then need to move to the real completion boundary, not immediate return from `lgfx_device_*`.
+If a future backend introduces DMA or other async transfer that outlives the device call, this model must change. Payload release would then need to move to the real completion boundary, not immediate return from `lgfx_device_*`.
 
 ## Stop and shutdown
 
@@ -312,7 +312,7 @@ This keeps:
 
 ## Boundaries by layer
 
-### Port thread / handlers
+### Port thread and handlers
 
 Belongs here:
 

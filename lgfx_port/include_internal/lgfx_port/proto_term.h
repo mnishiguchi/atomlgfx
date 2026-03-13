@@ -13,6 +13,7 @@
 // -----------------------------------------------------------------------------
 // AtomVM compatibility
 // -----------------------------------------------------------------------------
+
 // AtomVM deprecated term_from_int32() (unsafe on some targets). In this port we
 // only encode small integers that fit in avm_int_t, so use term_from_int().
 // Keep call sites unchanged by shadowing the deprecated function name.
@@ -29,25 +30,25 @@
 extern "C" {
 #endif
 
-// Forward declaration (keep this header light; implementations live in proto_term.c)
+// Forward declaration; implementations live in proto_term.c.
 typedef struct lgfx_port_t lgfx_port_t;
 
-// ----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // Request decode surface
-// ----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
 typedef struct lgfx_request_t
 {
     uint32_t proto_ver;
-    term op; // atom
-    uint32_t target; // decoded u32 (range/policy validated elsewhere)
-    uint32_t flags; // u32 (mask validated elsewhere)
-    term request_tuple; // original request tuple
-    int arity; // tuple arity
+    term op;
+    uint32_t target;
+    uint32_t flags;
+    term request_tuple;
+    int arity;
 } lgfx_request_t;
 
-// Decode {lgfx, ProtoVer, Op, Target, Flags, ...}
-// - Minimal structural decode + integer conversion only.
-// - Policy validation happens in lgfx_port.c (ops.def metadata).
+// Decode {lgfx, ProtoVer, Op, Target, Flags, ...}.
+// Structural decode only; policy validation happens in lgfx_port.c.
 bool lgfx_term_decode_request(
     Context *ctx,
     lgfx_port_t *port,
@@ -55,20 +56,21 @@ bool lgfx_term_decode_request(
     lgfx_request_t *out,
     term *out_error_reply);
 
-// Reply constructors (raw, no last_error side-effects)
+// Raw reply constructors; no last_error side-effects.
 term lgfx_reply_ok(Context *ctx, lgfx_port_t *port, term result);
 term lgfx_reply_error(Context *ctx, lgfx_port_t *port, term reason_atom);
 term lgfx_reply_error_detail(Context *ctx, lgfx_port_t *port, term reason_atom, term detail);
 
-// Helpers for structured tuples (small arities used by getCaps/getLastError)
+// Small tuple helper.
 term lgfx_make_tuple(Context *ctx, int arity, const term *elements);
 
-// Inspect reply shape
+// Reply inspection.
 bool lgfx_is_error_reply(Context *ctx, lgfx_port_t *port, term reply, term *out_reason);
 
-// ----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // Term utilities
-// ----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
 static inline bool lgfx_validate_i16(int32_t v)
 {
     return v >= -32768 && v <= 32767;
@@ -81,7 +83,7 @@ static inline bool lgfx_validate_u16(uint32_t v)
 
 static inline bool lgfx_validate_color888(uint32_t c)
 {
-    // 0x00RRGGBB only
+    // 0x00RRGGBB only.
     return (c & 0xFF000000u) == 0;
 }
 
@@ -168,17 +170,17 @@ static inline bool lgfx_term_to_color565(term color_t, uint16_t *out_color565)
     return true;
 }
 
-// ----------------------------------------------------------------------------
-// Reply helpers (with last_error side-effects)
-// ----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Reply helpers with last_error side-effects
+// -----------------------------------------------------------------------------
 
-// esp_err -> protocol reply mapping (no last_error side-effects)
+// esp_err -> protocol reply mapping without last_error side-effects.
 term lgfx_reply_from_esp_err(Context *ctx, lgfx_port_t *port, esp_err_t err);
 
-// esp_err -> protocol reply mapping + last_error update (OOM-safe)
+// esp_err -> protocol reply mapping with last_error update.
 term lgfx_reply_from_esp_err_req(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, esp_err_t err);
 
-// Reply constructors + last_error update (OOM-safe)
+// Reply constructors with last_error update.
 term lgfx_reply_ok_req(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, term payload);
 term lgfx_reply_error_req(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, term reason, int32_t esp_err);
 term lgfx_reply_error_detail_req(
@@ -189,7 +191,7 @@ term lgfx_reply_error_detail_req(
     term detail,
     int32_t esp_err);
 
-// Keep existing handler-facing helpers/macros (now thin wrappers over functions)
+// Handler-facing wrappers.
 #define LGFX_RETURN_IF_ESP_ERR(ctx, port, req, esp_expr)                     \
     do {                                                                     \
         esp_err_t __err = (esp_expr);                                        \

@@ -1,5 +1,4 @@
 // src/lgfx_device_control.cpp
-// LCD-only control + size/touch APIs that back the current protocol surface.
 
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"
@@ -107,6 +106,7 @@ static esp_err_t lgfx_get_touch_common(
     });
 }
 
+// Scale calibration markers from the larger panel dimension, but never return 0.
 static inline uint8_t lgfx_touch_calibration_marker_size(lgfx::LGFX_Device *lcd)
 {
     const uint16_t w = static_cast<uint16_t>(lcd->width());
@@ -121,10 +121,6 @@ static inline uint8_t lgfx_touch_calibration_marker_size(lgfx::LGFX_Device *lcd)
     return marker_size;
 }
 } // namespace
-
-// -----------------------------------------------------------------------------
-// LCD-only control APIs (rotation, brightness, display).
-// -----------------------------------------------------------------------------
 
 extern "C" esp_err_t lgfx_device_set_rotation(uint8_t rotation)
 {
@@ -144,10 +140,6 @@ extern "C" esp_err_t lgfx_device_display(void)
 {
     return lgfx_dev::with_lcd([&](lgfx::LGFX_Device *d) { d->display(); });
 }
-
-// -----------------------------------------------------------------------------
-// Size queries and common target config.
-// -----------------------------------------------------------------------------
 
 extern "C" esp_err_t lgfx_device_get_dims(uint16_t *out_w, uint16_t *out_h)
 {
@@ -210,10 +202,6 @@ extern "C" esp_err_t lgfx_device_set_color_depth(uint8_t target, uint8_t depth)
 {
     return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setColorDepth(depth); });
 }
-
-// -----------------------------------------------------------------------------
-// Touch (LCD-only by protocol semantics)
-// -----------------------------------------------------------------------------
 
 extern "C" esp_err_t lgfx_device_get_touch(
     bool *out_touched,

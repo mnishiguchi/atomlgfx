@@ -1,6 +1,6 @@
 defmodule LGFXPort do
   @moduledoc """
-  Minimal Elixir client for the `lgfx_port` AtomVM port driver.
+  Elixir client for the `lgfx_port` AtomVM port driver.
 
   Typical bring-up:
 
@@ -20,29 +20,24 @@ defmodule LGFXPort do
       :ok = LGFXPort.init(port)
       :ok = LGFXPort.display(port)
 
-  Notes:
+  Lifecycle notes:
 
-  - `open/1` validates and normalizes config, then passes it at port-open time.
-  - Omitted keys keep build defaults.
-  - Duplicate keys are allowed; the last value wins.
-  - Exact atoms only:
-    - `panel_driver`: `:ili9488`, `:ili9341`, `:ili9341_2`, `:st7789`
-    - SPI host: `:spi2_host`, `:spi3_host`
-    - DMA auto: `:spi_dma_ch_auto`
-  - The native driver currently uses a singleton device model.
-  - Open-time config is stored per port and applied when that same port calls `init/1`.
+  - The native driver uses a singleton device model.
+  - `open/1` remembers open-time config per port.
+  - `init/1` applies the remembered config for that same port.
   - Only one port can own the live native device at a time.
   - `close/1` performs full device teardown and clears this module's runtime caches.
-  - `close/1` does not close the port handle itself.
-  - `close/1` does not forget that port's remembered open-time config.
-  - After `close/1`, calling `init/1` again on the same port reuses those overrides.
-  - `panel_driver` should usually be set explicitly. When omitted, the build-default panel profile is used.
-  - `getTouch/getTouchRaw` returns `{:ok, :none}` or `{:ok, {x, y, size}}`.
-  - Transparent keys for `pushSprite*` / `pushRotateZoom` are RGB565 `u16` (`0x0000..0xFFFF`), not RGB888 (`0x00RRGGBB`).
-  - `pushRotateZoom` uses protocol units:
-    - angle: centi-degrees (1.00° = 100)
-    - zoom: x1024 fixed-point (1.0x = 1024)
-    - dst_target: 0 (LCD) or 1..254 (sprite)
+  - `close/1` does not close the port handle and does not forget that port's remembered open-time config.
+
+  Data / reply notes:
+
+  - Omitted open options keep build defaults.
+  - `get_touch/1` and `get_touch_raw/1` return `{:ok, :none}` or `{:ok, {x, y, size}}`.
+  - Transparent keys for sprite push operations are RGB565 `u16` values (`0x0000..0xFFFF`), not RGB888 (`0x00RRGGBB`).
+  - `push_rotate_zoom*` uses protocol units:
+    - angle: centi-degrees (`1.00° = 100`)
+    - zoom: x1024 fixed-point (`1.0x = 1024`)
+    - `dst_target`: `0` for LCD or `1..254` for sprite
   """
 
   @compile {:no_warn_undefined, :port}
@@ -113,9 +108,6 @@ defmodule LGFXPort do
 
   @supported_open_config_keys Keyword.keys(@open_option_rules)
 
-  # -----------------------------------------------------------------------------
-  # Protocol numeric types
-  # -----------------------------------------------------------------------------
   defguardp i16(v) when is_integer(v) and v >= -0x8000 and v <= 0x7FFF
   defguardp u16(v) when is_integer(v) and v >= 0 and v <= 0xFFFF
   defguardp i32(v) when is_integer(v) and v >= -0x8000_0000 and v <= 0x7FFF_FFFF
@@ -128,9 +120,6 @@ defmodule LGFXPort do
   defguardp color888(v) when is_integer(v) and v >= 0 and v <= 0xFFFFFF
   defguardp rgb565(v) when is_integer(v) and v >= 0 and v <= 0xFFFF
 
-  # -----------------------------------------------------------------------------
-  # Port lifecycle
-  # -----------------------------------------------------------------------------
   def open, do: open([])
 
   def open(options) when is_list(options) do
@@ -167,9 +156,6 @@ defmodule LGFXPort do
     call(port, op, target, flags, args, timeout)
   end
 
-  # -----------------------------------------------------------------------------
-  # Control / introspection
-  # -----------------------------------------------------------------------------
   def ping(port), do: call_ok(port, :ping, 0, 0, [], @t_short)
 
   def get_caps(port) do
@@ -204,7 +190,6 @@ defmodule LGFXPort do
   def supports_last_error?(port), do: supports_cap?(port, @cap_last_error)
   def supports_touch?(port), do: supports_cap?(port, @cap_touch)
 
-  # AtomVM-friendly cache for MaxBinaryBytes.
   def max_binary_bytes(port) do
     key = max_binary_bytes_cache_key(port)
 
@@ -220,9 +205,6 @@ defmodule LGFXPort do
     end
   end
 
-  # -----------------------------------------------------------------------------
-  # Setup
-  # -----------------------------------------------------------------------------
   def init(port), do: call_ok(port, :init, 0, 0, [], @t_long)
 
   def close(port) do
@@ -245,9 +227,6 @@ defmodule LGFXPort do
     call_ok(port, :setColorDepth, target, 0, [depth], @t_long)
   end
 
-  # -----------------------------------------------------------------------------
-  # Sprite operations
-  # -----------------------------------------------------------------------------
   def create_sprite(port, width, height, target)
       when u16(width) and width >= 1 and
              u16(height) and height >= 1 and
@@ -272,7 +251,6 @@ defmodule LGFXPort do
     call_ok(port, :setPivot, target, 0, [x, y], @t_long)
   end
 
-  # pushSprite wire args: [dst_target, x, y] or [dst_target, x, y, transparent565]
   def push_sprite_to(port, src_target, dst_target, x, y)
       when sprite_handle(src_target) and
              target_any(dst_target) and
@@ -300,8 +278,6 @@ defmodule LGFXPort do
     push_sprite_to(port, src_target, 0, x, y, transparent565)
   end
 
-  # pushRotateZoom wire args:
-  # [dst_target, x, y, angle_centi_deg, zoom_x1024, zoom_y1024 [, transparent565]]
   def push_rotate_zoom_to(
         port,
         src_target,
@@ -356,7 +332,7 @@ defmodule LGFXPort do
     )
   end
 
-  # Convenience wrapper: degrees / float zoom -> protocol units.
+  # Convenience wrapper: accepts degrees / float zoom and converts them to protocol units.
   def push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom_x, zoom_y)
       when sprite_handle(src_target) and
              target_any(dst_target) and
@@ -380,9 +356,6 @@ defmodule LGFXPort do
     push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom, zoom)
   end
 
-  # -----------------------------------------------------------------------------
-  # Primitives
-  # -----------------------------------------------------------------------------
   def fill_screen(port, color888, target \\ 0)
       when color888(color888) and target_any(target) do
     call_ok(port, :fillScreen, target, 0, [color888], @t_long)
@@ -475,9 +448,6 @@ defmodule LGFXPort do
     call_ok(port, :fillTriangle, target, 0, [x0, y0, x1, y1, x2, y2, color888], @t_long)
   end
 
-  # -----------------------------------------------------------------------------
-  # Touch
-  # -----------------------------------------------------------------------------
   def get_touch(port) do
     with {:ok, payload} <- call(port, :getTouch, 0, 0, [], @t_short) do
       decode_touch_payload(:getTouch, payload)
@@ -502,9 +472,6 @@ defmodule LGFXPort do
     end
   end
 
-  # -----------------------------------------------------------------------------
-  # Text
-  # -----------------------------------------------------------------------------
   def set_text_size(port, size, target \\ 0)
       when is_integer(size) and size in 1..255 and target_any(target) do
     call_ok(port, :setTextSize, target, 0, [size], @t_long)
@@ -542,7 +509,7 @@ defmodule LGFXPort do
     end)
   end
 
-  # Preset selection may also change device-side text size.
+  # Preset selection also updates cached font selection and implied text size.
   def set_font_preset(port, preset, target \\ 0)
       when target_any(target) do
     with {:ok, preset_id, canonical_preset} <- font_preset_to_wire(preset) do
@@ -597,9 +564,6 @@ defmodule LGFXPort do
     :ok
   end
 
-  # -----------------------------------------------------------------------------
-  # Pixel/image transfer
-  # -----------------------------------------------------------------------------
   def push_image_rgb565(port, x, y, width, height, pixels, stride_pixels \\ 0, target \\ 0)
       when i16(x) and i16(y) and
              u16(width) and
@@ -628,9 +592,6 @@ defmodule LGFXPort do
     end
   end
 
-  # -----------------------------------------------------------------------------
-  # Request / response transport
-  # -----------------------------------------------------------------------------
   defp call_ok(port, op, target, flags, args, timeout) do
     case call(port, op, target, flags, args, timeout) do
       {:ok, _result} -> :ok
@@ -659,9 +620,6 @@ defmodule LGFXPort do
     end
   end
 
-  # -----------------------------------------------------------------------------
-  # Decoding helpers
-  # -----------------------------------------------------------------------------
   defp decode_caps({:caps, proto_ver, max_binary_bytes, max_sprites, feature_bits})
        when is_integer(proto_ver) and is_integer(max_binary_bytes) and
               is_integer(max_sprites) and is_integer(feature_bits) do
@@ -728,9 +686,6 @@ defmodule LGFXPort do
 
   defp decode_calibrate_payload(other), do: {:error, {:bad_touch_calibrate_payload, other}}
 
-  # -----------------------------------------------------------------------------
-  # Internal helpers
-  # -----------------------------------------------------------------------------
   defp remember_open_config(port, normalized_open_config) when is_list(normalized_open_config) do
     cache_put(open_config_cache_key(port), normalized_open_config)
     :ok
@@ -1010,6 +965,7 @@ defmodule LGFXPort do
     end
   end
 
+  # Split large RGB565 transfers when they exceed the device's MaxBinaryBytes limit.
   defp push_image_rgb565_transfer(
          port,
          x,
@@ -1157,6 +1113,7 @@ defmodule LGFXPort do
 
   defp after_ok(result, _fun), do: result
 
+  # Clear per-port runtime caches after close/1 so later calls do not reuse stale state.
   defp reset_runtime_cache(port) do
     cache_erase(max_binary_bytes_cache_key(port))
     reset_runtime_cache_targets(port, 0)
@@ -1185,9 +1142,6 @@ defmodule LGFXPort do
   defp text_size_cache_key(port, target), do: {:lgfx_text_size, port, target}
   defp text_font_selection_cache_key(port, target), do: {:lgfx_text_font_selection, port, target}
 
-  # -----------------------------------------------------------------------------
-  # Error formatting
-  # -----------------------------------------------------------------------------
   def format_error({:bad_stride, stride, width}), do: "bad stride stride=#{stride} w=#{width}"
 
   def format_error({:pixels_size_not_even, size}),

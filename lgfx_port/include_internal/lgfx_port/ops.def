@@ -1,7 +1,7 @@
-// include/lgfx_port/ops.def
+// lgfx_port/include_internal/lgfx_port/ops.def
 //
 // Canonical op list + protocol metadata.
-// Intentionally included multiple times with different X(...) definitions.
+// Included multiple times with different X(...) definitions.
 // No include guards.
 //
 // X(op_name, handler_fn, atom_str, min_arity, max_arity, allowed_flags_mask, target_policy, state_policy, feature_cap_bit)
@@ -23,11 +23,10 @@ X(close, lgfx_handle_close, ATOM_STR("\x05", "close"), 5, 5, 0, LGFX_OP_TARGET_B
 X(setRotation, lgfx_handle_setRotation, ATOM_STR("\x0B", "setRotation"), 6, 6, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(setBrightness, lgfx_handle_setBrightness, ATOM_STR("\x0D", "setBrightness"), 6, 6, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(setColorDepth, lgfx_handle_setColorDepth, ATOM_STR("\x0D", "setColorDepth"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
-
 X(display, lgfx_handle_display, ATOM_STR("\x07", "display"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, 0)
 
 //
-// Primitives (target-aware: LCD target 0, sprite target 1..254)
+// Primitives
 //
 X(fillScreen, lgfx_handle_fillScreen, ATOM_STR("\x0A", "fillScreen"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(clear, lgfx_handle_clear, ATOM_STR("\x05", "clear"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
@@ -43,7 +42,7 @@ X(drawTriangle, lgfx_handle_drawTriangle, ATOM_STR("\x0C", "drawTriangle"), 12, 
 X(fillTriangle, lgfx_handle_fillTriangle, ATOM_STR("\x0C", "fillTriangle"), 12, 12, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 
 //
-// Text (target-aware: LCD target 0, sprite target 1..254)
+// Text
 //
 X(setTextSize, lgfx_handle_setTextSize, ATOM_STR("\x0B", "setTextSize"), 6, 7, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(setTextDatum, lgfx_handle_setTextDatum, ATOM_STR("\x0C", "setTextDatum"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
@@ -65,32 +64,16 @@ X(createSprite, lgfx_handle_createSprite, ATOM_STR("\x0C", "createSprite"), 7, 8
 X(deleteSprite, lgfx_handle_deleteSprite, ATOM_STR("\x0C", "deleteSprite"), 5, 5, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
 X(setPivot, lgfx_handle_setPivot, ATOM_STR("\x08", "setPivot"), 7, 7, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
 
-// pushSprite payload semantics (destination-aware):
-// DstTarget, X, Y [, Transparent565]
-// - Target (header) is SrcSprite (sprite-only)
+// Header target is the source sprite; payload begins with destination target.
 X(pushSprite, lgfx_handle_pushSprite, ATOM_STR("\x0A", "pushSprite"), 8, 9, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
 
-// pushRotateZoom payload semantics:
-// DstTarget, X, Y, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32 [, Transparent565]
-// - Target (header) is SrcSprite (sprite-only)
+// Header target is the source sprite; payload begins with destination target.
 X(pushRotateZoom, lgfx_handle_pushRotateZoom, ATOM_STR("\x0E", "pushRotateZoom"), 11, 12, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
 
 //
-// Touch (LCD-only)
+// Touch
 //
-// - getTouch / getTouchRaw:
-//   - arity 5: {lgfx, ver, Op, 0, 0}
-//   - reply: {ok, none} or {ok, {X, Y, Size}}
-//
-// - setTouchCalibrate:
-//   - arity 13: {lgfx, ver, setTouchCalibrate, 0, 0, P0..P7}
-//   - reply: {ok, ok}
-//
-// - calibrateTouch:
-//   - arity 5: {lgfx, ver, calibrateTouch, 0, 0}
-//   - reply: {ok, {P0..P7}}
-//   - runs interactive calibration on the device (blocking)
-//
+// getTouch/getTouchRaw reply with {ok, none} or {ok, {X, Y, Size}}.
 X(getTouch, lgfx_handle_getTouch, ATOM_STR("\x08", "getTouch"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_TOUCH)
 X(getTouchRaw, lgfx_handle_getTouchRaw, ATOM_STR("\x0B", "getTouchRaw"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_TOUCH)
 X(setTouchCalibrate, lgfx_handle_setTouchCalibrate, ATOM_STR("\x11", "setTouchCalibrate"), 13, 13, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_TOUCH)
