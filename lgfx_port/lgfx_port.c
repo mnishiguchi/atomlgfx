@@ -184,7 +184,34 @@ static int lgfx_op_index_from_atom(const lgfx_port_t *port, term op_atom)
 // getCaps: metadata-driven FeatureBits + op enable gating
 // -----------------------------------------------------------------------------
 
-static inline bool lgfx_cap_bit_enabled(uint32_t cap_bits)
+static bool lgfx_port_touch_attached(const lgfx_port_t *port)
+{
+#if (LGFX_PORT_ENABLE_TOUCH != 1)
+    (void) port;
+    return false;
+#else
+    int32_t touch_cs_gpio = (int32_t) LGFX_PORT_TOUCH_CS_GPIO;
+
+    if (port != NULL && port->open_config_overrides.has_touch_cs_gpio) {
+        touch_cs_gpio = port->open_config_overrides.touch_cs_gpio;
+    }
+
+    return touch_cs_gpio >= 0;
+#endif
+}
+
+static uint32_t lgfx_port_enabled_cap_mask(const lgfx_port_t *port)
+{
+    uint32_t mask = ((uint32_t) LGFX_BUILD_CAP_MASK) & ~((uint32_t) LGFX_CAP_TOUCH);
+
+    if (lgfx_port_touch_attached(port)) {
+        mask |= (uint32_t) LGFX_CAP_TOUCH;
+    }
+
+    return mask;
+}
+
+static inline bool lgfx_cap_bit_enabled(const lgfx_port_t *port, uint32_t cap_bits)
 {
     if (cap_bits == 0u) {
         return true;
@@ -192,22 +219,22 @@ static inline bool lgfx_cap_bit_enabled(uint32_t cap_bits)
     if ((cap_bits & ~((uint32_t) LGFX_CAP_KNOWN_MASK)) != 0u) {
         return false;
     }
-    return (cap_bits & ~((uint32_t) LGFX_BUILD_CAP_MASK)) == 0u;
+    return (cap_bits & ~lgfx_port_enabled_cap_mask(port)) == 0u;
 }
 
-static bool lgfx_op_gated_by_index(int op_index)
+static bool lgfx_op_gated_by_index(const lgfx_port_t *port, int op_index)
 {
     if (op_index < 0 || op_index >= (int) LGFX_OP_COUNT) {
         return false;
     }
 
     const uint32_t cap_bit = s_op_meta[op_index].feature_cap_bit;
-    return lgfx_cap_bit_enabled(cap_bit);
+    return lgfx_cap_bit_enabled(port, cap_bit);
 }
 
-static bool lgfx_op_enabled_by_index(int op_index)
+static bool lgfx_op_enabled_by_index(const lgfx_port_t *port, int op_index)
 {
-    if (!lgfx_op_gated_by_index(op_index)) {
+    if (!lgfx_op_gated_by_index(port, op_index)) {
         return false;
     }
 
@@ -220,8 +247,6 @@ static bool lgfx_op_enabled_by_index(int op_index)
 
 uint32_t lgfx_port_feature_bits(const lgfx_port_t *port)
 {
-    (void) port;
-
     uint32_t bits = 0;
 
     for (int i = 0; i < (int) LGFX_OP_COUNT; i++) {
@@ -230,7 +255,7 @@ uint32_t lgfx_port_feature_bits(const lgfx_port_t *port)
         if (cap_bit == 0u) {
             continue;
         }
-        if (!lgfx_op_enabled_by_index(i)) {
+        if (!lgfx_op_enabled_by_index(port, i)) {
             continue;
         }
 
@@ -261,7 +286,7 @@ static bool lgfx_port_op_is_enabled(const lgfx_port_t *port, term op_atom)
         return false;
     }
 
-    return lgfx_op_enabled_by_index(op_index);
+    return lgfx_op_enabled_by_index(port, op_index);
 }
 
 const lgfx_op_meta_t *lgfx_op_meta_lookup(const lgfx_port_t *port, term op_atom)
@@ -295,7 +320,7 @@ lgfx_handler_fn lgfx_dispatch_lookup(lgfx_port_t *port, term op_atom)
         return NULL;
     }
 
-    if (!lgfx_op_enabled_by_index(op_index)) {
+    if (!lgfx_op_enabled_by_index(port, op_index)) {
         return NULL;
     }
 
