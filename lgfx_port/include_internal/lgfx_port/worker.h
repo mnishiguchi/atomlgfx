@@ -141,7 +141,7 @@ esp_err_t lgfx_worker_device_draw_string(
     int16_t x,
     int16_t y,
     const uint8_t *bytes,
-    uint16_t len);
+    size_t len);
 
 /* Touch is LCD-only. */
 esp_err_t lgfx_worker_device_get_touch(

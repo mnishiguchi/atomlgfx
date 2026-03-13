@@ -287,7 +287,7 @@ esp_err_t lgfx_device_fill_triangle(uint8_t target, int16_t x0, int16_t y0, int1
 // Text drawing (LCD or sprite target)
 // ----------------------------------------------------------------------------
 esp_err_t lgfx_device_set_text_color(uint8_t target, uint16_t fg_rgb565, bool has_bg, uint16_t bg_rgb565);
-esp_err_t lgfx_device_draw_string(uint8_t target, int16_t x, int16_t y, const uint8_t *text, uint16_t text_len);
+esp_err_t lgfx_device_draw_string(uint8_t target, int16_t x, int16_t y, const uint8_t *text, size_t text_len);
 
 // ----------------------------------------------------------------------------
 // Image transfer (LCD or sprite target)

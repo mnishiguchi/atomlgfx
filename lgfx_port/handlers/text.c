@@ -1,6 +1,7 @@
 // lgfx_port/handlers/text.c
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "context.h"
 #include "term.h"
@@ -201,15 +202,12 @@ term lgfx_handle_drawString(Context *ctx, lgfx_port_t *port, const lgfx_request_
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    uint32_t len32 = (uint32_t) len;
-    if (len32 == 0 || len32 > 255u) {
+    if (len == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    for (uint32_t i = 0; i < len32; i++) {
-        if (bytes[i] == 0) {
-            return reply_error(ctx, port, req, port->atoms.bad_args, 0);
-        }
+    if (memchr(bytes, 0, len) != NULL) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
     LGFX_RETURN_IF_ESP_ERR(
@@ -222,7 +220,7 @@ term lgfx_handle_drawString(Context *ctx, lgfx_port_t *port, const lgfx_request_
             x,
             y,
             bytes,
-            (uint16_t) len32));
+            len));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }

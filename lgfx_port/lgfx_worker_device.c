@@ -216,7 +216,7 @@ esp_err_t lgfx_worker_device_calibrate_touch(lgfx_port_t *port, uint16_t out_par
  * - this wrapper deep-copies before enqueueing
  * - the worker frees the copied payload after the device call and before notify
  */
-esp_err_t lgfx_worker_device_draw_string(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, const uint8_t *bytes, uint16_t len)
+esp_err_t lgfx_worker_device_draw_string(lgfx_port_t *port, uint8_t target, int16_t x, int16_t y, const uint8_t *bytes, size_t len)
 {
     lgfx_job_t job = {
         .kind = LGFX_JOB_DRAW_STRING,

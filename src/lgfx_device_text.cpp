@@ -3,6 +3,8 @@
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"
 
+#include <new>
+#include <stddef.h>
 #include <string.h>
 
 #if defined(LGFX_PORT_ENABLE_JP_FONTS) && (LGFX_PORT_ENABLE_JP_FONTS == 1)
@@ -93,15 +95,31 @@ extern "C" esp_err_t lgfx_device_set_text_color(uint8_t target, uint16_t fg_rgb5
     });
 }
 
-extern "C" esp_err_t lgfx_device_draw_string(uint8_t target, int16_t x, int16_t y, const uint8_t *text, uint16_t text_len)
+extern "C" esp_err_t lgfx_device_draw_string(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    const uint8_t *text,
+    size_t text_len)
 {
-    if (!text || text_len == 0 || text_len > 255) {
+    if (!text || text_len == 0) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    char buf[256];
-    memcpy(buf, text, (size_t) text_len);
+    if (text_len > (SIZE_MAX - 1u)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    char *buf = new (std::nothrow) char[text_len + 1u];
+    if (!buf) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    memcpy(buf, text, text_len);
     buf[text_len] = '\0';
 
-    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->drawString(buf, x, y); });
+    esp_err_t err = lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->drawString(buf, x, y); });
+
+    delete[] buf;
+    return err;
 }
