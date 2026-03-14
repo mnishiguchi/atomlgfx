@@ -6,10 +6,6 @@
 #include "context.h"
 #include "term.h"
 
-// Device-side preset IDs live in lgfx_device.h so handlers and the device ABI
-// stay aligned.
-#include "lgfx_device.h"
-
 #include "lgfx_port/handler_decode.h"
 #include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
@@ -22,14 +18,15 @@ static bool decode_font_preset(term preset_t, uint8_t *out_preset)
         return false;
     }
 
-    // MVP wire form: integer only
+    // Wire form is integer-only.
+    // Preset IDs are protocol-owned constants from include/lgfx_port/lgfx_port.h:
     // 0=ascii, 1=jp_small, 2=jp_medium, 3=jp_large
-    uint32_t v = 0;
-    if (!lgfx_term_to_u32(preset_t, &v) || v > (uint32_t) LGFX_FONT_PRESET_JP_LARGE) {
+    uint32_t value = 0;
+    if (!lgfx_term_to_u32(preset_t, &value) || value > (uint32_t) LGFX_FONT_PRESET_JP_LARGE) {
         return false;
     }
 
-    *out_preset = (uint8_t) v;
+    *out_preset = (uint8_t) value;
     return true;
 }
 
@@ -171,7 +168,11 @@ term lgfx_handle_setTextFontPreset(Context *ctx, lgfx_port_t *port, const lgfx_r
 
 term lgfx_handle_setTextColor(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    bool has_bg = ((req->flags & LGFX_F_TEXT_HAS_BG) != 0);
+    const bool has_bg = ((req->flags & LGFX_F_TEXT_HAS_BG) != 0);
+
+    if ((has_bg && req->arity != 7) || (!has_bg && req->arity != 6)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
 
     uint16_t fg565 = 0;
     if (!lgfx_decode_color565_at(req, 5, &fg565)) {
