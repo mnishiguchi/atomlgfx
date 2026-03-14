@@ -243,13 +243,13 @@ esp_err_t lgfx_device_set_text_datum(uint8_t target, uint8_t datum);
 esp_err_t lgfx_device_set_text_wrap(uint8_t target, bool wrap_x, bool wrap_y);
 esp_err_t lgfx_device_set_text_font(uint8_t target, uint8_t font);
 
-// setTextFontPreset(preset_id): selects a driver-defined font preset.
+// setTextFontPreset(preset_id): selects a protocol-owned text font preset.
 //
 // Behavior:
 // - unknown preset IDs return ESP_ERR_INVALID_ARG
 // - compiled-out optional presets return ESP_ERR_NOT_SUPPORTED
 //
-// Current mapping:
+// Current device mapping:
 // - ASCII preset uses setTextFont(1) and normalizes size=1
 // - JP presets may use one JP font object scaled via setTextSize()
 esp_err_t lgfx_device_set_text_font_preset(uint8_t target, uint8_t preset);

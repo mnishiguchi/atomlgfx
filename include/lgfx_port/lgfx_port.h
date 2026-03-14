@@ -14,9 +14,15 @@ typedef struct lgfx_port_t lgfx_port_t;
 // Protocol-level constants (stable wire values)
 // -----------------------------------------------------------------------------
 //
-// Font preset IDs used by setTextFontPreset/2.
+// Text font preset IDs used by setTextFontPreset/2.
+//
+// These values are part of the protocol contract and should remain stable across
+// handler / worker / device layers.
+//
+// Behavior is defined by the implementation behind the protocol:
 // - ASCII is always available.
-// - JP presets may be compiled out depending on LGFX_PORT_ENABLE_JP_FONTS.
+// - Optional JP presets may return "not supported" when JP fonts are compiled
+//   out in the current build.
 //
 typedef enum
 {
