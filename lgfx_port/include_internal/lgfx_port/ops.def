@@ -48,7 +48,7 @@ X(setTextSize, lgfx_handle_setTextSize, ATOM_STR("\x0B", "setTextSize"), 6, 7, 0
 X(setTextDatum, lgfx_handle_setTextDatum, ATOM_STR("\x0C", "setTextDatum"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(setTextWrap, lgfx_handle_setTextWrap, ATOM_STR("\x0B", "setTextWrap"), 6, 7, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(setTextFont, lgfx_handle_setTextFont, ATOM_STR("\x0B", "setTextFont"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
-X(setFontPreset, lgfx_handle_setFontPreset, ATOM_STR("\x0D", "setFontPreset"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(setTextFontPreset, lgfx_handle_setTextFontPreset, ATOM_STR("\x11", "setTextFontPreset"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(setTextColor, lgfx_handle_setTextColor, ATOM_STR("\x0C", "setTextColor"), 6, 7, LGFX_F_TEXT_HAS_BG, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(drawString, lgfx_handle_drawString, ATOM_STR("\x0A", "drawString"), 8, 8, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 

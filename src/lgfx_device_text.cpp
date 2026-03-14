@@ -64,7 +64,7 @@ extern "C" esp_err_t lgfx_device_set_text_font(uint8_t target, uint8_t font)
     return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextFont(font); });
 }
 
-extern "C" esp_err_t lgfx_device_set_font_preset(uint8_t target, uint8_t preset)
+extern "C" esp_err_t lgfx_device_set_text_font_preset(uint8_t target, uint8_t preset)
 {
     switch (preset) {
         case LGFX_FONT_PRESET_ASCII:

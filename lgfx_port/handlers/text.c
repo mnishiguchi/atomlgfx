@@ -151,7 +151,7 @@ term lgfx_handle_setTextFont(Context *ctx, lgfx_port_t *port, const lgfx_request
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
-term lgfx_handle_setFontPreset(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+term lgfx_handle_setTextFontPreset(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     term preset_t = lgfx_req_elem(req, 5);
 
@@ -164,7 +164,7 @@ term lgfx_handle_setFontPreset(Context *ctx, lgfx_port_t *port, const lgfx_reque
         ctx,
         port,
         req,
-        lgfx_worker_device_set_font_preset(port, (uint8_t) req->target, preset));
+        lgfx_worker_device_set_text_font_preset(port, (uint8_t) req->target, preset));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }

@@ -274,7 +274,7 @@ This table documents the implemented protocol surface.
 | `setTextDatum` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `setTextWrap` | `LGFX_OP_TARGET_ANY` | `F0` | `6/7` | `requires_init` | - |
 | `setTextFont` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
-| `setFontPreset` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
+| `setTextFontPreset` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `setTextColor` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_TEXT_HAS_BG)` | `6/7` | `requires_init` | - |
 | `drawString` | `LGFX_OP_TARGET_ANY` | `F0` | `8` | `requires_init` | - |
 | `pushImage` | `LGFX_OP_TARGET_ANY` | `F0` | `11` | `requires_init` | `LGFX_CAP_PUSHIMAGE` |
@@ -403,9 +403,9 @@ Two font-selection paths are exposed:
 - `setTextFont(FontIdU8)`
   - raw numeric passthrough to the pinned LovyanGFX API
   - accepts `0..255`
-  - for stable protocol-owned font selection, prefer `setFontPreset`
+  - for stable protocol-owned font selection, prefer `setTextFontPreset`
 
-- `setFontPreset(PresetIdU8)`
+- `setTextFontPreset(PresetIdU8)`
   - driver-defined stable preset selection
 
 ### `setTextDatum`
@@ -435,13 +435,13 @@ Rules:
 - `FontIdU8` must be an integer in `0..255`
 - forwarded as a raw numeric passthrough to the pinned LovyanGFX API
 - this protocol does not define a smaller stable subset of font IDs
-- for stable protocol-owned font selection, prefer `setFontPreset`
+- for stable protocol-owned font selection, prefer `setTextFontPreset`
 
 Errors:
 
 - out-of-range value => `{error, bad_args}`
 
-### `setFontPreset`
+### `setTextFontPreset`
 
 Preset IDs:
 

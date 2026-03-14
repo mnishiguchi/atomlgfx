@@ -69,8 +69,8 @@ extern "C" {
         SET_TEXT_WRAP_XY, set_text_wrap_xy, .target = target, .wrap_x = wrap_x, .wrap_y = wrap_y)          \
     X(set_text_font, (lgfx_port_t * port, uint8_t target, uint8_t font), SET_TEXT_FONT, set_text_font,     \
         .target = target, .font = font)                                                                    \
-    X(set_font_preset, (lgfx_port_t * port, uint8_t target, uint8_t preset), SET_FONT_PRESET,              \
-        set_font_preset, .target = target, .preset = preset)                                               \
+    X(set_text_font_preset, (lgfx_port_t * port, uint8_t target, uint8_t preset), SET_TEXT_FONT_PRESET,    \
+        set_text_font_preset, .target = target, .preset = preset)                                          \
     X(set_text_color, (lgfx_port_t * port, uint8_t target, uint16_t fg565, bool has_bg, uint16_t bg565),   \
         SET_TEXT_COLOR, set_text_color, .target = target, .fg565 = fg565, .has_bg = has_bg, .bg565 = bg565)
 

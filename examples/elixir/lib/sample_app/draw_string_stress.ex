@@ -75,7 +75,7 @@ defmodule SampleApp.DrawStringStress do
   end
 
   defp try_japanese_font_presets(port, [preset | rest]) do
-    case Port.set_font_preset(port, preset, 0) do
+    case Port.set_text_font_preset(port, preset, 0) do
       :ok ->
         :erlang.put({__MODULE__, :jp_preset}, preset)
         IO.puts("draw_string_stress jp preset: #{inspect(preset)}")

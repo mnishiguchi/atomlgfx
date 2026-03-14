@@ -40,7 +40,7 @@ defmodule LGFXPort do
     - `dst_target`: `0` for LCD or `1..254` for sprite
   - `set_text_datum/3` is a numeric passthrough. It accepts `0..255` and forwards the raw value to the pinned native driver.
   - `set_text_font/3` is a numeric passthrough. It accepts `0..255` and forwards the raw value to the pinned native driver.
-  - For stable protocol-owned font selection, prefer `set_font_preset/3`.
+  - For stable protocol-owned font selection, prefer `set_text_font_preset/3`.
   """
 
   @compile {:no_warn_undefined, :port}
@@ -513,7 +513,7 @@ defmodule LGFXPort do
   Sets the text font as a raw driver-facing `u8` passthrough.
 
   Accepted range is `0..255`. For stable protocol-owned font choices, prefer
-  `set_font_preset/3`.
+  `set_text_font_preset/3`.
   """
   def set_text_font(port, font_id, target \\ 0)
       when u8(font_id) and target_any(target) do
@@ -524,10 +524,10 @@ defmodule LGFXPort do
   end
 
   # Preset selection also updates cached font selection and implied text size.
-  def set_font_preset(port, preset, target \\ 0)
+  def set_text_font_preset(port, preset, target \\ 0)
       when target_any(target) do
     with {:ok, preset_id, canonical_preset} <- font_preset_to_wire(preset) do
-      call_ok(port, :setFontPreset, target, 0, [preset_id], @t_long)
+      call_ok(port, :setTextFontPreset, target, 0, [preset_id], @t_long)
       |> after_ok(fn ->
         cache_put(text_font_selection_cache_key(port, target), {:preset, canonical_preset})
 

@@ -236,14 +236,14 @@ esp_err_t lgfx_device_set_color_depth(uint8_t target, uint8_t depth);
 // - accepts raw u8 values in 0..255
 // - forwarded as a numeric passthrough to the pinned LovyanGFX text font API
 // - protocol does not define a smaller stable subset
-// - for stable protocol-owned font selection, prefer setFontPreset()
+// - for stable protocol-owned font selection, prefer setTextFontPreset()
 esp_err_t lgfx_device_set_text_size(uint8_t target, uint8_t size);
 esp_err_t lgfx_device_set_text_size_xy(uint8_t target, uint8_t sx, uint8_t sy);
 esp_err_t lgfx_device_set_text_datum(uint8_t target, uint8_t datum);
 esp_err_t lgfx_device_set_text_wrap(uint8_t target, bool wrap_x, bool wrap_y);
 esp_err_t lgfx_device_set_text_font(uint8_t target, uint8_t font);
 
-// setFontPreset(preset_id): selects a driver-defined font preset.
+// setTextFontPreset(preset_id): selects a driver-defined font preset.
 //
 // Behavior:
 // - unknown preset IDs return ESP_ERR_INVALID_ARG
@@ -252,7 +252,7 @@ esp_err_t lgfx_device_set_text_font(uint8_t target, uint8_t font);
 // Current mapping:
 // - ASCII preset uses setTextFont(1) and normalizes size=1
 // - JP presets may use one JP font object scaled via setTextSize()
-esp_err_t lgfx_device_set_font_preset(uint8_t target, uint8_t preset);
+esp_err_t lgfx_device_set_text_font_preset(uint8_t target, uint8_t preset);
 
 // ----------------------------------------------------------------------------
 // Size queries (LCD or sprite target)

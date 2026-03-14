@@ -14,7 +14,7 @@ typedef struct lgfx_port_t lgfx_port_t;
 // Protocol-level constants (stable wire values)
 // -----------------------------------------------------------------------------
 //
-// Font preset IDs used by setFontPreset/2.
+// Font preset IDs used by setTextFontPreset/2.
 // - ASCII is always available.
 // - JP presets may be compiled out depending on LGFX_PORT_ENABLE_JP_FONTS.
 //

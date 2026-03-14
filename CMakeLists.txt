@@ -8,7 +8,7 @@ set(LGFX_SRC_ROOT "${LGFX_ROOT}/src")
 
 set(LGFX_PORT_CONFIG_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/lgfx_port/cmake/lgfx_port_config.h.in")
 
-set(LGFX_PORT_ENABLE_JP_FONTS ON CACHE BOOL "Enable Japanese font data for setFontPreset jp_*")
+set(LGFX_PORT_ENABLE_JP_FONTS ON CACHE BOOL "Enable Japanese font data for setTextFontPreset jp_*")
 set(LGFX_PORT_ENABLE_TOUCH ON CACHE BOOL "Enable XPT2046 touch driver (Touch_XPT2046)")
 
 # -----------------------------------------------------------------------------

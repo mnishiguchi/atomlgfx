@@ -129,7 +129,7 @@ defmodule SampleApp.TextProbe do
   end
 
   defp try_japanese_font_presets(port, [preset | rest]) do
-    case Port.set_font_preset(port, preset, 0) do
+    case Port.set_text_font_preset(port, preset, 0) do
       :ok ->
         IO.puts("text_probe using font preset #{inspect(preset)}")
         :ok
@@ -227,7 +227,7 @@ defmodule SampleApp.TextProbe do
            :ok <- Port.set_text_size(port, 1, 0),
            :ok <- Port.set_text_color(port, @dim, nil, 0),
            :ok <- Port.draw_string(port, @pad, y, label, 0) do
-        case Port.set_font_preset(port, preset, 0) do
+        case Port.set_text_font_preset(port, preset, 0) do
           :ok ->
             IO.puts("text_probe using font preset #{inspect(preset)}")
 
