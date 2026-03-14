@@ -10,6 +10,7 @@
 #include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/proto_term.h"
 #include "lgfx_port/protocol.h"
+#include "lgfx_port/worker.h"
 
 // ----------------------------------------------------------------------------
 // Tiny decode helpers for handlers
@@ -25,6 +26,21 @@
 static inline term lgfx_req_elem(const lgfx_request_t *req, int index)
 {
     return term_get_tuple_element(req->request_tuple, index);
+}
+
+// ----------------------------------------------------------------------------
+// Tiny shared state helpers for handlers
+// ----------------------------------------------------------------------------
+
+static inline void lgfx_refresh_cached_dims(lgfx_port_t *port)
+{
+    uint16_t w = 0;
+    uint16_t h = 0;
+
+    if (lgfx_worker_device_get_dims(port, &w, &h) == ESP_OK) {
+        port->width = (uint32_t) w;
+        port->height = (uint32_t) h;
+    }
 }
 
 static inline bool lgfx_decode_u32_at(const lgfx_request_t *req, int index, uint32_t *out)

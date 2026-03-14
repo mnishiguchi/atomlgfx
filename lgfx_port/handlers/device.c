@@ -17,17 +17,6 @@
 #include "lgfx_port/proto_term.h"
 #include "lgfx_port/worker.h"
 
-static void refresh_cached_dims(lgfx_port_t *port)
-{
-    uint16_t w = 0;
-    uint16_t h = 0;
-
-    if (lgfx_worker_device_get_dims(port, &w, &h) == ESP_OK) {
-        port->width = (uint32_t) w;
-        port->height = (uint32_t) h;
-    }
-}
-
 term lgfx_handle_width(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     if (req->target == 0u) {
@@ -69,7 +58,7 @@ term lgfx_handle_setRotation(Context *ctx, lgfx_port_t *port, const lgfx_request
 
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_set_rotation(port, (uint8_t) rot));
 
-    refresh_cached_dims(port);
+    lgfx_refresh_cached_dims(port);
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }

@@ -10,21 +10,11 @@
 
 #include "esp_err.h"
 
+#include "lgfx_port/handler_decode.h"
 #include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
 #include "lgfx_port/proto_term.h"
 #include "lgfx_port/worker.h"
-
-static void refresh_cached_dims(lgfx_port_t *port)
-{
-    uint16_t w = 0;
-    uint16_t h = 0;
-
-    if (lgfx_worker_device_get_dims(port, &w, &h) == ESP_OK) {
-        port->width = (uint32_t) w;
-        port->height = (uint32_t) h;
-    }
-}
 
 term lgfx_handle_ping(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
@@ -89,7 +79,7 @@ term lgfx_handle_init(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req
 
     port->initialized = true;
     lgfx_last_error_clear(port);
-    refresh_cached_dims(port);
+    lgfx_refresh_cached_dims(port);
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
