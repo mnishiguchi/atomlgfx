@@ -8,6 +8,8 @@ X(INIT, init, const void *owner_token; lgfx_open_config_overrides_t open_config_
 X(CLOSE, close, const void *owner_token;, job->err = lgfx_device_close_for_owner(job->a.close.owner_token);)
 X(GET_DIMS, get_dims, const void *owner_token; lgfx_open_config_overrides_t open_config_overrides; uint16_t w; uint16_t h;, job->err = lgfx_device_get_dims_for_open_config(&job->a.get_dims.open_config_overrides, job->a.get_dims.owner_token, &job->a.get_dims.w, &job->a.get_dims.h);)
 X(GET_TARGET_DIMS, get_target_dims, uint8_t target; uint16_t w; uint16_t h;, job->err = lgfx_device_get_target_dims(job->a.get_target_dims.target, &job->a.get_target_dims.w, &job->a.get_target_dims.h);)
+X(START_WRITE, start_write, uint8_t _;, job->err = lgfx_device_start_write();)
+X(END_WRITE, end_write, uint8_t _;, job->err = lgfx_device_end_write();)
 X(SET_ROTATION, set_rotation, uint8_t rot;, job->err = lgfx_device_set_rotation(job->a.set_rotation.rot);)
 X(SET_BRIGHTNESS, set_brightness, uint8_t b;, job->err = lgfx_device_set_brightness(job->a.set_brightness.b);)
 X(SET_COLOR_DEPTH, set_color_depth, uint8_t target; uint8_t depth;, job->err = lgfx_device_set_color_depth(job->a.set_color_depth.target, job->a.set_color_depth.depth);)

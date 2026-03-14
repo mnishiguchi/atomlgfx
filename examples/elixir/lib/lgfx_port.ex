@@ -28,6 +28,9 @@ defmodule LGFXPort do
   - Only one port can own the live native device at a time.
   - `close/1` performs full device teardown and clears this module's runtime caches.
   - `close/1` does not close the port handle and does not forget that port's remembered open-time config.
+  - `start_write/1` and `end_write/1` map directly to LovyanGFX `startWrite()` / `endWrite()`.
+  - Write sessions are nestable and should be paired by the caller.
+  - `close/1` force-unwinds any still-open native write nesting for the owning port during teardown.
 
   Data / reply notes:
 
@@ -217,6 +220,22 @@ defmodule LGFXPort do
     call_ok(port, :close, 0, 0, [], @t_long)
     |> after_ok(fn -> reset_runtime_cache(port) end)
   end
+
+  @doc """
+  Starts a LovyanGFX write session on the LCD device.
+
+  This maps directly to native `startWrite()` and participates in LovyanGFX's
+  nested write counter. Calls should normally be paired with `end_write/1`.
+  """
+  def start_write(port), do: call_ok(port, :startWrite, 0, 0, [], @t_long)
+
+  @doc """
+  Ends a LovyanGFX write session on the LCD device.
+
+  This maps directly to native `endWrite()` and decrements LovyanGFX's nested
+  write counter.
+  """
+  def end_write(port), do: call_ok(port, :endWrite, 0, 0, [], @t_long)
 
   def display(port), do: call_ok(port, :display, 0, 0, [], @t_long)
 

@@ -3,6 +3,7 @@
 // Control-plane handlers:
 // - ping / getCaps / getLastError
 // - init / close
+// - startWrite / endWrite
 #include <stdint.h>
 
 #include "context.h"
@@ -98,5 +99,17 @@ term lgfx_handle_close(Context *ctx, lgfx_port_t *port, const lgfx_request_t *re
     port->height = 0;
 
     lgfx_last_error_clear(port);
+    return reply_ok(ctx, port, req, port->atoms.ok);
+}
+
+term lgfx_handle_startWrite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_start_write(port));
+    return reply_ok(ctx, port, req, port->atoms.ok);
+}
+
+term lgfx_handle_endWrite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_end_write(port));
     return reply_ok(ctx, port, req, port->atoms.ok);
 }

@@ -107,6 +107,16 @@ static inline uint8_t lgfx_touch_calibration_marker_size(lgfx::LGFX_Device *lcd)
 }
 } // namespace
 
+extern "C" esp_err_t lgfx_device_start_write(void)
+{
+    return lgfx_dev::start_write();
+}
+
+extern "C" esp_err_t lgfx_device_end_write(void)
+{
+    return lgfx_dev::end_write();
+}
+
 extern "C" esp_err_t lgfx_device_set_rotation(uint8_t rotation)
 {
     if (rotation > 7) {

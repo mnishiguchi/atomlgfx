@@ -19,6 +19,7 @@ defmodule SampleApp.ProtocolSmoke do
 
   def run(port, raw_call) when is_function(raw_call, 6) do
     with :ok <- check_local_cap_constants(),
+         :ok <- check_write_session_requires_init(port, raw_call),
          {:ok, caps} <- check_get_caps_metadata_and_pushimage(port, raw_call),
          :ok <- check_last_error_cap_matches_availability(port, raw_call, caps.feature_bits) do
       IO.puts("protocol smoke ok")
@@ -65,7 +66,22 @@ defmodule SampleApp.ProtocolSmoke do
   defp power_of_two?(_), do: false
 
   # -----------------------------------------------------------------------------
-  # 1) getCaps metadata sanity + CAP_PUSHIMAGE must be advertised
+  # 1) Pre-init write-session ops must be rejected consistently
+  # -----------------------------------------------------------------------------
+  defp check_write_session_requires_init(port, raw_call) do
+    with :ok <-
+           expect_not_initialized(raw_call.(port, :startWrite, 0, 0, [], @t_short), :startWrite),
+         :ok <- expect_not_initialized(raw_call.(port, :endWrite, 0, 0, [], @t_short), :endWrite) do
+      :ok
+    end
+  end
+
+  defp expect_not_initialized({:error, :not_initialized}, _op), do: :ok
+  defp expect_not_initialized({:error, reason}, op), do: {:error, {op, :unexpected_error, reason}}
+  defp expect_not_initialized({:ok, payload}, op), do: {:error, {op, :unexpected_ok, payload}}
+
+  # -----------------------------------------------------------------------------
+  # 2) getCaps metadata sanity + CAP_PUSHIMAGE must be advertised
   # -----------------------------------------------------------------------------
   defp check_get_caps_metadata_and_pushimage(port, raw_call) do
     case raw_call.(port, :getCaps, 0, 0, [], @t_short) do
@@ -132,7 +148,7 @@ defmodule SampleApp.ProtocolSmoke do
   end
 
   # -----------------------------------------------------------------------------
-  # 2) CAP_LAST_ERROR bit must match actual getLastError availability
+  # 3) CAP_LAST_ERROR bit must match actual getLastError availability
   # -----------------------------------------------------------------------------
   defp check_last_error_cap_matches_availability(port, raw_call, feature_bits) do
     cap_last_error? = cap_set?(feature_bits, @cap_last_error)

@@ -272,6 +272,8 @@ This table documents the implemented protocol surface.
 | `height` | `LGFX_OP_TARGET_ANY` | `F0` | `5` | `requires_init` | - |
 | `init` | `T0/bad_target` | `F0` | `5` | `any` | - |
 | `close` | `T0/bad_target` | `F0` | `5` | `any` | - |
+| `startWrite` | `T0/bad_target` | `F0` | `5` | `requires_init` | - |
+| `endWrite` | `T0/bad_target` | `F0` | `5` | `requires_init` | - |
 | `setRotation` | `T0/bad_target` | `F0` | `6` | `requires_init` | - |
 | `setBrightness` | `T0/bad_target` | `F0` | `6` | `requires_init` | - |
 | `setColorDepth` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |

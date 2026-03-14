@@ -196,11 +196,17 @@ typedef struct lgfx_open_config_overrides_t
 // - tears down the owning port's live device state
 // - releases sprites, LCD device, and singleton ownership
 // - resets globals so the next owner can init deterministically
+// - force-unwinds any remaining LovyanGFX write nesting before teardown
 //
 // get_dims_for_open_config():
 // - if owner_token owns a live device, returns current lcd->width/height
 // - otherwise returns effective panel dims from the provided snapshot layered
 //   over build defaults
+//
+// startWrite()/endWrite():
+// - thin LCD-only alignment with LovyanGFX transaction control
+// - nested calls are counted by LovyanGFX internally
+// - endWrite() is a no-op when the count is already zero
 esp_err_t lgfx_device_init_with_open_config(
     const lgfx_open_config_overrides_t *overrides,
     const void *owner_token);
@@ -212,6 +218,9 @@ esp_err_t lgfx_device_get_dims_for_open_config(
     const void *owner_token,
     uint16_t *out_w,
     uint16_t *out_h);
+
+esp_err_t lgfx_device_start_write(void);
+esp_err_t lgfx_device_end_write(void);
 
 esp_err_t lgfx_device_set_rotation(uint8_t rotation);
 esp_err_t lgfx_device_set_brightness(uint8_t brightness);

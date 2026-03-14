@@ -23,6 +23,8 @@ extern "C" {
  * - wrappers that deep-copy variable-length payloads
  */
 #define LGFX_WORKER_SIMPLE_DEVICE_STATE_WRAPPERS(X)                                                           \
+    X(start_write, (lgfx_port_t * port), START_WRITE, start_write, ._ = 0u)                                   \
+    X(end_write, (lgfx_port_t * port), END_WRITE, end_write, ._ = 0u)                                         \
     X(set_rotation, (lgfx_port_t * port, uint8_t rot), SET_ROTATION, set_rotation, .rot = rot)                \
     X(set_brightness, (lgfx_port_t * port, uint8_t brightness), SET_BRIGHTNESS, set_brightness,               \
         .b = brightness)                                                                                      \

@@ -10,6 +10,7 @@ defmodule SampleApp do
   alias SampleApp.TextProbe
   alias SampleApp.TouchCalibrate
   alias SampleApp.TouchProbe
+  alias SampleApp.WriteSessionSmoke
 
   @default_mode :all
 
@@ -234,6 +235,7 @@ defmodule SampleApp do
     with :ok <- step("ping", Port.ping(port)),
          :ok <- step("protocol_smoke", ProtocolSmoke.run(port)),
          :ok <- step("init", Port.init(port)),
+         :ok <- step("write_session_smoke", WriteSessionSmoke.run(port)),
          :ok <- step("display(init)", Port.display(port)) do
       :ok
     end

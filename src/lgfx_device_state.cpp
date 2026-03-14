@@ -823,6 +823,17 @@ static inline lgfx::LGFXBase *resolve_target(uint8_t target)
     return sprites[target];
 }
 
+static inline void force_end_write_all(PiyopiyoLGFX *lcd)
+{
+    if (lcd == nullptr) {
+        return;
+    }
+
+    while (lcd->getStartCount() != 0u) {
+        lcd->endWrite();
+    }
+}
+
 static esp_err_t ensure_published_device_for_owner(
     const lgfx_open_config_overrides_t *overrides,
     const void *owner_token)
@@ -945,6 +956,42 @@ esp_err_t lock_ready(ScopedLcdLock &lock)
         return ESP_ERR_INVALID_STATE;
     }
 
+    return ESP_OK;
+}
+
+esp_err_t start_write()
+{
+    ScopedLcdLock lock;
+    esp_err_t err = lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    auto *lcd = lcd_device_locked();
+    if (!lcd) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    lcd->startWrite();
+    return ESP_OK;
+}
+
+esp_err_t end_write()
+{
+    ScopedLcdLock lock;
+    esp_err_t err = lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    auto *lcd = lcd_device_locked();
+    if (!lcd) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    // Keep protocol/device contract aligned with LovyanGFX:
+    // endWrite() is tolerated even when the nesting count is already zero.
+    lcd->endWrite();
     return ESP_OK;
 }
 
@@ -1166,9 +1213,8 @@ static esp_err_t lgfx_device_deinit_for_owner(const void *owner_token)
     portEXIT_CRITICAL(&g_publication_mux);
 
     if (to_delete) {
-        // Best-effort cleanup of any in-flight write/transaction state.
-        to_delete->endWrite();
-        to_delete->endTransaction();
+        // Force-unwind any open LovyanGFX write nesting before teardown.
+        force_end_write_all(to_delete);
         delete to_delete;
     }
 

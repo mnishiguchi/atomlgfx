@@ -65,6 +65,12 @@ private:
 // ready (`begin()` completed).
 esp_err_t lock_ready(ScopedLcdLock &lock);
 
+// LovyanGFX-style write session helpers.
+// These do not hold the mutex across multiple protocol calls; they only forward
+// startWrite()/endWrite() to the live singleton under the normal ready checks.
+esp_err_t start_write();
+esp_err_t end_write();
+
 // -----------------------------------------------------------------------------
 // Shared state accessors (must be called while LCD lock is held unless noted)
 // -----------------------------------------------------------------------------
