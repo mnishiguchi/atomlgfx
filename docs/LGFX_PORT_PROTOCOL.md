@@ -13,6 +13,8 @@ Key points:
 - Open-time config passed through `open_port/2` is outside the request tuple protocol documented here.
 - The current sprite surface includes deterministic handle-based `createSprite`, destination-aware whole-sprite blit via `pushSprite`, and destination-aware rotate/zoom blit via `pushRotateZoom`.
 - Touch is advertised only when touch support is both enabled and attached.
+- Primitive and text colors are accepted on the wire as `0x00RRGGBB`, then quantized to RGB565 before entering the worker and device path.
+- `setColorDepth(24)` changes target depth, but does not imply full 24-bit input color fidelity for primitive or text operations.
 
 ## Source of truth
 
@@ -157,13 +159,29 @@ Common usage:
 
 Primitive and text colors:
 
-- `0x00RRGGBB` as packed RGB888 in `u32`
-- converted internally to RGB565
+- wire format is `0x00RRGGBB` as packed RGB888 in `u32`
+- handler decode quantizes that value to RGB565 before entering worker and device layers
+- worker and device layers do not preserve the original RGB888 value for primitive or text ops
+
+`setColorDepth(Target, 24)`:
+
+- changes the destination target depth
+- does not change primitive or text wire encoding
+- does not change the primitive or text worker/device ABI
+- therefore does not imply full 24-bit input color fidelity for primitive or text operations
+
+Examples:
+
+- `0x112233` is accepted on the wire as RGB888
+- that value is quantized to RGB565 `0x1106` before primitive or text execution
+- on a 16-bit target, primitive and text ops use that RGB565 value directly
+- on a 24-bit target, primitive and text ops still start from the same quantized RGB565 value, not the original `0x112233`
 
 `pushImage` pixel blobs:
 
 - RGB565 only
 - big-endian per pixel (`hi lo`)
+- unaffected by `setColorDepth`
 
 Sprite transparent keys:
 
@@ -434,7 +452,9 @@ Args:
 Rules:
 
 - booleans are accepted as atom `true` / `false`
+
 - numeric `0` / `1` are also accepted by the handler decode path
+
 - one-argument form follows LovyanGFX semantics
   - `setTextWrap(WrapXBool)` means `wrap_x = WrapXBool`, `wrap_y = false`
 
@@ -504,6 +524,35 @@ Semantics:
 
 ## Important op semantics
 
+### `setColorDepth`
+
+Args:
+
+- `setColorDepth(DepthU8)`
+
+Allowed values:
+
+- `1`
+- `2`
+- `4`
+- `8`
+- `16`
+- `24`
+
+Semantics:
+
+- changes the destination target color depth
+- does not change the wire format for primitive or text color arguments
+- does not change the primitive or text worker/device ABI, which remains RGB565-based
+- therefore `setColorDepth(24)` does not preserve full RGB888 input fidelity for primitive or text operations
+- `pushImage` remains RGB565-only regardless of target color depth
+
+Examples:
+
+- `setColorDepth(16), fillScreen(0x112233)` uses quantized RGB565 `0x1106`
+- `setColorDepth(24), fillScreen(0x112233)` still quantizes to RGB565 `0x1106` before drawing
+- `setColorDepth(24)` may affect how the target stores or renders the widened result, but not the original input precision of primitive or text colors
+
 ### `setTextWrap`
 
 Args:
@@ -564,6 +613,7 @@ Rules:
 - optional color depth must be valid when provided
 - creation fails if the handle is already in use
 - creation fails if the configured maximum concurrent sprite count is exhausted
+- sprite color depth affects the target storage format, but does not change primitive or text input color decoding rules
 
 ### `pushSprite`
 
@@ -650,6 +700,13 @@ Useful checks:
   - `setTextWrap(true)` should map to `wrap_x=true, wrap_y=false`
   - `setTextWrap(true, true)` should set both axes true
   - one-argument and two-argument forms should remain distinct
+
+- color contract path
+  - primitive and text colors should accept `0x00RRGGBB` on the wire
+  - primitive and text color inputs should quantize before worker/device execution
+  - `setColorDepth(16)` and `setColorDepth(24)` should not change primitive or text input quantization behavior
+  - `setColorDepth(24)` should not imply full RGB888 input fidelity for primitive or text ops
+  - `pushImage` should remain RGB565-only
 
 - rotate/zoom path
   - valid fixed-point call succeeds
