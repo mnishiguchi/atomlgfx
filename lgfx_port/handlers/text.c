@@ -115,7 +115,10 @@ term lgfx_handle_setTextWrap(Context *ctx, lgfx_port_t *port, const lgfx_request
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    bool wrap_y = wrap_x;
+    // LovyanGFX semantics:
+    // - setTextWrap(wrap_x) => wrap_y defaults to false
+    // - setTextWrap(wrap_x, wrap_y)
+    bool wrap_y = false;
     if (arity == 7) {
         term wrap_y_t = lgfx_req_elem(req, 6);
         if (!lgfx_decode_bool_term(port, wrap_y_t, &wrap_y)) {

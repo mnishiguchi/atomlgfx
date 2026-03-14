@@ -232,6 +232,11 @@ esp_err_t lgfx_device_set_color_depth(uint8_t target, uint8_t depth);
 // - forwarded as a numeric passthrough to the pinned LovyanGFX text datum API
 // - protocol does not define a smaller stable subset
 //
+// setTextWrap(wrap_x, wrap_y):
+// - explicit two-axis form at the device boundary
+// - forwarded to the pinned LovyanGFX two-argument API
+// - one-argument protocol/wrapper calls default wrap_y=false before calling here
+//
 // setTextFont(font):
 // - accepts raw u8 values in 0..255
 // - forwarded as a numeric passthrough to the pinned LovyanGFX text font API

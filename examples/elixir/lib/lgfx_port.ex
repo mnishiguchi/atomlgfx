@@ -40,6 +40,9 @@ defmodule LGFXPort do
     - `dst_target`: `0` for LCD or `1..254` for sprite
   - `set_text_datum/3` is a numeric passthrough. It accepts `0..255` and forwards the raw value to the pinned native driver.
   - `set_text_font/3` is a numeric passthrough. It accepts `0..255` and forwards the raw value to the pinned native driver.
+  - `set_text_wrap/3` follows LovyanGFX one-argument semantics:
+    - `set_text_wrap(port, wrap, target)` sets `wrap_x = wrap` and `wrap_y = false`
+    - `set_text_wrap_xy/4` sets both axes explicitly
   - For stable protocol-owned font selection, prefer `set_text_font_preset/3`.
   """
 
@@ -499,11 +502,29 @@ defmodule LGFXPort do
     call_ok(port, :setTextDatum, target, 0, [datum], @t_long)
   end
 
+  @doc """
+  Sets text wrapping using LovyanGFX one-argument semantics.
+
+  This wrapper sends the one-argument protocol form, which means:
+
+  - `wrap_x = wrap`
+  - `wrap_y = false`
+
+  Use `set_text_wrap_xy/4` when both axes must be controlled explicitly.
+  """
   def set_text_wrap(port, wrap, target \\ 0)
       when is_boolean(wrap) and target_any(target) do
     call_ok(port, :setTextWrap, target, 0, [wrap], @t_long)
   end
 
+  @doc """
+  Sets text wrapping for both axes explicitly.
+
+  This wrapper sends the two-argument protocol form:
+
+  - `wrap_x = wrap_x`
+  - `wrap_y = wrap_y`
+  """
   def set_text_wrap_xy(port, wrap_x, wrap_y, target \\ 0)
       when is_boolean(wrap_x) and is_boolean(wrap_y) and target_any(target) do
     call_ok(port, :setTextWrap, target, 0, [wrap_x, wrap_y], @t_long)

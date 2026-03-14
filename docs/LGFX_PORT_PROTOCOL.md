@@ -424,6 +424,29 @@ Errors:
 
 - out-of-range value => `{error, bad_args}`
 
+### `setTextWrap`
+
+Args:
+
+- `setTextWrap(WrapXBool)`
+- `setTextWrap(WrapXBool, WrapYBool)`
+
+Rules:
+
+- booleans are accepted as atom `true` / `false`
+- numeric `0` / `1` are also accepted by the handler decode path
+- one-argument form follows LovyanGFX semantics
+  - `setTextWrap(WrapXBool)` means `wrap_x = WrapXBool`, `wrap_y = false`
+
+- two-argument form sets both axes explicitly
+  - `setTextWrap(WrapXBool, WrapYBool)` means `wrap_x = WrapXBool`, `wrap_y = WrapYBool`
+
+Examples:
+
+- `setTextWrap(true)` => wrap horizontally only
+- `setTextWrap(true, true)` => wrap horizontally and vertically
+- `setTextWrap(false)` => disable horizontal and vertical wrapping
+
 ### `setTextFont`
 
 Args:
@@ -480,6 +503,18 @@ Semantics:
 - the driver enforces the bitmask
 
 ## Important op semantics
+
+### `setTextWrap`
+
+Args:
+
+- `setTextWrap(WrapXBool)`
+- `setTextWrap(WrapXBool, WrapYBool)`
+
+Semantics:
+
+- one-argument form follows LovyanGFX and sets `wrap_y = false`
+- two-argument form sets both axes explicitly
 
 ### `pushImage`
 
@@ -611,6 +646,11 @@ Useful checks:
   - valid `pushSprite` to LCD succeeds
   - missing destination sprite fails for sprite destination
 
+- text-wrap path
+  - `setTextWrap(true)` should map to `wrap_x=true, wrap_y=false`
+  - `setTextWrap(true, true)` should set both axes true
+  - one-argument and two-argument forms should remain distinct
+
 - rotate/zoom path
   - valid fixed-point call succeeds
   - zero or invalid zoom fails
@@ -624,12 +664,16 @@ Useful checks:
 When adding or changing an operation:
 
 - update `lgfx_port/include_internal/lgfx_port/ops.def`
+
 - implement or update the handler
+
 - update capability, error, or protocol constants if needed
+
 - resync generated protocol tables
   - `elixir scripts/sync_lgfx_protocol_doc.exs`
 
 - verify `getCaps` matches the new `feature_cap_bit`
+
 - update this document only for semantics not obvious from the generated tables
 
 ## Compatibility rules
