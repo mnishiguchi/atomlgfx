@@ -15,7 +15,7 @@ Key points:
 - Touch is advertised only when touch support is both enabled and attached.
 - Primitive and text colors are accepted on the wire as `0x00RRGGBB`, then quantized to RGB565 before entering the worker and device path.
 - `setColorDepth(24)` changes target depth, but does not change scalar color wire encoding and does not imply full 24-bit input color fidelity for primitive or text operations.
-- `setTextSize` uses plain positive integer size arguments on the wire (`1..255`), not fixed-point.
+- `setTextSize` uses positive x256 fixed-point integer size arguments on the wire, not floats.
 
 ## Source of truth
 
@@ -116,6 +116,7 @@ Examples of device-layer semantic checks:
 
 - source or destination sprite existence
 - `pushImage` stride normalization and required byte count
+- `drawJpg` decode/render behavior
 - rotate/zoom finite and positive constraints
 - deterministic sprite allocation rules
 
@@ -132,7 +133,7 @@ Current model:
 - deep-copy variable-length payloads before enqueueing worker jobs
 - free the copied payload after the device call completes
 
-That matters especially for `pushImage` and string-bearing operations.
+That matters especially for `pushImage`, `drawJpg`, and string-bearing operations.
 
 ## Common data and encodings
 
@@ -330,6 +331,7 @@ This table documents the implemented protocol surface.
 | `setTextFontPreset` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `setTextColor` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_TEXT_HAS_BG)` | `6/7` | `requires_init` | - |
 | `drawString` | `LGFX_OP_TARGET_ANY` | `F0` | `8` | `requires_init` | - |
+| `drawJpg` | `LGFX_OP_TARGET_ANY` | `F0` | `8/14` | `requires_init` | - |
 | `pushImage` | `LGFX_OP_TARGET_ANY` | `F0` | `11` | `requires_init` | `LGFX_CAP_PUSHIMAGE` |
 | `setClipRect` | `LGFX_OP_TARGET_ANY` | `F0` | `9` | `requires_init` | - |
 | `clearClipRect` | `LGFX_OP_TARGET_ANY` | `F0` | `5` | `requires_init` | - |
@@ -628,6 +630,57 @@ Semantics:
 - one-argument form follows LovyanGFX and sets `wrap_y = false`
 - two-argument form sets both axes explicitly
 
+### `drawJpg`
+
+Request args:
+
+- `drawJpg(Xi16, Yi16, JpegBinary)`
+- `drawJpg(Xi16, Yi16, MaxWu16, MaxHu16, OffXi16, OffYi16, ScaleXX1024I32, ScaleYX1024I32, JpegBinary)`
+
+Handler-side responsibilities:
+
+- decode tuple fields
+- require the final argument to be a binary
+- enforce the binary-size cap
+- for the short form:
+  - use `MaxW = 0`
+  - use `MaxH = 0`
+  - use `OffX = 0`
+  - use `OffY = 0`
+  - use `ScaleX = 1024`
+  - use `ScaleY = 1024`
+
+- for the extended form:
+  - require `ScaleXX1024I32 > 0`
+  - require `ScaleYX1024I32 > 0`
+
+Device-layer responsibilities:
+
+- decode JPEG from the supplied binary
+- draw to the selected target
+- allow target clipping
+- treat target `0` as LCD and `1..254` as sprite targets
+- return `bad_args` for invalid wire values
+- return `unsupported` only if JPEG support is intentionally unavailable in the build
+- return `internal` or `{internal, EspErr}` for runtime/device failures as appropriate
+
+Ownership rule:
+
+- the driver must not pass a term-binary pointer into any path that can outlive the request unless it first copies or synchronously waits for completion
+- current worker model deep-copies the JPEG payload before enqueueing
+- the copied payload is freed after the device call completes
+
+Conversion model:
+
+- the protocol carries integer x1024 scale values
+- the worker ABI carries those fixed-point values deeper than the handler path
+- conversion to the LovyanGFX float call shape happens at the final device-call boundary
+
+Equivalent formulas:
+
+- `scale_x = ScaleXX1024I32 / 1024.0`
+- `scale_y = ScaleYX1024I32 / 1024.0`
+
 ### `pushImage`
 
 Request args:
@@ -776,6 +829,15 @@ Useful checks:
   - `setColorDepth(16)` and `setColorDepth(24)` should not change primitive or text input quantization behavior
   - `setColorDepth(24)` should not imply full RGB888 input fidelity for primitive or text ops
   - `pushImage` should remain RGB565-only
+
+- jpg path
+  - valid `drawJpg(X, Y, Bin)` should succeed on LCD
+  - valid `drawJpg(X, Y, Bin)` should succeed on a sprite target
+  - valid extended `drawJpg(...)` with positive x1024 scales should succeed
+  - zero or negative x1024 scales should fail
+  - non-binary payload should fail
+  - over-cap binary should fail
+  - corrupt JPEG data should fail without crashing the driver
 
 - rotate/zoom path
   - valid fixed-point call succeeds

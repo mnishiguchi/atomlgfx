@@ -4,6 +4,7 @@ defmodule SampleApp do
   alias LGFXPort, as: Port
   alias SampleApp.ClipSmoke
   alias SampleApp.DrawStringStress
+  alias SampleApp.JpgSmoke
   alias SampleApp.MovingIcons
   alias SampleApp.ProtocolSmoke
   alias SampleApp.PushImageStress
@@ -19,6 +20,7 @@ defmodule SampleApp do
     :protocol,
     :boot,
     :clip,
+    :jpg,
     :sprites,
     :text,
     :touch,
@@ -82,13 +84,14 @@ defmodule SampleApp do
   # - :protocol      -> protocol-only checks (no display init)
   # - :boot          -> init + display + rotation baseline
   # - :clip          -> clipping smoke (requires boot)
+  # - :jpg           -> JPEG decode / draw smoke (requires boot)
   # - :sprites       -> sprite protocol smoke (requires boot)
   # - :text          -> text + font probe (requires boot)
   # - :touch         -> touch probe (requires boot)
   # - :calibrate     -> interactive touch calibration (requires boot)
   # - :stress        -> push_image + draw_string stress (requires boot)
   # - :moving_icons  -> moving icons demo loop (requires boot)
-  # - :all           -> stress + sprites + moving_icons (requires boot)
+  # - :all           -> jpg + stress + sprites + moving_icons (requires boot)
   def start do
     start(@default_mode)
   end
@@ -135,6 +138,12 @@ defmodule SampleApp do
     end)
   end
 
+  defp run_mode(port, :jpg) do
+    with_boot_dims(port, fn w, h ->
+      step("jpg_smoke", JpgSmoke.run(port, w, h))
+    end)
+  end
+
   defp run_mode(port, :sprites) do
     with_boot(port, fn ->
       step("sprite_protocol_smoke", SpriteProtocolSmoke.run(port))
@@ -173,7 +182,8 @@ defmodule SampleApp do
 
   defp run_mode(port, :all) do
     with_boot_dims(port, fn w, h ->
-      with :ok <- run_stress_suite(port),
+      with :ok <- step("jpg_smoke", JpgSmoke.run(port, w, h)),
+           :ok <- run_stress_suite(port),
            :ok <- step("sprite_protocol_smoke", SpriteProtocolSmoke.run(port)),
            :ok <- MovingIcons.run(port, w, h) do
         :ok

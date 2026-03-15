@@ -42,6 +42,9 @@ X(SET_TEXT_FONT_PRESET, set_text_font_preset, uint8_t target; uint8_t preset;, j
 X(SET_TEXT_COLOR, set_text_color, uint8_t target; uint16_t fg565; bool has_bg; uint16_t bg565;, job->err = lgfx_device_set_text_color(job->a.set_text_color.target, job->a.set_text_color.fg565, job->a.set_text_color.has_bg, job->a.set_text_color.bg565);)
 X(DRAW_STRING, draw_string, uint8_t target; int16_t x; int16_t y; const uint8_t *bytes; size_t len;, job->err = lgfx_device_draw_string(job->a.draw_string.target, job->a.draw_string.x, job->a.draw_string.y, job->a.draw_string.bytes, job->a.draw_string.len);)
 
+/* Keep worker ABI fixed-point; convert at the final device-call boundary. */
+X(DRAW_JPG, draw_jpg, uint8_t target; int16_t x; int16_t y; uint16_t max_w; uint16_t max_h; int16_t off_x; int16_t off_y; int32_t scale_x_x1024; int32_t scale_y_x1024; const uint8_t *bytes; size_t len;, job->err = lgfx_device_draw_jpg(job->a.draw_jpg.target, job->a.draw_jpg.x, job->a.draw_jpg.y, job->a.draw_jpg.max_w, job->a.draw_jpg.max_h, job->a.draw_jpg.off_x, job->a.draw_jpg.off_y, job->a.draw_jpg.scale_x_x1024, job->a.draw_jpg.scale_y_x1024, job->a.draw_jpg.bytes, job->a.draw_jpg.len);)
+
 X(PUSH_IMAGE_RGB565_STRIDED, push_image, uint8_t target; int16_t x; int16_t y; uint16_t w; uint16_t h; uint16_t stride_pixels; const uint8_t *bytes; size_t len;, job->err = lgfx_device_push_image_rgb565_strided(job->a.push_image.target, job->a.push_image.x, job->a.push_image.y, job->a.push_image.w, job->a.push_image.h, job->a.push_image.stride_pixels, job->a.push_image.bytes, job->a.push_image.len);)
 
 X(SET_CLIP_RECT, set_clip_rect, uint8_t target; int16_t x; int16_t y; uint16_t w; uint16_t h;, job->err = lgfx_device_set_clip_rect(job->a.set_clip_rect.target, job->a.set_clip_rect.x, job->a.set_clip_rect.y, job->a.set_clip_rect.w, job->a.set_clip_rect.h);)

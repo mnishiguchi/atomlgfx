@@ -341,6 +341,30 @@ esp_err_t lgfx_device_draw_string(uint8_t target, int16_t x, int16_t y, const ui
 // ----------------------------------------------------------------------------
 // Image transfer (LCD or sprite target)
 // ----------------------------------------------------------------------------
+
+// JPEG draw from an in-memory payload.
+//
+// Worker / protocol path provides:
+// - target-local x/y
+// - optional max_w / max_h crop bounds (0 means LovyanGFX default behavior)
+// - optional off_x / off_y source offsets
+// - positive x1024 fixed-point scales
+//
+// Conversion to the LovyanGFX float API happens here at the device boundary.
+// The payload must remain valid for the duration of the call only.
+esp_err_t lgfx_device_draw_jpg(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t max_w,
+    uint16_t max_h,
+    int16_t off_x,
+    int16_t off_y,
+    int32_t scale_x_x1024,
+    int32_t scale_y_x1024,
+    const uint8_t *jpeg_bytes,
+    size_t jpeg_len);
+
 esp_err_t lgfx_device_push_image_rgb565_strided(
     uint8_t target,
     int16_t x,

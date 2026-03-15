@@ -236,6 +236,58 @@ esp_err_t lgfx_worker_device_draw_string(lgfx_port_t *port, uint8_t target, int1
 }
 
 /*
+ * Owned-payload contract (draw_jpg):
+ * - bytes may point into caller-owned memory
+ * - this wrapper deep-copies before enqueueing
+ * - the worker frees the copied payload after the device call and before notify
+ *
+ * Current cleanup assumes the device path fully consumes the payload before the
+ * device call returns. If a future backend introduces async decode / DMA-backed
+ * pipelines, move this path to an explicit long-lived ownership model.
+ */
+esp_err_t lgfx_worker_device_draw_jpg(
+    lgfx_port_t *port,
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t max_w,
+    uint16_t max_h,
+    int16_t off_x,
+    int16_t off_y,
+    int32_t scale_x_x1024,
+    int32_t scale_y_x1024,
+    const uint8_t *bytes,
+    size_t len)
+{
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_DRAW_JPG,
+        .a.draw_jpg = {
+            .target = target,
+            .x = x,
+            .y = y,
+            .max_w = max_w,
+            .max_h = max_h,
+            .off_x = off_x,
+            .off_y = off_y,
+            .scale_x_x1024 = scale_x_x1024,
+            .scale_y_x1024 = scale_y_x1024,
+            .bytes = bytes,
+            .len = len }
+    };
+
+    esp_err_t err = lgfx_worker_copy_payload(&job, bytes, len);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    if (job.owned_payload) {
+        job.a.draw_jpg.bytes = job.owned_payload;
+    }
+
+    return lgfx_worker_call(port, &job);
+}
+
+/*
  * Owned-payload contract (push_image):
  * - bytes may point into caller-owned memory
  * - this wrapper deep-copies before enqueueing

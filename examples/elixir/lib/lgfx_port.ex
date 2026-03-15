@@ -49,6 +49,12 @@ defmodule LGFXPort do
   - `set_text_wrap/3` follows LovyanGFX one-argument semantics:
     - `set_text_wrap(port, wrap, target)` sets `wrap_x = wrap` and `wrap_y = false`
     - `set_text_wrap_xy/4` sets both axes explicitly
+  - `draw_jpg/5` draws a JPEG binary at `{x, y}` on the selected target.
+  - `draw_jpg/11` exposes the extended `drawJpg` protocol form:
+    - `max_width` / `max_height`
+    - `off_x` / `off_y`
+    - `scale_x1024` / `scale_y1024` use x1024 fixed-point (`1.0x = 1024`)
+  - JPEG payloads must be non-empty and must fit within the driver's advertised `MaxBinaryBytes` limit. No automatic chunking is performed.
   - `set_clip_rect/6` and `clear_clip_rect/2` apply to the selected target.
     LCD and sprite clip states are independent.
   - For stable protocol-owned font selection, prefer `set_text_font_preset/3`.
@@ -648,6 +654,117 @@ defmodule LGFXPort do
     :ok
   end
 
+  @doc """
+  Draws a JPEG binary at the given target-local position.
+
+  This uses the short protocol form:
+
+  - `drawJpg(X, Y, JpegBinary)`
+  """
+  def draw_jpg(port, x, y, jpeg, target \\ 0)
+      when i16(x) and i16(y) and is_binary(jpeg) and target_any(target) do
+    with :ok <- validate_non_empty_jpeg(jpeg),
+         :ok <- validate_binary_size_within_limit(port, jpeg, :draw_jpg) do
+      call_ok(port, :drawJpg, target, 0, [x, y, jpeg], @t_long)
+    end
+  end
+
+  @doc """
+  Draws a JPEG binary using the extended protocol form.
+
+  Protocol units:
+
+  - `scale_x1024`: x1024 fixed-point (`1.0x = 1024`)
+  - `scale_y1024`: x1024 fixed-point (`1.0x = 1024`)
+  """
+  def draw_jpg(
+        port,
+        x,
+        y,
+        max_width,
+        max_height,
+        off_x,
+        off_y,
+        scale_x1024,
+        scale_y1024,
+        jpeg,
+        target \\ 0
+      )
+      when i16(x) and i16(y) and
+             u16(max_width) and
+             u16(max_height) and
+             i16(off_x) and i16(off_y) and
+             i32(scale_x1024) and scale_x1024 > 0 and
+             i32(scale_y1024) and scale_y1024 > 0 and
+             is_binary(jpeg) and
+             target_any(target) do
+    with :ok <- validate_non_empty_jpeg(jpeg),
+         :ok <- validate_binary_size_within_limit(port, jpeg, :draw_jpg) do
+      call_ok(
+        port,
+        :drawJpg,
+        target,
+        0,
+        [x, y, max_width, max_height, off_x, off_y, scale_x1024, scale_y1024, jpeg],
+        @t_long
+      )
+    end
+  end
+
+  def draw_jpg_scaled(port, x, y, max_width, max_height, off_x, off_y, scale, jpeg, target \\ 0)
+      when i16(x) and i16(y) and
+             u16(max_width) and
+             u16(max_height) and
+             i16(off_x) and i16(off_y) and
+             is_number(scale) and scale > 0 and
+             is_binary(jpeg) and
+             target_any(target) do
+    draw_jpg_scaled(port, x, y, max_width, max_height, off_x, off_y, scale, scale, jpeg, target)
+  end
+
+  @doc """
+  Convenience wrapper for the extended `drawJpg` form.
+
+  Accepts natural Elixir scale values and converts them to protocol x1024 fixed-point integers.
+  """
+  def draw_jpg_scaled(
+        port,
+        x,
+        y,
+        max_width,
+        max_height,
+        off_x,
+        off_y,
+        scale_x,
+        scale_y,
+        jpeg,
+        target
+      )
+      when i16(x) and i16(y) and
+             u16(max_width) and
+             u16(max_height) and
+             i16(off_x) and i16(off_y) and
+             is_number(scale_x) and scale_x > 0 and
+             is_number(scale_y) and scale_y > 0 and
+             is_binary(jpeg) and
+             target_any(target) do
+    scale_x1024 = max(1, round(scale_x * 1024))
+    scale_y1024 = max(1, round(scale_y * 1024))
+
+    draw_jpg(
+      port,
+      x,
+      y,
+      max_width,
+      max_height,
+      off_x,
+      off_y,
+      scale_x1024,
+      scale_y1024,
+      jpeg,
+      target
+    )
+  end
   def push_image_rgb565(port, x, y, width, height, pixels, stride_pixels \\ 0, target \\ 0)
       when i16(x) and i16(y) and
              u16(width) and
@@ -1047,6 +1164,25 @@ defmodule LGFXPort do
 
   defp normalize_text_scale_x256(value), do: {:error, {:bad_text_scale, value}}
 
+  defp validate_non_empty_jpeg(<<>>), do: {:error, :empty_jpeg}
+  defp validate_non_empty_jpeg(_jpeg), do: :ok
+
+  defp validate_binary_size_within_limit(port, payload, op_name) when is_binary(payload) do
+    payload_size = byte_size(payload)
+
+    case max_binary_bytes(port) do
+      {:ok, max_binary_bytes} when is_integer(max_binary_bytes) and max_binary_bytes > 0 ->
+        if payload_size <= max_binary_bytes do
+          :ok
+        else
+          {:error, {:binary_too_large, op_name, payload_size, max_binary_bytes}}
+        end
+
+      _ ->
+        :ok
+    end
+  end
+
   defp validate_non_empty_image_dims(width, height) when width == 0 or height == 0, do: :skip
   defp validate_non_empty_image_dims(_width, _height), do: :ok
 
@@ -1283,6 +1419,11 @@ defmodule LGFXPort do
 
   def format_error({:bad_touch_calibrate_params, params}),
     do: "bad touch calibrate params #{inspect(params)}"
+
+  def format_error(:empty_jpeg), do: "jpeg must not be empty"
+
+  def format_error({:binary_too_large, op_name, got, max}),
+    do: "#{op_name} binary too large got=#{got} max=#{max}"
 
   def format_error(:empty_text), do: "text must not be empty"
   def format_error(:text_contains_nul), do: "text contains NUL byte"

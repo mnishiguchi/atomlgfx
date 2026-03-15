@@ -57,6 +57,7 @@ X(drawString, lgfx_handle_drawString, ATOM_STR("\x0A", "drawString"), 8, 8, 0, L
 //
 // Images
 //
+X(drawJpg, lgfx_handle_drawJpg, ATOM_STR("\x07", "drawJpg"), 8, 14, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(pushImage, lgfx_handle_pushImage, ATOM_STR("\x09", "pushImage"), 11, 11, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_PUSHIMAGE)
 
 //
