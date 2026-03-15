@@ -14,7 +14,7 @@ Key points:
 - The current sprite surface includes deterministic handle-based `createSprite`, destination-aware whole-sprite blit via `pushSprite`, and destination-aware rotate/zoom blit via `pushRotateZoom`.
 - Touch is advertised only when touch support is both enabled and attached.
 - Primitive and text colors are accepted on the wire as `0x00RRGGBB`, then quantized to RGB565 before entering the worker and device path.
-- `setColorDepth(24)` changes target depth, but does not imply full 24-bit input color fidelity for primitive or text operations.
+- `setColorDepth(24)` changes target depth, but does not change scalar color wire encoding and does not imply full 24-bit input color fidelity for primitive or text operations.
 - `setTextSize` uses plain positive integer size arguments on the wire (`1..255`), not fixed-point.
 
 ## Source of truth
@@ -178,6 +178,23 @@ Primitive and text colors:
 - wire format is `0x00RRGGBB` as packed RGB888 in `u32`
 - handler decode quantizes that value to RGB565 before entering worker and device layers
 - worker and device layers do not preserve the original RGB888 value for primitive or text ops
+- this scalar-color contract is the same regardless of target color depth
+
+This applies to scalar color arguments used by primitive and text operations such as:
+
+- `fillScreen`
+- `clear`
+- `drawPixel`
+- `drawFastVLine`
+- `drawFastHLine`
+- `drawLine`
+- `drawRect`
+- `fillRect`
+- `drawCircle`
+- `fillCircle`
+- `drawTriangle`
+- `fillTriangle`
+- `setTextColor`
 
 `setColorDepth(Target, 24)`:
 
