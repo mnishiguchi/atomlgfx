@@ -11,40 +11,55 @@
 extern const lgfx::U8g2font ui_font_ja_16_min;
 #endif
 
-static esp_err_t set_jp_font_scaled(uint8_t target, uint8_t text_size)
+static inline bool lgfx_text_scale_x256_to_float(uint16_t scale_x256, float *out_scale)
+{
+    if (!out_scale || scale_x256 == 0) {
+        return false;
+    }
+
+    *out_scale = static_cast<float>(scale_x256) / 256.0f;
+    return true;
+}
+
+static esp_err_t set_jp_font_scaled(uint8_t target, uint16_t text_scale_x256)
 {
 #if !defined(LGFX_PORT_ENABLE_JP_FONTS) || (LGFX_PORT_ENABLE_JP_FONTS != 1)
     (void) target;
-    (void) text_size;
+    (void) text_scale_x256;
     return ESP_ERR_NOT_SUPPORTED;
 #else
-    if (text_size == 0) {
+    float text_scale = 0.0f;
+    if (!lgfx_text_scale_x256_to_float(text_scale_x256, &text_scale)) {
         return ESP_ERR_INVALID_ARG;
     }
 
     return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) {
         gfx->setFont(&ui_font_ja_16_min);
-        gfx->setTextSize(text_size);
+        gfx->setTextSize(text_scale);
     });
 #endif
 }
 
-extern "C" esp_err_t lgfx_device_set_text_size(uint8_t target, uint8_t size)
+extern "C" esp_err_t lgfx_device_set_text_size(uint8_t target, uint16_t scale_x256)
 {
-    if (size == 0) {
+    float scale = 0.0f;
+    if (!lgfx_text_scale_x256_to_float(scale_x256, &scale)) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextSize(size); });
+    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextSize(scale); });
 }
 
-extern "C" esp_err_t lgfx_device_set_text_size_xy(uint8_t target, uint8_t sx, uint8_t sy)
+extern "C" esp_err_t lgfx_device_set_text_size_xy(uint8_t target, uint16_t scale_x_x256, uint16_t scale_y_x256)
 {
-    if (sx == 0 || sy == 0) {
+    float scale_x = 0.0f;
+    float scale_y = 0.0f;
+    if (!lgfx_text_scale_x256_to_float(scale_x_x256, &scale_x)
+        || !lgfx_text_scale_x256_to_float(scale_y_x256, &scale_y)) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextSize(sx, sy); });
+    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextSize(scale_x, scale_y); });
 }
 
 extern "C" esp_err_t lgfx_device_set_text_datum(uint8_t target, uint8_t datum)
@@ -70,17 +85,17 @@ extern "C" esp_err_t lgfx_device_set_text_font_preset(uint8_t target, uint8_t pr
         case LGFX_FONT_PRESET_ASCII:
             return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) {
                 gfx->setTextFont(1);
-                gfx->setTextSize(1);
+                gfx->setTextSize(1.0f);
             });
 
         case LGFX_FONT_PRESET_JP_SMALL:
-            return set_jp_font_scaled(target, 1);
+            return set_jp_font_scaled(target, LGFX_TEXT_SCALE_JP_SMALL_X256);
 
         case LGFX_FONT_PRESET_JP_MEDIUM:
-            return set_jp_font_scaled(target, 2);
+            return set_jp_font_scaled(target, LGFX_TEXT_SCALE_JP_MEDIUM_X256);
 
         case LGFX_FONT_PRESET_JP_LARGE:
-            return set_jp_font_scaled(target, 3);
+            return set_jp_font_scaled(target, LGFX_TEXT_SCALE_JP_LARGE_X256);
 
         default:
             return ESP_ERR_INVALID_ARG;

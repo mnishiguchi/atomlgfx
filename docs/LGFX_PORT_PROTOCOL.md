@@ -15,6 +15,7 @@ Key points:
 - Touch is advertised only when touch support is both enabled and attached.
 - Primitive and text colors are accepted on the wire as `0x00RRGGBB`, then quantized to RGB565 before entering the worker and device path.
 - `setColorDepth(24)` changes target depth, but does not imply full 24-bit input color fidelity for primitive or text operations.
+- `setTextSize` uses plain positive integer size arguments on the wire (`1..255`), not fixed-point.
 
 ## Source of truth
 
@@ -148,6 +149,21 @@ Common usage:
 
 - `x`, `y` => `i16`
 - `w`, `h` => `u16`
+
+### Text scale
+
+`setTextSize` uses positive x256 fixed-point integers on the wire:
+
+- `256` => `1.0x`
+- `384` => `1.5x`
+- `512` => `2.0x`
+- `768` => `3.0x`
+
+Rules:
+
+- wire form is integer-only
+- `0` is invalid
+- current accepted range is `1..65535`
 
 ### Strings
 
@@ -430,6 +446,32 @@ Two font-selection paths are exposed:
 - `setTextFontPreset(PresetIdU8)`
   - driver-defined stable preset selection
 
+### `setTextSize`
+
+Args:
+
+- `setTextSize(ScaleXX256U16)`
+- `setTextSize(ScaleXX256U16, ScaleYX256U16)`
+
+Wire encoding:
+
+- positive x256 fixed-point integer
+- `256` means `1.0x`
+- `384` means `1.5x`
+- `512` means `2.0x`
+
+Rules:
+
+- one-argument form applies the same scale to both axes
+- two-argument form sets both axes explicitly
+- `0` is invalid
+- the worker and device path keep protocol-owned x256 scale values
+- conversion to the pinned LovyanGFX float call shape happens at the final device-call boundary
+
+Errors:
+
+- zero or out-of-range value => `{error, bad_args}`
+
 ### `setTextDatum`
 
 Args:
@@ -494,19 +536,19 @@ Preset IDs:
 
 - `0` = `ascii`
   - select ASCII fallback
-  - normalize text size to `1`
+  - normalize text scale to `256` (`1.0x`)
 
 - `1` = `jp_small`
   - Japanese-capable preset
-  - size `1`
+  - text scale `256` (`1.0x`)
 
 - `2` = `jp_medium`
   - Japanese-capable preset
-  - size `2`
+  - text scale `512` (`2.0x`)
 
 - `3` = `jp_large`
   - Japanese-capable preset
-  - size `3`
+  - text scale `768` (`3.0x`)
 
 Errors:
 
@@ -704,6 +746,12 @@ Useful checks:
   - `setTextWrap(true)` should map to `wrap_x=true, wrap_y=false`
   - `setTextWrap(true, true)` should set both axes true
   - one-argument and two-argument forms should remain distinct
+
+- text-scale path
+  - `setTextSize(256)` should mean `1.0x`
+  - `setTextSize(384)` should mean `1.5x`
+  - `setTextSize(256, 512)` should mean `1.0x, 2.0x`
+  - zero scale should fail
 
 - color contract path
   - primitive and text colors should accept `0x00RRGGBB` on the wire

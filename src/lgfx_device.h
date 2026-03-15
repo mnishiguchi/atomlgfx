@@ -253,6 +253,13 @@ esp_err_t lgfx_device_clear_clip_rect(uint8_t target);
 // ----------------------------------------------------------------------------
 // Font preset IDs are protocol-level constants defined in lgfx_port/lgfx_port.h.
 //
+// setTextSize(scale):
+// - accepts positive x256 fixed-point values from the protocol/worker path
+// - 256 => 1.0x
+// - 384 => 1.5x
+// - one-argument form applies the same scale to both axes
+// - conversion to the LovyanGFX float API happens here at the device boundary
+//
 // setTextDatum(datum):
 // - accepts raw u8 values in 0..255
 // - forwarded as a numeric passthrough to the pinned LovyanGFX text datum API
@@ -268,8 +275,8 @@ esp_err_t lgfx_device_clear_clip_rect(uint8_t target);
 // - forwarded as a numeric passthrough to the pinned LovyanGFX text font API
 // - protocol does not define a smaller stable subset
 // - for stable protocol-owned font selection, prefer setTextFontPreset()
-esp_err_t lgfx_device_set_text_size(uint8_t target, uint8_t size);
-esp_err_t lgfx_device_set_text_size_xy(uint8_t target, uint8_t sx, uint8_t sy);
+esp_err_t lgfx_device_set_text_size(uint8_t target, uint16_t scale_x256);
+esp_err_t lgfx_device_set_text_size_xy(uint8_t target, uint16_t scale_x_x256, uint16_t scale_y_x256);
 esp_err_t lgfx_device_set_text_datum(uint8_t target, uint8_t datum);
 esp_err_t lgfx_device_set_text_wrap(uint8_t target, bool wrap_x, bool wrap_y);
 esp_err_t lgfx_device_set_text_font(uint8_t target, uint8_t font);
@@ -281,7 +288,7 @@ esp_err_t lgfx_device_set_text_font(uint8_t target, uint8_t font);
 // - compiled-out optional presets return ESP_ERR_NOT_SUPPORTED
 //
 // Current device mapping:
-// - ASCII preset uses setTextFont(1) and normalizes size=1
+// - ASCII preset uses setTextFont(1) and normalizes text scale to 1.0x
 // - JP presets may use one JP font object scaled via setTextSize()
 esp_err_t lgfx_device_set_text_font_preset(uint8_t target, uint8_t preset);
 

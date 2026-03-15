@@ -50,8 +50,8 @@ term lgfx_handle_setTextSize(Context *ctx, lgfx_port_t *port, const lgfx_request
     const int arity = req->arity;
 
     if (arity == 6) {
-        uint32_t size = 0;
-        if (!lgfx_decode_u32_at(req, 5, &size) || size == 0 || size > 255u) {
+        uint16_t scale_x256 = 0;
+        if (!lgfx_decode_text_scale_x256_at(req, 5, &scale_x256)) {
             return reply_error(ctx, port, req, port->atoms.bad_args, 0);
         }
 
@@ -59,19 +59,22 @@ term lgfx_handle_setTextSize(Context *ctx, lgfx_port_t *port, const lgfx_request
             ctx,
             port,
             req,
-            lgfx_worker_device_set_text_size(port, (uint8_t) req->target, (uint8_t) size));
+            lgfx_worker_device_set_text_size(
+                port,
+                (uint8_t) req->target,
+                scale_x256));
 
         return reply_ok(ctx, port, req, port->atoms.ok);
     }
 
-    uint32_t sx = 0;
-    uint32_t sy = 0;
+    uint16_t scale_x_x256 = 0;
+    uint16_t scale_y_x256 = 0;
 
-    if (!lgfx_decode_u32_at(req, 5, &sx) || sx == 0 || sx > 255u) {
+    if (!lgfx_decode_text_scale_x256_at(req, 5, &scale_x_x256)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    if (!lgfx_decode_u32_at(req, 6, &sy) || sy == 0 || sy > 255u) {
+    if (!lgfx_decode_text_scale_x256_at(req, 6, &scale_y_x256)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -82,8 +85,8 @@ term lgfx_handle_setTextSize(Context *ctx, lgfx_port_t *port, const lgfx_request
         lgfx_worker_device_set_text_size_xy(
             port,
             (uint8_t) req->target,
-            (uint8_t) sx,
-            (uint8_t) sy));
+            scale_x_x256,
+            scale_y_x256));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }

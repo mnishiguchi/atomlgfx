@@ -60,20 +60,20 @@ extern "C" {
         .target = target, .x0 = x0, .y0 = y0, .x1 = x1, .y1 = y1, .x2 = x2, .y2 = y2,                                                                                                 \
         .color565 = color565)
 
-#define LGFX_WORKER_SIMPLE_TEXT_WRAPPERS(X)                                                                \
-    X(set_text_size, (lgfx_port_t * port, uint8_t target, uint8_t size), SET_TEXT_SIZE, set_text_size,     \
-        .target = target, .size = size)                                                                    \
-    X(set_text_size_xy, (lgfx_port_t * port, uint8_t target, uint8_t sx, uint8_t sy),                      \
-        SET_TEXT_SIZE_XY, set_text_size_xy, .target = target, .sx = sx, .sy = sy)                          \
-    X(set_text_datum, (lgfx_port_t * port, uint8_t target, uint8_t datum), SET_TEXT_DATUM, set_text_datum, \
-        .target = target, .datum = datum)                                                                  \
-    X(set_text_wrap_xy, (lgfx_port_t * port, uint8_t target, bool wrap_x, bool wrap_y),                    \
-        SET_TEXT_WRAP_XY, set_text_wrap_xy, .target = target, .wrap_x = wrap_x, .wrap_y = wrap_y)          \
-    X(set_text_font, (lgfx_port_t * port, uint8_t target, uint8_t font), SET_TEXT_FONT, set_text_font,     \
-        .target = target, .font = font)                                                                    \
-    X(set_text_font_preset, (lgfx_port_t * port, uint8_t target, uint8_t preset), SET_TEXT_FONT_PRESET,    \
-        set_text_font_preset, .target = target, .preset = preset)                                          \
-    X(set_text_color, (lgfx_port_t * port, uint8_t target, uint16_t fg565, bool has_bg, uint16_t bg565),   \
+#define LGFX_WORKER_SIMPLE_TEXT_WRAPPERS(X)                                                                               \
+    X(set_text_size, (lgfx_port_t * port, uint8_t target, uint16_t scale_x256), SET_TEXT_SIZE, set_text_size,             \
+        .target = target, .scale_x256 = scale_x256)                                                                       \
+    X(set_text_size_xy, (lgfx_port_t * port, uint8_t target, uint16_t scale_x_x256, uint16_t scale_y_x256),               \
+        SET_TEXT_SIZE_XY, set_text_size_xy, .target = target, .scale_x_x256 = scale_x_x256, .scale_y_x256 = scale_y_x256) \
+    X(set_text_datum, (lgfx_port_t * port, uint8_t target, uint8_t datum), SET_TEXT_DATUM, set_text_datum,                \
+        .target = target, .datum = datum)                                                                                 \
+    X(set_text_wrap_xy, (lgfx_port_t * port, uint8_t target, bool wrap_x, bool wrap_y),                                   \
+        SET_TEXT_WRAP_XY, set_text_wrap_xy, .target = target, .wrap_x = wrap_x, .wrap_y = wrap_y)                         \
+    X(set_text_font, (lgfx_port_t * port, uint8_t target, uint8_t font), SET_TEXT_FONT, set_text_font,                    \
+        .target = target, .font = font)                                                                                   \
+    X(set_text_font_preset, (lgfx_port_t * port, uint8_t target, uint8_t preset), SET_TEXT_FONT_PRESET,                   \
+        set_text_font_preset, .target = target, .preset = preset)                                                         \
+    X(set_text_color, (lgfx_port_t * port, uint8_t target, uint16_t fg565, bool has_bg, uint16_t bg565),                  \
         SET_TEXT_COLOR, set_text_color, .target = target, .fg565 = fg565, .has_bg = has_bg, .bg565 = bg565)
 
 #define LGFX_WORKER_SIMPLE_CLIP_WRAPPERS(X)                                                              \

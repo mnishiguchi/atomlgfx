@@ -58,6 +58,17 @@ static inline bool lgfx_decode_u16_at(const lgfx_request_t *req, int index, uint
     return lgfx_term_to_u16(lgfx_req_elem(req, index), out);
 }
 
+static inline bool lgfx_decode_text_scale_x256_at(const lgfx_request_t *req, int index, uint16_t *out)
+{
+    uint32_t value = 0;
+    if (!out || !lgfx_decode_u32_at(req, index, &value) || !lgfx_validate_text_scale_x256(value)) {
+        return false;
+    }
+
+    *out = (uint16_t) value;
+    return true;
+}
+
 static inline bool lgfx_decode_i16_at(const lgfx_request_t *req, int index, int16_t *out)
 {
     return lgfx_term_to_i16(lgfx_req_elem(req, index), out);

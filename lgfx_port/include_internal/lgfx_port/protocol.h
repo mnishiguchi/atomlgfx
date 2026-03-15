@@ -10,7 +10,7 @@
 // Build-time configuration generated from lgfx_port/cmake/lgfx_port_config.h.in.
 #include "lgfx_port/lgfx_port_config.h"
 
-#include "lgfx_port/lgfx_port.h" // LGFX_FONT_PRESET_* and other wire constants
+#include "lgfx_port/lgfx_port.h" // LGFX_FONT_PRESET_*, LGFX_TEXT_SCALE_* and other wire constants
 
 // -----------------------------------------------------------------------------
 // Optional debug string constants
@@ -127,6 +127,16 @@ static inline bool lgfx_validate_color_depth(uint32_t d)
         default:
             return false;
     }
+}
+
+// setTextSize wire values use positive x256 fixed-point integers.
+// Examples:
+// - 256 => 1.0x
+// - 384 => 1.5x
+// - 512 => 2.0x
+static inline bool lgfx_validate_text_scale_x256(uint32_t scale_x256)
+{
+    return scale_x256 >= 1u && scale_x256 <= 65535u;
 }
 
 // -----------------------------------------------------------------------------

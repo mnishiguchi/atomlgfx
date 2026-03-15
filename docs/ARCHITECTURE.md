@@ -15,6 +15,7 @@ Core ideas:
 - Open-time config may override selected runtime values per port before `init`.
 - The device layer is a thin C ABI around the pinned LovyanGFX surface used by this repository.
 - Touch is advertised only when support is both enabled and effectively attached.
+- `setTextSize` uses positive x256 fixed-point integers on the wire and converts to the pinned LovyanGFX float API only at the final device boundary.
 
 The wire contract itself is documented in `docs/LGFX_PORT_PROTOCOL.md`.
 
@@ -138,7 +139,9 @@ The protocol-visible operation surface is declared in:
 That metadata drives:
 
 - op atom registration
+
 - dispatch table entries
+
 - validation rules
   - arity
   - allowed flags
@@ -146,6 +149,7 @@ That metadata drives:
   - init-state policy
 
 - capability linkage used by `getCaps`
+
 - generated tables in `docs/LGFX_PORT_PROTOCOL.md`
 
 Worker jobs follow the same pattern:
@@ -187,6 +191,7 @@ Handlers stay intentionally narrow:
 - decode op-specific wire arguments
 - enforce obvious wire-level constraints
 - call synchronous `lgfx_worker_device_*` wrappers
+- keep protocol-owned fixed-point units intact until the device boundary
 
 ### Worker and device path
 
@@ -209,6 +214,7 @@ The device layer is authoritative for device-facing semantics such as:
 - deterministic sprite allocation at a chosen handle
 - destination-aware sprite push behavior
 - `pushImage` payload validity
+- final conversion of protocol-owned text scale x256 values into LovyanGFX float calls
 - rotate/zoom semantic validity
 
 ## Port lifecycle

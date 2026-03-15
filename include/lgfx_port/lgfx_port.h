@@ -32,6 +32,19 @@ typedef enum
     LGFX_FONT_PRESET_JP_LARGE = 3,
 } lgfx_font_preset_t;
 
+// Text scale values used by setTextSize on the wire.
+//
+// Wire encoding is x256 fixed-point:
+// - 256 => 1.0x
+// - 384 => 1.5x
+// - 512 => 2.0x
+//
+// These constants are protocol-visible and should remain stable.
+#define LGFX_TEXT_SCALE_ONE_X256 ((uint16_t) 256u)
+#define LGFX_TEXT_SCALE_JP_SMALL_X256 LGFX_TEXT_SCALE_ONE_X256
+#define LGFX_TEXT_SCALE_JP_MEDIUM_X256 ((uint16_t) 512u)
+#define LGFX_TEXT_SCALE_JP_LARGE_X256 ((uint16_t) 768u)
+
 #ifdef __cplusplus
 }
 #endif

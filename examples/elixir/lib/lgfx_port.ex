@@ -43,6 +43,9 @@ defmodule LGFXPort do
     - `dst_target`: `0` for LCD or `1..254` for sprite
   - `set_text_datum/3` is a numeric passthrough. It accepts `0..255` and forwards the raw value to the pinned native driver.
   - `set_text_font/3` is a numeric passthrough. It accepts `0..255` and forwards the raw value to the pinned native driver.
+  - `set_text_size/3` and `set_text_size_xy/4` accept natural Elixir scales and encode them on the wire as x256 fixed-point integers.
+    - `1` becomes `256`
+    - `1.5` becomes `384`
   - `set_text_wrap/3` follows LovyanGFX one-argument semantics:
     - `set_text_wrap(port, wrap, target)` sets `wrap_x = wrap` and `wrap_y = false`
     - `set_text_wrap_xy/4` sets both axes explicitly
@@ -74,6 +77,13 @@ defmodule LGFXPort do
   @font_preset_jp_small 1
   @font_preset_jp_medium 2
   @font_preset_jp_large 3
+
+  @text_scale_one_x256 256
+  @text_scale_jp_small_x256 @text_scale_one_x256
+  @text_scale_jp_medium_x256 512
+  @text_scale_jp_large_x256 768
+  @text_scale_min_x256 1
+  @text_scale_max_x256 0xFFFF
 
   @valid_color_depths [1, 2, 4, 8, 16, 24]
 
@@ -512,18 +522,23 @@ defmodule LGFXPort do
     end
   end
 
-  def set_text_size(port, size, target \\ 0)
-      when is_integer(size) and size in 1..255 and target_any(target) do
-    call_ok(port, :setTextSize, target, 0, [size], @t_long)
-    |> after_ok(fn -> cache_put(text_size_cache_key(port, target), {size, size}) end)
+  def set_text_size(port, scale, target \\ 0)
+      when is_number(scale) and scale > 0 and target_any(target) do
+    with {:ok, scale_x256} <- normalize_text_scale_x256(scale) do
+      call_ok(port, :setTextSize, target, 0, [scale_x256], @t_long)
+      |> after_ok(fn -> cache_put(text_size_cache_key(port, target), {scale_x256, scale_x256}) end)
+    end
   end
 
   def set_text_size_xy(port, sx, sy, target \\ 0)
-      when is_integer(sx) and sx in 1..255 and
-             is_integer(sy) and sy in 1..255 and
+      when is_number(sx) and sx > 0 and
+             is_number(sy) and sy > 0 and
              target_any(target) do
-    call_ok(port, :setTextSize, target, 0, [sx, sy], @t_long)
-    |> after_ok(fn -> cache_put(text_size_cache_key(port, target), {sx, sy}) end)
+    with {:ok, sx_x256} <- normalize_text_scale_x256(sx),
+         {:ok, sy_x256} <- normalize_text_scale_x256(sy) do
+      call_ok(port, :setTextSize, target, 0, [sx_x256, sy_x256], @t_long)
+      |> after_ok(fn -> cache_put(text_size_cache_key(port, target), {sx_x256, sy_x256}) end)
+    end
   end
 
   @doc """
@@ -578,7 +593,7 @@ defmodule LGFXPort do
     end)
   end
 
-  # Preset selection also updates cached font selection and implied text size.
+  # Preset selection also updates cached font selection and implied text scale.
   def set_text_font_preset(port, preset, target \\ 0)
       when target_any(target) do
     with {:ok, preset_id, canonical_preset} <- font_preset_to_wire(preset) do
@@ -588,7 +603,7 @@ defmodule LGFXPort do
 
         cache_put(
           text_size_cache_key(port, target),
-          implied_text_size_for_preset(canonical_preset)
+          implied_text_scale_x256_for_preset(canonical_preset)
         )
       end)
     end
@@ -613,16 +628,16 @@ defmodule LGFXPort do
     end
   end
 
-  def draw_string_bg(port, x, y, fg888, bg888, size, text, target \\ 0)
+  def draw_string_bg(port, x, y, fg888, bg888, scale, text, target \\ 0)
       when i16(x) and i16(y) and
              color888(fg888) and
              color888(bg888) and
-             is_integer(size) and size in 1..255 and
+             is_number(scale) and scale > 0 and
              is_binary(text) and
              target_any(target) do
     with :ok <- validate_text_binary(text),
          :ok <- maybe_set_text_color(port, fg888, bg888, target),
-         :ok <- maybe_set_text_size(port, size, target),
+         :ok <- maybe_set_text_size(port, scale, target),
          :ok <- draw_string(port, x, y, text, target) do
       :ok
     end
@@ -976,10 +991,17 @@ defmodule LGFXPort do
   defp font_preset_to_wire(:jp), do: {:ok, @font_preset_jp_medium, :jp_medium}
   defp font_preset_to_wire(other), do: {:error, {:bad_font_preset, other}}
 
-  defp implied_text_size_for_preset(:ascii), do: {1, 1}
-  defp implied_text_size_for_preset(:jp_small), do: {1, 1}
-  defp implied_text_size_for_preset(:jp_medium), do: {2, 2}
-  defp implied_text_size_for_preset(:jp_large), do: {3, 3}
+  defp implied_text_scale_x256_for_preset(:ascii),
+    do: {@text_scale_one_x256, @text_scale_one_x256}
+
+  defp implied_text_scale_x256_for_preset(:jp_small),
+    do: {@text_scale_jp_small_x256, @text_scale_jp_small_x256}
+
+  defp implied_text_scale_x256_for_preset(:jp_medium),
+    do: {@text_scale_jp_medium_x256, @text_scale_jp_medium_x256}
+
+  defp implied_text_scale_x256_for_preset(:jp_large),
+    do: {@text_scale_jp_large_x256, @text_scale_jp_large_x256}
 
   defp maybe_set_text_color(port, fg888, bg888, target) do
     desired = {fg888, bg888}
@@ -990,12 +1012,14 @@ defmodule LGFXPort do
     end
   end
 
-  defp maybe_set_text_size(port, size, target) do
-    desired = {size, size}
+  defp maybe_set_text_size(port, scale, target) do
+    with {:ok, scale_x256} <- normalize_text_scale_x256(scale) do
+      desired = {scale_x256, scale_x256}
 
-    case cache_get(text_size_cache_key(port, target)) do
-      ^desired -> :ok
-      _ -> set_text_size(port, size, target)
+      case cache_get(text_size_cache_key(port, target)) do
+        ^desired -> :ok
+        _ -> set_text_size(port, scale, target)
+      end
     end
   end
 
@@ -1006,6 +1030,22 @@ defmodule LGFXPort do
   end
 
   defp normalize_text_color_args(_fg888, bg888), do: {:error, {:bad_text_color, bg888}}
+
+  defp normalize_text_scale_x256(value) when is_number(value) and value > 0 do
+    scale_x256 =
+      cond do
+        is_integer(value) -> value * @text_scale_one_x256
+        is_float(value) -> round(value * @text_scale_one_x256)
+      end
+
+    if scale_x256 >= @text_scale_min_x256 and scale_x256 <= @text_scale_max_x256 do
+      {:ok, scale_x256}
+    else
+      {:error, {:bad_text_scale, value}}
+    end
+  end
+
+  defp normalize_text_scale_x256(value), do: {:error, {:bad_text_scale, value}}
 
   defp validate_non_empty_image_dims(width, height) when width == 0 or height == 0, do: :skip
   defp validate_non_empty_image_dims(_width, _height), do: :ok
@@ -1232,6 +1272,7 @@ defmodule LGFXPort do
 
   def format_error({:bad_reply_value, name}), do: "bad reply value for #{inspect(name)}"
   def format_error({:bad_text_color, value}), do: "bad text bg color #{inspect(value)}"
+  def format_error({:bad_text_scale, value}), do: "bad text scale #{inspect(value)}"
   def format_error({:bad_font_preset, preset}), do: "bad font preset #{inspect(preset)}"
 
   def format_error({:bad_touch_payload, op, payload}),

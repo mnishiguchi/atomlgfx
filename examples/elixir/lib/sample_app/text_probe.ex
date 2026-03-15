@@ -32,7 +32,7 @@ defmodule SampleApp.TextProbe do
          :ok <- Port.set_text_wrap_xy(port, false, false, 0),
          :ok <- Port.set_text_datum(port, 0, 0),
          :ok <- Port.set_text_font(port, 1, 0),
-         :ok <- Port.set_text_size_xy(port, 2, 0, 0),
+         :ok <- Port.set_text_size_xy(port, 2, 2, 0),
          :ok <- Port.set_text_size(port, 1, 0),
          :ok <- Port.set_text_color(port, @fg, nil, 0),
          :ok <- Port.draw_rect(port, 0, 0, w, h, @frame),
@@ -65,7 +65,7 @@ defmodule SampleApp.TextProbe do
          :ok <- Port.set_text_wrap_xy(port, false, false, 0),
          :ok <- Port.set_text_datum(port, 0, 0),
          :ok <- Port.set_text_font(port, 1, 0),
-         :ok <- Port.set_text_size_xy(port, 2, 0, 0),
+         :ok <- Port.set_text_size_xy(port, 2, 2, 0),
          :ok <- Port.set_text_size(port, 1, 0),
          :ok <- Port.set_text_color(port, @fg, nil, 0),
          :ok <- Port.draw_rect(port, 0, 0, w, h, @frame),
@@ -144,8 +144,6 @@ defmodule SampleApp.TextProbe do
   # Font matrix block (below the smoke block)
   # -----------------------------------------------------------------------------
   defp should_draw_font_matrix?(h, y_after_smoke) do
-    # Roughly needs:
-    # - header + a few rows, otherwise it turns into half-rendered noise.
     min_needed = 2 * @line_h + 3 * @ascii_row_h + 2 * @jp_row_h
     y_after_smoke + min_needed < h
   end
@@ -153,7 +151,6 @@ defmodule SampleApp.TextProbe do
   defp draw_font_matrix_block(port, _w, h, y0) do
     ascii_y0 = y0 + 6
 
-    # Make sure our label style is predictable after JP preset.
     with :ok <- Port.set_text_font(port, 1, 0),
          :ok <- Port.set_text_size(port, 1, 0),
          :ok <- Port.set_text_color(port, @dim, nil, 0),
@@ -167,11 +164,9 @@ defmodule SampleApp.TextProbe do
   end
 
   defp compute_jp_y0(ascii_rows_y0, h) do
-    # Place JP section after all ASCII rows, but clamp to screen.
     jp_y0 = ascii_rows_y0 + length(@font_ids) * @ascii_row_h + 12
 
     if jp_y0 + 10 >= h do
-      # will effectively skip JP header/rows via guards
       {:ok, h}
     else
       {:ok, jp_y0}
@@ -232,7 +227,6 @@ defmodule SampleApp.TextProbe do
             IO.puts("text_probe using font preset #{inspect(preset)}")
 
             with :ok <- Port.set_text_color(port, @fg, nil, 0),
-                 # Do not call set_text_size here: preset owns it.
                  :ok <- Port.draw_string(port, 120, y, "日本語: 設定 戻る 次へ", 0) do
               draw_jp_rows(port, rest, y0 + row_h, row_h, h)
             end
@@ -253,9 +247,6 @@ defmodule SampleApp.TextProbe do
     end
   end
 
-  # -----------------------------------------------------------------------------
-  # Tiny helpers
-  # -----------------------------------------------------------------------------
   defp min_i(a, b) when a <= b, do: a
   defp min_i(_a, b), do: b
 
