@@ -337,7 +337,7 @@ This table documents the implemented protocol surface.
 | `clearClipRect` | `LGFX_OP_TARGET_ANY` | `F0` | `5` | `requires_init` | - |
 | `createSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7/8` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `deleteSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `5` | `requires_init` | `LGFX_CAP_SPRITE` |
-| `setPivot` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7` | `requires_init` | `LGFX_CAP_SPRITE` |
+| `setPivot` | `LGFX_OP_TARGET_ANY` | `F0` | `7` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `pushSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `8/9` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `pushRotateZoom` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `11/12` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `getTouch` | `T0/bad_target` | `F0` | `5` | `requires_init` | `LGFX_CAP_TOUCH` |

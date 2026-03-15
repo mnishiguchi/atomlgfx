@@ -230,6 +230,7 @@ esp_err_t lgfx_device_display(void);
 // Common ops (LCD or sprite target)
 // ----------------------------------------------------------------------------
 esp_err_t lgfx_device_set_color_depth(uint8_t target, uint8_t depth);
+esp_err_t lgfx_device_set_pivot(uint8_t target, int16_t px, int16_t py);
 
 // ----------------------------------------------------------------------------
 // Clipping (LCD or sprite target)
@@ -380,7 +381,6 @@ esp_err_t lgfx_device_push_image_rgb565_strided(
 // ----------------------------------------------------------------------------
 esp_err_t lgfx_device_sprite_create_at(uint8_t handle, uint16_t w, uint16_t h, uint8_t color_depth);
 esp_err_t lgfx_device_sprite_delete(uint8_t handle);
-esp_err_t lgfx_device_sprite_set_pivot(uint8_t handle, int16_t px, int16_t py);
 
 /*
  * Whole-sprite push to LCD or another sprite.

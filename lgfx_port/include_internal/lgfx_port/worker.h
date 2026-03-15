@@ -82,12 +82,14 @@ extern "C" {
     X(clear_clip_rect, (lgfx_port_t * port, uint8_t target),                                             \
         CLEAR_CLIP_RECT, clear_clip_rect, .target = target)
 
+#define LGFX_WORKER_SIMPLE_TARGET_WRAPPERS(X)                                                      \
+    X(set_pivot, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y), SET_PIVOT, set_pivot, \
+        .target = target, .x = x, .y = y)
+
 #define LGFX_WORKER_SIMPLE_SPRITE_WRAPPERS(X)                                                                                                                                                                                                                  \
     X(create_sprite, (lgfx_port_t * port, uint8_t target, uint16_t w, uint16_t h, uint8_t color_depth),                                                                                                                                                        \
         CREATE_SPRITE, create_sprite, .target = target, .w = w, .h = h, .color_depth = color_depth)                                                                                                                                                            \
     X(delete_sprite, (lgfx_port_t * port, uint8_t target), DELETE_SPRITE, delete_sprite, .target = target)                                                                                                                                                     \
-    X(set_pivot, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y), SET_PIVOT, set_pivot,                                                                                                                                                             \
-        .target = target, .x = x, .y = y)                                                                                                                                                                                                                      \
     X(push_sprite, (lgfx_port_t * port, uint8_t src_target, uint8_t dst_target, int16_t x, int16_t y, bool has_transparent, uint16_t transparent565), PUSH_SPRITE, push_sprite,                                                                                \
         .src_target = src_target, .dst_target = dst_target, .x = x, .y = y,                                                                                                                                                                                    \
         .has_transparent = has_transparent, .transparent565 = transparent565)                                                                                                                                                                                  \
@@ -101,6 +103,7 @@ extern "C" {
     LGFX_WORKER_SIMPLE_PRIMITIVE_WRAPPERS(X)    \
     LGFX_WORKER_SIMPLE_TEXT_WRAPPERS(X)         \
     LGFX_WORKER_SIMPLE_CLIP_WRAPPERS(X)         \
+    LGFX_WORKER_SIMPLE_TARGET_WRAPPERS(X)       \
     LGFX_WORKER_SIMPLE_SPRITE_WRAPPERS(X)
 
 bool lgfx_worker_start(lgfx_port_t *port);

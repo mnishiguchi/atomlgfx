@@ -71,7 +71,7 @@ X(clearClipRect, lgfx_handle_clearClipRect, ATOM_STR("\x0D", "clearClipRect"), 5
 //
 X(createSprite, lgfx_handle_createSprite, ATOM_STR("\x0C", "createSprite"), 7, 8, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
 X(deleteSprite, lgfx_handle_deleteSprite, ATOM_STR("\x0C", "deleteSprite"), 5, 5, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
-X(setPivot, lgfx_handle_setPivot, ATOM_STR("\x08", "setPivot"), 7, 7, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
+X(setPivot, lgfx_handle_setPivot, ATOM_STR("\x08", "setPivot"), 7, 7, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
 
 // Header target is the source sprite; payload begins with destination target.
 X(pushSprite, lgfx_handle_pushSprite, ATOM_STR("\x0A", "pushSprite"), 8, 9, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)

@@ -108,6 +108,7 @@ Checks that do not belong in handlers:
 - destination sprite existence
 - `pushImage` stride and byte-count semantics
 - rotate/zoom semantic validity beyond basic wire decode
+- target-resolution semantics such as LCD target `0` versus sprite targets `1..254`
 
 ### Worker task
 
@@ -348,6 +349,7 @@ Belongs here:
 Examples:
 
 - deterministic `createSprite` at the caller-selected handle
+- target-aware `setPivot` for LCD target `0` or sprite targets `1..254`
 - destination-aware `pushSprite` / `pushRotateZoom`
 - `pushImage` stride and payload checks
 - rotate/zoom semantic validation

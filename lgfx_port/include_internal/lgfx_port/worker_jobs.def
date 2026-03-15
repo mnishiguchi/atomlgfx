@@ -49,10 +49,10 @@ X(PUSH_IMAGE_RGB565_STRIDED, push_image, uint8_t target; int16_t x; int16_t y; u
 
 X(SET_CLIP_RECT, set_clip_rect, uint8_t target; int16_t x; int16_t y; uint16_t w; uint16_t h;, job->err = lgfx_device_set_clip_rect(job->a.set_clip_rect.target, job->a.set_clip_rect.x, job->a.set_clip_rect.y, job->a.set_clip_rect.w, job->a.set_clip_rect.h);)
 X(CLEAR_CLIP_RECT, clear_clip_rect, uint8_t target;, job->err = lgfx_device_clear_clip_rect(job->a.clear_clip_rect.target);)
+X(SET_PIVOT, set_pivot, uint8_t target; int16_t x; int16_t y;, job->err = lgfx_device_set_pivot(job->a.set_pivot.target, job->a.set_pivot.x, job->a.set_pivot.y);)
 
 X(CREATE_SPRITE, create_sprite, uint8_t target; uint16_t w; uint16_t h; uint8_t color_depth;, job->err = lgfx_device_sprite_create_at(job->a.create_sprite.target, job->a.create_sprite.w, job->a.create_sprite.h, job->a.create_sprite.color_depth);)
 X(DELETE_SPRITE, delete_sprite, uint8_t target;, job->err = lgfx_device_sprite_delete(job->a.delete_sprite.target);)
-X(SET_PIVOT, set_pivot, uint8_t target; int16_t x; int16_t y;, job->err = lgfx_device_sprite_set_pivot(job->a.set_pivot.target, job->a.set_pivot.x, job->a.set_pivot.y);)
 X(PUSH_SPRITE, push_sprite, uint8_t src_target; uint8_t dst_target; int16_t x; int16_t y; bool has_transparent; uint16_t transparent565;, job->err = lgfx_device_sprite_push_sprite(job->a.push_sprite.src_target, job->a.push_sprite.dst_target, job->a.push_sprite.x, job->a.push_sprite.y, job->a.push_sprite.has_transparent, job->a.push_sprite.transparent565);)
 
 /* Keep worker ABI fixed-point; convert at the final device-call boundary. */

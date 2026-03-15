@@ -98,9 +98,9 @@ extern "C" esp_err_t lgfx_device_sprite_delete(uint8_t handle)
     return ESP_OK;
 }
 
-extern "C" esp_err_t lgfx_device_sprite_set_pivot(uint8_t handle, int16_t px, int16_t py)
+extern "C" esp_err_t lgfx_device_set_pivot(uint8_t target, int16_t px, int16_t py)
 {
-    return lgfx_dev::with_sprite(handle, [&](lgfx::LGFX_Sprite *spr) { spr->setPivot(px, py); });
+    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setPivot(px, py); });
 }
 
 extern "C" esp_err_t lgfx_device_sprite_push_sprite(
