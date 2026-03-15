@@ -232,6 +232,23 @@ esp_err_t lgfx_device_display(void);
 esp_err_t lgfx_device_set_color_depth(uint8_t target, uint8_t depth);
 
 // ----------------------------------------------------------------------------
+// Clipping (LCD or sprite target)
+// ----------------------------------------------------------------------------
+//
+// Target behavior:
+// - target 0 applies to the LCD singleton
+// - sprite targets apply to that sprite only
+//
+// Coordinate behavior:
+// - x/y are target-local signed coordinates
+// - w/h must be > 0
+//
+// lgfx_device_clear_clip_rect():
+// - removes any active clip rectangle for the target
+esp_err_t lgfx_device_set_clip_rect(uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h);
+esp_err_t lgfx_device_clear_clip_rect(uint8_t target);
+
+// ----------------------------------------------------------------------------
 // Text config (LCD or sprite target)
 // ----------------------------------------------------------------------------
 // Font preset IDs are protocol-level constants defined in lgfx_port/lgfx_port.h.

@@ -357,6 +357,7 @@ idf_component_register(
     "lgfx_port/handlers/images.c"
     "lgfx_port/handlers/sprites.c"
     "lgfx_port/handlers/touch.c"
+    "lgfx_port/handlers/clip.c"
 
     # Device adapter
     "src/lgfx_device_state.cpp"
@@ -365,6 +366,7 @@ idf_component_register(
     "src/lgfx_device_primitives.cpp"
     "src/lgfx_device_images.cpp"
     "src/lgfx_device_sprites.cpp"
+    "src/lgfx_device_clip.cpp"
   INCLUDE_DIRS
     "include"
   PRIV_INCLUDE_DIRS

@@ -76,6 +76,12 @@ extern "C" {
     X(set_text_color, (lgfx_port_t * port, uint8_t target, uint16_t fg565, bool has_bg, uint16_t bg565),   \
         SET_TEXT_COLOR, set_text_color, .target = target, .fg565 = fg565, .has_bg = has_bg, .bg565 = bg565)
 
+#define LGFX_WORKER_SIMPLE_CLIP_WRAPPERS(X)                                                              \
+    X(set_clip_rect, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h), \
+        SET_CLIP_RECT, set_clip_rect, .target = target, .x = x, .y = y, .w = w, .h = h)                  \
+    X(clear_clip_rect, (lgfx_port_t * port, uint8_t target),                                             \
+        CLEAR_CLIP_RECT, clear_clip_rect, .target = target)
+
 #define LGFX_WORKER_SIMPLE_SPRITE_WRAPPERS(X)                                                                                                                                                                                                                  \
     X(create_sprite, (lgfx_port_t * port, uint8_t target, uint16_t w, uint16_t h, uint8_t color_depth),                                                                                                                                                        \
         CREATE_SPRITE, create_sprite, .target = target, .w = w, .h = h, .color_depth = color_depth)                                                                                                                                                            \
@@ -94,6 +100,7 @@ extern "C" {
     LGFX_WORKER_SIMPLE_DEVICE_STATE_WRAPPERS(X) \
     LGFX_WORKER_SIMPLE_PRIMITIVE_WRAPPERS(X)    \
     LGFX_WORKER_SIMPLE_TEXT_WRAPPERS(X)         \
+    LGFX_WORKER_SIMPLE_CLIP_WRAPPERS(X)         \
     LGFX_WORKER_SIMPLE_SPRITE_WRAPPERS(X)
 
 bool lgfx_worker_start(lgfx_port_t *port);

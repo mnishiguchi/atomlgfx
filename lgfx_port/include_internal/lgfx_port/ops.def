@@ -60,6 +60,12 @@ X(drawString, lgfx_handle_drawString, ATOM_STR("\x0A", "drawString"), 8, 8, 0, L
 X(pushImage, lgfx_handle_pushImage, ATOM_STR("\x09", "pushImage"), 11, 11, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_PUSHIMAGE)
 
 //
+// Clipping
+//
+X(setClipRect, lgfx_handle_setClipRect, ATOM_STR("\x0B", "setClipRect"), 9, 9, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(clearClipRect, lgfx_handle_clearClipRect, ATOM_STR("\x0D", "clearClipRect"), 5, 5, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+
+//
 // Sprites
 //
 X(createSprite, lgfx_handle_createSprite, ATOM_STR("\x0C", "createSprite"), 7, 8, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)

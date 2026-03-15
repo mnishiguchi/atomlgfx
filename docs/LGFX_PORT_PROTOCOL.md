@@ -298,6 +298,8 @@ This table documents the implemented protocol surface.
 | `setTextColor` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_TEXT_HAS_BG)` | `6/7` | `requires_init` | - |
 | `drawString` | `LGFX_OP_TARGET_ANY` | `F0` | `8` | `requires_init` | - |
 | `pushImage` | `LGFX_OP_TARGET_ANY` | `F0` | `11` | `requires_init` | `LGFX_CAP_PUSHIMAGE` |
+| `setClipRect` | `LGFX_OP_TARGET_ANY` | `F0` | `9` | `requires_init` | - |
+| `clearClipRect` | `LGFX_OP_TARGET_ANY` | `F0` | `5` | `requires_init` | - |
 | `createSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7/8` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `deleteSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `5` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `setPivot` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7` | `requires_init` | `LGFX_CAP_SPRITE` |

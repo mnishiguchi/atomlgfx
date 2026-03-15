@@ -46,6 +46,8 @@ defmodule LGFXPort do
   - `set_text_wrap/3` follows LovyanGFX one-argument semantics:
     - `set_text_wrap(port, wrap, target)` sets `wrap_x = wrap` and `wrap_y = false`
     - `set_text_wrap_xy/4` sets both axes explicitly
+  - `set_clip_rect/6` and `clear_clip_rect/2` apply to the selected target.
+    LCD and sprite clip states are independent.
   - For stable protocol-owned font selection, prefer `set_text_font_preset/3`.
   """
 
@@ -250,6 +252,19 @@ defmodule LGFXPort do
   def set_color_depth(port, depth, target \\ 0)
       when is_integer(depth) and depth in @valid_color_depths and target_any(target) do
     call_ok(port, :setColorDepth, target, 0, [depth], @t_long)
+  end
+
+  def set_clip_rect(port, x, y, width, height, target \\ 0)
+      when i16(x) and i16(y) and
+             u16(width) and width >= 1 and
+             u16(height) and height >= 1 and
+             target_any(target) do
+    call_ok(port, :setClipRect, target, 0, [x, y, width, height], @t_long)
+  end
+
+  def clear_clip_rect(port, target \\ 0)
+      when target_any(target) do
+    call_ok(port, :clearClipRect, target, 0, [], @t_long)
   end
 
   def create_sprite(port, width, height, target)

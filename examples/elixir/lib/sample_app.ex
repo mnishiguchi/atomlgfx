@@ -2,6 +2,7 @@ defmodule SampleApp do
   @moduledoc false
 
   alias LGFXPort, as: Port
+  alias SampleApp.ClipSmoke
   alias SampleApp.DrawStringStress
   alias SampleApp.MovingIcons
   alias SampleApp.ProtocolSmoke
@@ -17,6 +18,7 @@ defmodule SampleApp do
   @valid_modes [
     :protocol,
     :boot,
+    :clip,
     :sprites,
     :text,
     :touch,
@@ -79,6 +81,7 @@ defmodule SampleApp do
   # Modes:
   # - :protocol      -> protocol-only checks (no display init)
   # - :boot          -> init + display + rotation baseline
+  # - :clip          -> clipping smoke (requires boot)
   # - :sprites       -> sprite protocol smoke (requires boot)
   # - :text          -> text + font probe (requires boot)
   # - :touch         -> touch probe (requires boot)
@@ -124,6 +127,12 @@ defmodule SampleApp do
 
   defp run_mode(port, :boot) do
     boot_for_display(port)
+  end
+
+  defp run_mode(port, :clip) do
+    with_boot_dims(port, fn w, h ->
+      step("clip_smoke", ClipSmoke.run(port, w, h))
+    end)
   end
 
   defp run_mode(port, :sprites) do
