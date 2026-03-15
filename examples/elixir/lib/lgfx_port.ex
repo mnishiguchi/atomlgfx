@@ -60,94 +60,26 @@ defmodule LGFXPort do
   - For stable protocol-owned font selection, prefer `set_text_font_preset/3`.
   """
 
-  @compile {:no_warn_undefined, :port}
-
-  import Bitwise
+  alias LGFXPort.Cache
+  alias LGFXPort.Clip
+  alias LGFXPort.Device
+  alias LGFXPort.Errors
+  alias LGFXPort.Images
+  alias LGFXPort.OpenConfig
+  alias LGFXPort.Primitives
+  alias LGFXPort.Protocol
+  alias LGFXPort.Sprites
+  alias LGFXPort.Text
+  alias LGFXPort.Touch
 
   @port_name "lgfx_port"
-  @proto_ver 1
-  @max_open_config_i32 0x7FFF_FFFF
 
-  @t_short 5_000
-  @t_long 10_000
-  @t_touch_calibrate 60_000
+  @doc """
+  Opens the `lgfx_port` driver with optional open-time configuration.
 
-  @f_text_has_bg 1 <<< 0
-
-  @cap_sprite 1 <<< 0
-  @cap_pushimage 1 <<< 1
-  @cap_last_error 1 <<< 2
-  @cap_touch 1 <<< 3
-
-  @font_preset_ascii 0
-  @font_preset_jp_small 1
-  @font_preset_jp_medium 2
-  @font_preset_jp_large 3
-
-  @text_scale_one_x256 256
-  @text_scale_jp_small_x256 @text_scale_one_x256
-  @text_scale_jp_medium_x256 512
-  @text_scale_jp_large_x256 768
-  @text_scale_min_x256 1
-  @text_scale_max_x256 0xFFFF
-
-  @valid_color_depths [1, 2, 4, 8, 16, 24]
-
-  @panel_driver_atoms [:ili9488, :ili9341, :ili9341_2, :st7789]
-  @spi_host_atoms [:spi2_host, :spi3_host]
-
-  # Keep aligned with:
-  # - lgfx_port/lgfx_port.c
-  # - src/lgfx_device.h
-  @open_option_rules [
-    panel_driver: :panel_driver,
-    width: :positive_u16,
-    height: :positive_u16,
-    offset_x: :i32,
-    offset_y: :i32,
-    offset_rotation: :rotation,
-    readable: :boolean,
-    invert: :boolean,
-    rgb_order: :boolean,
-    dlen_16bit: :boolean,
-    lcd_spi_mode: :spi_mode,
-    lcd_freq_write_hz: :positive_i32,
-    lcd_freq_read_hz: :positive_i32,
-    lcd_dma_channel: :dma_channel,
-    lcd_spi_3wire: :boolean,
-    lcd_use_lock: :boolean,
-    lcd_bus_shared: :boolean,
-    spi_sclk_gpio: :gpio,
-    spi_mosi_gpio: :gpio,
-    spi_miso_gpio: :gpio_or_disabled,
-    lcd_spi_host: :spi_host,
-    lcd_cs_gpio: :gpio,
-    lcd_dc_gpio: :gpio,
-    lcd_rst_gpio: :gpio_or_disabled,
-    lcd_pin_busy: :gpio_or_disabled,
-    touch_cs_gpio: :gpio_or_disabled,
-    touch_irq_gpio: :gpio_or_disabled,
-    touch_spi_host: :spi_host,
-    touch_spi_freq_hz: :positive_i32,
-    touch_offset_rotation: :rotation,
-    touch_bus_shared: :boolean
-  ]
-
-  @supported_open_config_keys Keyword.keys(@open_option_rules)
-
-  defguardp i16(v) when is_integer(v) and v >= -0x8000 and v <= 0x7FFF
-  defguardp u16(v) when is_integer(v) and v >= 0 and v <= 0xFFFF
-  defguardp i32(v) when is_integer(v) and v >= -0x8000_0000 and v <= 0x7FFF_FFFF
-  defguardp u8(v) when is_integer(v) and v >= 0 and v <= 0xFF
-  defguardp positive_i32(v) when is_integer(v) and v >= 1 and v <= 0x7FFF_FFFF
-
-  defguardp target_any(v) when is_integer(v) and v >= 0 and v <= 254
-  defguardp sprite_handle(v) when is_integer(v) and v >= 1 and v <= 254
-
-  defguardp color888(v) when is_integer(v) and v >= 0 and v <= 0xFFFFFF
-  defguardp rgb565(v) when is_integer(v) and v >= 0 and v <= 0xFFFF
-
-  def open, do: open([])
+  Omitted options keep the driver's build defaults.
+  """
+  def open(options \\ [])
 
   def open(options) when is_list(options) do
     open_with(options, &:erlang.open_port/2)
@@ -161,83 +93,95 @@ defmodule LGFXPort do
   @doc false
   def open_with(options, open_port_fun)
       when is_list(options) and is_function(open_port_fun, 2) do
-    normalized_open_config = normalize_open_options!(options)
+    normalized_open_config = OpenConfig.normalize_open_options!(options)
     port = open_port_fun.({:spawn_driver, @port_name}, normalized_open_config)
-    remember_open_config(port, normalized_open_config)
+    Cache.remember_open_config(port, normalized_open_config)
     port
   end
 
-  @doc false
-  def normalize_open_config(options) when is_list(options) do
-    normalize_open_options(options)
-  end
+  @doc """
+  Normalizes open-time configuration without opening the driver.
 
-  def normalize_open_config(other) do
-    {:error, {:bad_open_options_shape, other}}
-  end
+  Returns `{:ok, keyword}` on success or `{:error, reason}` on invalid input.
+  """
+  def normalize_open_config(options), do: OpenConfig.normalize_open_config(options)
 
-  # Raw protocol call for smoke tests. Target is intentionally not range-checked.
-  def raw_call(port, op, target, flags, args, timeout \\ @t_short)
-      when is_atom(op) and is_integer(target) and is_integer(flags) and flags >= 0 and
+  @doc """
+  Sends a raw protocol request tuple to the driver.
+
+  This is mainly useful for smoke tests and protocol-level experiments.
+  """
+  def raw_call(port, op, target, flags, args, timeout \\ Protocol.short_timeout())
+      when is_atom(op) and
+             is_integer(target) and
+             is_integer(flags) and flags >= 0 and
              is_list(args) do
-    call(port, op, target, flags, args, timeout)
+    Protocol.raw_call(port, op, target, flags, args, timeout)
   end
 
-  def ping(port), do: call_ok(port, :ping, 0, 0, [], @t_short)
+  @doc """
+  Verifies basic protocol reachability.
+  """
+  def ping(port), do: Protocol.ping(port)
 
-  def get_caps(port) do
-    with {:ok, payload} <- call(port, :getCaps, 0, 0, [], @t_short) do
-      decode_caps(payload)
-    end
-  end
+  @doc """
+  Returns the driver's advertised protocol capabilities.
+  """
+  def get_caps(port), do: Protocol.get_caps(port)
 
-  def get_open_config(port) do
-    case cache_get(open_config_cache_key(port)) do
-      value when is_list(value) -> {:ok, value}
-      _ -> {:ok, []}
-    end
-  end
+  @doc """
+  Returns the remembered open-time configuration for this port.
+  """
+  def get_open_config(port), do: Cache.get_open_config(port)
 
-  def get_last_error(port) do
-    with {:ok, payload} <- call(port, :getLastError, 0, 0, [], @t_short) do
-      decode_last_error(payload)
-    end
-  end
+  @doc """
+  Returns the last protocol-level error snapshot from the driver.
+  """
+  def get_last_error(port), do: Protocol.get_last_error(port)
 
-  def width(port, target \\ 0) when target_any(target) do
-    integer_query(port, :width, :width, target)
-  end
+  @doc """
+  Returns the width of the selected target.
 
-  def height(port, target \\ 0) when target_any(target) do
-    integer_query(port, :height, :height, target)
-  end
+  Target `0` is the LCD. Targets `1..254` are sprite handles.
+  """
+  def width(port, target \\ 0), do: Protocol.width(port, target)
 
-  def supports_sprite?(port), do: supports_cap?(port, @cap_sprite)
-  def supports_pushimage?(port), do: supports_cap?(port, @cap_pushimage)
-  def supports_last_error?(port), do: supports_cap?(port, @cap_last_error)
-  def supports_touch?(port), do: supports_cap?(port, @cap_touch)
+  @doc """
+  Returns the height of the selected target.
 
-  def max_binary_bytes(port) do
-    key = max_binary_bytes_cache_key(port)
+  Target `0` is the LCD. Targets `1..254` are sprite handles.
+  """
+  def height(port, target \\ 0), do: Protocol.height(port, target)
 
-    case cache_get(key) do
-      value when is_integer(value) and value > 0 ->
-        {:ok, value}
+  @doc """
+  Returns whether sprite operations are advertised by the driver.
+  """
+  def supports_sprite?(port), do: Protocol.supports_sprite?(port)
 
-      _ ->
-        with {:ok, %{max_binary_bytes: max_binary_bytes}} <- get_caps(port) do
-          cache_put(key, max_binary_bytes)
-          {:ok, max_binary_bytes}
-        end
-    end
-  end
+  @doc """
+  Returns whether `pushImage` is advertised by the driver.
+  """
+  def supports_pushimage?(port), do: Protocol.supports_pushimage?(port)
 
-  def init(port), do: call_ok(port, :init, 0, 0, [], @t_long)
+  @doc """
+  Returns whether `getLastError` is advertised by the driver.
+  """
+  def supports_last_error?(port), do: Protocol.supports_last_error?(port)
 
-  def close(port) do
-    call_ok(port, :close, 0, 0, [], @t_long)
-    |> after_ok(fn -> reset_runtime_cache(port) end)
-  end
+  @doc """
+  Returns whether touch operations are advertised by the driver.
+  """
+  def supports_touch?(port), do: Protocol.supports_touch?(port)
+
+  @doc """
+  Returns the maximum accepted binary payload size for this driver instance.
+  """
+  def max_binary_bytes(port), do: Protocol.max_binary_bytes(port)
+
+  @doc """
+  Initializes the native device using this port's remembered open-time configuration.
+  """
+  def init(port), do: Device.init(port)
 
   @doc """
   Starts a LovyanGFX write session on the LCD device.
@@ -245,7 +189,7 @@ defmodule LGFXPort do
   This maps directly to native `startWrite()` and participates in LovyanGFX's
   nested write counter. Calls should normally be paired with `end_write/1`.
   """
-  def start_write(port), do: call_ok(port, :startWrite, 0, 0, [], @t_long)
+  def start_write(port), do: Device.start_write(port)
 
   @doc """
   Ends a LovyanGFX write session on the LCD device.
@@ -253,87 +197,182 @@ defmodule LGFXPort do
   This maps directly to native `endWrite()` and decrements LovyanGFX's nested
   write counter.
   """
-  def end_write(port), do: call_ok(port, :endWrite, 0, 0, [], @t_long)
+  def end_write(port), do: Device.end_write(port)
 
-  def display(port), do: call_ok(port, :display, 0, 0, [], @t_long)
+  @doc """
+  Flushes or presents the LCD display according to the native driver behavior.
+  """
+  def display(port), do: Device.display(port)
 
-  def set_rotation(port, rotation) when is_integer(rotation) and rotation in 0..7 do
-    call_ok(port, :setRotation, 0, 0, [rotation], @t_long)
+  @doc """
+  Sets the LCD rotation.
+
+  Accepted values are `0..7`.
+  """
+  def set_rotation(port, rotation), do: Device.set_rotation(port, rotation)
+
+  @doc """
+  Sets LCD brightness using the driver's raw `u8` brightness value.
+  """
+  def set_brightness(port, brightness), do: Device.set_brightness(port, brightness)
+
+  @doc """
+  Sets the color depth for the selected target.
+
+  Valid depths are `1`, `2`, `4`, `8`, `16`, and `24`.
+  """
+  def set_color_depth(port, depth, target \\ 0), do: Device.set_color_depth(port, depth, target)
+
+  @doc """
+  Closes the native device owned by this port and clears runtime caches.
+
+  This does not close the BEAM port handle itself and does not forget the
+  remembered open-time configuration for the port.
+  """
+  def close(port) do
+    with :ok <- Device.close(port) do
+      Cache.reset_runtime_cache(port)
+      :ok
+    end
   end
 
-  def set_brightness(port, brightness) when u8(brightness) do
-    call_ok(port, :setBrightness, 0, 0, [brightness], @t_long)
+  @doc """
+  Sets a clip rectangle on the selected target.
+
+  Target `0` is the LCD. Targets `1..254` are sprite handles.
+  """
+  def set_clip_rect(port, x, y, width, height, target \\ 0) do
+    Clip.set_clip_rect(port, x, y, width, height, target)
   end
 
-  def set_color_depth(port, depth, target \\ 0)
-      when is_integer(depth) and depth in @valid_color_depths and target_any(target) do
-    call_ok(port, :setColorDepth, target, 0, [depth], @t_long)
-  end
+  @doc """
+  Clears the active clip rectangle on the selected target.
+  """
+  def clear_clip_rect(port, target \\ 0), do: Clip.clear_clip_rect(port, target)
 
-  def set_clip_rect(port, x, y, width, height, target \\ 0)
-      when i16(x) and i16(y) and
-             u16(width) and width >= 1 and
-             u16(height) and height >= 1 and
-             target_any(target) do
-    call_ok(port, :setClipRect, target, 0, [x, y, width, height], @t_long)
-  end
+  @doc """
+  Fills the selected target with the given RGB888 color.
+  """
+  def fill_screen(port, color888, target \\ 0), do: Primitives.fill_screen(port, color888, target)
 
-  def clear_clip_rect(port, target \\ 0)
-      when target_any(target) do
-    call_ok(port, :clearClipRect, target, 0, [], @t_long)
-  end
+  @doc """
+  Clears the selected target with the given RGB888 color.
+  """
+  def clear(port, color888, target \\ 0), do: Primitives.clear(port, color888, target)
 
-  def create_sprite(port, width, height, target)
-      when u16(width) and width >= 1 and
-             u16(height) and height >= 1 and
-             sprite_handle(target) do
-    call_ok(port, :createSprite, target, 0, [width, height], @t_long)
-  end
+  @doc """
+  Draws a single pixel using an RGB888 color.
+  """
+  def draw_pixel(port, x, y, color888, target \\ 0),
+    do: Primitives.draw_pixel(port, x, y, color888, target)
 
-  def create_sprite(port, width, height, color_depth, target)
-      when u16(width) and width >= 1 and
-             u16(height) and height >= 1 and
-             is_integer(color_depth) and color_depth in @valid_color_depths and
-             sprite_handle(target) do
-    call_ok(port, :createSprite, target, 0, [width, height, color_depth], @t_long)
-  end
+  @doc """
+  Draws a fast vertical line using an RGB888 color.
+  """
+  def draw_fast_vline(port, x, y, height, color888, target \\ 0),
+    do: Primitives.draw_fast_vline(port, x, y, height, color888, target)
 
-  def delete_sprite(port, target) when sprite_handle(target) do
-    call_ok(port, :deleteSprite, target, 0, [], @t_long)
-  end
+  @doc """
+  Draws a fast horizontal line using an RGB888 color.
+  """
+  def draw_fast_hline(port, x, y, width, color888, target \\ 0),
+    do: Primitives.draw_fast_hline(port, x, y, width, color888, target)
 
-  def set_pivot(port, target, x, y)
-      when sprite_handle(target) and i16(x) and i16(y) do
-    call_ok(port, :setPivot, target, 0, [x, y], @t_long)
-  end
+  @doc """
+  Draws a line using an RGB888 color.
+  """
+  def draw_line(port, x0, y0, x1, y1, color888, target \\ 0),
+    do: Primitives.draw_line(port, x0, y0, x1, y1, color888, target)
 
-  def push_sprite_to(port, src_target, dst_target, x, y)
-      when sprite_handle(src_target) and
-             target_any(dst_target) and
-             i16(x) and i16(y) do
-    call_ok(port, :pushSprite, src_target, 0, [dst_target, x, y], @t_long)
-  end
+  @doc """
+  Draws a rectangle outline using an RGB888 color.
+  """
+  def draw_rect(port, x, y, width, height, color888, target \\ 0),
+    do: Primitives.draw_rect(port, x, y, width, height, color888, target)
 
-  def push_sprite_to(port, src_target, dst_target, x, y, transparent565)
-      when sprite_handle(src_target) and
-             target_any(dst_target) and
-             i16(x) and i16(y) and
-             rgb565(transparent565) do
-    call_ok(port, :pushSprite, src_target, 0, [dst_target, x, y, transparent565], @t_long)
-  end
+  @doc """
+  Fills a rectangle using an RGB888 color.
+  """
+  def fill_rect(port, x, y, width, height, color888, target \\ 0),
+    do: Primitives.fill_rect(port, x, y, width, height, color888, target)
 
-  def push_sprite(port, src_target, x, y)
-      when sprite_handle(src_target) and i16(x) and i16(y) do
-    push_sprite_to(port, src_target, 0, x, y)
-  end
+  @doc """
+  Draws a circle outline using an RGB888 color.
+  """
+  def draw_circle(port, x, y, radius, color888, target \\ 0),
+    do: Primitives.draw_circle(port, x, y, radius, color888, target)
 
-  def push_sprite(port, src_target, x, y, transparent565)
-      when sprite_handle(src_target) and
-             i16(x) and i16(y) and
-             rgb565(transparent565) do
-    push_sprite_to(port, src_target, 0, x, y, transparent565)
-  end
+  @doc """
+  Fills a circle using an RGB888 color.
+  """
+  def fill_circle(port, x, y, radius, color888, target \\ 0),
+    do: Primitives.fill_circle(port, x, y, radius, color888, target)
 
+  @doc """
+  Draws a triangle outline using an RGB888 color.
+  """
+  def draw_triangle(port, x0, y0, x1, y1, x2, y2, color888, target \\ 0),
+    do: Primitives.draw_triangle(port, x0, y0, x1, y1, x2, y2, color888, target)
+
+  @doc """
+  Fills a triangle using an RGB888 color.
+  """
+  def fill_triangle(port, x0, y0, x1, y1, x2, y2, color888, target \\ 0),
+    do: Primitives.fill_triangle(port, x0, y0, x1, y1, x2, y2, color888, target)
+
+  @doc """
+  Creates a sprite at the given handle using the target's default sprite color depth.
+  """
+  def create_sprite(port, width, height, target),
+    do: Sprites.create_sprite(port, width, height, target)
+
+  @doc """
+  Creates a sprite at the given handle with an explicit color depth.
+  """
+  def create_sprite(port, width, height, color_depth, target),
+    do: Sprites.create_sprite(port, width, height, color_depth, target)
+
+  @doc """
+  Deletes the sprite at the given handle.
+  """
+  def delete_sprite(port, target), do: Sprites.delete_sprite(port, target)
+
+  @doc """
+  Sets the pivot point for the given sprite handle.
+  """
+  def set_pivot(port, target, x, y), do: Sprites.set_pivot(port, target, x, y)
+
+  @doc """
+  Pushes a source sprite to the destination target at `{x, y}`.
+  """
+  def push_sprite_to(port, src_target, dst_target, x, y),
+    do: Sprites.push_sprite_to(port, src_target, dst_target, x, y)
+
+  @doc """
+  Pushes a source sprite to the destination target at `{x, y}` using an RGB565 transparent key.
+  """
+  def push_sprite_to(port, src_target, dst_target, x, y, transparent565),
+    do: Sprites.push_sprite_to(port, src_target, dst_target, x, y, transparent565)
+
+  @doc """
+  Pushes a source sprite to the LCD at `{x, y}`.
+  """
+  def push_sprite(port, src_target, x, y), do: Sprites.push_sprite(port, src_target, x, y)
+
+  @doc """
+  Pushes a source sprite to the LCD at `{x, y}` using an RGB565 transparent key.
+  """
+  def push_sprite(port, src_target, x, y, transparent565),
+    do: Sprites.push_sprite(port, src_target, x, y, transparent565)
+
+  @doc """
+  Pushes a source sprite to the destination target using protocol-native rotate/zoom units.
+
+  Units:
+
+  - angle: centi-degrees (`1.00° = 100`)
+  - zoom: x1024 fixed-point (`1.0x = 1024`)
+  """
   def push_rotate_zoom_to(
         port,
         src_target,
@@ -343,23 +382,23 @@ defmodule LGFXPort do
         angle_centi_deg,
         zoom_x1024,
         zoom_y1024
-      )
-      when sprite_handle(src_target) and
-             target_any(dst_target) and
-             i16(x) and i16(y) and
-             i32(angle_centi_deg) and
-             i32(zoom_x1024) and zoom_x1024 > 0 and
-             i32(zoom_y1024) and zoom_y1024 > 0 do
-    call_ok(
+      ) do
+    Sprites.push_rotate_zoom_to(
       port,
-      :pushRotateZoom,
       src_target,
-      0,
-      [dst_target, x, y, angle_centi_deg, zoom_x1024, zoom_y1024],
-      @t_long
+      dst_target,
+      x,
+      y,
+      angle_centi_deg,
+      zoom_x1024,
+      zoom_y1024
     )
   end
 
+  @doc """
+  Pushes a source sprite to the destination target using protocol-native rotate/zoom units
+  and an RGB565 transparent key.
+  """
   def push_rotate_zoom_to(
         port,
         src_target,
@@ -370,220 +409,118 @@ defmodule LGFXPort do
         zoom_x1024,
         zoom_y1024,
         transparent565
-      )
-      when sprite_handle(src_target) and
-             target_any(dst_target) and
-             i16(x) and i16(y) and
-             i32(angle_centi_deg) and
-             i32(zoom_x1024) and zoom_x1024 > 0 and
-             i32(zoom_y1024) and zoom_y1024 > 0 and
-             rgb565(transparent565) do
-    call_ok(
+      ) do
+    Sprites.push_rotate_zoom_to(
       port,
-      :pushRotateZoom,
       src_target,
-      0,
-      [dst_target, x, y, angle_centi_deg, zoom_x1024, zoom_y1024, transparent565],
-      @t_long
+      dst_target,
+      x,
+      y,
+      angle_centi_deg,
+      zoom_x1024,
+      zoom_y1024,
+      transparent565
     )
   end
 
-  # Convenience wrapper: accepts degrees / float zoom and converts them to protocol units.
-  def push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom_x, zoom_y)
-      when sprite_handle(src_target) and
-             target_any(dst_target) and
-             i16(x) and i16(y) and
-             is_number(angle_deg) and
-             is_number(zoom_x) and zoom_x > 0 and
-             is_number(zoom_y) and zoom_y > 0 do
-    angle_centi_deg = round(angle_deg * 100)
-    zx1024 = max(1, round(zoom_x * 1024))
-    zy1024 = max(1, round(zoom_y * 1024))
+  @doc """
+  Convenience wrapper for sprite rotate/zoom push.
 
-    push_rotate_zoom_to(port, src_target, dst_target, x, y, angle_centi_deg, zx1024, zy1024)
+  Accepts natural degree and zoom values and converts them to protocol units.
+  """
+  def push_rotate_zoom_deg_to(
+        port,
+        src_target,
+        dst_target,
+        x,
+        y,
+        angle_deg,
+        zoom_x,
+        zoom_y
+      ) do
+    Sprites.push_rotate_zoom_deg_to(
+      port,
+      src_target,
+      dst_target,
+      x,
+      y,
+      angle_deg,
+      zoom_x,
+      zoom_y
+    )
   end
 
-  def push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom)
-      when sprite_handle(src_target) and
-             target_any(dst_target) and
-             i16(x) and i16(y) and
-             is_number(angle_deg) and
-             is_number(zoom) and zoom > 0 do
-    push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom, zoom)
+  @doc """
+  Convenience wrapper for uniform sprite rotate/zoom push.
+
+  Uses the same zoom factor for both axes.
+  """
+  def push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom) do
+    Sprites.push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom)
   end
 
-  def fill_screen(port, color888, target \\ 0)
-      when color888(color888) and target_any(target) do
-    call_ok(port, :fillScreen, target, 0, [color888], @t_long)
-  end
+  @doc """
+  Returns the current touch point in screen-space coordinates.
 
-  def clear(port, color888, target \\ 0)
-      when color888(color888) and target_any(target) do
-    call_ok(port, :clear, target, 0, [color888], @t_long)
-  end
+  Returns `{:ok, :none}` or `{:ok, {x, y, size}}`.
+  """
+  def get_touch(port), do: Touch.get_touch(port)
 
-  def draw_pixel(port, x, y, color888, target \\ 0)
-      when i16(x) and i16(y) and
-             color888(color888) and
-             target_any(target) do
-    call_ok(port, :drawPixel, target, 0, [x, y, color888], @t_long)
-  end
+  @doc """
+  Returns the current raw touch point in controller-space coordinates.
 
-  def draw_fast_vline(port, x, y, height, color888, target \\ 0)
-      when i16(x) and i16(y) and
-             u16(height) and
-             color888(color888) and
-             target_any(target) do
-    call_ok(port, :drawFastVLine, target, 0, [x, y, height, color888], @t_long)
-  end
+  Returns `{:ok, :none}` or `{:ok, {x, y, size}}`.
+  """
+  def get_touch_raw(port), do: Touch.get_touch_raw(port)
 
-  def draw_fast_hline(port, x, y, width, color888, target \\ 0)
-      when i16(x) and i16(y) and
-             u16(width) and
-             color888(color888) and
-             target_any(target) do
-    call_ok(port, :drawFastHLine, target, 0, [x, y, width, color888], @t_long)
-  end
+  @doc """
+  Sets the persisted touch calibration parameters.
 
-  def draw_line(port, x0, y0, x1, y1, color888, target \\ 0)
-      when i16(x0) and i16(y0) and i16(x1) and i16(y1) and
-             color888(color888) and
-             target_any(target) do
-    call_ok(port, :drawLine, target, 0, [x0, y0, x1, y1, color888], @t_long)
-  end
+  The payload must contain exactly 8 unsigned 16-bit integers.
+  """
+  def set_touch_calibrate(port, params8), do: Touch.set_touch_calibrate(port, params8)
 
-  def draw_rect(port, x, y, width, height, color888, target \\ 0)
-      when i16(x) and i16(y) and
-             u16(width) and
-             u16(height) and
-             color888(color888) and
-             target_any(target) do
-    call_ok(port, :drawRect, target, 0, [x, y, width, height, color888], @t_long)
-  end
+  @doc """
+  Runs interactive touch calibration and returns the resulting 8-value tuple.
+  """
+  def calibrate_touch(port), do: Touch.calibrate_touch(port)
 
-  def fill_rect(port, x, y, width, height, color888, target \\ 0)
-      when i16(x) and i16(y) and
-             u16(width) and
-             u16(height) and
-             color888(color888) and
-             target_any(target) do
-    call_ok(port, :fillRect, target, 0, [x, y, width, height, color888], @t_long)
-  end
+  @doc """
+  Sets text size using natural Elixir scale values.
 
-  def draw_circle(port, x, y, radius, color888, target \\ 0)
-      when i16(x) and i16(y) and
-             u16(radius) and
-             color888(color888) and
-             target_any(target) do
-    call_ok(port, :drawCircle, target, 0, [x, y, radius, color888], @t_long)
-  end
+  These are encoded on the wire as x256 fixed-point integers.
+  """
+  def set_text_size(port, scale, target \\ 0), do: Text.set_text_size(port, scale, target)
 
-  def fill_circle(port, x, y, radius, color888, target \\ 0)
-      when i16(x) and i16(y) and
-             u16(radius) and
-             color888(color888) and
-             target_any(target) do
-    call_ok(port, :fillCircle, target, 0, [x, y, radius, color888], @t_long)
-  end
-
-  def draw_triangle(port, x0, y0, x1, y1, x2, y2, color888, target \\ 0)
-      when i16(x0) and i16(y0) and
-             i16(x1) and i16(y1) and
-             i16(x2) and i16(y2) and
-             color888(color888) and
-             target_any(target) do
-    call_ok(port, :drawTriangle, target, 0, [x0, y0, x1, y1, x2, y2, color888], @t_long)
-  end
-
-  def fill_triangle(port, x0, y0, x1, y1, x2, y2, color888, target \\ 0)
-      when i16(x0) and i16(y0) and
-             i16(x1) and i16(y1) and
-             i16(x2) and i16(y2) and
-             color888(color888) and
-             target_any(target) do
-    call_ok(port, :fillTriangle, target, 0, [x0, y0, x1, y1, x2, y2, color888], @t_long)
-  end
-
-  def get_touch(port) do
-    with {:ok, payload} <- call(port, :getTouch, 0, 0, [], @t_short) do
-      decode_touch_payload(:getTouch, payload)
-    end
-  end
-
-  def get_touch_raw(port) do
-    with {:ok, payload} <- call(port, :getTouchRaw, 0, 0, [], @t_short) do
-      decode_touch_payload(:getTouchRaw, payload)
-    end
-  end
-
-  def set_touch_calibrate(port, params8) do
-    with {:ok, params_list} <- normalize_u16_8(params8) do
-      call_ok(port, :setTouchCalibrate, 0, 0, params_list, @t_long)
-    end
-  end
-
-  def calibrate_touch(port) do
-    with {:ok, payload} <- call(port, :calibrateTouch, 0, 0, [], @t_touch_calibrate) do
-      decode_calibrate_payload(payload)
-    end
-  end
-
-  def set_text_size(port, scale, target \\ 0)
-      when is_number(scale) and scale > 0 and target_any(target) do
-    with {:ok, scale_x256} <- normalize_text_scale_x256(scale) do
-      call_ok(port, :setTextSize, target, 0, [scale_x256], @t_long)
-      |> after_ok(fn -> cache_put(text_size_cache_key(port, target), {scale_x256, scale_x256}) end)
-    end
-  end
-
-  def set_text_size_xy(port, sx, sy, target \\ 0)
-      when is_number(sx) and sx > 0 and
-             is_number(sy) and sy > 0 and
-             target_any(target) do
-    with {:ok, sx_x256} <- normalize_text_scale_x256(sx),
-         {:ok, sy_x256} <- normalize_text_scale_x256(sy) do
-      call_ok(port, :setTextSize, target, 0, [sx_x256, sy_x256], @t_long)
-      |> after_ok(fn -> cache_put(text_size_cache_key(port, target), {sx_x256, sy_x256}) end)
-    end
-  end
+  @doc """
+  Sets text size independently for both axes using natural Elixir scale values.
+  """
+  def set_text_size_xy(port, sx, sy, target \\ 0), do: Text.set_text_size_xy(port, sx, sy, target)
 
   @doc """
   Sets the text datum as a raw driver-facing `u8` passthrough.
 
   Accepted range is `0..255`. This API does not define a smaller stable subset.
   """
-  def set_text_datum(port, datum, target \\ 0)
-      when u8(datum) and target_any(target) do
-    call_ok(port, :setTextDatum, target, 0, [datum], @t_long)
-  end
+  def set_text_datum(port, datum, target \\ 0), do: Text.set_text_datum(port, datum, target)
 
   @doc """
   Sets text wrapping using LovyanGFX one-argument semantics.
 
-  This wrapper sends the one-argument protocol form, which means:
+  This means:
 
   - `wrap_x = wrap`
   - `wrap_y = false`
 
   Use `set_text_wrap_xy/4` when both axes must be controlled explicitly.
   """
-  def set_text_wrap(port, wrap, target \\ 0)
-      when is_boolean(wrap) and target_any(target) do
-    call_ok(port, :setTextWrap, target, 0, [wrap], @t_long)
-  end
+  def set_text_wrap(port, wrap, target \\ 0), do: Text.set_text_wrap(port, wrap, target)
 
   @doc """
   Sets text wrapping for both axes explicitly.
-
-  This wrapper sends the two-argument protocol form:
-
-  - `wrap_x = wrap_x`
-  - `wrap_y = wrap_y`
   """
-  def set_text_wrap_xy(port, wrap_x, wrap_y, target \\ 0)
-      when is_boolean(wrap_x) and is_boolean(wrap_y) and target_any(target) do
-    call_ok(port, :setTextWrap, target, 0, [wrap_x, wrap_y], @t_long)
-  end
+  def set_text_wrap_xy(port, wrap_x, wrap_y, target \\ 0),
+    do: Text.set_text_wrap_xy(port, wrap_x, wrap_y, target)
 
   @doc """
   Sets the text font as a raw driver-facing `u8` passthrough.
@@ -591,91 +528,47 @@ defmodule LGFXPort do
   Accepted range is `0..255`. For stable protocol-owned font choices, prefer
   `set_text_font_preset/3`.
   """
-  def set_text_font(port, font_id, target \\ 0)
-      when u8(font_id) and target_any(target) do
-    call_ok(port, :setTextFont, target, 0, [font_id], @t_long)
-    |> after_ok(fn ->
-      cache_put(text_font_selection_cache_key(port, target), {:font_id, font_id})
-    end)
-  end
-
-  # Preset selection also updates cached font selection and implied text scale.
-  def set_text_font_preset(port, preset, target \\ 0)
-      when target_any(target) do
-    with {:ok, preset_id, canonical_preset} <- font_preset_to_wire(preset) do
-      call_ok(port, :setTextFontPreset, target, 0, [preset_id], @t_long)
-      |> after_ok(fn ->
-        cache_put(text_font_selection_cache_key(port, target), {:preset, canonical_preset})
-
-        cache_put(
-          text_size_cache_key(port, target),
-          implied_text_scale_x256_for_preset(canonical_preset)
-        )
-      end)
-    end
-  end
-
-  def set_text_color(port, fg888, bg888 \\ nil, target \\ 0)
-      when color888(fg888) and target_any(target) do
-    case normalize_text_color_args(fg888, bg888) do
-      {:ok, flags, args, desired} ->
-        call_ok(port, :setTextColor, target, flags, args, @t_long)
-        |> after_ok(fn -> cache_put(text_color_cache_key(port, target), desired) end)
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  def draw_string(port, x, y, text, target \\ 0)
-      when i16(x) and i16(y) and is_binary(text) and target_any(target) do
-    with :ok <- validate_text_binary(text) do
-      call_ok(port, :drawString, target, 0, [x, y, text], @t_long)
-    end
-  end
-
-  def draw_string_bg(port, x, y, fg888, bg888, scale, text, target \\ 0)
-      when i16(x) and i16(y) and
-             color888(fg888) and
-             color888(bg888) and
-             is_number(scale) and scale > 0 and
-             is_binary(text) and
-             target_any(target) do
-    with :ok <- validate_text_binary(text),
-         :ok <- maybe_set_text_color(port, fg888, bg888, target),
-         :ok <- maybe_set_text_size(port, scale, target),
-         :ok <- draw_string(port, x, y, text, target) do
-      :ok
-    end
-  end
-
-  def reset_text_state(port, target \\ 0) when target_any(target) do
-    erase_text_cache(port, target)
-    :ok
-  end
+  def set_text_font(port, font_id, target \\ 0), do: Text.set_text_font(port, font_id, target)
 
   @doc """
-  Draws a JPEG binary at the given target-local position.
-
-  This uses the short protocol form:
-
-  - `drawJpg(X, Y, JpegBinary)`
+  Sets a stable protocol-owned text font preset.
   """
-  def draw_jpg(port, x, y, jpeg, target \\ 0)
-      when i16(x) and i16(y) and is_binary(jpeg) and target_any(target) do
-    with :ok <- validate_non_empty_jpeg(jpeg),
-         :ok <- validate_binary_size_within_limit(port, jpeg, :draw_jpg) do
-      call_ok(port, :drawJpg, target, 0, [x, y, jpeg], @t_long)
-    end
-  end
+  def set_text_font_preset(port, preset, target \\ 0),
+    do: Text.set_text_font_preset(port, preset, target)
 
   @doc """
-  Draws a JPEG binary using the extended protocol form.
+  Sets the text foreground color, and optionally the background color, using RGB888 values.
+  """
+  def set_text_color(port, fg888, bg888 \\ nil, target \\ 0),
+    do: Text.set_text_color(port, fg888, bg888, target)
 
-  Protocol units:
+  @doc """
+  Draws a UTF-8 string at `{x, y}` on the selected target.
+  """
+  def draw_string(port, x, y, text, target \\ 0), do: Text.draw_string(port, x, y, text, target)
 
-  - `scale_x1024`: x1024 fixed-point (`1.0x = 1024`)
-  - `scale_y1024`: x1024 fixed-point (`1.0x = 1024`)
+  @doc """
+  Convenience helper that sets text color and scale before drawing a string.
+  """
+  def draw_string_bg(port, x, y, fg888, bg888, scale, text, target \\ 0),
+    do: Text.draw_string_bg(port, x, y, fg888, bg888, scale, text, target)
+
+  @doc """
+  Clears cached text state tracked by the Elixir wrapper for the selected target.
+  """
+  def reset_text_state(port, target \\ 0), do: Text.reset_text_state(port, target)
+
+  @doc """
+  Draws a JPEG binary at `{x, y}` on the selected target.
+
+  This uses the short `drawJpg` protocol form.
+  """
+  def draw_jpg(port, x, y, jpeg, target \\ 0), do: Images.draw_jpg(port, x, y, jpeg, target)
+
+  @doc """
+  Draws a JPEG binary using the extended `drawJpg` protocol form.
+
+  Scale values use x1024 fixed-point units (`1.0x = 1024`).
   """
   def draw_jpg(
         port,
@@ -689,69 +582,8 @@ defmodule LGFXPort do
         scale_y1024,
         jpeg,
         target \\ 0
-      )
-      when i16(x) and i16(y) and
-             u16(max_width) and
-             u16(max_height) and
-             i16(off_x) and i16(off_y) and
-             i32(scale_x1024) and scale_x1024 > 0 and
-             i32(scale_y1024) and scale_y1024 > 0 and
-             is_binary(jpeg) and
-             target_any(target) do
-    with :ok <- validate_non_empty_jpeg(jpeg),
-         :ok <- validate_binary_size_within_limit(port, jpeg, :draw_jpg) do
-      call_ok(
-        port,
-        :drawJpg,
-        target,
-        0,
-        [x, y, max_width, max_height, off_x, off_y, scale_x1024, scale_y1024, jpeg],
-        @t_long
-      )
-    end
-  end
-
-  def draw_jpg_scaled(port, x, y, max_width, max_height, off_x, off_y, scale, jpeg, target \\ 0)
-      when i16(x) and i16(y) and
-             u16(max_width) and
-             u16(max_height) and
-             i16(off_x) and i16(off_y) and
-             is_number(scale) and scale > 0 and
-             is_binary(jpeg) and
-             target_any(target) do
-    draw_jpg_scaled(port, x, y, max_width, max_height, off_x, off_y, scale, scale, jpeg, target)
-  end
-
-  @doc """
-  Convenience wrapper for the extended `drawJpg` form.
-
-  Accepts natural Elixir scale values and converts them to protocol x1024 fixed-point integers.
-  """
-  def draw_jpg_scaled(
-        port,
-        x,
-        y,
-        max_width,
-        max_height,
-        off_x,
-        off_y,
-        scale_x,
-        scale_y,
-        jpeg,
-        target
-      )
-      when i16(x) and i16(y) and
-             u16(max_width) and
-             u16(max_height) and
-             i16(off_x) and i16(off_y) and
-             is_number(scale_x) and scale_x > 0 and
-             is_number(scale_y) and scale_y > 0 and
-             is_binary(jpeg) and
-             target_any(target) do
-    scale_x1024 = max(1, round(scale_x * 1024))
-    scale_y1024 = max(1, round(scale_y * 1024))
-
-    draw_jpg(
+      ) do
+    Images.draw_jpg(
       port,
       x,
       y,
@@ -765,670 +597,86 @@ defmodule LGFXPort do
       target
     )
   end
-  def push_image_rgb565(port, x, y, width, height, pixels, stride_pixels \\ 0, target \\ 0)
-      when i16(x) and i16(y) and
-             u16(width) and
-             u16(height) and
-             is_binary(pixels) and
-             u16(stride_pixels) and
-             target_any(target) do
-    with :ok <- validate_non_empty_image_dims(width, height),
-         :ok <- validate_even_pixel_binary(pixels),
-         {:ok, stride} <- normalize_stride_pixels(width, stride_pixels),
-         :ok <- validate_pixel_binary_size(pixels, stride, height) do
-      push_image_rgb565_transfer(
+
+  @doc """
+  Convenience wrapper for extended JPEG drawing.
+
+  Accepts a single natural Elixir scale value for both axes and converts it to
+  protocol x1024 fixed-point units.
+  """
+  def draw_jpg_scaled(
         port,
         x,
         y,
-        width,
-        height,
-        pixels,
-        stride_pixels,
-        stride,
+        max_width,
+        max_height,
+        off_x,
+        off_y,
+        scale,
+        jpeg,
+        target \\ 0
+      ) do
+    Images.draw_jpg_scaled(
+      port,
+      x,
+      y,
+      max_width,
+      max_height,
+      off_x,
+      off_y,
+      scale,
+      jpeg,
+      target
+    )
+  end
+
+  @doc """
+  Convenience wrapper for extended JPEG drawing.
+
+  Accepts independent natural Elixir scale values for X and Y and converts them
+  to protocol x1024 fixed-point units.
+  """
+  def draw_jpg_scaled(
+        port,
+        x,
+        y,
+        max_width,
+        max_height,
+        off_x,
+        off_y,
+        scale_x,
+        scale_y,
+        jpeg,
         target
-      )
-    else
-      :skip -> :ok
-      {:error, reason} -> {:error, reason}
-    end
+      ) do
+    Images.draw_jpg_scaled(
+      port,
+      x,
+      y,
+      max_width,
+      max_height,
+      off_x,
+      off_y,
+      scale_x,
+      scale_y,
+      jpeg,
+      target
+    )
   end
 
-  defp call_ok(port, op, target, flags, args, timeout) do
-    case call(port, op, target, flags, args, timeout) do
-      {:ok, _result} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
+  @doc """
+  Pushes an RGB565 image binary to the selected target.
+
+  The payload is interpreted as big-endian RGB565 pixels. Large payloads may be
+  chunked automatically by the Elixir wrapper to stay within the driver's
+  advertised binary limit.
+  """
+  def push_image_rgb565(port, x, y, width, height, pixels, stride_pixels \\ 0, target \\ 0) do
+    Images.push_image_rgb565(port, x, y, width, height, pixels, stride_pixels, target)
   end
 
-  defp call(port, op, target, flags, args, timeout)
-       when is_atom(op) and is_integer(target) and is_integer(flags) and flags >= 0 and
-              is_list(args) do
-    request = :erlang.list_to_tuple([:lgfx, @proto_ver, op, target, flags | args])
-
-    try do
-      case :port.call(port, request, timeout) do
-        {:ok, result} ->
-          {:ok, result}
-
-        {:error, reason} ->
-          {:error, reason}
-
-        other ->
-          {:error, {:unexpected_reply, other}}
-      end
-    catch
-      :exit, reason -> {:error, {:port_call_exit, reason}}
-    end
-  end
-
-  defp decode_caps({:caps, proto_ver, max_binary_bytes, max_sprites, feature_bits})
-       when is_integer(proto_ver) and is_integer(max_binary_bytes) and
-              is_integer(max_sprites) and is_integer(feature_bits) do
-    sprite_cap_set? = (feature_bits &&& @cap_sprite) != 0
-
-    cond do
-      proto_ver != @proto_ver ->
-        {:error, {:bad_caps_proto_ver, @proto_ver, proto_ver}}
-
-      max_binary_bytes <= 0 ->
-        {:error, {:bad_caps_payload, {:max_binary_bytes, max_binary_bytes}}}
-
-      max_sprites < 0 ->
-        {:error, {:bad_caps_payload, {:max_sprites, max_sprites}}}
-
-      not sprite_cap_set? and max_sprites != 0 ->
-        {:error,
-         {:bad_caps_payload, {:max_sprites_without_cap_sprite, max_sprites, feature_bits}}}
-
-      feature_bits < 0 ->
-        {:error, {:bad_caps_payload, {:feature_bits, feature_bits}}}
-
-      true ->
-        {:ok,
-         %{
-           proto_ver: proto_ver,
-           max_binary_bytes: max_binary_bytes,
-           max_sprites: max_sprites,
-           feature_bits: feature_bits
-         }}
-    end
-  end
-
-  defp decode_caps(other), do: {:error, {:bad_caps_payload, other}}
-
-  defp decode_last_error({:last_error, last_op, reason, last_flags, last_target, esp_err})
-       when is_integer(last_flags) and is_integer(last_target) and is_integer(esp_err) do
-    {:ok,
-     %{
-       last_op: last_op,
-       reason: reason,
-       last_flags: last_flags,
-       last_target: last_target,
-       esp_err: esp_err
-     }}
-  end
-
-  defp decode_last_error(other), do: {:error, {:bad_last_error_payload, other}}
-
-  defp decode_touch_payload(_op, :none), do: {:ok, :none}
-
-  defp decode_touch_payload(_op, {x, y, size})
-       when is_integer(x) and is_integer(y) and is_integer(size) do
-    {:ok, {x, y, size}}
-  end
-
-  defp decode_touch_payload(op, other), do: {:error, {:bad_touch_payload, op, other}}
-
-  defp decode_calibrate_payload({p0, p1, p2, p3, p4, p5, p6, p7} = tuple)
-       when is_integer(p0) and is_integer(p1) and is_integer(p2) and is_integer(p3) and
-              is_integer(p4) and is_integer(p5) and is_integer(p6) and is_integer(p7) do
-    {:ok, tuple}
-  end
-
-  defp decode_calibrate_payload(other), do: {:error, {:bad_touch_calibrate_payload, other}}
-
-  defp remember_open_config(port, normalized_open_config) when is_list(normalized_open_config) do
-    cache_put(open_config_cache_key(port), normalized_open_config)
-    :ok
-  end
-
-  defp normalize_open_options!(options) do
-    case normalize_open_config(options) do
-      {:ok, normalized_options} ->
-        normalized_options
-
-      {:error, reason} ->
-        raise ArgumentError, format_open_option_error(reason)
-    end
-  end
-
-  defp normalize_open_options(options) when is_list(options) do
-    with {:ok, normalized_map} <- normalize_open_option_entries(options, %{}, options) do
-      {:ok, open_config_map_to_keyword(normalized_map)}
-    end
-  end
-
-  defp normalize_open_option_entries([], normalized_map, _original_options) do
-    {:ok, normalized_map}
-  end
-
-  defp normalize_open_option_entries(
-         [{key, _value} = entry | rest],
-         normalized_map,
-         original_options
-       )
-       when is_atom(key) do
-    case normalize_open_option_entry(entry, original_options) do
-      {:ok, {normalized_key, normalized_value}} ->
-        normalize_open_option_entries(
-          rest,
-          Map.put(normalized_map, normalized_key, normalized_value),
-          original_options
-        )
-
-      {:error, _reason} = err ->
-        err
-    end
-  end
-
-  defp normalize_open_option_entries(_entries, _normalized_map, original_options) do
-    {:error, {:bad_open_options_shape, original_options}}
-  end
-
-  defp normalize_open_option_entry({key, value}, _original_options) when is_atom(key) do
-    case normalize_open_option_value(key, value) do
-      {:ok, normalized_value} -> {:ok, {key, normalized_value}}
-      {:error, _reason} = err -> err
-    end
-  end
-
-  defp normalize_open_option_entry(_entry, original_options) do
-    {:error, {:bad_open_options_shape, original_options}}
-  end
-
-  defp normalize_open_option_value(key, value) do
-    case Keyword.fetch(@open_option_rules, key) do
-      {:ok, rule} -> normalize_open_option_by_rule(rule, key, value)
-      :error -> {:error, {:unknown_open_option, key}}
-    end
-  end
-
-  defp normalize_open_option_by_rule(:panel_driver, _key, value)
-       when value in @panel_driver_atoms,
-       do: {:ok, value}
-
-  defp normalize_open_option_by_rule(:panel_driver, key, value) do
-    {:error, {:bad_open_option_value, key, value, ":ili9488, :ili9341, :ili9341_2, or :st7789"}}
-  end
-
-  defp normalize_open_option_by_rule(:positive_u16, _key, value)
-       when u16(value) and value > 0,
-       do: {:ok, value}
-
-  defp normalize_open_option_by_rule(:positive_u16, key, value) do
-    {:error, {:bad_open_option_value, key, value, "a positive integer in 1..65535"}}
-  end
-
-  defp normalize_open_option_by_rule(:positive_i32, _key, value)
-       when positive_i32(value),
-       do: {:ok, value}
-
-  defp normalize_open_option_by_rule(:positive_i32, key, value) do
-    {:error,
-     {:bad_open_option_value, key, value, "a positive integer in 1..#{@max_open_config_i32}"}}
-  end
-
-  defp normalize_open_option_by_rule(:i32, _key, value) when i32(value), do: {:ok, value}
-
-  defp normalize_open_option_by_rule(:i32, key, value) do
-    {:error, {:bad_open_option_value, key, value, "a signed 32-bit integer"}}
-  end
-
-  defp normalize_open_option_by_rule(:rotation, _key, value)
-       when is_integer(value) and value in 0..7,
-       do: {:ok, value}
-
-  defp normalize_open_option_by_rule(:rotation, key, value) do
-    {:error, {:bad_open_option_value, key, value, "an integer in 0..7"}}
-  end
-
-  defp normalize_open_option_by_rule(:spi_mode, _key, value)
-       when is_integer(value) and value in 0..3,
-       do: {:ok, value}
-
-  defp normalize_open_option_by_rule(:spi_mode, key, value) do
-    {:error, {:bad_open_option_value, key, value, "an integer in 0..3"}}
-  end
-
-  defp normalize_open_option_by_rule(:boolean, _key, value) when is_boolean(value),
-    do: {:ok, value}
-
-  defp normalize_open_option_by_rule(:boolean, key, value) do
-    {:error, {:bad_open_option_value, key, value, "a boolean"}}
-  end
-
-  defp normalize_open_option_by_rule(:gpio, _key, value)
-       when is_integer(value) and value >= 0 and value <= 255,
-       do: {:ok, value}
-
-  defp normalize_open_option_by_rule(:gpio, key, value) do
-    {:error, {:bad_open_option_value, key, value, "a GPIO integer in 0..255"}}
-  end
-
-  defp normalize_open_option_by_rule(:gpio_or_disabled, _key, value)
-       when is_integer(value) and value >= -1 and value <= 255,
-       do: {:ok, value}
-
-  defp normalize_open_option_by_rule(:gpio_or_disabled, key, value) do
-    {:error, {:bad_open_option_value, key, value, "a GPIO integer in -1..255 (-1 disables)"}}
-  end
-
-  defp normalize_open_option_by_rule(:spi_host, _key, value)
-       when value in @spi_host_atoms,
-       do: {:ok, value}
-
-  defp normalize_open_option_by_rule(:spi_host, key, value) do
-    {:error, {:bad_open_option_value, key, value, ":spi2_host or :spi3_host"}}
-  end
-
-  defp normalize_open_option_by_rule(:dma_channel, _key, value) when value in [1, 2],
-    do: {:ok, value}
-
-  defp normalize_open_option_by_rule(:dma_channel, _key, :spi_dma_ch_auto),
-    do: {:ok, :spi_dma_ch_auto}
-
-  defp normalize_open_option_by_rule(:dma_channel, key, value) do
-    {:error, {:bad_open_option_value, key, value, ":spi_dma_ch_auto, 1, or 2"}}
-  end
-
-  defp open_config_map_to_keyword(normalized_map) when is_map(normalized_map) do
-    Enum.reduce(@supported_open_config_keys, [], fn key, acc ->
-      case Map.fetch(normalized_map, key) do
-        {:ok, value} -> [{key, value} | acc]
-        :error -> acc
-      end
-    end)
-    |> :lists.reverse()
-  end
-
-  defp format_open_option_error({:bad_open_options_shape, options}) do
-    "LGFXPort.open/1 expects a keyword list or proplist with atom keys, got: #{inspect(options)}"
-  end
-
-  defp format_open_option_error({:unknown_open_option, key}) do
-    "unknown LGFXPort.open/1 option #{inspect(key)}; supported keys: #{inspect(@supported_open_config_keys)}"
-  end
-
-  defp format_open_option_error({:bad_open_option_value, key, value, expected}) do
-    "bad LGFXPort.open/1 value for #{inspect(key)}: #{inspect(value)} (expected #{expected})"
-  end
-
-  defp validate_text_binary(<<>>), do: {:error, :empty_text}
-
-  defp validate_text_binary(text) when is_binary(text) do
-    if contains_nul?(text) do
-      {:error, :text_contains_nul}
-    else
-      :ok
-    end
-  end
-
-  defp contains_nul?(<<>>), do: false
-  defp contains_nul?(<<0, _::binary>>), do: true
-
-  defp contains_nul?(<<a, b, c, d, e, f, g, h, rest::binary>>) do
-    a == 0 or b == 0 or c == 0 or d == 0 or e == 0 or f == 0 or g == 0 or h == 0 or
-      contains_nul?(rest)
-  end
-
-  defp contains_nul?(<<_byte, rest::binary>>), do: contains_nul?(rest)
-
-  defp normalize_u16_8({p0, p1, p2, p3, p4, p5, p6, p7}) do
-    normalize_u16_8([p0, p1, p2, p3, p4, p5, p6, p7])
-  end
-
-  defp normalize_u16_8([p0, p1, p2, p3, p4, p5, p6, p7] = list) do
-    if u16?(p0) and u16?(p1) and u16?(p2) and u16?(p3) and
-         u16?(p4) and u16?(p5) and u16?(p6) and u16?(p7) do
-      {:ok, list}
-    else
-      {:error, {:bad_touch_calibrate_params, list}}
-    end
-  end
-
-  defp normalize_u16_8(other), do: {:error, {:bad_touch_calibrate_params, other}}
-
-  defp u16?(v) when is_integer(v) and v >= 0 and v <= 0xFFFF, do: true
-  defp u16?(_), do: false
-
-  defp font_preset_to_wire(:ascii), do: {:ok, @font_preset_ascii, :ascii}
-  defp font_preset_to_wire(:jp_small), do: {:ok, @font_preset_jp_small, :jp_small}
-  defp font_preset_to_wire(:jp_medium), do: {:ok, @font_preset_jp_medium, :jp_medium}
-  defp font_preset_to_wire(:jp_large), do: {:ok, @font_preset_jp_large, :jp_large}
-  defp font_preset_to_wire(:jp), do: {:ok, @font_preset_jp_medium, :jp_medium}
-  defp font_preset_to_wire(other), do: {:error, {:bad_font_preset, other}}
-
-  defp implied_text_scale_x256_for_preset(:ascii),
-    do: {@text_scale_one_x256, @text_scale_one_x256}
-
-  defp implied_text_scale_x256_for_preset(:jp_small),
-    do: {@text_scale_jp_small_x256, @text_scale_jp_small_x256}
-
-  defp implied_text_scale_x256_for_preset(:jp_medium),
-    do: {@text_scale_jp_medium_x256, @text_scale_jp_medium_x256}
-
-  defp implied_text_scale_x256_for_preset(:jp_large),
-    do: {@text_scale_jp_large_x256, @text_scale_jp_large_x256}
-
-  defp maybe_set_text_color(port, fg888, bg888, target) do
-    desired = {fg888, bg888}
-
-    case cache_get(text_color_cache_key(port, target)) do
-      ^desired -> :ok
-      _ -> set_text_color(port, fg888, bg888, target)
-    end
-  end
-
-  defp maybe_set_text_size(port, scale, target) do
-    with {:ok, scale_x256} <- normalize_text_scale_x256(scale) do
-      desired = {scale_x256, scale_x256}
-
-      case cache_get(text_size_cache_key(port, target)) do
-        ^desired -> :ok
-        _ -> set_text_size(port, scale, target)
-      end
-    end
-  end
-
-  defp normalize_text_color_args(fg888, nil), do: {:ok, 0, [fg888], {fg888, nil}}
-
-  defp normalize_text_color_args(fg888, bg888) when color888(bg888) do
-    {:ok, @f_text_has_bg, [fg888, bg888], {fg888, bg888}}
-  end
-
-  defp normalize_text_color_args(_fg888, bg888), do: {:error, {:bad_text_color, bg888}}
-
-  defp normalize_text_scale_x256(value) when is_number(value) and value > 0 do
-    scale_x256 =
-      cond do
-        is_integer(value) -> value * @text_scale_one_x256
-        is_float(value) -> round(value * @text_scale_one_x256)
-      end
-
-    if scale_x256 >= @text_scale_min_x256 and scale_x256 <= @text_scale_max_x256 do
-      {:ok, scale_x256}
-    else
-      {:error, {:bad_text_scale, value}}
-    end
-  end
-
-  defp normalize_text_scale_x256(value), do: {:error, {:bad_text_scale, value}}
-
-  defp validate_non_empty_jpeg(<<>>), do: {:error, :empty_jpeg}
-  defp validate_non_empty_jpeg(_jpeg), do: :ok
-
-  defp validate_binary_size_within_limit(port, payload, op_name) when is_binary(payload) do
-    payload_size = byte_size(payload)
-
-    case max_binary_bytes(port) do
-      {:ok, max_binary_bytes} when is_integer(max_binary_bytes) and max_binary_bytes > 0 ->
-        if payload_size <= max_binary_bytes do
-          :ok
-        else
-          {:error, {:binary_too_large, op_name, payload_size, max_binary_bytes}}
-        end
-
-      _ ->
-        :ok
-    end
-  end
-
-  defp validate_non_empty_image_dims(width, height) when width == 0 or height == 0, do: :skip
-  defp validate_non_empty_image_dims(_width, _height), do: :ok
-
-  defp validate_even_pixel_binary(pixels) when rem(byte_size(pixels), 2) != 0 do
-    {:error, {:pixels_size_not_even, byte_size(pixels)}}
-  end
-
-  defp validate_even_pixel_binary(_pixels), do: :ok
-
-  defp normalize_stride_pixels(width, 0), do: {:ok, width}
-
-  defp normalize_stride_pixels(width, stride) when stride < width do
-    {:error, {:bad_stride, stride, width}}
-  end
-
-  defp normalize_stride_pixels(_width, stride), do: {:ok, stride}
-
-  defp validate_pixel_binary_size(pixels, stride, height) do
-    min_bytes = stride * height * 2
-
-    if byte_size(pixels) < min_bytes do
-      {:error, {:pixels_size_too_small, min_bytes, byte_size(pixels)}}
-    else
-      :ok
-    end
-  end
-
-  # Split large RGB565 transfers when they exceed the device's MaxBinaryBytes limit.
-  defp push_image_rgb565_transfer(
-         port,
-         x,
-         y,
-         width,
-         height,
-         pixels,
-         stride_pixels,
-         stride,
-         target
-       ) do
-    min_bytes = stride * height * 2
-
-    case max_binary_bytes(port) do
-      {:ok, max_binary_bytes} when is_integer(max_binary_bytes) and max_binary_bytes > 0 ->
-        if min_bytes <= max_binary_bytes do
-          push_image_rgb565_raw(port, x, y, width, height, pixels, stride_pixels, target)
-        else
-          push_image_rgb565_chunked(
-            port,
-            x,
-            y,
-            width,
-            height,
-            pixels,
-            stride,
-            max_binary_bytes,
-            target
-          )
-        end
-
-      _ ->
-        push_image_rgb565_raw(port, x, y, width, height, pixels, stride_pixels, target)
-    end
-  end
-
-  defp push_image_rgb565_raw(port, x, y, width, height, pixels, stride_pixels, target) do
-    call_ok(port, :pushImage, target, 0, [x, y, width, height, stride_pixels, pixels], @t_long)
-  end
-
-  defp push_image_rgb565_chunked(
-         port,
-         x,
-         y,
-         width,
-         height,
-         pixels,
-         stride,
-         max_binary_bytes,
-         target
-       ) do
-    row_bytes = width * 2
-    stride_bytes = stride * 2
-
-    if max_binary_bytes < row_bytes do
-      {:error, {:push_image_max_binary_too_small, max_binary_bytes, row_bytes}}
-    else
-      rows_per_chunk = max(1, div(max_binary_bytes, row_bytes))
-      do_push_chunks(port, x, y, width, height, pixels, stride_bytes, rows_per_chunk, target, 0)
-    end
-  end
-
-  defp do_push_chunks(
-         _port,
-         _x,
-         _y,
-         _width,
-         height,
-         _pixels,
-         _stride_bytes,
-         _rows_per_chunk,
-         _target,
-         row
-       )
-       when row >= height,
-       do: :ok
-
-  defp do_push_chunks(
-         port,
-         x,
-         y,
-         width,
-         height,
-         pixels,
-         stride_bytes,
-         rows_per_chunk,
-         target,
-         row
-       ) do
-    chunk_height = min(height - row, rows_per_chunk)
-    chunk = pack_rows(pixels, stride_bytes, width * 2, row, chunk_height)
-
-    with :ok <- push_image_rgb565_raw(port, x, y + row, width, chunk_height, chunk, 0, target) do
-      do_push_chunks(
-        port,
-        x,
-        y,
-        width,
-        height,
-        pixels,
-        stride_bytes,
-        rows_per_chunk,
-        target,
-        row + chunk_height
-      )
-    end
-  end
-
-  defp pack_rows(pixels, stride_bytes, row_bytes, row_start, row_count) do
-    pack_rows_iolist(pixels, stride_bytes, row_bytes, row_start, row_start + row_count, [])
-    |> :lists.reverse()
-    |> :erlang.iolist_to_binary()
-  end
-
-  defp pack_rows_iolist(_pixels, _stride_bytes, _row_bytes, row, row_end, acc)
-       when row >= row_end,
-       do: acc
-
-  defp pack_rows_iolist(pixels, stride_bytes, row_bytes, row, row_end, acc) do
-    offset = row * stride_bytes
-    part = :binary.part(pixels, offset, row_bytes)
-    pack_rows_iolist(pixels, stride_bytes, row_bytes, row + 1, row_end, [part | acc])
-  end
-
-  defp integer_query(port, op, name, target) do
-    with {:ok, value} <- call(port, op, target, 0, [], @t_short),
-         true <- is_integer(value) do
-      {:ok, value}
-    else
-      false -> {:error, {:bad_reply_value, name}}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp supports_cap?(port, cap_bit) do
-    with {:ok, %{feature_bits: feature_bits}} <- get_caps(port) do
-      {:ok, (feature_bits &&& cap_bit) != 0}
-    end
-  end
-
-  defp after_ok(:ok = result, fun) do
-    fun.()
-    result
-  end
-
-  defp after_ok(result, _fun), do: result
-
-  # Clear per-port runtime caches after close/1 so later calls do not reuse stale state.
-  defp reset_runtime_cache(port) do
-    cache_erase(max_binary_bytes_cache_key(port))
-    reset_runtime_cache_targets(port, 0)
-  end
-
-  defp reset_runtime_cache_targets(_port, target) when target > 254, do: :ok
-
-  defp reset_runtime_cache_targets(port, target) do
-    erase_text_cache(port, target)
-    reset_runtime_cache_targets(port, target + 1)
-  end
-
-  defp erase_text_cache(port, target) do
-    cache_erase(text_color_cache_key(port, target))
-    cache_erase(text_size_cache_key(port, target))
-    cache_erase(text_font_selection_cache_key(port, target))
-  end
-
-  defp cache_get(key), do: :erlang.get(key)
-  defp cache_put(key, value), do: :erlang.put(key, value)
-  defp cache_erase(key), do: :erlang.erase(key)
-
-  defp open_config_cache_key(port), do: {:lgfx_open_config, port}
-  defp max_binary_bytes_cache_key(port), do: {:lgfx_max_binary_bytes, port}
-  defp text_color_cache_key(port, target), do: {:lgfx_text_color, port, target}
-  defp text_size_cache_key(port, target), do: {:lgfx_text_size, port, target}
-  defp text_font_selection_cache_key(port, target), do: {:lgfx_text_font_selection, port, target}
-
-  def format_error({:bad_stride, stride, width}), do: "bad stride stride=#{stride} w=#{width}"
-
-  def format_error({:pixels_size_not_even, size}),
-    do: "pixels binary size must be even bytes got=#{size}"
-
-  def format_error({:pixels_size_too_small, min_needed, got}),
-    do: "pixels too small min_needed=#{min_needed} got=#{got}"
-
-  def format_error({:push_image_max_binary_too_small, max_binary_bytes, row_bytes}),
-    do: "push_image max_binary_bytes too small max=#{max_binary_bytes} row_bytes=#{row_bytes}"
-
-  def format_error({:bad_caps_proto_ver, expected, got}),
-    do: "caps proto_ver mismatch expected=#{expected} got=#{got}"
-
-  def format_error({:bad_caps_payload, payload}), do: "bad caps payload #{inspect(payload)}"
-
-  def format_error({:bad_last_error_payload, payload}),
-    do: "bad last_error payload #{inspect(payload)}"
-
-  def format_error({:bad_reply_value, name}), do: "bad reply value for #{inspect(name)}"
-  def format_error({:bad_text_color, value}), do: "bad text bg color #{inspect(value)}"
-  def format_error({:bad_text_scale, value}), do: "bad text scale #{inspect(value)}"
-  def format_error({:bad_font_preset, preset}), do: "bad font preset #{inspect(preset)}"
-
-  def format_error({:bad_touch_payload, op, payload}),
-    do: "bad touch payload op=#{inspect(op)} payload=#{inspect(payload)}"
-
-  def format_error({:bad_touch_calibrate_payload, payload}),
-    do: "bad touch calibrate payload #{inspect(payload)}"
-
-  def format_error({:bad_touch_calibrate_params, params}),
-    do: "bad touch calibrate params #{inspect(params)}"
-
-  def format_error(:empty_jpeg), do: "jpeg must not be empty"
-
-  def format_error({:binary_too_large, op_name, got, max}),
-    do: "#{op_name} binary too large got=#{got} max=#{max}"
-
-  def format_error(:empty_text), do: "text must not be empty"
-  def format_error(:text_contains_nul), do: "text contains NUL byte"
-  def format_error({:port_call_exit, reason}), do: "port.call exited #{inspect(reason)}"
-  def format_error({:unexpected_reply, reply}), do: "unexpected reply #{inspect(reply)}"
-  def format_error(reason) when is_atom(reason), do: Atom.to_string(reason)
-  def format_error(reason), do: inspect(reason)
+  @doc """
+  Formats a wrapper or protocol error into a readable string.
+  """
+  def format_error(reason), do: Errors.format_error(reason)
 end
