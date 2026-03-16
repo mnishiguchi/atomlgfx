@@ -189,8 +189,11 @@ defmodule SampleApp.SpriteProtocolSmoke do
            [@sprite_w, @sprite_h, color_depth],
            @t_short
          ) do
-      {:ok, _result} -> :ok
-      {:error, reason} -> {:error, {:createSprite_with_depth_failed, sprite_target, color_depth, reason}}
+      {:ok, _result} ->
+        :ok
+
+      {:error, reason} ->
+        {:error, {:createSprite_with_depth_failed, sprite_target, color_depth, reason}}
     end
   end
 
@@ -333,7 +336,8 @@ defmodule SampleApp.SpriteProtocolSmoke do
   end
 
   defp check_palette_lifecycle_and_indexed_blits(port, raw_call) do
-    with :ok <- check_create_sprite_with_depth(port, raw_call, @sprite_target, @palette_sprite_depth),
+    with :ok <-
+           check_create_sprite_with_depth(port, raw_call, @sprite_target, @palette_sprite_depth),
          :ok <- check_create_palette(port, raw_call, @sprite_target),
          :ok <- check_set_palette_color(port, raw_call, @sprite_target, 0, 0x000000),
          :ok <- check_set_palette_color(port, raw_call, @sprite_target, 1, 0x00FF00),
@@ -382,7 +386,8 @@ defmodule SampleApp.SpriteProtocolSmoke do
              [2, 2, 4, 4, 1],
              @t_short
            ),
-         {:ok, _} <- raw_call.(port, :drawPixel, sprite_target, @f_color_index, [1, 1, 1], @t_short) do
+         {:ok, _} <-
+           raw_call.(port, :drawPixel, sprite_target, @f_color_index, [1, 1, 1], @t_short) do
       :ok
     else
       {:error, reason} ->
@@ -395,7 +400,14 @@ defmodule SampleApp.SpriteProtocolSmoke do
 
   defp check_indexed_push_sprite_to_lcd(port, raw_call, sprite_target) do
     # Transparent value is palette index 0 because the transparent-index flag is set.
-    case raw_call.(port, :pushSprite, sprite_target, @f_transparent_index, [0, 4, 20, 0], @t_short) do
+    case raw_call.(
+           port,
+           :pushSprite,
+           sprite_target,
+           @f_transparent_index,
+           [0, 4, 20, 0],
+           @t_short
+         ) do
       {:ok, _result} -> :ok
       {:error, reason} -> {:error, {:pushSprite_indexed_transparent_failed, reason}}
     end

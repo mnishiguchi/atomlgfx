@@ -24,6 +24,37 @@ static inline bool lgfx_text_scale_x256_to_float(uint16_t scale_x256, float *out
     return true;
 }
 
+template <typename Fn>
+static esp_err_t with_nul_terminated_text(
+    const uint8_t *text,
+    size_t text_len,
+    bool allow_empty,
+    Fn fn)
+{
+    if ((!allow_empty && text_len == 0) || (text_len > 0 && !text)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (text_len > (SIZE_MAX - 1u)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    char *buf = new (std::nothrow) char[text_len + 1u];
+    if (!buf) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    if (text_len > 0) {
+        memcpy(buf, text, text_len);
+    }
+    buf[text_len] = '\0';
+
+    esp_err_t err = fn(buf);
+
+    delete[] buf;
+    return err;
+}
+
 static esp_err_t set_jp_font_scaled(uint8_t target, uint16_t text_scale_x256)
 {
 #if !defined(LGFX_PORT_ENABLE_JP_FONTS) || (LGFX_PORT_ENABLE_JP_FONTS != 1)
@@ -153,6 +184,34 @@ extern "C" esp_err_t lgfx_device_set_text_color(
     return ESP_OK;
 }
 
+extern "C" esp_err_t lgfx_device_set_cursor(uint8_t target, int16_t x, int16_t y)
+{
+    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setCursor(x, y); });
+}
+
+extern "C" esp_err_t lgfx_device_get_cursor(uint8_t target, int32_t *out_x, int32_t *out_y)
+{
+    if (!out_x || !out_y) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    int32_t x = 0;
+    int32_t y = 0;
+
+    esp_err_t err = lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) {
+        x = static_cast<int32_t>(gfx->getCursorX());
+        y = static_cast<int32_t>(gfx->getCursorY());
+    });
+
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    *out_x = x;
+    *out_y = y;
+    return ESP_OK;
+}
+
 extern "C" esp_err_t lgfx_device_draw_string(
     uint8_t target,
     int16_t x,
@@ -160,24 +219,39 @@ extern "C" esp_err_t lgfx_device_draw_string(
     const uint8_t *text,
     size_t text_len)
 {
-    if (!text || text_len == 0) {
-        return ESP_ERR_INVALID_ARG;
-    }
+    return with_nul_terminated_text(
+        text,
+        text_len,
+        false,
+        [&](const char *buf) {
+            return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->drawString(buf, x, y); });
+        });
+}
 
-    if (text_len > (SIZE_MAX - 1u)) {
-        return ESP_ERR_INVALID_SIZE;
-    }
+extern "C" esp_err_t lgfx_device_print(
+    uint8_t target,
+    const uint8_t *text,
+    size_t text_len)
+{
+    return with_nul_terminated_text(
+        text,
+        text_len,
+        true,
+        [&](const char *buf) {
+            return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->print(buf); });
+        });
+}
 
-    char *buf = new (std::nothrow) char[text_len + 1u];
-    if (!buf) {
-        return ESP_ERR_NO_MEM;
-    }
-
-    memcpy(buf, text, text_len);
-    buf[text_len] = '\0';
-
-    esp_err_t err = lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->drawString(buf, x, y); });
-
-    delete[] buf;
-    return err;
+extern "C" esp_err_t lgfx_device_println(
+    uint8_t target,
+    const uint8_t *text,
+    size_t text_len)
+{
+    return with_nul_terminated_text(
+        text,
+        text_len,
+        true,
+        [&](const char *buf) {
+            return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->println(buf); });
+        });
 }

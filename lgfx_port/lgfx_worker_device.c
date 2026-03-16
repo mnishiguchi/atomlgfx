@@ -48,19 +48,35 @@
         LGFX_WORKER_CALL_ARGS(job_kind, member, __VA_ARGS__);                     \
     }
 
-static esp_err_t lgfx_worker_copy_payload(lgfx_job_t *job, const uint8_t *bytes, size_t len)
+/*
+ * Deep-copy helper for variable-length payload jobs.
+ *
+ * Contract after return on success:
+ * - len == 0  => *inout_bytes == NULL and job->owned_payload == NULL
+ * - len > 0   => *inout_bytes points to owned copied memory and
+ *                job->owned_payload points to the same buffer
+ *
+ * This avoids passing borrowed pointers across the worker boundary for the
+ * empty-payload case and makes payload ownership uniform for all non-empty
+ * variable-length jobs.
+ */
+static esp_err_t lgfx_worker_copy_payload(
+    lgfx_job_t *job,
+    const uint8_t **inout_bytes,
+    size_t len)
 {
-    if (!job) {
+    if (!job || !inout_bytes) {
         return ESP_ERR_INVALID_ARG;
     }
 
     job->owned_payload = NULL;
 
     if (len == 0) {
+        *inout_bytes = NULL;
         return ESP_OK;
     }
 
-    if (!bytes) {
+    if (!*inout_bytes) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -69,8 +85,9 @@ static esp_err_t lgfx_worker_copy_payload(lgfx_job_t *job, const uint8_t *bytes,
         return ESP_ERR_NO_MEM;
     }
 
-    memcpy(copy, bytes, len);
+    memcpy(copy, *inout_bytes, len);
     job->owned_payload = copy;
+    *inout_bytes = copy;
     return ESP_OK;
 }
 
@@ -218,6 +235,29 @@ esp_err_t lgfx_worker_device_calibrate_touch(lgfx_port_t *port, uint16_t out_par
     return err;
 }
 
+esp_err_t lgfx_worker_device_get_cursor(
+    lgfx_port_t *port,
+    uint8_t target,
+    int32_t *out_x,
+    int32_t *out_y)
+{
+    if (!out_x || !out_y) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_GET_CURSOR,
+        .a.get_cursor = { .target = target, .x = 0, .y = 0 }
+    };
+
+    esp_err_t err = lgfx_worker_call(port, &job);
+    if (err == ESP_OK) {
+        *out_x = job.a.get_cursor.x;
+        *out_y = job.a.get_cursor.y;
+    }
+    return err;
+}
+
 /*
  * Owned-payload contract (draw_string):
  * - bytes may point into caller-owned memory
@@ -231,13 +271,56 @@ esp_err_t lgfx_worker_device_draw_string(lgfx_port_t *port, uint8_t target, int1
         .a.draw_string = { .target = target, .x = x, .y = y, .bytes = bytes, .len = len }
     };
 
-    esp_err_t err = lgfx_worker_copy_payload(&job, bytes, (size_t) len);
+    esp_err_t err = lgfx_worker_copy_payload(&job, &job.a.draw_string.bytes, len);
     if (err != ESP_OK) {
         return err;
     }
 
-    if (job.owned_payload) {
-        job.a.draw_string.bytes = job.owned_payload;
+    return lgfx_worker_call(port, &job);
+}
+
+/*
+ * Owned-payload contract (print):
+ * - bytes may point into caller-owned memory
+ * - this wrapper deep-copies before enqueueing
+ * - the worker frees the copied payload after the device call and before notify
+ *
+ * Empty payload is allowed so the cursor state model can support no-op print
+ * without forcing callers to special-case it.
+ */
+esp_err_t lgfx_worker_device_print(lgfx_port_t *port, uint8_t target, const uint8_t *bytes, size_t len)
+{
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_PRINT,
+        .a.print = { .target = target, .bytes = bytes, .len = len }
+    };
+
+    esp_err_t err = lgfx_worker_copy_payload(&job, &job.a.print.bytes, len);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    return lgfx_worker_call(port, &job);
+}
+
+/*
+ * Owned-payload contract (println):
+ * - bytes may point into caller-owned memory
+ * - this wrapper deep-copies before enqueueing
+ * - the worker frees the copied payload after the device call and before notify
+ *
+ * Empty payload is allowed so println can still advance the cursor.
+ */
+esp_err_t lgfx_worker_device_println(lgfx_port_t *port, uint8_t target, const uint8_t *bytes, size_t len)
+{
+    lgfx_job_t job = {
+        .kind = LGFX_JOB_PRINTLN,
+        .a.println = { .target = target, .bytes = bytes, .len = len }
+    };
+
+    esp_err_t err = lgfx_worker_copy_payload(&job, &job.a.println.bytes, len);
+    if (err != ESP_OK) {
+        return err;
     }
 
     return lgfx_worker_call(port, &job);
@@ -283,13 +366,9 @@ esp_err_t lgfx_worker_device_draw_jpg(
             .len = len }
     };
 
-    esp_err_t err = lgfx_worker_copy_payload(&job, bytes, len);
+    esp_err_t err = lgfx_worker_copy_payload(&job, &job.a.draw_jpg.bytes, len);
     if (err != ESP_OK) {
         return err;
-    }
-
-    if (job.owned_payload) {
-        job.a.draw_jpg.bytes = job.owned_payload;
     }
 
     return lgfx_worker_call(port, &job);
@@ -329,13 +408,9 @@ esp_err_t lgfx_worker_device_push_image_rgb565_strided(
             .len = len }
     };
 
-    esp_err_t err = lgfx_worker_copy_payload(&job, bytes, len);
+    esp_err_t err = lgfx_worker_copy_payload(&job, &job.a.push_image.bytes, len);
     if (err != ESP_OK) {
         return err;
-    }
-
-    if (job.owned_payload) {
-        job.a.push_image.bytes = job.owned_payload;
     }
 
     return lgfx_worker_call(port, &job);

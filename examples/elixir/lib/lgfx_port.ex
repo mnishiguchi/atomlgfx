@@ -36,7 +36,12 @@ defmodule LGFXPort do
 
   - Omitted open options keep build defaults.
   - `get_touch/1` and `get_touch_raw/1` return `{:ok, :none}` or `{:ok, {x, y, size}}`.
-  - Transparent keys for sprite push operations are RGB565 `u16` values (`0x0000..0xFFFF`), not RGB888 (`0x00RRGGBB`).
+  - Primitive and text scalar colors accept either:
+    - RGB888 integers like `0x112233`
+    - indexed tuples like `{:index, 3}` on palette-backed sprite targets
+  - Transparent keys for sprite push operations accept either:
+    - RGB565 `u16` values (`0x0000..0xFFFF`)
+    - indexed tuples like `{:index, 0}` on palette-backed source sprites
   - `push_rotate_zoom*` uses protocol units:
     - angle: centi-degrees (`1.00° = 100`)
     - zoom: x1024 fixed-point (`1.0x = 1024`)
@@ -49,6 +54,8 @@ defmodule LGFXPort do
   - `set_text_wrap/3` follows LovyanGFX one-argument semantics:
     - `set_text_wrap(port, wrap, target)` sets `wrap_x = wrap` and `wrap_y = false`
     - `set_text_wrap_xy/4` sets both axes explicitly
+  - `set_cursor/4` and `get_cursor/2` operate on either the LCD target `0` or a sprite target `1..254`.
+  - `print/3` and `println/3` use the target's current cursor state.
   - `draw_jpg/5` draws a JPEG binary at `{x, y}` on the selected target.
   - `draw_jpg/11` exposes the extended `drawJpg` protocol form:
     - `max_width` / `max_height`
@@ -57,6 +64,7 @@ defmodule LGFXPort do
   - JPEG payloads must be non-empty and must fit within the driver's advertised `MaxBinaryBytes` limit. No automatic chunking is performed.
   - `set_clip_rect/6` and `clear_clip_rect/2` apply to the selected target.
     LCD and sprite clip states are independent.
+  - `create_palette/2` and `set_palette_color/4` manage palette backing for paletted sprite targets.
   - For stable protocol-owned font selection, prefer `set_text_font_preset/3`.
   """
 
@@ -174,6 +182,11 @@ defmodule LGFXPort do
   def supports_touch?(port), do: Protocol.supports_touch?(port)
 
   @doc """
+  Returns whether palette lifecycle operations are advertised by the driver.
+  """
+  def supports_palette?(port), do: Protocol.supports_palette?(port)
+
+  @doc """
   Returns the maximum accepted binary payload size for this driver instance.
   """
   def max_binary_bytes(port), do: Protocol.max_binary_bytes(port)
@@ -251,74 +264,80 @@ defmodule LGFXPort do
   def clear_clip_rect(port, target \\ 0), do: Clip.clear_clip_rect(port, target)
 
   @doc """
-  Fills the selected target with the given RGB888 color.
+  Fills the selected target with the given scalar color.
+
+  Accepts either RGB888 integers like `0x112233` or indexed tuples like `{:index, 3}`.
+  Indexed color mode is valid only on palette-backed sprite targets.
   """
-  def fill_screen(port, color888, target \\ 0), do: Primitives.fill_screen(port, color888, target)
+  def fill_screen(port, color, target \\ 0), do: Primitives.fill_screen(port, color, target)
 
   @doc """
-  Clears the selected target with the given RGB888 color.
+  Clears the selected target with the given scalar color.
+
+  Accepts either RGB888 integers like `0x112233` or indexed tuples like `{:index, 3}`.
+  Indexed color mode is valid only on palette-backed sprite targets.
   """
-  def clear(port, color888, target \\ 0), do: Primitives.clear(port, color888, target)
+  def clear(port, color, target \\ 0), do: Primitives.clear(port, color, target)
 
   @doc """
-  Draws a single pixel using an RGB888 color.
+  Draws a single pixel using the given scalar color.
   """
-  def draw_pixel(port, x, y, color888, target \\ 0),
-    do: Primitives.draw_pixel(port, x, y, color888, target)
+  def draw_pixel(port, x, y, color, target \\ 0),
+    do: Primitives.draw_pixel(port, x, y, color, target)
 
   @doc """
-  Draws a fast vertical line using an RGB888 color.
+  Draws a fast vertical line using the given scalar color.
   """
-  def draw_fast_vline(port, x, y, height, color888, target \\ 0),
-    do: Primitives.draw_fast_vline(port, x, y, height, color888, target)
+  def draw_fast_vline(port, x, y, height, color, target \\ 0),
+    do: Primitives.draw_fast_vline(port, x, y, height, color, target)
 
   @doc """
-  Draws a fast horizontal line using an RGB888 color.
+  Draws a fast horizontal line using the given scalar color.
   """
-  def draw_fast_hline(port, x, y, width, color888, target \\ 0),
-    do: Primitives.draw_fast_hline(port, x, y, width, color888, target)
+  def draw_fast_hline(port, x, y, width, color, target \\ 0),
+    do: Primitives.draw_fast_hline(port, x, y, width, color, target)
 
   @doc """
-  Draws a line using an RGB888 color.
+  Draws a line using the given scalar color.
   """
-  def draw_line(port, x0, y0, x1, y1, color888, target \\ 0),
-    do: Primitives.draw_line(port, x0, y0, x1, y1, color888, target)
+  def draw_line(port, x0, y0, x1, y1, color, target \\ 0),
+    do: Primitives.draw_line(port, x0, y0, x1, y1, color, target)
 
   @doc """
-  Draws a rectangle outline using an RGB888 color.
+  Draws a rectangle outline using the given scalar color.
   """
-  def draw_rect(port, x, y, width, height, color888, target \\ 0),
-    do: Primitives.draw_rect(port, x, y, width, height, color888, target)
+  def draw_rect(port, x, y, width, height, color, target \\ 0),
+    do: Primitives.draw_rect(port, x, y, width, height, color, target)
 
   @doc """
-  Fills a rectangle using an RGB888 color.
+  Fills a rectangle using the given scalar color.
   """
-  def fill_rect(port, x, y, width, height, color888, target \\ 0),
-    do: Primitives.fill_rect(port, x, y, width, height, color888, target)
+  def fill_rect(port, x, y, width, height, color, target \\ 0),
+    do: Primitives.fill_rect(port, x, y, width, height, color, target)
 
   @doc """
-  Draws a circle outline using an RGB888 color.
+  Draws a circle outline using the given scalar color.
   """
-  def draw_circle(port, x, y, radius, color888, target \\ 0),
-    do: Primitives.draw_circle(port, x, y, radius, color888, target)
+  def draw_circle(port, x, y, radius, color, target \\ 0),
+    do: Primitives.draw_circle(port, x, y, radius, color, target)
 
   @doc """
-  Fills a circle using an RGB888 color.
+  Fills a circle using the given scalar color.
   """
-  def fill_circle(port, x, y, radius, color888, target \\ 0),
-    do: Primitives.fill_circle(port, x, y, radius, color888, target)
+  def fill_circle(port, x, y, radius, color, target \\ 0),
+    do: Primitives.fill_circle(port, x, y, radius, color, target)
 
   @doc """
-  Draws a triangle outline using an RGB888 color.
+  Draws a triangle outline using the given scalar color.
   """
-  def draw_triangle(port, x0, y0, x1, y1, x2, y2, color888, target \\ 0),
-    do: Primitives.draw_triangle(port, x0, y0, x1, y1, x2, y2, color888, target)
+  def draw_triangle(port, x0, y0, x1, y1, x2, y2, color, target \\ 0),
+    do: Primitives.draw_triangle(port, x0, y0, x1, y1, x2, y2, color, target)
 
   @doc """
-  Fills a triangle using an RGB888 color.
+  Fills a triangle using the given scalar color.
   """
-  def fill_triangle(port, x0, y0, x1, y1, x2, y2, color888, target \\ 0),
-    do: Primitives.fill_triangle(port, x0, y0, x1, y1, x2, y2, color888, target)
+  def fill_triangle(port, x0, y0, x1, y1, x2, y2, color, target \\ 0),
+    do: Primitives.fill_triangle(port, x0, y0, x1, y1, x2, y2, color, target)
 
   @doc """
   Creates a sprite at the given handle using the target's default sprite color depth.
@@ -338,7 +357,20 @@ defmodule LGFXPort do
   def delete_sprite(port, target), do: Sprites.delete_sprite(port, target)
 
   @doc """
-  Sets the pivot point for the given sprite handle.
+  Creates palette backing for an existing paletted sprite target.
+  """
+  def create_palette(port, target), do: Sprites.create_palette(port, target)
+
+  @doc """
+  Sets one palette entry on a palette-backed sprite target using RGB888.
+  """
+  def set_palette_color(port, target, palette_index, rgb888),
+    do: Sprites.set_palette_color(port, target, palette_index, rgb888)
+
+  @doc """
+  Sets the pivot point for the selected target.
+
+  Target `0` is the LCD. Targets `1..254` are sprite handles.
   """
   def set_pivot(port, target, x, y), do: Sprites.set_pivot(port, target, x, y)
 
@@ -349,10 +381,13 @@ defmodule LGFXPort do
     do: Sprites.push_sprite_to(port, src_target, dst_target, x, y)
 
   @doc """
-  Pushes a source sprite to the destination target at `{x, y}` using an RGB565 transparent key.
+  Pushes a source sprite to the destination target at `{x, y}` using a transparent key.
+
+  Accepts either an RGB565 integer or an indexed tuple like `{:index, 0}`.
+  Indexed transparent mode is valid only on palette-backed source sprites.
   """
-  def push_sprite_to(port, src_target, dst_target, x, y, transparent565),
-    do: Sprites.push_sprite_to(port, src_target, dst_target, x, y, transparent565)
+  def push_sprite_to(port, src_target, dst_target, x, y, transparent),
+    do: Sprites.push_sprite_to(port, src_target, dst_target, x, y, transparent)
 
   @doc """
   Pushes a source sprite to the LCD at `{x, y}`.
@@ -360,10 +395,13 @@ defmodule LGFXPort do
   def push_sprite(port, src_target, x, y), do: Sprites.push_sprite(port, src_target, x, y)
 
   @doc """
-  Pushes a source sprite to the LCD at `{x, y}` using an RGB565 transparent key.
+  Pushes a source sprite to the LCD at `{x, y}` using a transparent key.
+
+  Accepts either an RGB565 integer or an indexed tuple like `{:index, 0}`.
+  Indexed transparent mode is valid only on palette-backed source sprites.
   """
-  def push_sprite(port, src_target, x, y, transparent565),
-    do: Sprites.push_sprite(port, src_target, x, y, transparent565)
+  def push_sprite(port, src_target, x, y, transparent),
+    do: Sprites.push_sprite(port, src_target, x, y, transparent)
 
   @doc """
   Pushes a source sprite to the destination target using protocol-native rotate/zoom units.
@@ -397,7 +435,10 @@ defmodule LGFXPort do
 
   @doc """
   Pushes a source sprite to the destination target using protocol-native rotate/zoom units
-  and an RGB565 transparent key.
+  and a transparent key.
+
+  Accepts either an RGB565 integer or an indexed tuple like `{:index, 0}`.
+  Indexed transparent mode is valid only on palette-backed source sprites.
   """
   def push_rotate_zoom_to(
         port,
@@ -408,7 +449,7 @@ defmodule LGFXPort do
         angle_centi_deg,
         zoom_x1024,
         zoom_y1024,
-        transparent565
+        transparent
       ) do
     Sprites.push_rotate_zoom_to(
       port,
@@ -419,7 +460,7 @@ defmodule LGFXPort do
       angle_centi_deg,
       zoom_x1024,
       zoom_y1024,
-      transparent565
+      transparent
     )
   end
 
@@ -451,9 +492,41 @@ defmodule LGFXPort do
   end
 
   @doc """
+  Convenience wrapper for sprite rotate/zoom push with a transparent key.
+
+  Accepts natural degree and zoom values and converts them to protocol units.
+  """
+  def push_rotate_zoom_deg_to(
+        port,
+        src_target,
+        dst_target,
+        x,
+        y,
+        angle_deg,
+        zoom_x,
+        zoom_y,
+        transparent
+      ) do
+    Sprites.push_rotate_zoom_deg_to(
+      port,
+      src_target,
+      dst_target,
+      x,
+      y,
+      angle_deg,
+      zoom_x,
+      zoom_y,
+      transparent
+    )
+  end
+
+  @doc """
   Convenience wrapper for uniform sprite rotate/zoom push.
 
   Uses the same zoom factor for both axes.
+
+  For uniform zoom with transparency, call
+  `push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom, zoom, transparent)`.
   """
   def push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom) do
     Sprites.push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom)
@@ -537,10 +610,23 @@ defmodule LGFXPort do
     do: Text.set_text_font_preset(port, preset, target)
 
   @doc """
-  Sets the text foreground color, and optionally the background color, using RGB888 values.
+  Sets the text foreground color, and optionally the background color.
+
+  Accepts RGB888 integers like `0x112233` or indexed tuples like `{:index, 3}`.
+  Indexed color mode is valid only on palette-backed sprite targets.
   """
-  def set_text_color(port, fg888, bg888 \\ nil, target \\ 0),
-    do: Text.set_text_color(port, fg888, bg888, target)
+  def set_text_color(port, fg_color, bg_color \\ nil, target \\ 0),
+    do: Text.set_text_color(port, fg_color, bg_color, target)
+
+  @doc """
+  Sets the current text cursor for the selected target.
+  """
+  def set_cursor(port, x, y, target \\ 0), do: Text.set_cursor(port, x, y, target)
+
+  @doc """
+  Returns the current text cursor for the selected target as `{:ok, {x, y}}`.
+  """
+  def get_cursor(port, target \\ 0), do: Text.get_cursor(port, target)
 
   @doc """
   Draws a UTF-8 string at `{x, y}` on the selected target.
@@ -548,10 +634,20 @@ defmodule LGFXPort do
   def draw_string(port, x, y, text, target \\ 0), do: Text.draw_string(port, x, y, text, target)
 
   @doc """
+  Prints UTF-8 text at the current cursor of the selected target.
+  """
+  def print(port, text, target \\ 0), do: Text.print(port, text, target)
+
+  @doc """
+  Prints UTF-8 text followed by newline behavior at the current cursor of the selected target.
+  """
+  def println(port, text, target \\ 0), do: Text.println(port, text, target)
+
+  @doc """
   Convenience helper that sets text color and scale before drawing a string.
   """
-  def draw_string_bg(port, x, y, fg888, bg888, scale, text, target \\ 0),
-    do: Text.draw_string_bg(port, x, y, fg888, bg888, scale, text, target)
+  def draw_string_bg(port, x, y, fg_color, bg_color, scale, text, target \\ 0),
+    do: Text.draw_string_bg(port, x, y, fg_color, bg_color, scale, text, target)
 
   @doc """
   Clears cached text state tracked by the Elixir wrapper for the selected target.

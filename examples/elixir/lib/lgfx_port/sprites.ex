@@ -50,7 +50,7 @@ defmodule LGFXPort.Sprites do
   end
 
   def set_pivot(port, target, x, y)
-      when sprite_handle(target) and i16(x) and i16(y) do
+      when target_any(target) and i16(x) and i16(y) do
     Protocol.call_ok(port, :setPivot, target, 0, [x, y], Protocol.long_timeout())
   end
 
@@ -58,7 +58,14 @@ defmodule LGFXPort.Sprites do
       when sprite_handle(src_target) and
              target_any(dst_target) and
              i16(x) and i16(y) do
-    Protocol.call_ok(port, :pushSprite, src_target, 0, [dst_target, x, y], Protocol.long_timeout())
+    Protocol.call_ok(
+      port,
+      :pushSprite,
+      src_target,
+      0,
+      [dst_target, x, y],
+      Protocol.long_timeout()
+    )
   end
 
   def push_sprite_to(port, src_target, dst_target, x, y, transparent)
@@ -197,15 +204,6 @@ defmodule LGFXPort.Sprites do
              is_number(angle_deg) and
              is_number(zoom) and zoom > 0 do
     push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom, zoom)
-  end
-
-  def push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom, transparent)
-      when sprite_handle(src_target) and
-             target_any(dst_target) and
-             i16(x) and i16(y) and
-             is_number(angle_deg) and
-             is_number(zoom) and zoom > 0 do
-    push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom, zoom, transparent)
   end
 
   defp normalize_transparent_arg(transparent) when rgb565(transparent) do

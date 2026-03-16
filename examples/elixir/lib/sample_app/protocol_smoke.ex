@@ -86,7 +86,7 @@ defmodule SampleApp.ProtocolSmoke do
   defp list_member?(value, [_other | rest]), do: list_member?(value, rest)
 
   defp power_of_two?(n) when is_integer(n) and n > 0 do
-    (n &&& (n - 1)) == 0
+    (n &&& n - 1) == 0
   end
 
   defp power_of_two?(_), do: false

@@ -29,6 +29,9 @@ defmodule SampleApp.DrawStringStress do
   # Periodically emit a UTF-8 line to stress multi-byte transport under churn.
   @utf8_every 17
 
+  # Exercise println occasionally while keeping the demo mostly deterministic.
+  @println_every 19
+
   # Try enabling JP glyphs once so UTF-8 lines are not guaranteed tofu.
   # If presets are not compiled in, this will simply log and continue.
   @jp_presets [:jp_medium, :jp_small, :jp, :jp_large]
@@ -56,8 +59,9 @@ defmodule SampleApp.DrawStringStress do
       _ = Port.set_text_color(port, 0xFFFFFF, nil, 0)
 
       _ = maybe_use_japanese_font_preset(port)
-
-      probe_invalid_text_guard(port)
+      _ = probe_cursor_roundtrip(port, text_y0)
+      _ = probe_invalid_text_guard(port)
+      _ = probe_empty_prints(port, text_y0)
 
       do_run(port, w, rows, rounds, text_y0, 0, 0, 0)
     else
@@ -92,8 +96,27 @@ defmodule SampleApp.DrawStringStress do
     end
   end
 
+  defp probe_cursor_roundtrip(port, text_y0) do
+    probe_x = @x
+    probe_y = text_y0
+
+    with :ok <- Port.set_cursor(port, probe_x, probe_y, 0),
+         {:ok, {^probe_x, ^probe_y}} <- Port.get_cursor(port, 0) do
+      IO.puts("cursor_probe ok x=#{probe_x} y=#{probe_y}")
+      :ok
+    else
+      {:ok, {x, y}} ->
+        IO.puts("cursor_probe mismatch got=#{inspect({x, y})}")
+        :ok
+
+      {:error, reason} ->
+        IO.puts("cursor_probe failed: #{Port.format_error(reason)}")
+        :ok
+    end
+  end
+
   defp probe_invalid_text_guard(port) do
-    # Client-side validation probe: empty binaries must be rejected.
+    # Client-side validation probe: empty binaries must be rejected for draw_string.
     case Port.draw_string(port, @x, 0, <<>>, 0) do
       {:error, :empty_text} ->
         IO.puts("invalid_text_probe ok (empty_text)")
@@ -106,6 +129,34 @@ defmodule SampleApp.DrawStringStress do
 
       other ->
         IO.puts("invalid_text_probe unexpected_reply=#{inspect(other)}")
+    end
+
+    :ok
+  end
+
+  defp probe_empty_prints(port, text_y0) do
+    _ = Port.set_cursor(port, @x, text_y0, 0)
+
+    case Port.print(port, <<>>, 0) do
+      :ok ->
+        IO.puts("empty_print_probe ok")
+
+      {:error, reason} ->
+        IO.puts("empty_print_probe failed: #{Port.format_error(reason)}")
+
+      other ->
+        IO.puts("empty_print_probe unexpected_reply=#{inspect(other)}")
+    end
+
+    case Port.println(port, <<>>, 0) do
+      :ok ->
+        IO.puts("empty_println_probe ok")
+
+      {:error, reason} ->
+        IO.puts("empty_println_probe failed: #{Port.format_error(reason)}")
+
+      other ->
+        IO.puts("empty_println_probe unexpected_reply=#{inspect(other)}")
     end
 
     :ok
@@ -137,7 +188,7 @@ defmodule SampleApp.DrawStringStress do
     text = make_line(i)
 
     {ok_count2, err_count2} =
-      case Port.draw_string(port, @x, y, text, 0) do
+      case draw_line_with_cursor(port, @x, y, text, i) do
         :ok ->
           {ok_count + 1, err_count}
 
@@ -161,6 +212,18 @@ defmodule SampleApp.DrawStringStress do
     yield()
     do_run(port, w, rows, rounds, text_y0, i + 1, ok_count2, err_count2)
   end
+
+  defp draw_line_with_cursor(port, x, y, text, i) do
+    with :ok <- Port.set_cursor(port, x, y, 0) do
+      if use_println?(i) do
+        Port.println(port, text, 0)
+      else
+        Port.print(port, text, 0)
+      end
+    end
+  end
+
+  defp use_println?(i), do: rem(i, @println_every) == 0
 
   defp should_log_progress?(i, rounds) do
     i == 0 or i == rounds - 1 or rem(i, @progress_every) == 0
@@ -194,12 +257,12 @@ defmodule SampleApp.DrawStringStress do
     _ = Port.fill_rect(port, 0, 0, screen_w, @hud_h, @hud_bg)
 
     line1 =
-      <<"TXT stress  ", progress_label(i, rounds)::binary, "  ok:", i2b(ok_count)::binary,
+      <<"TXT cursor  ", progress_label(i, rounds)::binary, "  ok:", i2b(ok_count)::binary,
         "  err:", i2b(err_count)::binary>>
 
     line2 =
       <<"rows:", i2b(rows)::binary, "  line_h:", i2b(@line_h)::binary, "  ", jp_label()::binary,
-        "  utf8_every:", i2b(@utf8_every)::binary>>
+        "  ", cursor_label(port)::binary>>
 
     _ = Port.draw_string_bg(port, 4, 0, @hud_fg, @hud_bg, 2, line1)
     _ = Port.draw_string_bg(port, 4, 12, @hud_dim, @hud_bg, 1, line2)
@@ -234,6 +297,16 @@ defmodule SampleApp.DrawStringStress do
 
       _ ->
         "jp:none"
+    end
+  end
+
+  defp cursor_label(port) do
+    case Port.get_cursor(port, 0) do
+      {:ok, {x, y}} ->
+        <<"cur:", i2b(x)::binary, ",", i2b(y)::binary>>
+
+      {:error, _reason} ->
+        "cur:err"
     end
   end
 

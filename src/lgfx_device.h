@@ -308,6 +308,10 @@ esp_err_t lgfx_device_set_text_size_xy(uint8_t target, uint16_t scale_x_x256, ui
 esp_err_t lgfx_device_set_text_datum(uint8_t target, uint8_t datum);
 esp_err_t lgfx_device_set_text_wrap(uint8_t target, bool wrap_x, bool wrap_y);
 esp_err_t lgfx_device_set_text_font(uint8_t target, uint8_t font);
+esp_err_t lgfx_device_set_cursor(uint8_t target, int16_t x, int16_t y);
+esp_err_t lgfx_device_get_cursor(uint8_t target, int32_t *out_x, int32_t *out_y);
+esp_err_t lgfx_device_print(uint8_t target, const uint8_t *text, size_t text_len);
+esp_err_t lgfx_device_println(uint8_t target, const uint8_t *text, size_t text_len);
 
 // setTextFontPreset(preset_id): selects a protocol-owned text font preset.
 //

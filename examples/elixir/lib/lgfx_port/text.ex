@@ -103,10 +103,42 @@ defmodule LGFXPort.Text do
     end
   end
 
+  def set_cursor(port, x, y, target \\ 0)
+      when i16(x) and i16(y) and target_any(target) do
+    Protocol.call_ok(port, :setCursor, target, 0, [x, y], Protocol.long_timeout())
+  end
+
+  def get_cursor(port, target \\ 0) when target_any(target) do
+    case Protocol.raw_call(port, :getCursor, target, 0, [], Protocol.long_timeout()) do
+      {:ok, {x, y}} when is_integer(x) and is_integer(y) ->
+        {:ok, {x, y}}
+
+      {:ok, other} ->
+        {:error, {:bad_cursor_reply, other}}
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
   def draw_string(port, x, y, text, target \\ 0)
       when i16(x) and i16(y) and is_binary(text) and target_any(target) do
-    with :ok <- validate_text_binary(text) do
+    with :ok <- validate_nonempty_text_binary(text) do
       Protocol.call_ok(port, :drawString, target, 0, [x, y, text], Protocol.long_timeout())
+    end
+  end
+
+  def print(port, text, target \\ 0)
+      when is_binary(text) and target_any(target) do
+    with :ok <- validate_stream_text_binary(text) do
+      Protocol.call_ok(port, :print, target, 0, [text], Protocol.long_timeout())
+    end
+  end
+
+  def println(port, text, target \\ 0)
+      when is_binary(text) and target_any(target) do
+    with :ok <- validate_stream_text_binary(text) do
+      Protocol.call_ok(port, :println, target, 0, [text], Protocol.long_timeout())
     end
   end
 
@@ -115,7 +147,7 @@ defmodule LGFXPort.Text do
              is_number(scale) and scale > 0 and
              is_binary(text) and
              target_any(target) do
-    with :ok <- validate_text_binary(text),
+    with :ok <- validate_nonempty_text_binary(text),
          :ok <- maybe_set_text_color(port, fg_color, bg_color, target),
          :ok <- maybe_set_text_size(port, scale, target),
          :ok <- draw_string(port, x, y, text, target) do
@@ -128,9 +160,17 @@ defmodule LGFXPort.Text do
     :ok
   end
 
-  defp validate_text_binary(<<>>), do: {:error, :empty_text}
+  defp validate_nonempty_text_binary(<<>>), do: {:error, :empty_text}
 
-  defp validate_text_binary(text) when is_binary(text) do
+  defp validate_nonempty_text_binary(text) when is_binary(text) do
+    if contains_nul?(text) do
+      {:error, :text_contains_nul}
+    else
+      :ok
+    end
+  end
+
+  defp validate_stream_text_binary(text) when is_binary(text) do
     if contains_nul?(text) do
       {:error, :text_contains_nul}
     else
@@ -216,7 +256,8 @@ defmodule LGFXPort.Text do
     {:ok, index_flag, index, {:index, index}}
   end
 
-  defp normalize_text_color_arg(other, _index_flag, role), do: {:error, {:bad_text_color, role, other}}
+  defp normalize_text_color_arg(other, _index_flag, role),
+    do: {:error, {:bad_text_color, role, other}}
 
   defp normalize_text_scale_x256(value) when is_number(value) and value > 0 do
     scale_x256 =

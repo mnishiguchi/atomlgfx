@@ -89,7 +89,9 @@ extern "C" {
         set_text_font_preset, .target = target, .preset = preset)                                                                                  \
     X(set_text_color, (lgfx_port_t * port, uint8_t target, bool fg_is_index, uint32_t fg_value, bool has_bg, bool bg_is_index, uint32_t bg_value), \
         SET_TEXT_COLOR, set_text_color, .target = target, .fg_is_index = fg_is_index, .fg_value = fg_value, .has_bg = has_bg,                      \
-        .bg_is_index = bg_is_index, .bg_value = bg_value)
+        .bg_is_index = bg_is_index, .bg_value = bg_value)                                                                                          \
+    X(set_cursor, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y), SET_CURSOR, set_cursor,                                              \
+        .target = target, .x = x, .y = y)
 
 #define LGFX_WORKER_SIMPLE_CLIP_WRAPPERS(X)                                                              \
     X(set_clip_rect, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h), \
@@ -164,11 +166,29 @@ LGFX_WORKER_SIMPLE_DEVICE_WRAPPERS(LGFX_WORKER_DECLARE_SIMPLE_WRAPPER)
 
 #undef LGFX_WORKER_DECLARE_SIMPLE_WRAPPER
 
+esp_err_t lgfx_worker_device_get_cursor(
+    lgfx_port_t *port,
+    uint8_t target,
+    int32_t *out_x,
+    int32_t *out_y);
+
 esp_err_t lgfx_worker_device_draw_string(
     lgfx_port_t *port,
     uint8_t target,
     int16_t x,
     int16_t y,
+    const uint8_t *bytes,
+    size_t len);
+
+esp_err_t lgfx_worker_device_print(
+    lgfx_port_t *port,
+    uint8_t target,
+    const uint8_t *bytes,
+    size_t len);
+
+esp_err_t lgfx_worker_device_println(
+    lgfx_port_t *port,
+    uint8_t target,
     const uint8_t *bytes,
     size_t len);
 

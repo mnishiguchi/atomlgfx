@@ -373,7 +373,11 @@ This table documents the implemented protocol surface.
 | `setTextFont` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `setTextFontPreset` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `setTextColor` | `LGFX_OP_TARGET_ANY` | `Fmask((LGFX_F_TEXT_HAS_BG | LGFX_F_TEXT_FG_INDEX | LGFX_F_TEXT_BG_INDEX))` | `6/7` | `requires_init` | - |
+| `setCursor` | `LGFX_OP_TARGET_ANY` | `F0` | `7` | `requires_init` | - |
+| `getCursor` | `LGFX_OP_TARGET_ANY` | `F0` | `5` | `requires_init` | - |
 | `drawString` | `LGFX_OP_TARGET_ANY` | `F0` | `8` | `requires_init` | - |
+| `print` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
+| `println` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `drawJpg` | `LGFX_OP_TARGET_ANY` | `F0` | `8/14` | `requires_init` | - |
 | `pushImage` | `LGFX_OP_TARGET_ANY` | `F0` | `11` | `requires_init` | `LGFX_CAP_PUSHIMAGE` |
 | `setClipRect` | `LGFX_OP_TARGET_ANY` | `F0` | `9` | `requires_init` | - |
