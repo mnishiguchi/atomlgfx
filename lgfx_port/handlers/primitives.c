@@ -21,6 +21,12 @@ typedef struct
     int16_t y2;
 } lgfx_triangle_i16_t;
 
+typedef struct
+{
+    bool is_index;
+    uint32_t value;
+} lgfx_wire_color_t;
+
 static bool decode_triangle_i16(const lgfx_request_t *req, lgfx_triangle_i16_t *out)
 {
     return lgfx_decode_i16_at(req, 5, &out->x0)
@@ -31,10 +37,22 @@ static bool decode_triangle_i16(const lgfx_request_t *req, lgfx_triangle_i16_t *
         && lgfx_decode_i16_at(req, 10, &out->y2);
 }
 
+static bool decode_wire_color_at(const lgfx_request_t *req, int index, lgfx_wire_color_t *out)
+{
+    return out
+        && lgfx_decode_color_or_index_at(
+            req,
+            index,
+            LGFX_F_COLOR_INDEX,
+            &out->is_index,
+            &out->value);
+}
+
 term lgfx_handle_fillScreen(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    uint16_t color565 = 0;
-    if (!lgfx_decode_color565_at(req, 5, &color565)) {
+    lgfx_wire_color_t color = { 0 };
+
+    if (!decode_wire_color_at(req, 5, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -42,15 +60,20 @@ term lgfx_handle_fillScreen(Context *ctx, lgfx_port_t *port, const lgfx_request_
         ctx,
         port,
         req,
-        lgfx_worker_device_fill_screen(port, (uint8_t) req->target, color565));
+        lgfx_worker_device_fill_screen(
+            port,
+            (uint8_t) req->target,
+            color.is_index,
+            color.value));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 term lgfx_handle_clear(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    uint16_t color565 = 0;
-    if (!lgfx_decode_color565_at(req, 5, &color565)) {
+    lgfx_wire_color_t color = { 0 };
+
+    if (!decode_wire_color_at(req, 5, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -58,7 +81,11 @@ term lgfx_handle_clear(Context *ctx, lgfx_port_t *port, const lgfx_request_t *re
         ctx,
         port,
         req,
-        lgfx_worker_device_clear(port, (uint8_t) req->target, color565));
+        lgfx_worker_device_clear(
+            port,
+            (uint8_t) req->target,
+            color.is_index,
+            color.value));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -67,7 +94,7 @@ term lgfx_handle_drawPixel(Context *ctx, lgfx_port_t *port, const lgfx_request_t
 {
     int16_t x = 0;
     int16_t y = 0;
-    uint16_t color565 = 0;
+    lgfx_wire_color_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -75,7 +102,7 @@ term lgfx_handle_drawPixel(Context *ctx, lgfx_port_t *port, const lgfx_request_t
     if (!lgfx_decode_i16_at(req, 6, &y)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_decode_color565_at(req, 7, &color565)) {
+    if (!decode_wire_color_at(req, 7, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -88,7 +115,8 @@ term lgfx_handle_drawPixel(Context *ctx, lgfx_port_t *port, const lgfx_request_t
             (uint8_t) req->target,
             x,
             y,
-            color565));
+            color.is_index,
+            color.value));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -98,7 +126,7 @@ term lgfx_handle_drawFastVLine(Context *ctx, lgfx_port_t *port, const lgfx_reque
     int16_t x = 0;
     int16_t y = 0;
     uint16_t h = 0;
-    uint16_t color565 = 0;
+    lgfx_wire_color_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -109,7 +137,7 @@ term lgfx_handle_drawFastVLine(Context *ctx, lgfx_port_t *port, const lgfx_reque
     if (!lgfx_decode_u16_at(req, 7, &h) || h == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_decode_color565_at(req, 8, &color565)) {
+    if (!decode_wire_color_at(req, 8, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -123,7 +151,8 @@ term lgfx_handle_drawFastVLine(Context *ctx, lgfx_port_t *port, const lgfx_reque
             x,
             y,
             h,
-            color565));
+            color.is_index,
+            color.value));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -133,7 +162,7 @@ term lgfx_handle_drawFastHLine(Context *ctx, lgfx_port_t *port, const lgfx_reque
     int16_t x = 0;
     int16_t y = 0;
     uint16_t w = 0;
-    uint16_t color565 = 0;
+    lgfx_wire_color_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -144,7 +173,7 @@ term lgfx_handle_drawFastHLine(Context *ctx, lgfx_port_t *port, const lgfx_reque
     if (!lgfx_decode_u16_at(req, 7, &w) || w == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_decode_color565_at(req, 8, &color565)) {
+    if (!decode_wire_color_at(req, 8, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -158,7 +187,8 @@ term lgfx_handle_drawFastHLine(Context *ctx, lgfx_port_t *port, const lgfx_reque
             x,
             y,
             w,
-            color565));
+            color.is_index,
+            color.value));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -169,7 +199,7 @@ term lgfx_handle_drawLine(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     int16_t y0 = 0;
     int16_t x1 = 0;
     int16_t y1 = 0;
-    uint16_t color565 = 0;
+    lgfx_wire_color_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x0)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -183,7 +213,7 @@ term lgfx_handle_drawLine(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     if (!lgfx_decode_i16_at(req, 8, &y1)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_decode_color565_at(req, 9, &color565)) {
+    if (!decode_wire_color_at(req, 9, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -198,7 +228,8 @@ term lgfx_handle_drawLine(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
             y0,
             x1,
             y1,
-            color565));
+            color.is_index,
+            color.value));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -209,7 +240,7 @@ term lgfx_handle_drawRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     int16_t y = 0;
     uint16_t w = 0;
     uint16_t h = 0;
-    uint16_t color565 = 0;
+    lgfx_wire_color_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -223,7 +254,7 @@ term lgfx_handle_drawRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     if (!lgfx_decode_u16_at(req, 8, &h) || h == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_decode_color565_at(req, 9, &color565)) {
+    if (!decode_wire_color_at(req, 9, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -238,7 +269,8 @@ term lgfx_handle_drawRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
             y,
             w,
             h,
-            color565));
+            color.is_index,
+            color.value));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -249,7 +281,7 @@ term lgfx_handle_fillRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     int16_t y = 0;
     uint16_t w = 0;
     uint16_t h = 0;
-    uint16_t color565 = 0;
+    lgfx_wire_color_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -263,7 +295,7 @@ term lgfx_handle_fillRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     if (!lgfx_decode_u16_at(req, 8, &h) || h == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_decode_color565_at(req, 9, &color565)) {
+    if (!decode_wire_color_at(req, 9, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -278,7 +310,8 @@ term lgfx_handle_fillRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
             y,
             w,
             h,
-            color565));
+            color.is_index,
+            color.value));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -288,7 +321,7 @@ term lgfx_handle_drawCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_
     int16_t x = 0;
     int16_t y = 0;
     uint16_t r = 0;
-    uint16_t color565 = 0;
+    lgfx_wire_color_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -299,7 +332,7 @@ term lgfx_handle_drawCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_
     if (!lgfx_decode_u16_at(req, 7, &r) || r == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_decode_color565_at(req, 8, &color565)) {
+    if (!decode_wire_color_at(req, 8, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -313,7 +346,8 @@ term lgfx_handle_drawCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_
             x,
             y,
             r,
-            color565));
+            color.is_index,
+            color.value));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -323,7 +357,7 @@ term lgfx_handle_fillCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_
     int16_t x = 0;
     int16_t y = 0;
     uint16_t r = 0;
-    uint16_t color565 = 0;
+    lgfx_wire_color_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -334,7 +368,7 @@ term lgfx_handle_fillCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_
     if (!lgfx_decode_u16_at(req, 7, &r) || r == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!lgfx_decode_color565_at(req, 8, &color565)) {
+    if (!decode_wire_color_at(req, 8, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -348,7 +382,8 @@ term lgfx_handle_fillCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_
             x,
             y,
             r,
-            color565));
+            color.is_index,
+            color.value));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -356,13 +391,13 @@ term lgfx_handle_fillCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_
 term lgfx_handle_drawTriangle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     lgfx_triangle_i16_t tri = { 0 };
-    uint16_t color565 = 0;
+    lgfx_wire_color_t color = { 0 };
 
     if (!decode_triangle_i16(req, &tri)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    if (!lgfx_decode_color565_at(req, 11, &color565)) {
+    if (!decode_wire_color_at(req, 11, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -373,10 +408,14 @@ term lgfx_handle_drawTriangle(Context *ctx, lgfx_port_t *port, const lgfx_reques
         lgfx_worker_device_draw_triangle(
             port,
             (uint8_t) req->target,
-            tri.x0, tri.y0,
-            tri.x1, tri.y1,
-            tri.x2, tri.y2,
-            color565));
+            tri.x0,
+            tri.y0,
+            tri.x1,
+            tri.y1,
+            tri.x2,
+            tri.y2,
+            color.is_index,
+            color.value));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -384,13 +423,13 @@ term lgfx_handle_drawTriangle(Context *ctx, lgfx_port_t *port, const lgfx_reques
 term lgfx_handle_fillTriangle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     lgfx_triangle_i16_t tri = { 0 };
-    uint16_t color565 = 0;
+    lgfx_wire_color_t color = { 0 };
 
     if (!decode_triangle_i16(req, &tri)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    if (!lgfx_decode_color565_at(req, 11, &color565)) {
+    if (!decode_wire_color_at(req, 11, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -401,10 +440,14 @@ term lgfx_handle_fillTriangle(Context *ctx, lgfx_port_t *port, const lgfx_reques
         lgfx_worker_device_fill_triangle(
             port,
             (uint8_t) req->target,
-            tri.x0, tri.y0,
-            tri.x1, tri.y1,
-            tri.x2, tri.y2,
-            color565));
+            tri.x0,
+            tri.y0,
+            tri.x1,
+            tri.y1,
+            tri.x2,
+            tri.y2,
+            color.is_index,
+            color.value));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }

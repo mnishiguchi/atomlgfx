@@ -59,6 +59,33 @@ static inline bool lgfx_device_is_sprite_target(uint8_t target)
 }
 
 // ----------------------------------------------------------------------------
+// Scalar color ABI at the device boundary
+// ----------------------------------------------------------------------------
+//
+// Handlers own wire decode.
+// The device layer receives already-decoded scalar color arguments.
+//
+// For primitive, text, and sprite-transparent scalar colors:
+//
+// - when *_is_index == false:
+//     *_value carries RGB565 in the low 16 bits
+//
+// - when *_is_index == true:
+//     *_value carries palette index in the low 8 bits
+//
+// The device layer is authoritative for semantic checks such as:
+//
+// - palette-index mode on LCD target
+// - palette-index mode on true-color sprite target
+// - transparent palette index on non-paletted sprite paths
+//
+// Palette lifecycle is different:
+// - create_palette acts on a sprite target
+// - set_palette_color keeps rgb888 because the protocol defines that op on the
+//   wire as 0x00RRGGBB
+//
+
+// ----------------------------------------------------------------------------
 // Open-time panel driver override
 // ----------------------------------------------------------------------------
 // Parsed by the port layer; keep aligned with LGFXPort and lgfx_port.c.
@@ -293,6 +320,20 @@ esp_err_t lgfx_device_set_text_font(uint8_t target, uint8_t font);
 // - JP presets may use one JP font object scaled via setTextSize()
 esp_err_t lgfx_device_set_text_font_preset(uint8_t target, uint8_t preset);
 
+// setTextColor():
+// - fg/bg values arrive already decoded from handler wire semantics
+// - when *_is_index == false, the corresponding *_value is RGB565
+// - when *_is_index == true, the corresponding *_value is palette index
+// - has_bg=false means bg fields are ignored
+// - device layer is authoritative for target/depth semantic checks
+esp_err_t lgfx_device_set_text_color(
+    uint8_t target,
+    bool fg_is_index,
+    uint32_t fg_value,
+    bool has_bg,
+    bool bg_is_index,
+    uint32_t bg_value);
+
 // ----------------------------------------------------------------------------
 // Size queries (LCD or sprite target)
 // ----------------------------------------------------------------------------
@@ -319,24 +360,52 @@ esp_err_t lgfx_device_calibrate_touch(uint16_t out_params[8]);
 // ----------------------------------------------------------------------------
 // Basic drawing (LCD or sprite target)
 // ----------------------------------------------------------------------------
-esp_err_t lgfx_device_fill_screen(uint8_t target, uint16_t rgb565);
-esp_err_t lgfx_device_clear(uint8_t target, uint16_t rgb565);
+//
+// Color-bearing primitive ops are mode-aware at this boundary:
+//
+// - color_is_index=false:
+//     color_value is RGB565
+//
+// - color_is_index=true:
+//     color_value is palette index
+//
+// The device layer is authoritative for rejecting invalid combinations such as
+// palette-index mode on LCD target or true-color sprite targets.
+esp_err_t lgfx_device_fill_screen(uint8_t target, bool color_is_index, uint32_t color_value);
+esp_err_t lgfx_device_clear(uint8_t target, bool color_is_index, uint32_t color_value);
 
-esp_err_t lgfx_device_draw_pixel(uint8_t target, int16_t x, int16_t y, uint16_t rgb565);
-esp_err_t lgfx_device_draw_fast_vline(uint8_t target, int16_t x, int16_t y, uint16_t h, uint16_t rgb565);
-esp_err_t lgfx_device_draw_fast_hline(uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t rgb565);
-esp_err_t lgfx_device_draw_line(uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t rgb565);
-esp_err_t lgfx_device_draw_rect(uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t rgb565);
-esp_err_t lgfx_device_fill_rect(uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t rgb565);
-esp_err_t lgfx_device_draw_circle(uint8_t target, int16_t x, int16_t y, uint16_t r, uint16_t rgb565);
-esp_err_t lgfx_device_fill_circle(uint8_t target, int16_t x, int16_t y, uint16_t r, uint16_t rgb565);
-esp_err_t lgfx_device_draw_triangle(uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t rgb565);
-esp_err_t lgfx_device_fill_triangle(uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t rgb565);
+esp_err_t lgfx_device_draw_pixel(uint8_t target, int16_t x, int16_t y, bool color_is_index, uint32_t color_value);
+esp_err_t lgfx_device_draw_fast_vline(uint8_t target, int16_t x, int16_t y, uint16_t h, bool color_is_index, uint32_t color_value);
+esp_err_t lgfx_device_draw_fast_hline(uint8_t target, int16_t x, int16_t y, uint16_t w, bool color_is_index, uint32_t color_value);
+esp_err_t lgfx_device_draw_line(uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, bool color_is_index, uint32_t color_value);
+esp_err_t lgfx_device_draw_rect(uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, bool color_is_index, uint32_t color_value);
+esp_err_t lgfx_device_fill_rect(uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, bool color_is_index, uint32_t color_value);
+esp_err_t lgfx_device_draw_circle(uint8_t target, int16_t x, int16_t y, uint16_t r, bool color_is_index, uint32_t color_value);
+esp_err_t lgfx_device_fill_circle(uint8_t target, int16_t x, int16_t y, uint16_t r, bool color_is_index, uint32_t color_value);
+esp_err_t lgfx_device_draw_triangle(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    bool color_is_index,
+    uint32_t color_value);
+esp_err_t lgfx_device_fill_triangle(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    bool color_is_index,
+    uint32_t color_value);
 
 // ----------------------------------------------------------------------------
 // Text drawing (LCD or sprite target)
 // ----------------------------------------------------------------------------
-esp_err_t lgfx_device_set_text_color(uint8_t target, uint16_t fg_rgb565, bool has_bg, uint16_t bg_rgb565);
 esp_err_t lgfx_device_draw_string(uint8_t target, int16_t x, int16_t y, const uint8_t *text, size_t text_len);
 
 // ----------------------------------------------------------------------------
@@ -382,15 +451,31 @@ esp_err_t lgfx_device_push_image_rgb565_strided(
 esp_err_t lgfx_device_sprite_create_at(uint8_t handle, uint16_t w, uint16_t h, uint8_t color_depth);
 esp_err_t lgfx_device_sprite_delete(uint8_t handle);
 
+// Palette lifecycle:
+//
+// - sprite target only
+// - requires an existing paletted sprite target
+// - create_palette establishes palette backing for that sprite
+// - set_palette_color writes one palette entry using RGB888 input
+esp_err_t lgfx_device_sprite_create_palette(uint8_t handle);
+esp_err_t lgfx_device_sprite_set_palette_color(uint8_t handle, uint8_t palette_index, uint32_t rgb888);
+
 /*
  * Whole-sprite push to LCD or another sprite.
  *
- * Thin wrapper over pinned LovyanGFX destination-aware overloads:
- * - pushSprite(dst, x, y)
- * - pushSprite(dst, x, y, transparent565)
+ * Thin wrapper over pinned LovyanGFX destination-aware overloads.
+ *
+ * Transparent semantics at this boundary:
+ * - has_transparent=false:
+ *     no transparent key
+ * - has_transparent=true && transparent_is_index=false:
+ *     transparent_value is RGB565
+ * - has_transparent=true && transparent_is_index=true:
+ *     transparent_value is palette index
  *
  * Invalid protocol targets return ESP_ERR_INVALID_ARG.
  * Missing source or destination sprites return ESP_ERR_NOT_FOUND.
+ * Device layer remains authoritative for paletted-vs-true-color checks.
  */
 esp_err_t lgfx_device_sprite_push_sprite(
     uint8_t src_handle,
@@ -398,7 +483,8 @@ esp_err_t lgfx_device_sprite_push_sprite(
     int16_t x,
     int16_t y,
     bool has_transparent,
-    uint16_t transparent_rgb565);
+    bool transparent_is_index,
+    uint32_t transparent_value);
 
 /*
  * Rotate/zoom sprite push to LCD or another sprite.
@@ -407,9 +493,7 @@ esp_err_t lgfx_device_sprite_push_sprite(
  * - angle_deg: float degrees
  * - zoom_x / zoom_y: float scale factors (> 0)
  *
- * Thin wrapper over pinned LovyanGFX destination-aware overloads:
- * - pushRotateZoom(dst, x, y, angle_deg, zoom_x, zoom_y)
- * - pushRotateZoom(dst, x, y, angle_deg, zoom_x, zoom_y, transparent565)
+ * Transparent semantics match lgfx_device_sprite_push_sprite().
  */
 esp_err_t lgfx_device_sprite_push_rotate_zoom(
     uint8_t src_handle,
@@ -420,7 +504,8 @@ esp_err_t lgfx_device_sprite_push_rotate_zoom(
     float zoom_x,
     float zoom_y,
     bool has_transparent,
-    uint16_t transparent_rgb565);
+    bool transparent_is_index,
+    uint32_t transparent_value);
 
 #ifdef __cplusplus
 }

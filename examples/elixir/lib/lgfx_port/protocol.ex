@@ -15,11 +15,16 @@ defmodule LGFXPort.Protocol do
   @t_touch_calibrate 60_000
 
   @f_text_has_bg 1 <<< 0
+  @f_color_index 1 <<< 1
+  @f_text_fg_index 1 <<< 2
+  @f_text_bg_index 1 <<< 3
+  @f_transparent_index 1 <<< 4
 
   @cap_sprite 1 <<< 0
   @cap_pushimage 1 <<< 1
   @cap_last_error 1 <<< 2
   @cap_touch 1 <<< 3
+  @cap_palette 1 <<< 4
 
   def proto_ver, do: @proto_ver
 
@@ -28,11 +33,16 @@ defmodule LGFXPort.Protocol do
   def touch_calibrate_timeout, do: @t_touch_calibrate
 
   def text_has_bg_flag, do: @f_text_has_bg
+  def color_index_flag, do: @f_color_index
+  def text_fg_index_flag, do: @f_text_fg_index
+  def text_bg_index_flag, do: @f_text_bg_index
+  def transparent_index_flag, do: @f_transparent_index
 
   def cap_sprite, do: @cap_sprite
   def cap_pushimage, do: @cap_pushimage
   def cap_last_error, do: @cap_last_error
   def cap_touch, do: @cap_touch
+  def cap_palette, do: @cap_palette
 
   # Raw protocol call for smoke tests. Target is intentionally not range-checked.
   def raw_call(port, op, target, flags, args, timeout \\ @t_short)
@@ -69,6 +79,7 @@ defmodule LGFXPort.Protocol do
   def supports_pushimage?(port), do: supports_cap?(port, @cap_pushimage)
   def supports_last_error?(port), do: supports_cap?(port, @cap_last_error)
   def supports_touch?(port), do: supports_cap?(port, @cap_touch)
+  def supports_palette?(port), do: supports_cap?(port, @cap_palette)
 
   def max_binary_bytes(port) do
     case Cache.get_max_binary_bytes(port) do

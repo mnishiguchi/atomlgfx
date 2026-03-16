@@ -1,6 +1,7 @@
 defmodule LGFXPort.Text do
   @moduledoc false
 
+  import Bitwise
   import LGFXPort.Guards
 
   alias LGFXPort.Cache
@@ -17,6 +18,10 @@ defmodule LGFXPort.Text do
   @text_scale_jp_large_x256 768
   @text_scale_min_x256 1
   @text_scale_max_x256 0xFFFF
+
+  @f_text_has_bg 1 <<< 0
+  @f_text_fg_index 1 <<< 2
+  @f_text_bg_index 1 <<< 3
 
   def set_text_size(port, scale, target \\ 0)
       when is_number(scale) and scale > 0 and target_any(target) do
@@ -88,9 +93,9 @@ defmodule LGFXPort.Text do
     end
   end
 
-  def set_text_color(port, fg888, bg888 \\ nil, target \\ 0)
-      when color888(fg888) and target_any(target) do
-    with {:ok, flags, args, desired} <- normalize_text_color_args(fg888, bg888),
+  def set_text_color(port, fg_color, bg_color \\ nil, target \\ 0)
+      when target_any(target) do
+    with {:ok, flags, args, desired} <- normalize_text_color_args(fg_color, bg_color),
          :ok <-
            Protocol.call_ok(port, :setTextColor, target, flags, args, Protocol.long_timeout()) do
       Cache.put_text_color(port, target, desired)
@@ -105,15 +110,13 @@ defmodule LGFXPort.Text do
     end
   end
 
-  def draw_string_bg(port, x, y, fg888, bg888, scale, text, target \\ 0)
+  def draw_string_bg(port, x, y, fg_color, bg_color, scale, text, target \\ 0)
       when i16(x) and i16(y) and
-             color888(fg888) and
-             color888(bg888) and
              is_number(scale) and scale > 0 and
              is_binary(text) and
              target_any(target) do
     with :ok <- validate_text_binary(text),
-         :ok <- maybe_set_text_color(port, fg888, bg888, target),
+         :ok <- maybe_set_text_color(port, fg_color, bg_color, target),
          :ok <- maybe_set_text_size(port, scale, target),
          :ok <- draw_string(port, x, y, text, target) do
       :ok
@@ -164,12 +167,12 @@ defmodule LGFXPort.Text do
   defp implied_text_scale_x256_for_preset(:jp_large),
     do: {@text_scale_jp_large_x256, @text_scale_jp_large_x256}
 
-  defp maybe_set_text_color(port, fg888, bg888, target) do
-    desired = {fg888, bg888}
-
-    case Cache.get_text_color(port, target) do
-      ^desired -> :ok
-      _ -> set_text_color(port, fg888, bg888, target)
+  defp maybe_set_text_color(port, fg_color, bg_color, target) do
+    with {:ok, _flags, _args, desired} <- normalize_text_color_args(fg_color, bg_color) do
+      case Cache.get_text_color(port, target) do
+        ^desired -> :ok
+        _ -> set_text_color(port, fg_color, bg_color, target)
+      end
     end
   end
 
@@ -184,13 +187,36 @@ defmodule LGFXPort.Text do
     end
   end
 
-  defp normalize_text_color_args(fg888, nil), do: {:ok, 0, [fg888], {fg888, nil}}
-
-  defp normalize_text_color_args(fg888, bg888) when color888(bg888) do
-    {:ok, Protocol.text_has_bg_flag(), [fg888, bg888], {fg888, bg888}}
+  defp normalize_text_color_args(fg_color, nil) do
+    with {:ok, fg_flags, fg_arg, fg_desired} <-
+           normalize_text_color_arg(fg_color, @f_text_fg_index, :fg) do
+      {:ok, fg_flags, [fg_arg], {fg_desired, nil}}
+    end
   end
 
-  defp normalize_text_color_args(_fg888, bg888), do: {:error, {:bad_text_color, bg888}}
+  defp normalize_text_color_args(fg_color, bg_color) do
+    with {:ok, fg_flags, fg_arg, fg_desired} <-
+           normalize_text_color_arg(fg_color, @f_text_fg_index, :fg),
+         {:ok, bg_flags, bg_arg, bg_desired} <-
+           normalize_text_color_arg(bg_color, @f_text_bg_index, :bg) do
+      flags = @f_text_has_bg ||| fg_flags ||| bg_flags
+      {:ok, flags, [fg_arg, bg_arg], {fg_desired, bg_desired}}
+    end
+  end
+
+  defp normalize_text_color_arg(color, _index_flag, _role) when color888(color) do
+    {:ok, 0, color, {:rgb888, color}}
+  end
+
+  defp normalize_text_color_arg({:rgb888, color}, _index_flag, _role) when color888(color) do
+    {:ok, 0, color, {:rgb888, color}}
+  end
+
+  defp normalize_text_color_arg({:index, index}, index_flag, _role) when palette_index(index) do
+    {:ok, index_flag, index, {:index, index}}
+  end
+
+  defp normalize_text_color_arg(other, _index_flag, role), do: {:error, {:bad_text_color, role, other}}
 
   defp normalize_text_scale_x256(value) when is_number(value) and value > 0 do
     scale_x256 =

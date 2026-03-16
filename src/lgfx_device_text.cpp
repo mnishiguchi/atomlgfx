@@ -11,6 +11,9 @@
 extern const lgfx::U8g2font ui_font_ja_16_min;
 #endif
 
+namespace
+{
+
 static inline bool lgfx_text_scale_x256_to_float(uint16_t scale_x256, float *out_scale)
 {
     if (!out_scale || scale_x256 == 0) {
@@ -39,6 +42,8 @@ static esp_err_t set_jp_font_scaled(uint8_t target, uint16_t text_scale_x256)
     });
 #endif
 }
+
+} // namespace
 
 extern "C" esp_err_t lgfx_device_set_text_size(uint8_t target, uint16_t scale_x256)
 {
@@ -102,15 +107,50 @@ extern "C" esp_err_t lgfx_device_set_text_font_preset(uint8_t target, uint8_t pr
     }
 }
 
-extern "C" esp_err_t lgfx_device_set_text_color(uint8_t target, uint16_t fg_rgb565, bool has_bg, uint16_t bg_rgb565)
+extern "C" esp_err_t lgfx_device_set_text_color(
+    uint8_t target,
+    bool fg_is_index,
+    uint32_t fg_value,
+    bool has_bg,
+    bool bg_is_index,
+    uint32_t bg_value)
 {
-    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) {
+    esp_err_t fg_validation_err = ESP_OK;
+    esp_err_t bg_validation_err = ESP_OK;
+
+    esp_err_t err = lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) {
+        fg_validation_err = lgfx_dev::validate_target_scalar_color(target, gfx, fg_is_index, fg_value);
+        if (fg_validation_err != ESP_OK) {
+            return;
+        }
+
         if (has_bg) {
-            gfx->setTextColor(fg_rgb565, bg_rgb565);
+            bg_validation_err = lgfx_dev::validate_target_scalar_color(target, gfx, bg_is_index, bg_value);
+            if (bg_validation_err != ESP_OK) {
+                return;
+            }
+
+            gfx->setTextColor(
+                static_cast<uint32_t>(fg_value),
+                static_cast<uint32_t>(bg_value));
         } else {
-            gfx->setTextColor(fg_rgb565);
+            gfx->setTextColor(static_cast<uint32_t>(fg_value));
         }
     });
+
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    if (fg_validation_err != ESP_OK) {
+        return fg_validation_err;
+    }
+
+    if (bg_validation_err != ESP_OK) {
+        return bg_validation_err;
+    }
+
+    return ESP_OK;
 }
 
 extern "C" esp_err_t lgfx_device_draw_string(

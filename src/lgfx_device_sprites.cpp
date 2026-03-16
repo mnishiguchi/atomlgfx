@@ -6,23 +6,6 @@
 #include <cmath>
 #include <new>
 
-namespace
-{
-
-// Supported pinned LovyanGFX surface:
-// - createSprite(w, h)
-// - pushSprite(dst, x, y [, transparent565])
-// - pushRotateZoom(dst, x, y, angle_deg, zoom_x, zoom_y [, transparent565])
-//
-// If the pinned submodule changes these signatures, update this layer
-// explicitly instead of reintroducing fallback probes.
-static bool protocol_valid_target(uint8_t target)
-{
-    return lgfx_device_is_lcd_target(target) || lgfx_device_is_sprite_target(target);
-}
-
-} // namespace
-
 extern "C" esp_err_t lgfx_device_sprite_create_at(uint8_t handle, uint16_t w, uint16_t h, uint8_t color_depth)
 {
     if (!lgfx_device_is_sprite_target(handle) || w == 0 || h == 0) {
@@ -98,6 +81,65 @@ extern "C" esp_err_t lgfx_device_sprite_delete(uint8_t handle)
     return ESP_OK;
 }
 
+extern "C" esp_err_t lgfx_device_sprite_create_palette(uint8_t handle)
+{
+    if (!lgfx_device_is_sprite_target(handle)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    lgfx_dev::ScopedLcdLock lock;
+    esp_err_t err = lgfx_dev::lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    auto *spr = lgfx_dev::resolve_sprite_locked(handle);
+    if (!spr) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (!lgfx_dev::sprite_supports_palette_storage(spr)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    spr->createPalette();
+
+    if (!lgfx_dev::sprite_uses_palette_indices(spr)) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    return ESP_OK;
+}
+
+extern "C" esp_err_t lgfx_device_sprite_set_palette_color(uint8_t handle, uint8_t palette_index, uint32_t rgb888)
+{
+    if (!lgfx_device_is_sprite_target(handle) || !lgfx_dev::scalar_rgb888_is_valid(rgb888)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    lgfx_dev::ScopedLcdLock lock;
+    esp_err_t err = lgfx_dev::lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    auto *spr = lgfx_dev::resolve_sprite_locked(handle);
+    if (!spr) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (!lgfx_dev::sprite_uses_palette_indices(spr)) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (palette_index > lgfx_dev::sprite_palette_index_max(spr)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    spr->setPaletteColor(palette_index, rgb888);
+    return ESP_OK;
+}
+
 extern "C" esp_err_t lgfx_device_set_pivot(uint8_t target, int16_t px, int16_t py)
 {
     return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setPivot(px, py); });
@@ -109,13 +151,14 @@ extern "C" esp_err_t lgfx_device_sprite_push_sprite(
     int16_t x,
     int16_t y,
     bool has_transparent,
-    uint16_t transparent_rgb565)
+    bool transparent_is_index,
+    uint32_t transparent_value)
 {
     if (!lgfx_device_is_sprite_target(src_handle)) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (!protocol_valid_target(dst_target)) {
+    if (!lgfx_dev::protocol_valid_target(dst_target)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -130,6 +173,11 @@ extern "C" esp_err_t lgfx_device_sprite_push_sprite(
         return ESP_ERR_NOT_FOUND;
     }
 
+    err = lgfx_dev::validate_sprite_transparent_scalar(src, has_transparent, transparent_is_index, transparent_value);
+    if (err != ESP_OK) {
+        return err;
+    }
+
     if (lgfx_device_is_lcd_target(dst_target)) {
         auto *lcd = lgfx_dev::lcd_device_locked();
         if (!lcd) {
@@ -137,7 +185,7 @@ extern "C" esp_err_t lgfx_device_sprite_push_sprite(
         }
 
         if (has_transparent) {
-            src->pushSprite(lcd, x, y, transparent_rgb565);
+            src->pushSprite(lcd, x, y, static_cast<uint32_t>(transparent_value));
         } else {
             src->pushSprite(lcd, x, y);
         }
@@ -151,7 +199,7 @@ extern "C" esp_err_t lgfx_device_sprite_push_sprite(
     }
 
     if (has_transparent) {
-        src->pushSprite(dst_spr, x, y, transparent_rgb565);
+        src->pushSprite(dst_spr, x, y, static_cast<uint32_t>(transparent_value));
     } else {
         src->pushSprite(dst_spr, x, y);
     }
@@ -168,13 +216,14 @@ extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
     float zoom_x,
     float zoom_y,
     bool has_transparent,
-    uint16_t transparent565)
+    bool transparent_is_index,
+    uint32_t transparent_value)
 {
     if (!lgfx_device_is_sprite_target(src_handle)) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (!protocol_valid_target(dst_target)) {
+    if (!lgfx_dev::protocol_valid_target(dst_target)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -198,6 +247,11 @@ extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
         return ESP_ERR_NOT_FOUND;
     }
 
+    err = lgfx_dev::validate_sprite_transparent_scalar(src, has_transparent, transparent_is_index, transparent_value);
+    if (err != ESP_OK) {
+        return err;
+    }
+
     if (lgfx_device_is_lcd_target(dst_target)) {
         auto *lcd = lgfx_dev::lcd_device_locked();
         if (!lcd) {
@@ -205,9 +259,22 @@ extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
         }
 
         if (has_transparent) {
-            src->pushRotateZoom(lcd, (float) x, (float) y, angle_deg, zoom_x, zoom_y, transparent565);
+            src->pushRotateZoom(
+                lcd,
+                static_cast<float>(x),
+                static_cast<float>(y),
+                angle_deg,
+                zoom_x,
+                zoom_y,
+                static_cast<uint32_t>(transparent_value));
         } else {
-            src->pushRotateZoom(lcd, (float) x, (float) y, angle_deg, zoom_x, zoom_y);
+            src->pushRotateZoom(
+                lcd,
+                static_cast<float>(x),
+                static_cast<float>(y),
+                angle_deg,
+                zoom_x,
+                zoom_y);
         }
 
         return ESP_OK;
@@ -219,9 +286,22 @@ extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
     }
 
     if (has_transparent) {
-        src->pushRotateZoom(dst_spr, (float) x, (float) y, angle_deg, zoom_x, zoom_y, transparent565);
+        src->pushRotateZoom(
+            dst_spr,
+            static_cast<float>(x),
+            static_cast<float>(y),
+            angle_deg,
+            zoom_x,
+            zoom_y,
+            static_cast<uint32_t>(transparent_value));
     } else {
-        src->pushRotateZoom(dst_spr, (float) x, (float) y, angle_deg, zoom_x, zoom_y);
+        src->pushRotateZoom(
+            dst_spr,
+            static_cast<float>(x),
+            static_cast<float>(y),
+            angle_deg,
+            zoom_x,
+            zoom_y);
     }
 
     return ESP_OK;

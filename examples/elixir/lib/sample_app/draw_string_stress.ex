@@ -4,18 +4,20 @@ defmodule SampleApp.DrawStringStress do
   alias LGFXPort, as: Port
   import SampleApp.AtomVMCompat, only: [yield: 0]
 
-  @bg 0x0B1020
-  @hud_bg 0x111827
-  @hud_fg 0xE5E7EB
-  @hud_dim 0x94A3B8
-  @hud_ok 0x10B981
-  @hud_err 0xEF4444
-  @divider 0x334155
+  @bg 0x101010
+  @hud_bg 0x181818
+  @hud_fg 0xFFFFFF
+  @hud_dim 0xB0B0B0
+  @hud_ok 0xC8C8C8
+  @hud_err 0x707070
+  @divider 0x505050
 
-  @console_bg 0x05070E
-  @row_bg_a 0x0F172A
-  @row_bg_b 0x111827
-  @row_marker 0x334155
+  @console_bg 0x0C0C0C
+  @row_bg_a 0x141414
+  @row_bg_b 0x1C1C1C
+  @row_marker 0x606060
+
+  @progress_bg 0x2A2A2A
 
   @hud_h 44
   @line_h 20
@@ -202,7 +204,7 @@ defmodule SampleApp.DrawStringStress do
     _ = Port.draw_string_bg(port, 4, 0, @hud_fg, @hud_bg, 2, line1)
     _ = Port.draw_string_bg(port, 4, 12, @hud_dim, @hud_bg, 1, line2)
 
-    _ = Port.fill_rect(port, bar_x, bar_y, bar_w, bar_h, 0x1F2937)
+    _ = Port.fill_rect(port, bar_x, bar_y, bar_w, bar_h, @progress_bg)
 
     fill_w =
       cond do
@@ -253,12 +255,12 @@ defmodule SampleApp.DrawStringStress do
 
   defp row_fg_color(i) do
     case rem(i, 6) do
-      0 -> 0xE5E7EB
-      1 -> 0x93C5FD
-      2 -> 0x86EFAC
-      3 -> 0xFDE68A
-      4 -> 0xFCA5A5
-      _ -> 0xC4B5FD
+      0 -> 0xFFFFFF
+      1 -> 0xE8E8E8
+      2 -> 0xD8D8D8
+      3 -> 0xC8C8C8
+      4 -> 0xB8B8B8
+      _ -> 0xF0F0F0
     end
   end
 

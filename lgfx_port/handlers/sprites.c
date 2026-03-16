@@ -15,21 +15,27 @@
 //
 // - pushSprite request shape:
 //   {lgfx, ver, pushSprite, SrcSprite, Flags,
-//      DstTarget, X, Y [, Transparent565]}
+//      DstTarget, X, Y [, Transparent]}
 //
 // - SrcSprite is the request header Target (sprite-only; 1..254)
 // - DstTarget is 0 (LCD) or 1..254 (sprite)
+// - Transparent is interpreted as:
+//   - RGB565 when LGFX_F_TRANSPARENT_INDEX is not set
+//   - palette index when LGFX_F_TRANSPARENT_INDEX is set
 //
 // pushRotateZoom wire payload convention used in this handler:
 //
 // - Request shape:
 //   {lgfx, ver, pushRotateZoom, SrcSprite, Flags,
-//      DstTarget, X, Y, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32 [, Transparent565]}
+//      DstTarget, X, Y, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32 [, Transparent]}
 //
 // - SrcSprite is the request header Target (sprite-only; 1..254)
 // - DstTarget is 0 (LCD) or 1..254 (sprite)
 // - Angle uses centi-degrees (i32; 9000 == 90.00°)
 // - Zoom uses x1024 fixed-point scale (i32; 1024 == 1.0x)
+// - Transparent is interpreted as:
+//   - RGB565 when LGFX_F_TRANSPARENT_INDEX is not set
+//   - palette index when LGFX_F_TRANSPARENT_INDEX is set
 //
 // Keep the handler wire-oriented: decode fixed-point integers here and carry them
 // unchanged into the worker ABI. Conversion to float happens later at the device
@@ -44,6 +50,12 @@ typedef struct
 
 typedef struct
 {
+    uint8_t palette_index;
+    uint32_t rgb888;
+} lgfx_set_palette_color_args_t;
+
+typedef struct
+{
     int16_t px;
     int16_t py;
 } lgfx_set_pivot_args_t;
@@ -54,7 +66,8 @@ typedef struct
     int16_t x;
     int16_t y;
     bool has_transparent;
-    uint16_t transparent565;
+    bool transparent_is_index;
+    uint32_t transparent_value;
 } lgfx_push_sprite_args_t;
 
 typedef struct
@@ -66,7 +79,8 @@ typedef struct
     int32_t zoom_x_x1024;
     int32_t zoom_y_x1024;
     bool has_transparent;
-    uint16_t transparent565;
+    bool transparent_is_index;
+    uint32_t transparent_value;
 } lgfx_push_rotate_zoom_args_t;
 
 static bool decode_create_sprite_args(const lgfx_request_t *req, lgfx_create_sprite_args_t *out)
@@ -96,6 +110,13 @@ static bool decode_create_sprite_args(const lgfx_request_t *req, lgfx_create_spr
     return true;
 }
 
+static bool decode_set_palette_color_args(const lgfx_request_t *req, lgfx_set_palette_color_args_t *out)
+{
+    return out
+        && lgfx_decode_palette_index_at(req, 5, &out->palette_index)
+        && lgfx_decode_rgb888_at(req, 6, &out->rgb888);
+}
+
 static bool decode_set_pivot_args(const lgfx_request_t *req, lgfx_set_pivot_args_t *out)
 {
     return lgfx_decode_i16_at(req, 5, &out->px)
@@ -104,8 +125,8 @@ static bool decode_set_pivot_args(const lgfx_request_t *req, lgfx_set_pivot_args
 
 static bool decode_push_sprite_args(const lgfx_request_t *req, lgfx_push_sprite_args_t *out)
 {
+    const bool transparent_is_index_flag = lgfx_req_has_flag(req, LGFX_F_TRANSPARENT_INDEX);
     uint32_t dst_target32 = 0;
-    uint32_t transparent32 = 0;
 
     if (!lgfx_decode_u32_at(req, 5, &dst_target32) || dst_target32 > 254u) {
         return false;
@@ -120,26 +141,34 @@ static bool decode_push_sprite_args(const lgfx_request_t *req, lgfx_push_sprite_
     }
 
     out->has_transparent = false;
-    out->transparent565 = 0;
+    out->transparent_is_index = false;
+    out->transparent_value = 0;
 
     if (req->arity == 9) {
-        if (!lgfx_decode_u32_at(req, 8, &transparent32) || !lgfx_validate_u16(transparent32)) {
+        if (!lgfx_decode_color_or_index_at(
+                req,
+                8,
+                LGFX_F_TRANSPARENT_INDEX,
+                &out->transparent_is_index,
+                &out->transparent_value)) {
             return false;
         }
 
         out->has_transparent = true;
-        out->transparent565 = (uint16_t) transparent32;
-    } else if (req->arity != 8) {
-        return false;
+        return true;
     }
 
-    return true;
+    if (req->arity == 8) {
+        return !transparent_is_index_flag;
+    }
+
+    return false;
 }
 
 static bool decode_push_rotate_zoom_args(const lgfx_request_t *req, lgfx_push_rotate_zoom_args_t *out)
 {
+    const bool transparent_is_index_flag = lgfx_req_has_flag(req, LGFX_F_TRANSPARENT_INDEX);
     uint32_t dst_target32 = 0;
-    uint32_t transparent32 = 0;
 
     if (!lgfx_decode_u32_at(req, 5, &dst_target32) || dst_target32 > 254u) {
         return false;
@@ -155,28 +184,36 @@ static bool decode_push_rotate_zoom_args(const lgfx_request_t *req, lgfx_push_ro
     if (!lgfx_decode_i32_at(req, 8, &out->angle_x100)) {
         return false;
     }
-    if (!lgfx_decode_i32_at(req, 9, &out->zoom_x_x1024)) {
+    if (!lgfx_decode_i32_at(req, 9, &out->zoom_x_x1024) || out->zoom_x_x1024 <= 0) {
         return false;
     }
-    if (!lgfx_decode_i32_at(req, 10, &out->zoom_y_x1024)) {
+    if (!lgfx_decode_i32_at(req, 10, &out->zoom_y_x1024) || out->zoom_y_x1024 <= 0) {
         return false;
     }
 
     out->has_transparent = false;
-    out->transparent565 = 0;
+    out->transparent_is_index = false;
+    out->transparent_value = 0;
 
     if (req->arity == 12) {
-        if (!lgfx_decode_u32_at(req, 11, &transparent32) || !lgfx_validate_u16(transparent32)) {
+        if (!lgfx_decode_color_or_index_at(
+                req,
+                11,
+                LGFX_F_TRANSPARENT_INDEX,
+                &out->transparent_is_index,
+                &out->transparent_value)) {
             return false;
         }
 
         out->has_transparent = true;
-        out->transparent565 = (uint16_t) transparent32;
-    } else if (req->arity != 11) {
-        return false;
+        return true;
     }
 
-    return true;
+    if (req->arity == 11) {
+        return !transparent_is_index_flag;
+    }
+
+    return false;
 }
 
 term lgfx_handle_createSprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -204,6 +241,38 @@ term lgfx_handle_createSprite(Context *ctx, lgfx_port_t *port, const lgfx_reques
 term lgfx_handle_deleteSprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_delete_sprite(port, (uint8_t) req->target));
+    return reply_ok(ctx, port, req, port->atoms.ok);
+}
+
+term lgfx_handle_createPalette(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
+        lgfx_worker_device_create_palette(port, (uint8_t) req->target));
+
+    return reply_ok(ctx, port, req, port->atoms.ok);
+}
+
+term lgfx_handle_setPaletteColor(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    lgfx_set_palette_color_args_t args = { 0 };
+
+    if (!decode_set_palette_color_args(req, &args)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
+        lgfx_worker_device_set_palette_color(
+            port,
+            (uint8_t) req->target,
+            args.palette_index,
+            args.rgb888));
+
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
@@ -247,7 +316,8 @@ term lgfx_handle_pushSprite(Context *ctx, lgfx_port_t *port, const lgfx_request_
             args.x,
             args.y,
             args.has_transparent,
-            args.transparent565));
+            args.transparent_is_index,
+            args.transparent_value));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -274,7 +344,8 @@ term lgfx_handle_pushRotateZoom(Context *ctx, lgfx_port_t *port, const lgfx_requ
             args.zoom_x_x1024,
             args.zoom_y_x1024,
             args.has_transparent,
-            args.transparent565));
+            args.transparent_is_index,
+            args.transparent_value));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }

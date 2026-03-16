@@ -129,6 +129,54 @@ static inline bool lgfx_validate_color_depth(uint32_t d)
     }
 }
 
+static inline bool lgfx_is_palette_color_depth(uint32_t d)
+{
+    switch (d) {
+        case 1:
+        case 2:
+        case 4:
+        case 8:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static inline bool lgfx_palette_capacity_for_depth(uint32_t depth, uint16_t *out_capacity)
+{
+    if (!out_capacity) {
+        return false;
+    }
+
+    switch (depth) {
+        case 1:
+            *out_capacity = 2u;
+            return true;
+        case 2:
+            *out_capacity = 4u;
+            return true;
+        case 4:
+            *out_capacity = 16u;
+            return true;
+        case 8:
+            *out_capacity = 256u;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static inline bool lgfx_validate_palette_index_for_depth(uint32_t depth, uint32_t index)
+{
+    uint16_t capacity = 0;
+    return lgfx_palette_capacity_for_depth(depth, &capacity) && index < capacity;
+}
+
+static inline bool lgfx_validate_rgb888(uint32_t rgb888)
+{
+    return rgb888 <= 0xFFFFFFu;
+}
+
 // setTextSize wire values use positive x256 fixed-point integers.
 // Examples:
 // - 256 => 1.0x
@@ -147,9 +195,10 @@ static inline bool lgfx_validate_text_scale_x256(uint32_t scale_x256)
 #define LGFX_CAP_PUSHIMAGE (1u << 1)
 #define LGFX_CAP_LAST_ERROR (1u << 2)
 #define LGFX_CAP_TOUCH (1u << 3)
+#define LGFX_CAP_PALETTE (1u << 4)
 
 #define LGFX_CAP_KNOWN_MASK \
-    (LGFX_CAP_SPRITE | LGFX_CAP_PUSHIMAGE | LGFX_CAP_LAST_ERROR | LGFX_CAP_TOUCH)
+    (LGFX_CAP_SPRITE | LGFX_CAP_PUSHIMAGE | LGFX_CAP_LAST_ERROR | LGFX_CAP_TOUCH | LGFX_CAP_PALETTE)
 
 // -----------------------------------------------------------------------------
 // Build / advertised capability mask
@@ -158,6 +207,7 @@ static inline bool lgfx_validate_text_scale_x256(uint32_t scale_x256)
 // Touch remains derived; the other current capability bits are always built in.
 #define LGFX_BUILD_CAP_MASK                                                 \
     ((uint32_t) (LGFX_CAP_SPRITE | LGFX_CAP_PUSHIMAGE | LGFX_CAP_LAST_ERROR \
+        | LGFX_CAP_PALETTE                                                  \
         | (LGFX_PORT_SUPPORTS_TOUCH ? LGFX_CAP_TOUCH : 0u)))
 
 // -----------------------------------------------------------------------------
@@ -165,6 +215,10 @@ static inline bool lgfx_validate_text_scale_x256(uint32_t scale_x256)
 // -----------------------------------------------------------------------------
 
 #define LGFX_F_TEXT_HAS_BG (1u << 0) // setTextColor: background color is provided
+#define LGFX_F_COLOR_INDEX (1u << 1) // primitives: color argument is palette index, not rgb565
+#define LGFX_F_TEXT_FG_INDEX (1u << 2) // setTextColor: fg is palette index, not rgb565
+#define LGFX_F_TEXT_BG_INDEX (1u << 3) // setTextColor: bg is palette index, not rgb565
+#define LGFX_F_TRANSPARENT_INDEX (1u << 4) // sprite push transparent value is palette index, not rgb565
 
 #ifndef F_TEXT_HAS_BG
 #define F_TEXT_HAS_BG LGFX_F_TEXT_HAS_BG

@@ -12,6 +12,12 @@
 #include "lgfx_port/proto_term.h"
 #include "lgfx_port/worker.h"
 
+typedef struct
+{
+    bool is_index;
+    uint32_t value;
+} lgfx_wire_color_t;
+
 static bool decode_font_preset(term preset_t, uint8_t *out_preset)
 {
     if (!out_preset) {
@@ -43,6 +49,21 @@ static bool decode_u8_passthrough_at(const lgfx_request_t *req, int index, uint8
 
     *out_value = (uint8_t) value;
     return true;
+}
+
+static bool decode_text_color_at(
+    const lgfx_request_t *req,
+    int index,
+    uint32_t index_flag,
+    lgfx_wire_color_t *out)
+{
+    return out
+        && lgfx_decode_color_or_index_at(
+            req,
+            index,
+            index_flag,
+            &out->is_index,
+            &out->value);
 }
 
 term lgfx_handle_setTextSize(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -174,20 +195,25 @@ term lgfx_handle_setTextFontPreset(Context *ctx, lgfx_port_t *port, const lgfx_r
 
 term lgfx_handle_setTextColor(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    const bool has_bg = ((req->flags & LGFX_F_TEXT_HAS_BG) != 0);
+    const bool has_bg = lgfx_req_has_flag(req, LGFX_F_TEXT_HAS_BG);
+    const bool bg_is_index_flag = lgfx_req_has_flag(req, LGFX_F_TEXT_BG_INDEX);
 
     if ((has_bg && req->arity != 7) || (!has_bg && req->arity != 6)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    uint16_t fg565 = 0;
-    if (!lgfx_decode_color565_at(req, 5, &fg565)) {
+    if (bg_is_index_flag && !has_bg) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    uint16_t bg565 = 0;
+    lgfx_wire_color_t fg = { 0 };
+    if (!decode_text_color_at(req, 5, LGFX_F_TEXT_FG_INDEX, &fg)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+
+    lgfx_wire_color_t bg = { 0 };
     if (has_bg) {
-        if (!lgfx_decode_color565_at(req, 6, &bg565)) {
+        if (!decode_text_color_at(req, 6, LGFX_F_TEXT_BG_INDEX, &bg)) {
             return reply_error(ctx, port, req, port->atoms.bad_args, 0);
         }
     }
@@ -199,9 +225,11 @@ term lgfx_handle_setTextColor(Context *ctx, lgfx_port_t *port, const lgfx_reques
         lgfx_worker_device_set_text_color(
             port,
             (uint8_t) req->target,
-            fg565,
+            fg.is_index,
+            fg.value,
             has_bg,
-            bg565));
+            bg.is_index,
+            bg.value));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }

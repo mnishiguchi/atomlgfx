@@ -89,6 +89,22 @@ static inline bool lgfx_decode_color565_at(const lgfx_request_t *req, int index,
     return lgfx_term_to_color565(lgfx_req_elem(req, index), out);
 }
 
+static inline bool lgfx_decode_rgb888_at(const lgfx_request_t *req, int index, uint32_t *out)
+{
+    uint32_t rgb888 = 0;
+    if (!out || !lgfx_decode_u32_at(req, index, &rgb888) || !lgfx_validate_rgb888(rgb888)) {
+        return false;
+    }
+
+    *out = rgb888;
+    return true;
+}
+
+static inline bool lgfx_decode_palette_index_at(const lgfx_request_t *req, int index, uint8_t *out)
+{
+    return lgfx_decode_u8_at(req, index, out);
+}
+
 static inline bool lgfx_decode_binary_at(const lgfx_request_t *req, int index, const uint8_t **out_bytes, size_t *out_len)
 {
     term t = lgfx_req_elem(req, index);
@@ -136,5 +152,42 @@ static inline bool lgfx_decode_bool_term(const lgfx_port_t *port, term t, bool *
     }
 
     *out_value = (v == 1);
+    return true;
+}
+
+static inline bool lgfx_req_has_flag(const lgfx_request_t *req, uint32_t flag)
+{
+    return req && ((req->flags & flag) != 0u);
+}
+
+static inline bool lgfx_decode_color_or_index_at(
+    const lgfx_request_t *req,
+    int index,
+    uint32_t index_flag,
+    bool *out_is_index,
+    uint32_t *out_value)
+{
+    if (!req || !out_is_index || !out_value) {
+        return false;
+    }
+
+    if (lgfx_req_has_flag(req, index_flag)) {
+        uint8_t palette_index = 0;
+        if (!lgfx_decode_palette_index_at(req, index, &palette_index)) {
+            return false;
+        }
+
+        *out_is_index = true;
+        *out_value = (uint32_t) palette_index;
+        return true;
+    }
+
+    uint16_t rgb565 = 0;
+    if (!lgfx_decode_color565_at(req, index, &rgb565)) {
+        return false;
+    }
+
+    *out_is_index = false;
+    *out_value = (uint32_t) rgb565;
     return true;
 }

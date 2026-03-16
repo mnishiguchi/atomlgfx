@@ -4,14 +4,16 @@ defmodule SampleApp.PushImageStress do
   alias LGFXPort, as: Port
   import SampleApp.AtomVMCompat, only: [yield: 0]
 
-  @bg 0x0B1020
-  @hud_bg 0x111827
-  @hud_fg 0xE5E7EB
-  @hud_dim 0x94A3B8
-  @hud_accent 0x22D3EE
-  @hud_ok 0x10B981
-  @hud_err 0xEF4444
-  @divider 0x334155
+  @bg 0x101010
+  @hud_bg 0x181818
+  @hud_fg 0xFFFFFF
+  @hud_dim 0xB0B0B0
+  @hud_accent 0x909090
+  @hud_ok 0xD0D0D0
+  @hud_err 0x707070
+  @divider 0x505050
+  @stage_bg 0x080808
+  @progress_bg 0x2A2A2A
 
   @hud_h 44
   @poison565 0xF81F
@@ -145,7 +147,7 @@ defmodule SampleApp.PushImageStress do
     end
 
     if h > stage_y do
-      _ = Port.fill_rect(port, 0, stage_y, w, h - stage_y, 0x05070E)
+      _ = Port.fill_rect(port, 0, stage_y, w, h - stage_y, @stage_bg)
     end
 
     :ok
@@ -181,7 +183,7 @@ defmodule SampleApp.PushImageStress do
     _ = Port.draw_string_bg(port, 4, 0, @hud_fg, @hud_bg, 2, line1)
     _ = Port.draw_string_bg(port, 4, 12, @hud_dim, @hud_bg, 1, line2)
 
-    _ = Port.fill_rect(port, bar_x, bar_y, bar_w, bar_h, 0x1F2937)
+    _ = Port.fill_rect(port, bar_x, bar_y, bar_w, bar_h, @progress_bg)
 
     fill_w =
       cond do

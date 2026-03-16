@@ -13,6 +13,22 @@ extern "C" {
 #endif
 
 /*
+ * Worker ABI notes for color-bearing scalar arguments:
+ *
+ * - Handlers fully decode wire semantics before enqueueing worker jobs.
+ * - Primitive/text/sprite-transparent scalar colors do NOT carry RGB888 here.
+ * - When *_is_index == false:
+ *     *_value carries RGB565 in the low 16 bits.
+ * - When *_is_index == true:
+ *     *_value carries palette index in the low 8 bits.
+ * - Palette lifecycle ops keep rgb888 on the worker ABI because
+ *   setPaletteColor is defined on the wire as 0x00RRGGBB.
+ *
+ * This keeps the worker ABI explicit without duplicating protocol decode logic
+ * in the worker or device layers.
+ */
+
+/*
  * Simple synchronous wrappers.
  *
  * These wrappers only populate a fixed-size job and call lgfx_worker_call().
@@ -32,49 +48,48 @@ extern "C" {
         .target = target, .depth = depth)                                                                     \
     X(display, (lgfx_port_t * port), DISPLAY, display, ._ = 0u)
 
-#define LGFX_WORKER_SIMPLE_PRIMITIVE_WRAPPERS(X)                                                                                                                                      \
-    X(fill_screen, (lgfx_port_t * port, uint8_t target, uint16_t color565), FILL_SCREEN, fill_screen,                                                                                 \
-        .target = target, .color565 = color565)                                                                                                                                       \
-    X(clear, (lgfx_port_t * port, uint8_t target, uint16_t color565), CLEAR, clear,                                                                                                   \
-        .target = target, .color565 = color565)                                                                                                                                       \
-    X(draw_pixel, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t color565),                                                                                      \
-        DRAW_PIXEL, draw_pixel, .target = target, .x = x, .y = y, .color565 = color565)                                                                                               \
-    X(draw_fast_vline, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t h, uint16_t color565), DRAW_FAST_VLINE, draw_fast_vline, .target = target, .x = x, .y = y, \
-        .h = h, .color565 = color565)                                                                                                                                                 \
-    X(draw_fast_hline, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t color565), DRAW_FAST_HLINE, draw_fast_hline, .target = target, .x = x, .y = y, \
-        .w = w, .color565 = color565)                                                                                                                                                 \
-    X(draw_line, (lgfx_port_t * port, uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color565), DRAW_LINE, draw_line, .target = target, .x0 = x0, .y0 = y0, \
-        .x1 = x1, .y1 = y1, .color565 = color565)                                                                                                                                     \
-    X(draw_rect, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t color565), DRAW_RECT, draw_rect, .target = target, .x = x, .y = y,       \
-        .w = w, .h = h, .color565 = color565)                                                                                                                                         \
-    X(fill_rect, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t color565), FILL_RECT, fill_rect, .target = target, .x = x, .y = y,       \
-        .w = w, .h = h, .color565 = color565)                                                                                                                                         \
-    X(draw_circle, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t r, uint16_t color565), DRAW_CIRCLE, draw_circle, .target = target, .x = x, .y = y,             \
-        .r = r, .color565 = color565)                                                                                                                                                 \
-    X(fill_circle, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t r, uint16_t color565), FILL_CIRCLE, fill_circle, .target = target, .x = x, .y = y,             \
-        .r = r, .color565 = color565)                                                                                                                                                 \
-    X(draw_triangle, (lgfx_port_t * port, uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color565), DRAW_TRIANGLE, draw_triangle,   \
-        .target = target, .x0 = x0, .y0 = y0, .x1 = x1, .y1 = y1, .x2 = x2, .y2 = y2,                                                                                                 \
-        .color565 = color565)                                                                                                                                                         \
-    X(fill_triangle, (lgfx_port_t * port, uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color565), FILL_TRIANGLE, fill_triangle,   \
-        .target = target, .x0 = x0, .y0 = y0, .x1 = x1, .y1 = y1, .x2 = x2, .y2 = y2,                                                                                                 \
-        .color565 = color565)
+#define LGFX_WORKER_SIMPLE_PRIMITIVE_WRAPPERS(X)                                                                                                                                  \
+    X(fill_screen, (lgfx_port_t * port, uint8_t target, bool color_is_index, uint32_t color_value), FILL_SCREEN, fill_screen,                                                     \
+        .target = target, .color_is_index = color_is_index, .color_value = color_value)                                                                                           \
+    X(clear, (lgfx_port_t * port, uint8_t target, bool color_is_index, uint32_t color_value), CLEAR, clear,                                                                       \
+        .target = target, .color_is_index = color_is_index, .color_value = color_value)                                                                                           \
+    X(draw_pixel, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, bool color_is_index, uint32_t color_value),                                                          \
+        DRAW_PIXEL, draw_pixel, .target = target, .x = x, .y = y, .color_is_index = color_is_index, .color_value = color_value)                                                   \
+    X(draw_fast_vline, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t h, bool color_is_index, uint32_t color_value),                                         \
+        DRAW_FAST_VLINE, draw_fast_vline, .target = target, .x = x, .y = y, .h = h, .color_is_index = color_is_index, .color_value = color_value)                                 \
+    X(draw_fast_hline, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t w, bool color_is_index, uint32_t color_value),                                         \
+        DRAW_FAST_HLINE, draw_fast_hline, .target = target, .x = x, .y = y, .w = w, .color_is_index = color_is_index, .color_value = color_value)                                 \
+    X(draw_line, (lgfx_port_t * port, uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, bool color_is_index, uint32_t color_value),                                 \
+        DRAW_LINE, draw_line, .target = target, .x0 = x0, .y0 = y0, .x1 = x1, .y1 = y1, .color_is_index = color_is_index, .color_value = color_value)                             \
+    X(draw_rect, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, bool color_is_index, uint32_t color_value),                                   \
+        DRAW_RECT, draw_rect, .target = target, .x = x, .y = y, .w = w, .h = h, .color_is_index = color_is_index, .color_value = color_value)                                     \
+    X(fill_rect, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, bool color_is_index, uint32_t color_value),                                   \
+        FILL_RECT, fill_rect, .target = target, .x = x, .y = y, .w = w, .h = h, .color_is_index = color_is_index, .color_value = color_value)                                     \
+    X(draw_circle, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t r, bool color_is_index, uint32_t color_value),                                             \
+        DRAW_CIRCLE, draw_circle, .target = target, .x = x, .y = y, .r = r, .color_is_index = color_is_index, .color_value = color_value)                                         \
+    X(fill_circle, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t r, bool color_is_index, uint32_t color_value),                                             \
+        FILL_CIRCLE, fill_circle, .target = target, .x = x, .y = y, .r = r, .color_is_index = color_is_index, .color_value = color_value)                                         \
+    X(draw_triangle, (lgfx_port_t * port, uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, bool color_is_index, uint32_t color_value),     \
+        DRAW_TRIANGLE, draw_triangle, .target = target, .x0 = x0, .y0 = y0, .x1 = x1, .y1 = y1, .x2 = x2, .y2 = y2, .color_is_index = color_is_index, .color_value = color_value) \
+    X(fill_triangle, (lgfx_port_t * port, uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, bool color_is_index, uint32_t color_value),     \
+        FILL_TRIANGLE, fill_triangle, .target = target, .x0 = x0, .y0 = y0, .x1 = x1, .y1 = y1, .x2 = x2, .y2 = y2, .color_is_index = color_is_index, .color_value = color_value)
 
-#define LGFX_WORKER_SIMPLE_TEXT_WRAPPERS(X)                                                                               \
-    X(set_text_size, (lgfx_port_t * port, uint8_t target, uint16_t scale_x256), SET_TEXT_SIZE, set_text_size,             \
-        .target = target, .scale_x256 = scale_x256)                                                                       \
-    X(set_text_size_xy, (lgfx_port_t * port, uint8_t target, uint16_t scale_x_x256, uint16_t scale_y_x256),               \
-        SET_TEXT_SIZE_XY, set_text_size_xy, .target = target, .scale_x_x256 = scale_x_x256, .scale_y_x256 = scale_y_x256) \
-    X(set_text_datum, (lgfx_port_t * port, uint8_t target, uint8_t datum), SET_TEXT_DATUM, set_text_datum,                \
-        .target = target, .datum = datum)                                                                                 \
-    X(set_text_wrap_xy, (lgfx_port_t * port, uint8_t target, bool wrap_x, bool wrap_y),                                   \
-        SET_TEXT_WRAP_XY, set_text_wrap_xy, .target = target, .wrap_x = wrap_x, .wrap_y = wrap_y)                         \
-    X(set_text_font, (lgfx_port_t * port, uint8_t target, uint8_t font), SET_TEXT_FONT, set_text_font,                    \
-        .target = target, .font = font)                                                                                   \
-    X(set_text_font_preset, (lgfx_port_t * port, uint8_t target, uint8_t preset), SET_TEXT_FONT_PRESET,                   \
-        set_text_font_preset, .target = target, .preset = preset)                                                         \
-    X(set_text_color, (lgfx_port_t * port, uint8_t target, uint16_t fg565, bool has_bg, uint16_t bg565),                  \
-        SET_TEXT_COLOR, set_text_color, .target = target, .fg565 = fg565, .has_bg = has_bg, .bg565 = bg565)
+#define LGFX_WORKER_SIMPLE_TEXT_WRAPPERS(X)                                                                                                        \
+    X(set_text_size, (lgfx_port_t * port, uint8_t target, uint16_t scale_x256), SET_TEXT_SIZE, set_text_size,                                      \
+        .target = target, .scale_x256 = scale_x256)                                                                                                \
+    X(set_text_size_xy, (lgfx_port_t * port, uint8_t target, uint16_t scale_x_x256, uint16_t scale_y_x256),                                        \
+        SET_TEXT_SIZE_XY, set_text_size_xy, .target = target, .scale_x_x256 = scale_x_x256, .scale_y_x256 = scale_y_x256)                          \
+    X(set_text_datum, (lgfx_port_t * port, uint8_t target, uint8_t datum), SET_TEXT_DATUM, set_text_datum,                                         \
+        .target = target, .datum = datum)                                                                                                          \
+    X(set_text_wrap_xy, (lgfx_port_t * port, uint8_t target, bool wrap_x, bool wrap_y),                                                            \
+        SET_TEXT_WRAP_XY, set_text_wrap_xy, .target = target, .wrap_x = wrap_x, .wrap_y = wrap_y)                                                  \
+    X(set_text_font, (lgfx_port_t * port, uint8_t target, uint8_t font), SET_TEXT_FONT, set_text_font,                                             \
+        .target = target, .font = font)                                                                                                            \
+    X(set_text_font_preset, (lgfx_port_t * port, uint8_t target, uint8_t preset), SET_TEXT_FONT_PRESET,                                            \
+        set_text_font_preset, .target = target, .preset = preset)                                                                                  \
+    X(set_text_color, (lgfx_port_t * port, uint8_t target, bool fg_is_index, uint32_t fg_value, bool has_bg, bool bg_is_index, uint32_t bg_value), \
+        SET_TEXT_COLOR, set_text_color, .target = target, .fg_is_index = fg_is_index, .fg_value = fg_value, .has_bg = has_bg,                      \
+        .bg_is_index = bg_is_index, .bg_value = bg_value)
 
 #define LGFX_WORKER_SIMPLE_CLIP_WRAPPERS(X)                                                              \
     X(set_clip_rect, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h), \
@@ -86,17 +101,19 @@ extern "C" {
     X(set_pivot, (lgfx_port_t * port, uint8_t target, int16_t x, int16_t y), SET_PIVOT, set_pivot, \
         .target = target, .x = x, .y = y)
 
-#define LGFX_WORKER_SIMPLE_SPRITE_WRAPPERS(X)                                                                                                                                                                                                                  \
-    X(create_sprite, (lgfx_port_t * port, uint8_t target, uint16_t w, uint16_t h, uint8_t color_depth),                                                                                                                                                        \
-        CREATE_SPRITE, create_sprite, .target = target, .w = w, .h = h, .color_depth = color_depth)                                                                                                                                                            \
-    X(delete_sprite, (lgfx_port_t * port, uint8_t target), DELETE_SPRITE, delete_sprite, .target = target)                                                                                                                                                     \
-    X(push_sprite, (lgfx_port_t * port, uint8_t src_target, uint8_t dst_target, int16_t x, int16_t y, bool has_transparent, uint16_t transparent565), PUSH_SPRITE, push_sprite,                                                                                \
-        .src_target = src_target, .dst_target = dst_target, .x = x, .y = y,                                                                                                                                                                                    \
-        .has_transparent = has_transparent, .transparent565 = transparent565)                                                                                                                                                                                  \
-    X(push_rotate_zoom, (lgfx_port_t * port, uint8_t src_target, uint8_t dst_target, int16_t x, int16_t y, int32_t angle_x100, int32_t zoom_x_x1024, int32_t zoom_y_x1024, bool has_transparent, uint16_t transparent565), PUSH_ROTATE_ZOOM, push_rotate_zoom, \
-        .src_target = src_target, .dst_target = dst_target, .x = x, .y = y,                                                                                                                                                                                    \
-        .angle_x100 = angle_x100, .zoom_x_x1024 = zoom_x_x1024, .zoom_y_x1024 = zoom_y_x1024,                                                                                                                                                                  \
-        .has_transparent = has_transparent, .transparent565 = transparent565)
+#define LGFX_WORKER_SIMPLE_SPRITE_WRAPPERS(X)                                                                                                                                                                                                                                                                                                                    \
+    X(create_sprite, (lgfx_port_t * port, uint8_t target, uint16_t w, uint16_t h, uint8_t color_depth),                                                                                                                                                                                                                                                          \
+        CREATE_SPRITE, create_sprite, .target = target, .w = w, .h = h, .color_depth = color_depth)                                                                                                                                                                                                                                                              \
+    X(delete_sprite, (lgfx_port_t * port, uint8_t target), DELETE_SPRITE, delete_sprite, .target = target)                                                                                                                                                                                                                                                       \
+    X(create_palette, (lgfx_port_t * port, uint8_t target), CREATE_PALETTE, create_palette, .target = target)                                                                                                                                                                                                                                                    \
+    X(set_palette_color, (lgfx_port_t * port, uint8_t target, uint8_t palette_index, uint32_t rgb888), SET_PALETTE_COLOR, set_palette_color,                                                                                                                                                                                                                     \
+        .target = target, .palette_index = palette_index, .rgb888 = rgb888)                                                                                                                                                                                                                                                                                      \
+    X(push_sprite, (lgfx_port_t * port, uint8_t src_target, uint8_t dst_target, int16_t x, int16_t y, bool has_transparent, bool transparent_is_index, uint32_t transparent_value), PUSH_SPRITE,                                                                                                                                                                 \
+        push_sprite, .src_target = src_target, .dst_target = dst_target, .x = x, .y = y,                                                                                                                                                                                                                                                                         \
+        .has_transparent = has_transparent, .transparent_is_index = transparent_is_index, .transparent_value = transparent_value)                                                                                                                                                                                                                                \
+    X(push_rotate_zoom, (lgfx_port_t * port, uint8_t src_target, uint8_t dst_target, int16_t x, int16_t y, int32_t angle_x100, int32_t zoom_x_x1024, int32_t zoom_y_x1024, bool has_transparent, bool transparent_is_index, uint32_t transparent_value), PUSH_ROTATE_ZOOM, push_rotate_zoom, .src_target = src_target, .dst_target = dst_target, .x = x, .y = y, \
+        .angle_x100 = angle_x100, .zoom_x_x1024 = zoom_x_x1024, .zoom_y_x1024 = zoom_y_x1024,                                                                                                                                                                                                                                                                    \
+        .has_transparent = has_transparent, .transparent_is_index = transparent_is_index, .transparent_value = transparent_value)
 
 #define LGFX_WORKER_SIMPLE_DEVICE_WRAPPERS(X)   \
     LGFX_WORKER_SIMPLE_DEVICE_STATE_WRAPPERS(X) \

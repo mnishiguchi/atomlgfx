@@ -12,8 +12,18 @@ defmodule SampleApp.ProtocolSmoke do
   @cap_pushimage 1 <<< 1
   @cap_last_error 1 <<< 2
   @cap_touch 1 <<< 3
+  @cap_palette 1 <<< 4
 
-  @known_caps_mask @cap_sprite ||| @cap_pushimage ||| @cap_last_error ||| @cap_touch
+  @cap_constants [
+    cap_sprite: @cap_sprite,
+    cap_pushimage: @cap_pushimage,
+    cap_last_error: @cap_last_error,
+    cap_touch: @cap_touch,
+    cap_palette: @cap_palette
+  ]
+
+  @known_caps_mask @cap_sprite ||| @cap_pushimage ||| @cap_last_error ||| @cap_touch |||
+                     @cap_palette
 
   def run(port), do: run(port, &Port.raw_call/6)
 
@@ -35,32 +45,48 @@ defmodule SampleApp.ProtocolSmoke do
   # 0) Tiny local metadata self-test (future-proof)
   # -----------------------------------------------------------------------------
   defp check_local_cap_constants do
-    cond do
-      not power_of_two?(@cap_pushimage) ->
-        {:error, {:bad_cap_constant_not_power_of_two, :cap_pushimage, @cap_pushimage}}
-
-      not power_of_two?(@cap_last_error) ->
-        {:error, {:bad_cap_constant_not_power_of_two, :cap_last_error, @cap_last_error}}
-
-      not power_of_two?(@cap_touch) ->
-        {:error, {:bad_cap_constant_not_power_of_two, :cap_touch, @cap_touch}}
-
-      @cap_pushimage == @cap_last_error ->
-        {:error, {:duplicate_cap_constants, @cap_pushimage}}
-
-      @cap_pushimage == @cap_touch ->
-        {:error, {:duplicate_cap_constants, @cap_pushimage}}
-
-      @cap_last_error == @cap_touch ->
-        {:error, {:duplicate_cap_constants, @cap_last_error}}
-
-      true ->
-        :ok
+    with :ok <- check_cap_constants_are_powers_of_two(@cap_constants),
+         :ok <- check_cap_constants_are_unique(@cap_constants) do
+      :ok
     end
   end
 
+  defp check_cap_constants_are_powers_of_two([]), do: :ok
+
+  defp check_cap_constants_are_powers_of_two([{name, value} | rest]) do
+    if power_of_two?(value) do
+      check_cap_constants_are_powers_of_two(rest)
+    else
+      {:error, {:bad_cap_constant_not_power_of_two, name, value}}
+    end
+  end
+
+  defp check_cap_constants_are_unique(cap_constants) do
+    case find_duplicate_cap_constant_value(cap_constants, []) do
+      :ok ->
+        :ok
+
+      {:error, duplicate_value} ->
+        {:error, {:duplicate_cap_constants, duplicate_value, cap_constants}}
+    end
+  end
+
+  defp find_duplicate_cap_constant_value([], _seen_values), do: :ok
+
+  defp find_duplicate_cap_constant_value([{_name, value} | rest], seen_values) do
+    if list_member?(value, seen_values) do
+      {:error, value}
+    else
+      find_duplicate_cap_constant_value(rest, [value | seen_values])
+    end
+  end
+
+  defp list_member?(_value, []), do: false
+  defp list_member?(value, [value | _rest]), do: true
+  defp list_member?(value, [_other | rest]), do: list_member?(value, rest)
+
   defp power_of_two?(n) when is_integer(n) and n > 0 do
-    (n &&& n - 1) == 0
+    (n &&& (n - 1)) == 0
   end
 
   defp power_of_two?(_), do: false

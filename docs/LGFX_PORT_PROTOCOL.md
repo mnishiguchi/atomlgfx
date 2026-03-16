@@ -11,10 +11,12 @@ Key points:
 - Validation, dispatch, and capability advertisement are metadata-driven.
 - The implemented operation surface is the one declared in `ops.def`.
 - Open-time config passed through `open_port/2` is outside the request tuple protocol documented here.
-- The current sprite surface includes deterministic handle-based `createSprite`, destination-aware whole-sprite blit via `pushSprite`, and destination-aware rotate/zoom blit via `pushRotateZoom`.
+- The sprite surface includes deterministic handle-based `createSprite`, palette lifecycle control via `createPalette` and `setPaletteColor`, destination-aware whole-sprite blit via `pushSprite`, and destination-aware rotate/zoom blit via `pushRotateZoom`.
 - Touch is advertised only when touch support is both enabled and attached.
-- Primitive and text colors are accepted on the wire as `0x00RRGGBB`, then quantized to RGB565 before entering the worker and device path.
-- `setColorDepth(24)` changes target depth, but does not change scalar color wire encoding and does not imply full 24-bit input color fidelity for primitive or text operations.
+- Primitive and text scalar colors have two wire-level interpretations selected by op-specific flags:
+  - default RGB mode accepts `0x00RRGGBB` on the wire and quantizes to RGB565 before entering worker and device layers
+  - indexed mode interprets the corresponding scalar argument as a palette index
+- `setColorDepth(24)` changes target depth, but does not change scalar color mode selection and does not imply full 24-bit input color fidelity for primitive or text operations in default RGB mode.
 - `setTextSize` uses positive x256 fixed-point integer size arguments on the wire, not floats.
 
 ## Source of truth
@@ -115,6 +117,7 @@ Validation is layered:
 Examples of device-layer semantic checks:
 
 - source or destination sprite existence
+- palette-backed sprite requirements for indexed scalar colors
 - `pushImage` stride normalization and required byte count
 - `drawJpg` decode/render behavior
 - rotate/zoom finite and positive constraints
@@ -128,7 +131,7 @@ Rule:
 
 - The driver must not retain pointers into caller binaries past the request boundary unless it explicitly manages lifetime.
 
-Current model:
+Ownership model:
 
 - deep-copy variable-length payloads before enqueueing worker jobs
 - free the copied payload after the device call completes
@@ -164,7 +167,7 @@ Rules:
 
 - wire form is integer-only
 - `0` is invalid
-- current accepted range is `1..65535`
+- accepted range is `1..65535`
 
 ### Strings
 
@@ -174,12 +177,32 @@ Rules:
 
 ### Colors
 
-Primitive and text colors:
+This protocol distinguishes four related color domains:
+
+- scalar colors used by primitive and text operations
+- palette lifecycle colors
+- sprite transparent scalar colors
+- `pushImage` pixel blobs
+
+#### Scalar colors used by primitive and text operations
+
+Primitive and text scalar colors use two modes.
+
+Default RGB mode:
 
 - wire format is `0x00RRGGBB` as packed RGB888 in `u32`
 - handler decode quantizes that value to RGB565 before entering worker and device layers
-- worker and device layers do not preserve the original RGB888 value for primitive or text ops
-- this scalar-color contract is the same regardless of target color depth
+- worker and device layers do not preserve the original RGB888 value for those scalar arguments
+- this default RGB scalar-color contract is the same regardless of target color depth
+
+Indexed palette mode:
+
+- enabled only by op-specific flags
+- the corresponding scalar argument is interpreted as a palette index
+- the palette index is carried in the low 8 bits of the decoded scalar value
+- indexed mode is invalid on LCD target
+- indexed mode on a sprite target requires that sprite to have actual palette backing
+- target color depth alone does not implicitly enable indexed semantics
 
 This applies to scalar color arguments used by primitive and text operations such as:
 
@@ -200,26 +223,46 @@ This applies to scalar color arguments used by primitive and text operations suc
 `setColorDepth(Target, 24)`:
 
 - changes the destination target depth
-- does not change primitive or text wire encoding
-- does not change the primitive or text worker/device ABI
-- therefore does not imply full 24-bit input color fidelity for primitive or text operations
+- does not change default RGB scalar wire encoding
+- does not select indexed palette mode
+- does not preserve full 24-bit input fidelity for primitive or text operations in default RGB mode
 
 Examples:
 
-- `0x112233` is accepted on the wire as RGB888
+- `0x112233` is accepted on the wire in default RGB mode
 - that value is quantized to RGB565 `0x1106` before primitive or text execution
 - on a 16-bit target, primitive and text ops use that RGB565 value directly
 - on a 24-bit target, primitive and text ops still start from the same quantized RGB565 value, not the original `0x112233`
+- indexed palette mode requires both the appropriate flag and a palette-backed sprite target
 
-`pushImage` pixel blobs:
+#### Palette lifecycle colors
+
+Palette lifecycle operations use RGB888 directly on the wire.
+
+- `setPaletteColor` takes `0x00RRGGBB` packed RGB888 in `u32`
+- palette lifecycle arguments are not reinterpreted as RGB565 scalar colors
+- `createPalette` establishes palette backing for an existing paletted sprite target
+- `setPaletteColor` writes one palette entry on that palette-backed sprite
+
+#### Sprite transparent scalar colors
+
+`pushSprite` and `pushRotateZoom` use an optional transparent scalar argument.
+
+Default transparent mode:
+
+- the optional transparent argument is RGB565
+
+Indexed transparent mode:
+
+- enabled by `LGFX_F_TRANSPARENT_INDEX`
+- the optional transparent argument is interpreted as a palette index
+- indexed transparent mode requires the source sprite to have actual palette backing
+
+#### `pushImage` pixel blobs
 
 - RGB565 only
 - big-endian per pixel (`hi lo`)
 - unaffected by `setColorDepth`
-
-Sprite transparent keys:
-
-- optional transparent color uses RGB565 in `u16`
 
 ## Error reasons
 
@@ -312,24 +355,24 @@ This table documents the implemented protocol surface.
 | `setBrightness` | `T0/bad_target` | `F0` | `6` | `requires_init` | - |
 | `setColorDepth` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `display` | `T0/bad_target` | `F0` | `5` | `requires_init` | - |
-| `fillScreen` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
-| `clear` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
-| `drawPixel` | `LGFX_OP_TARGET_ANY` | `F0` | `8` | `requires_init` | - |
-| `drawFastVLine` | `LGFX_OP_TARGET_ANY` | `F0` | `9` | `requires_init` | - |
-| `drawFastHLine` | `LGFX_OP_TARGET_ANY` | `F0` | `9` | `requires_init` | - |
-| `drawLine` | `LGFX_OP_TARGET_ANY` | `F0` | `10` | `requires_init` | - |
-| `drawRect` | `LGFX_OP_TARGET_ANY` | `F0` | `10` | `requires_init` | - |
-| `fillRect` | `LGFX_OP_TARGET_ANY` | `F0` | `10` | `requires_init` | - |
-| `drawCircle` | `LGFX_OP_TARGET_ANY` | `F0` | `9` | `requires_init` | - |
-| `fillCircle` | `LGFX_OP_TARGET_ANY` | `F0` | `9` | `requires_init` | - |
-| `drawTriangle` | `LGFX_OP_TARGET_ANY` | `F0` | `12` | `requires_init` | - |
-| `fillTriangle` | `LGFX_OP_TARGET_ANY` | `F0` | `12` | `requires_init` | - |
+| `fillScreen` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `6` | `requires_init` | - |
+| `clear` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `6` | `requires_init` | - |
+| `drawPixel` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `8` | `requires_init` | - |
+| `drawFastVLine` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `9` | `requires_init` | - |
+| `drawFastHLine` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `9` | `requires_init` | - |
+| `drawLine` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `10` | `requires_init` | - |
+| `drawRect` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `10` | `requires_init` | - |
+| `fillRect` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `10` | `requires_init` | - |
+| `drawCircle` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `9` | `requires_init` | - |
+| `fillCircle` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `9` | `requires_init` | - |
+| `drawTriangle` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `12` | `requires_init` | - |
+| `fillTriangle` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `12` | `requires_init` | - |
 | `setTextSize` | `LGFX_OP_TARGET_ANY` | `F0` | `6/7` | `requires_init` | - |
 | `setTextDatum` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `setTextWrap` | `LGFX_OP_TARGET_ANY` | `F0` | `6/7` | `requires_init` | - |
 | `setTextFont` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `setTextFontPreset` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
-| `setTextColor` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_TEXT_HAS_BG)` | `6/7` | `requires_init` | - |
+| `setTextColor` | `LGFX_OP_TARGET_ANY` | `Fmask((LGFX_F_TEXT_HAS_BG | LGFX_F_TEXT_FG_INDEX | LGFX_F_TEXT_BG_INDEX))` | `6/7` | `requires_init` | - |
 | `drawString` | `LGFX_OP_TARGET_ANY` | `F0` | `8` | `requires_init` | - |
 | `drawJpg` | `LGFX_OP_TARGET_ANY` | `F0` | `8/14` | `requires_init` | - |
 | `pushImage` | `LGFX_OP_TARGET_ANY` | `F0` | `11` | `requires_init` | `LGFX_CAP_PUSHIMAGE` |
@@ -337,9 +380,11 @@ This table documents the implemented protocol surface.
 | `clearClipRect` | `LGFX_OP_TARGET_ANY` | `F0` | `5` | `requires_init` | - |
 | `createSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7/8` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `deleteSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `5` | `requires_init` | `LGFX_CAP_SPRITE` |
+| `createPalette` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `5` | `requires_init` | `LGFX_CAP_PALETTE` |
+| `setPaletteColor` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7` | `requires_init` | `LGFX_CAP_PALETTE` |
 | `setPivot` | `LGFX_OP_TARGET_ANY` | `F0` | `7` | `requires_init` | `LGFX_CAP_SPRITE` |
-| `pushSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `8/9` | `requires_init` | `LGFX_CAP_SPRITE` |
-| `pushRotateZoom` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `11/12` | `requires_init` | `LGFX_CAP_SPRITE` |
+| `pushSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `Fmask(LGFX_F_TRANSPARENT_INDEX)` | `8/9` | `requires_init` | `LGFX_CAP_SPRITE` |
+| `pushRotateZoom` | `LGFX_OP_TARGET_SPRITE_ONLY` | `Fmask(LGFX_F_TRANSPARENT_INDEX)` | `11/12` | `requires_init` | `LGFX_CAP_SPRITE` |
 | `getTouch` | `T0/bad_target` | `F0` | `5` | `requires_init` | `LGFX_CAP_TOUCH` |
 | `getTouchRaw` | `T0/bad_target` | `F0` | `5` | `requires_init` | `LGFX_CAP_TOUCH` |
 | `setTouchCalibrate` | `T0/bad_target` | `F0` | `13` | `requires_init` | `LGFX_CAP_TOUCH` |
@@ -396,9 +441,10 @@ Generated capability vocabulary:
 | `LGFX_CAP_PUSHIMAGE` | `CAP_PUSHIMAGE` | `1` | `0x0002` | `ops.def` feature_cap_bit |
 | `LGFX_CAP_LAST_ERROR` | `CAP_LAST_ERROR` | `2` | `0x0004` | `ops.def` feature_cap_bit |
 | `LGFX_CAP_TOUCH` | `CAP_TOUCH` | `3` | `0x0008` | `ops.def` feature_cap_bit |
+| `LGFX_CAP_PALETTE` | `CAP_PALETTE` | `4` | `0x0010` | `ops.def` feature_cap_bit |
 <!-- END:generated_caps_table -->
 
-Current meaning:
+Meaning:
 
 - `CAP_SPRITE`
   - sprite operations are available
@@ -411,6 +457,10 @@ Current meaning:
 
 - `CAP_TOUCH`
   - touch operations are available
+
+- `CAP_PALETTE`
+  - palette lifecycle operations are available
+  - specifically `createPalette` and `setPaletteColor`
 
 Touch note:
 
@@ -517,9 +567,7 @@ Args:
 Rules:
 
 - booleans are accepted as atom `true` / `false`
-
 - numeric `0` / `1` are also accepted by the handler decode path
-
 - one-argument form follows LovyanGFX semantics
   - `setTextWrap(WrapXBool)` means `wrap_x = WrapXBool`, `wrap_y = false`
 
@@ -578,14 +626,44 @@ Errors:
 
 `Flags` is op-specific unless documented otherwise.
 
+Defined protocol flags:
+
+- `LGFX_F_TEXT_HAS_BG = 1 bsl 0`
+  - `setTextColor` includes a background scalar argument
+
+- `LGFX_F_COLOR_INDEX = 1 bsl 1`
+  - primitive op color argument is interpreted as a palette index instead of default RGB input
+
+- `LGFX_F_TEXT_FG_INDEX = 1 bsl 2`
+  - `setTextColor` foreground scalar argument is interpreted as a palette index
+
+- `LGFX_F_TEXT_BG_INDEX = 1 bsl 3`
+  - `setTextColor` background scalar argument is interpreted as a palette index
+
+- `LGFX_F_TRANSPARENT_INDEX = 1 bsl 4`
+  - `pushSprite` or `pushRotateZoom` transparent scalar argument is interpreted as a palette index
+
+General rules:
+
+- a flag is valid only for operations whose `ops.def` mask allows it
+- indexed color flags select argument interpretation; they do not create palette backing
+- `LGFX_F_TEXT_BG_INDEX` is invalid unless `LGFX_F_TEXT_HAS_BG` is also set
+
 ### `setTextColor`
 
-- `F_TEXT_HAS_BG = 1 bsl 0`
+Args:
+
+- `setTextColor(FgColor)`
+- `setTextColor(FgColor, BgColor)` when `LGFX_F_TEXT_HAS_BG` is set
 
 Semantics:
 
-- when present, the background color argument is enabled
-- the driver enforces the bitmask
+- foreground and background scalar colors independently support default RGB mode or indexed palette mode
+- foreground indexed mode is selected by `LGFX_F_TEXT_FG_INDEX`
+- background indexed mode is selected by `LGFX_F_TEXT_BG_INDEX`
+- background presence is selected by `LGFX_F_TEXT_HAS_BG`
+- indexed scalar mode on LCD is invalid
+- indexed scalar mode on a sprite target requires a palette-backed sprite target
 
 ## Important op semantics
 
@@ -607,16 +685,17 @@ Allowed values:
 Semantics:
 
 - changes the destination target color depth
-- does not change the wire format for primitive or text color arguments
-- does not change the primitive or text worker/device ABI, which remains RGB565-based
-- therefore `setColorDepth(24)` does not preserve full RGB888 input fidelity for primitive or text operations
+- does not change the wire format used by default RGB scalar colors for primitive or text operations
+- does not by itself enable indexed scalar-color semantics
+- does not by itself create palette backing for a sprite
+- `setColorDepth(24)` does not preserve full RGB888 input fidelity for primitive or text operations in default RGB mode
 - `pushImage` remains RGB565-only regardless of target color depth
 
 Examples:
 
-- `setColorDepth(16), fillScreen(0x112233)` uses quantized RGB565 `0x1106`
-- `setColorDepth(24), fillScreen(0x112233)` still quantizes to RGB565 `0x1106` before drawing
-- `setColorDepth(24)` may affect how the target stores or renders the widened result, but not the original input precision of primitive or text colors
+- `setColorDepth(16), fillScreen(0x112233)` in default RGB mode uses quantized RGB565 `0x1106`
+- `setColorDepth(24), fillScreen(0x112233)` in default RGB mode still quantizes to RGB565 `0x1106` before drawing
+- `setColorDepth(4)` selects paletted storage depth, but indexed scalar-color use still requires `createPalette` on that sprite target
 
 ### `setTextWrap`
 
@@ -640,8 +719,11 @@ Request args:
 Handler-side responsibilities:
 
 - decode tuple fields
+
 - require the final argument to be a binary
+
 - enforce the binary-size cap
+
 - for the short form:
   - use `MaxW = 0`
   - use `MaxH = 0`
@@ -667,7 +749,7 @@ Device-layer responsibilities:
 Ownership rule:
 
 - the driver must not pass a term-binary pointer into any path that can outlive the request unless it first copies or synchronously waits for completion
-- current worker model deep-copies the JPEG payload before enqueueing
+- the worker model deep-copies the JPEG payload before enqueueing
 - the copied payload is freed after the device call completes
 
 Conversion model:
@@ -729,7 +811,41 @@ Rules:
 - optional color depth must be valid when provided
 - creation fails if the handle is already in use
 - creation fails if the configured maximum concurrent sprite count is exhausted
-- sprite color depth affects the target storage format, but does not change primitive or text input color decoding rules
+- paletted sprite depths are `1`, `2`, `4`, and `8`
+- true-color sprite depths are `16` and `24`
+- sprite color depth affects target storage format, but does not by itself create palette backing
+
+### `createPalette` and `setPaletteColor`
+
+These operations manage palette backing for a sprite target.
+
+Request-header `Target` is the sprite handle:
+
+- `1..254` => candidate sprite handle
+- `0` => invalid
+
+`createPalette` args:
+
+- none
+
+`setPaletteColor` args:
+
+- `setPaletteColor(PaletteIndexU8, Rgb888U32)`
+
+Rules:
+
+- both operations are sprite-only
+- the target sprite must already exist
+- `createPalette` requires a paletted sprite depth (`1`, `2`, `4`, or `8`)
+- `createPalette` establishes palette backing for that sprite
+- indexed scalar-color semantics require actual palette backing, not just paletted depth
+- `setPaletteColor` requires an existing palette-backed sprite
+- `Rgb888U32` uses `0x00RRGGBB`
+- valid palette index range depends on sprite depth:
+  - depth `1` => `0..1`
+  - depth `2` => `0..3`
+  - depth `4` => `0..15`
+  - depth `8` => `0..255`
 
 ### `pushSprite`
 
@@ -743,7 +859,7 @@ Request-header `Target` is the source sprite handle:
 Args:
 
 - `pushSprite(DstTargetU8, DstXi16, DstYi16)`
-- `pushSprite(DstTargetU8, DstXi16, DstYi16, TransparentRgb565U16)`
+- `pushSprite(DstTargetU8, DstXi16, DstYi16, TransparentValue)`
 
 Rules:
 
@@ -751,10 +867,12 @@ Rules:
 - `DstTargetU8 in 1..254` => destination sprite
 - source sprite existence is resolved in the device layer
 - destination sprite existence is resolved in the device layer when `DstTarget != 0`
-- optional transparent color is RGB565
+- optional transparent scalar uses RGB565 by default
+- `LGFX_F_TRANSPARENT_INDEX` interprets the optional transparent scalar as a palette index
+- transparent index mode requires the source sprite to be palette-backed
 - edge clipping is allowed
 
-There is no region-based sprite blit op in the current protocol.
+There is no region-based sprite blit op in this protocol.
 
 ### `pushRotateZoom`
 
@@ -765,7 +883,7 @@ Request-header `Target` is the source sprite handle.
 Args:
 
 - `pushRotateZoom(DstTargetU8, DstXi16, DstYi16, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32)`
-- `pushRotateZoom(DstTargetU8, DstXi16, DstYi16, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32, TransparentRgb565U16)`
+- `pushRotateZoom(DstTargetU8, DstXi16, DstYi16, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32, TransparentValue)`
 
 Wire encoding:
 
@@ -779,7 +897,9 @@ Rules:
 - rotation uses the source sprite pivot set by `setPivot`
 - source and destination sprite existence rules are resolved in the device layer
 - both zoom values must represent positive scale
-- optional transparent color is RGB565
+- optional transparent scalar uses RGB565 by default
+- `LGFX_F_TRANSPARENT_INDEX` interprets the optional transparent scalar as a palette index
+- transparent index mode requires the source sprite to be palette-backed
 - edge clipping is allowed
 
 Conversion model:
@@ -804,13 +924,24 @@ Useful checks:
 - capability advertisement
   - `pushImage` support should match `CAP_PUSHIMAGE`
   - `getLastError` support should match `CAP_LAST_ERROR`
+  - palette support should match `CAP_PALETTE`
   - touch support should disappear from `FeatureBits` when touch is compiled but unattached
 
 - sprite path
   - deterministic `createSprite` at a chosen handle succeeds
   - creating the same handle twice fails
+  - `setPivot` rejects LCD target
   - valid `pushSprite` to LCD succeeds
   - missing destination sprite fails for sprite destination
+
+- palette path
+  - `createSprite(..., 4)` followed by `createPalette` succeeds
+  - `setPaletteColor(0, 16#112233)` succeeds on a palette-backed sprite
+  - out-of-range `setPaletteColor` index fails for the selected depth
+  - `createPalette` on a true-color sprite fails
+  - indexed primitive or text color mode on LCD fails
+  - indexed primitive or text color mode on a sprite without palette backing fails
+  - indexed transparent mode on a non-paletted source sprite fails
 
 - text-wrap path
   - `setTextWrap(true)` should map to `wrap_x=true, wrap_y=false`
@@ -824,10 +955,10 @@ Useful checks:
   - zero scale should fail
 
 - color contract path
-  - primitive and text colors should accept `0x00RRGGBB` on the wire
-  - primitive and text color inputs should quantize before worker/device execution
-  - `setColorDepth(16)` and `setColorDepth(24)` should not change primitive or text input quantization behavior
-  - `setColorDepth(24)` should not imply full RGB888 input fidelity for primitive or text ops
+  - primitive and text colors should accept `0x00RRGGBB` in default RGB mode
+  - default RGB scalar-color inputs should quantize before worker/device execution
+  - `setColorDepth(16)` and `setColorDepth(24)` should not change default RGB scalar-color quantization behavior
+  - `setColorDepth(24)` should not imply full RGB888 input fidelity for primitive or text ops in default RGB mode
   - `pushImage` should remain RGB565-only
 
 - jpg path

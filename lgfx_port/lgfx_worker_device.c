@@ -33,6 +33,14 @@
  * - init/close use owner-token + persisted open-config snapshot
  * - getters copy outputs back to caller pointers
  * - variable-length payload calls deep-copy before enqueueing
+ *
+ * Color-bearing primitive/text/sprite-transparent wrappers are now explicit:
+ * - *_is_index selects RGB565 vs palette-index interpretation
+ * - *_value carries the decoded scalar payload from the handler
+ *
+ * Palette lifecycle wrappers are also simple:
+ * - create_palette
+ * - set_palette_color
  */
 #define LGFX_WORKER_DEFINE_SIMPLE_WRAPPER(fn_name, params, job_kind, member, ...) \
     esp_err_t lgfx_worker_device_##fn_name params                                 \

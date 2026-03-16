@@ -12,4 +12,5 @@ defmodule LGFXPort.Guards do
 
   defguard color888(v) when is_integer(v) and v >= 0 and v <= 0xFFFFFF
   defguard rgb565(v) when is_integer(v) and v >= 0 and v <= 0xFFFF
+  defguard palette_index(v) when is_integer(v) and v >= 0 and v <= 0xFF
 end

@@ -30,18 +30,18 @@ X(display, lgfx_handle_display, ATOM_STR("\x07", "display"), 5, 5, 0, LGFX_OP_TA
 //
 // Primitives
 //
-X(fillScreen, lgfx_handle_fillScreen, ATOM_STR("\x0A", "fillScreen"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
-X(clear, lgfx_handle_clear, ATOM_STR("\x05", "clear"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
-X(drawPixel, lgfx_handle_drawPixel, ATOM_STR("\x09", "drawPixel"), 8, 8, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
-X(drawFastVLine, lgfx_handle_drawFastVLine, ATOM_STR("\x0D", "drawFastVLine"), 9, 9, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
-X(drawFastHLine, lgfx_handle_drawFastHLine, ATOM_STR("\x0D", "drawFastHLine"), 9, 9, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
-X(drawLine, lgfx_handle_drawLine, ATOM_STR("\x08", "drawLine"), 10, 10, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
-X(drawRect, lgfx_handle_drawRect, ATOM_STR("\x08", "drawRect"), 10, 10, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
-X(fillRect, lgfx_handle_fillRect, ATOM_STR("\x08", "fillRect"), 10, 10, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
-X(drawCircle, lgfx_handle_drawCircle, ATOM_STR("\x0A", "drawCircle"), 9, 9, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
-X(fillCircle, lgfx_handle_fillCircle, ATOM_STR("\x0A", "fillCircle"), 9, 9, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
-X(drawTriangle, lgfx_handle_drawTriangle, ATOM_STR("\x0C", "drawTriangle"), 12, 12, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
-X(fillTriangle, lgfx_handle_fillTriangle, ATOM_STR("\x0C", "fillTriangle"), 12, 12, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(fillScreen, lgfx_handle_fillScreen, ATOM_STR("\x0A", "fillScreen"), 6, 6, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(clear, lgfx_handle_clear, ATOM_STR("\x05", "clear"), 6, 6, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(drawPixel, lgfx_handle_drawPixel, ATOM_STR("\x09", "drawPixel"), 8, 8, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(drawFastVLine, lgfx_handle_drawFastVLine, ATOM_STR("\x0D", "drawFastVLine"), 9, 9, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(drawFastHLine, lgfx_handle_drawFastHLine, ATOM_STR("\x0D", "drawFastHLine"), 9, 9, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(drawLine, lgfx_handle_drawLine, ATOM_STR("\x08", "drawLine"), 10, 10, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(drawRect, lgfx_handle_drawRect, ATOM_STR("\x08", "drawRect"), 10, 10, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(fillRect, lgfx_handle_fillRect, ATOM_STR("\x08", "fillRect"), 10, 10, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(drawCircle, lgfx_handle_drawCircle, ATOM_STR("\x0A", "drawCircle"), 9, 9, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(fillCircle, lgfx_handle_fillCircle, ATOM_STR("\x0A", "fillCircle"), 9, 9, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(drawTriangle, lgfx_handle_drawTriangle, ATOM_STR("\x0C", "drawTriangle"), 12, 12, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(fillTriangle, lgfx_handle_fillTriangle, ATOM_STR("\x0C", "fillTriangle"), 12, 12, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 
 //
 // Text
@@ -51,7 +51,7 @@ X(setTextDatum, lgfx_handle_setTextDatum, ATOM_STR("\x0C", "setTextDatum"), 6, 6
 X(setTextWrap, lgfx_handle_setTextWrap, ATOM_STR("\x0B", "setTextWrap"), 6, 7, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(setTextFont, lgfx_handle_setTextFont, ATOM_STR("\x0B", "setTextFont"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(setTextFontPreset, lgfx_handle_setTextFontPreset, ATOM_STR("\x11", "setTextFontPreset"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
-X(setTextColor, lgfx_handle_setTextColor, ATOM_STR("\x0C", "setTextColor"), 6, 7, LGFX_F_TEXT_HAS_BG, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(setTextColor, lgfx_handle_setTextColor, ATOM_STR("\x0C", "setTextColor"), 6, 7, (LGFX_F_TEXT_HAS_BG | LGFX_F_TEXT_FG_INDEX | LGFX_F_TEXT_BG_INDEX), LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(drawString, lgfx_handle_drawString, ATOM_STR("\x0A", "drawString"), 8, 8, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 
 //
@@ -71,13 +71,15 @@ X(clearClipRect, lgfx_handle_clearClipRect, ATOM_STR("\x0D", "clearClipRect"), 5
 //
 X(createSprite, lgfx_handle_createSprite, ATOM_STR("\x0C", "createSprite"), 7, 8, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
 X(deleteSprite, lgfx_handle_deleteSprite, ATOM_STR("\x0C", "deleteSprite"), 5, 5, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
+X(createPalette, lgfx_handle_createPalette, ATOM_STR("\x0D", "createPalette"), 5, 5, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_PALETTE)
+X(setPaletteColor, lgfx_handle_setPaletteColor, ATOM_STR("\x0F", "setPaletteColor"), 7, 7, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_PALETTE)
 X(setPivot, lgfx_handle_setPivot, ATOM_STR("\x08", "setPivot"), 7, 7, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
 
 // Header target is the source sprite; payload begins with destination target.
-X(pushSprite, lgfx_handle_pushSprite, ATOM_STR("\x0A", "pushSprite"), 8, 9, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
+X(pushSprite, lgfx_handle_pushSprite, ATOM_STR("\x0A", "pushSprite"), 8, 9, LGFX_F_TRANSPARENT_INDEX, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
 
 // Header target is the source sprite; payload begins with destination target.
-X(pushRotateZoom, lgfx_handle_pushRotateZoom, ATOM_STR("\x0E", "pushRotateZoom"), 11, 12, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
+X(pushRotateZoom, lgfx_handle_pushRotateZoom, ATOM_STR("\x0E", "pushRotateZoom"), 11, 12, LGFX_F_TRANSPARENT_INDEX, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE)
 
 //
 // Touch
