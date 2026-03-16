@@ -305,6 +305,27 @@ Current protocol implications:
 - `pushRotateZoom` is a destination-aware rotate/zoom blit
 - `pushSpriteRegion` is not part of the current protocol surface
 
+## Host API surface policy
+
+This port does not try to expose LovyanGFX one method at a time.
+
+Policy:
+
+- prefer explicit rendering semantics over convenience aliases
+- prefer explicit arguments over hidden mutable workflow state
+- prefer small coherent feature slices over isolated helper methods
+- expose APIs only when their protocol contract is clear, stable, and easy to test
+
+Decision rule for exposing a LovyanGFX-facing API:
+
+- it must enable a real use case that is awkward or impossible with the current surface
+- it must be useful on its own, not only as part of a larger missing cluster
+- its behavior must be easy to describe across target types, font selection, text size, datum, and wrap settings
+- it must fit the current explicit draw model without introducing surprising hidden state
+- it must be straightforward to validate in protocol smoke tests and sample apps
+
+If those conditions are not met, the API should be deferred.
+
 ## Capability advertisement
 
 `getCaps` is metadata-driven.
