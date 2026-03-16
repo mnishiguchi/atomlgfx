@@ -19,8 +19,17 @@ defmodule SampleApp.DrawStringStress do
 
   @progress_bg 0x2A2A2A
 
-  @hud_h 44
-  @line_h 20
+  @hud_h 52
+  @hud_title_y 2
+  @hud_meta_y 16
+  @hud_bar_y 34
+  @hud_bar_h 8
+
+  @main_text_scale 1
+  @hud_title_scale 1
+  @hud_meta_scale 1
+
+  @line_h 18
   @x 4
 
   @progress_every 25
@@ -55,10 +64,11 @@ defmodule SampleApp.DrawStringStress do
       # Note: reset_text_state resets host cache only; device state remains whatever it was.
       _ = Port.reset_text_state(port, 0)
       _ = Port.set_text_wrap(port, false, 0)
-      _ = Port.set_text_size(port, 2, 0)
       _ = Port.set_text_color(port, 0xFFFFFF, nil, 0)
 
       _ = maybe_use_japanese_font_preset(port)
+      _ = Port.set_text_size(port, @main_text_scale, 0)
+
       _ = probe_cursor_roundtrip(port, text_y0)
       _ = probe_invalid_text_guard(port)
       _ = probe_empty_prints(port, text_y0)
@@ -182,13 +192,14 @@ defmodule SampleApp.DrawStringStress do
     # Clear row and draw a small marker strip.
     _ = Port.fill_rect(port, 0, y, w, @line_h, row_bg)
     _ = Port.fill_rect(port, 0, y, 2, @line_h, @row_marker)
+    _ = restore_main_text_style(port)
     _ = Port.set_text_color(port, fg, nil, 0)
 
     # Fresh runtime binary each iteration (important for lifetime testing).
     text = make_line(i)
 
     {ok_count2, err_count2} =
-      case draw_line_with_cursor(port, @x, y, text, i) do
+      case draw_line_with_cursor(port, w, @x, y, text, i) do
         :ok ->
           {ok_count + 1, err_count}
 
@@ -213,14 +224,32 @@ defmodule SampleApp.DrawStringStress do
     do_run(port, w, rows, rounds, text_y0, i + 1, ok_count2, err_count2)
   end
 
-  defp draw_line_with_cursor(port, x, y, text, i) do
-    with :ok <- Port.set_cursor(port, x, y, 0) do
-      if use_println?(i) do
-        Port.println(port, text, 0)
-      else
-        Port.print(port, text, 0)
+  defp draw_line_with_cursor(port, screen_w, x, y, text, i) do
+    result =
+      with :ok <- Port.set_clip_rect(port, 0, y, screen_w, @line_h, 0),
+           :ok <- Port.set_cursor(port, x, y, 0) do
+        if use_println?(i) do
+          Port.println(port, text, 0)
+        else
+          Port.print(port, text, 0)
+        end
       end
+
+    _ = Port.clear_clip_rect(port, 0)
+    result
+  end
+
+  defp restore_main_text_style(port) do
+    case :erlang.get({__MODULE__, :jp_preset}) do
+      preset when is_atom(preset) ->
+        _ = Port.set_text_font_preset(port, preset, 0)
+
+      _ ->
+        :ok
     end
+
+    _ = Port.set_text_size(port, @main_text_scale, 0)
+    :ok
   end
 
   defp use_println?(i), do: rem(i, @println_every) == 0
@@ -250,8 +279,8 @@ defmodule SampleApp.DrawStringStress do
 
   defp draw_status(port, screen_w, rounds, i, ok_count, err_count, rows) do
     bar_x = 4
-    bar_y = 24
-    bar_h = 8
+    bar_y = @hud_bar_y
+    bar_h = @hud_bar_h
     bar_w = max_i(8, screen_w - 8)
 
     _ = Port.fill_rect(port, 0, 0, screen_w, @hud_h, @hud_bg)
@@ -261,11 +290,11 @@ defmodule SampleApp.DrawStringStress do
         "  err:", i2b(err_count)::binary>>
 
     line2 =
-      <<"rows:", i2b(rows)::binary, "  line_h:", i2b(@line_h)::binary, "  ", jp_label()::binary,
-        "  ", cursor_label(port)::binary>>
+      <<"rows:", i2b(rows)::binary, "  lh:", i2b(@line_h)::binary, "  ", jp_label()::binary,
+        "  pln:", i2b(@println_every)::binary>>
 
-    _ = Port.draw_string_bg(port, 4, 0, @hud_fg, @hud_bg, 2, line1)
-    _ = Port.draw_string_bg(port, 4, 12, @hud_dim, @hud_bg, 1, line2)
+    _ = Port.draw_string_bg(port, 4, @hud_title_y, @hud_fg, @hud_bg, @hud_title_scale, line1)
+    _ = Port.draw_string_bg(port, 4, @hud_meta_y, @hud_dim, @hud_bg, @hud_meta_scale, line2)
 
     _ = Port.fill_rect(port, bar_x, bar_y, bar_w, bar_h, @progress_bg)
 
@@ -287,6 +316,7 @@ defmodule SampleApp.DrawStringStress do
       _ = Port.fill_rect(port, bar_x, bar_y, fill_w, bar_h, bar_color)
     end
 
+    _ = restore_main_text_style(port)
     :ok
   end
 
@@ -297,16 +327,6 @@ defmodule SampleApp.DrawStringStress do
 
       _ ->
         "jp:none"
-    end
-  end
-
-  defp cursor_label(port) do
-    case Port.get_cursor(port, 0) do
-      {:ok, {x, y}} ->
-        <<"cur:", i2b(x)::binary, ",", i2b(y)::binary>>
-
-      {:error, _reason} ->
-        "cur:err"
     end
   end
 
@@ -355,8 +375,6 @@ defmodule SampleApp.DrawStringStress do
   end
 
   defp make_line_utf8(i) do
-    # Short but representative: common UI words + punctuation.
-    # This primarily exercises UTF-8 transport + lifetime under churn.
     <<"[utf8 i:", i2b(i)::binary, "] 日本語テスト 設定 戻る 次へ 。、！？">>
   end
 
@@ -380,7 +398,6 @@ defmodule SampleApp.DrawStringStress do
     <<"[", mode::binary, " i:", i2b(i)::binary, "] ">>
   end
 
-  # Alnum payload with periodic separators for readability.
   defp make_payload(seed, len) when is_integer(seed) and is_integer(len) and len > 0 do
     make_payload_bytes(seed, len, 0, [])
     |> :lists.reverse()

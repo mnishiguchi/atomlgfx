@@ -15,7 +15,14 @@ defmodule SampleApp.PushImageStress do
   @stage_bg 0x080808
   @progress_bg 0x2A2A2A
 
-  @hud_h 44
+  @hud_h 40
+  @hud_x 4
+  @hud_line1_y 2
+  @hud_line2_y 12
+  @hud_text_scale 1
+  @hud_bar_y 26
+  @hud_bar_h 6
+
   @poison565 0xF81F
 
   # Progress log interval (also forces GC on this cadence)
@@ -165,23 +172,23 @@ defmodule SampleApp.PushImageStress do
          pattern_id
        ) do
     hud_h = @hud_h
-    bar_x = 4
-    bar_y = 24
-    bar_h = 8
-    bar_w = max_i(8, screen_w - 8)
+    bar_x = @hud_x
+    bar_y = @hud_bar_y
+    bar_h = @hud_bar_h
+    bar_w = max_i(8, screen_w - 2 * @hud_x)
 
     _ = Port.fill_rect(port, 0, 0, screen_w, hud_h, @hud_bg)
 
     line1 =
-      <<"IMG stress  ", progress_label(i, rounds)::binary, "  ", "ok:", i2b(ok_count)::binary,
-        "  err:", i2b(err_count)::binary>>
+      <<"IMG ", progress_label(i, rounds)::binary, "  ok:", i2b(ok_count)::binary, "  err:",
+        i2b(err_count)::binary>>
 
     line2 =
-      <<"case:", i2b(case_w)::binary, "x", i2b(case_h)::binary, "  stride:",
-        stride_label(stride_pixels, case_w)::binary, "  pat:", pattern_label(pattern_id)::binary>>
+      <<i2b(case_w)::binary, "x", i2b(case_h)::binary, "  st:",
+        stride_label(stride_pixels, case_w)::binary, "  ", pattern_label(pattern_id)::binary>>
 
-    _ = Port.draw_string_bg(port, 4, 0, @hud_fg, @hud_bg, 2, line1)
-    _ = Port.draw_string_bg(port, 4, 12, @hud_dim, @hud_bg, 1, line2)
+    _ = Port.draw_string_bg(port, @hud_x, @hud_line1_y, @hud_fg, @hud_bg, @hud_text_scale, line1)
+    _ = Port.draw_string_bg(port, @hud_x, @hud_line2_y, @hud_dim, @hud_bg, @hud_text_scale, line2)
 
     _ = Port.fill_rect(port, bar_x, bar_y, bar_w, bar_h, @progress_bg)
 
@@ -220,11 +227,11 @@ defmodule SampleApp.PushImageStress do
   end
 
   defp pattern_label(@pattern_solid), do: "solid"
-  defp pattern_label(@pattern_stripes), do: "stripes"
-  defp pattern_label(@pattern_checker), do: "checker"
+  defp pattern_label(@pattern_stripes), do: "stripe"
+  defp pattern_label(@pattern_checker), do: "check"
   defp pattern_label(_), do: "?"
 
-  defp stride_label(0, _w), do: "0(tight)"
+  defp stride_label(0, _w), do: "tight"
   defp stride_label(stride, w) when stride == w, do: "w"
   defp stride_label(stride, w), do: <<i2b(stride)::binary, "(+", i2b(stride - w)::binary, ")">>
 
