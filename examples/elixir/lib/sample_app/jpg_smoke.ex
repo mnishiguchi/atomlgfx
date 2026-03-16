@@ -34,7 +34,7 @@ defmodule SampleApp.JpgSmoke do
     with :ok <- Port.fill_screen(port, @bg),
          :ok <- Port.reset_text_state(port, 0),
          :ok <- Port.set_text_wrap(port, false, 0),
-         :ok <- Port.set_text_font(port, 1, 0),
+         :ok <- Port.set_text_font_preset(port, :ascii, 0),
          :ok <- Port.set_text_size(port, 1, 0),
          :ok <- Port.set_text_color(port, @fg, nil, 0),
          :ok <- Port.draw_rect(port, 0, 0, w, h, @frame, 0),
@@ -70,6 +70,8 @@ defmodule SampleApp.JpgSmoke do
            ),
          :ok <- Port.set_text_color(port, @accent, nil, 0),
          :ok <- Port.draw_string(port, right_x, top_y + scaled_box_h + 4, "scaled 4x", 0),
+         :ok <- Port.set_text_font_preset(port, :ascii, 0),
+         :ok <- Port.set_text_size(port, 1, 0),
          :ok <- Port.set_text_color(port, @dim, nil, 0),
          :ok <- Port.draw_string(port, 4, status_y, "draw_jpg ok", 0) do
       IO.puts("jpg_smoke ok")

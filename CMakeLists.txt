@@ -8,7 +8,7 @@ set(LGFX_SRC_ROOT "${LGFX_ROOT}/src")
 
 set(LGFX_PORT_CONFIG_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/lgfx_port/cmake/lgfx_port_config.h.in")
 
-set(LGFX_PORT_ENABLE_JP_FONTS ON CACHE BOOL "Enable Japanese font data for setTextFontPreset jp_*")
+set(LGFX_PORT_ENABLE_JP_FONTS ON CACHE BOOL "Enable Japanese font data for the Japanese-capable text preset")
 set(LGFX_PORT_ENABLE_TOUCH ON CACHE BOOL "Enable XPT2046 touch driver (Touch_XPT2046)")
 
 # -----------------------------------------------------------------------------
@@ -329,10 +329,10 @@ set(LGFX_PORT_TOUCH_SPI_HOST
     CACHE STRING "SPI host token for touch (defaults to LCD host)")
 set(LGFX_PORT_TOUCH_SPI_FREQ_HZ "1000000u" CACHE STRING "Touch SPI frequency (Hz, token)")
 
-# Custom minimal JP font subset
+# Custom minimal Japanese font subset used by the Japanese-capable text preset
 set(LGFX_PORT_JP_FONT_CPP
     "${CMAKE_CURRENT_LIST_DIR}/src/fonts/generated/ui_font_ja_16_min.cpp"
-    CACHE STRING "Path to custom JP font subset .cpp (compiled when LGFX_PORT_ENABLE_JP_FONTS=ON)")
+    CACHE STRING "Path to custom Japanese font subset .cpp (compiled when LGFX_PORT_ENABLE_JP_FONTS=ON)")
 
 # -----------------------------------------------------------------------------
 # Register component
@@ -507,13 +507,11 @@ list(APPEND LGFX_SRCS
   "${LGFX_SRC_ROOT}/lgfx/utility/lgfx_tjpgd.c"
 )
 
-# -----------------------------------------------------------------------------
-# Japanese font data
-# -----------------------------------------------------------------------------
+# Optional Japanese font data backing the Japanese-capable text preset
 if(LGFX_PORT_ENABLE_JP_FONTS)
   if(NOT EXISTS "${LGFX_PORT_JP_FONT_CPP}")
     message(FATAL_ERROR
-      "Custom JP font subset .cpp not found:\n  ${LGFX_PORT_JP_FONT_CPP}\n\n"
+      "Custom Japanese font subset .cpp not found:\n  ${LGFX_PORT_JP_FONT_CPP}\n\n"
       "Set LGFX_PORT_JP_FONT_CPP to the path of your generated subset, e.g.:\n"
       "  -DLGFX_PORT_JP_FONT_CPP=${CMAKE_CURRENT_LIST_DIR}/src/fonts/generated/ui_font_ja_16_min.cpp\n"
     )

@@ -8,14 +8,9 @@ defmodule LGFXPort.Text do
   alias LGFXPort.Protocol
 
   @font_preset_ascii 0
-  @font_preset_jp_small 1
-  @font_preset_jp_medium 2
-  @font_preset_jp_large 3
+  @font_preset_jp 1
 
   @text_scale_one_x256 256
-  @text_scale_jp_small_x256 @text_scale_one_x256
-  @text_scale_jp_medium_x256 512
-  @text_scale_jp_large_x256 768
   @text_scale_min_x256 1
   @text_scale_max_x256 0xFFFF
 
@@ -64,15 +59,6 @@ defmodule LGFXPort.Text do
   def set_text_wrap_xy(port, wrap_x, wrap_y, target \\ 0)
       when is_boolean(wrap_x) and is_boolean(wrap_y) and target_any(target) do
     Protocol.call_ok(port, :setTextWrap, target, 0, [wrap_x, wrap_y], Protocol.long_timeout())
-  end
-
-  def set_text_font(port, font_id, target \\ 0)
-      when u8(font_id) and target_any(target) do
-    with :ok <-
-           Protocol.call_ok(port, :setTextFont, target, 0, [font_id], Protocol.long_timeout()) do
-      Cache.put_text_font_selection(port, target, {:font_id, font_id})
-      :ok
-    end
   end
 
   def set_text_font_preset(port, preset, target \\ 0)
@@ -189,23 +175,14 @@ defmodule LGFXPort.Text do
   defp contains_nul?(<<_byte, rest::binary>>), do: contains_nul?(rest)
 
   defp font_preset_to_wire(:ascii), do: {:ok, @font_preset_ascii, :ascii}
-  defp font_preset_to_wire(:jp_small), do: {:ok, @font_preset_jp_small, :jp_small}
-  defp font_preset_to_wire(:jp_medium), do: {:ok, @font_preset_jp_medium, :jp_medium}
-  defp font_preset_to_wire(:jp_large), do: {:ok, @font_preset_jp_large, :jp_large}
-  defp font_preset_to_wire(:jp), do: {:ok, @font_preset_jp_medium, :jp_medium}
+  defp font_preset_to_wire(:jp), do: {:ok, @font_preset_jp, :jp}
   defp font_preset_to_wire(other), do: {:error, {:bad_font_preset, other}}
 
   defp implied_text_scale_x256_for_preset(:ascii),
     do: {@text_scale_one_x256, @text_scale_one_x256}
 
-  defp implied_text_scale_x256_for_preset(:jp_small),
-    do: {@text_scale_jp_small_x256, @text_scale_jp_small_x256}
-
-  defp implied_text_scale_x256_for_preset(:jp_medium),
-    do: {@text_scale_jp_medium_x256, @text_scale_jp_medium_x256}
-
-  defp implied_text_scale_x256_for_preset(:jp_large),
-    do: {@text_scale_jp_large_x256, @text_scale_jp_large_x256}
+  defp implied_text_scale_x256_for_preset(:jp),
+    do: {@text_scale_one_x256, @text_scale_one_x256}
 
   defp maybe_set_text_color(port, fg_color, bg_color, target) do
     with {:ok, _flags, _args, desired} <- normalize_text_color_args(fg_color, bg_color) do

@@ -370,7 +370,6 @@ This table documents the implemented protocol surface.
 | `setTextSize` | `LGFX_OP_TARGET_ANY` | `F0` | `6/7` | `requires_init` | - |
 | `setTextDatum` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `setTextWrap` | `LGFX_OP_TARGET_ANY` | `F0` | `6/7` | `requires_init` | - |
-| `setTextFont` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `setTextFontPreset` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `setTextColor` | `LGFX_OP_TARGET_ANY` | `Fmask((LGFX_F_TEXT_HAS_BG | LGFX_F_TEXT_FG_INDEX | LGFX_F_TEXT_BG_INDEX))` | `6/7` | `requires_init` | - |
 | `setCursor` | `LGFX_OP_TARGET_ANY` | `F0` | `7` | `requires_init` | - |
@@ -509,15 +508,16 @@ Behavior:
 
 ## Fonts
 
-Two font-selection paths are exposed:
-
-- `setTextFont(FontIdU8)`
-  - raw numeric passthrough to the pinned LovyanGFX API
-  - accepts `0..255`
-  - for stable protocol-owned font selection, prefer `setTextFontPreset`
+Stable protocol-owned font selection is exposed through:
 
 - `setTextFontPreset(PresetIdU8)`
-  - driver-defined stable preset selection
+  - stable protocol-owned preset selection
+
+Font preset and text size are separate concerns:
+
+- `setTextFontPreset` chooses the glyph source
+- `setTextSize` controls the rendered size
+- selecting a preset normalizes text scale to `1.0x`
 
 ### `setTextSize`
 
@@ -584,42 +584,17 @@ Examples:
 - `setTextWrap(true, true)` => wrap horizontally and vertically
 - `setTextWrap(false)` => disable horizontal and vertical wrapping
 
-### `setTextFont`
-
-Args:
-
-- `setTextFont(FontIdU8)`
-
-Rules:
-
-- `FontIdU8` must be an integer in `0..255`
-- forwarded as a raw numeric passthrough to the pinned LovyanGFX API
-- this protocol does not define a smaller stable subset of font IDs
-- for stable protocol-owned font selection, prefer `setTextFontPreset`
-
-Errors:
-
-- out-of-range value => `{error, bad_args}`
-
 ### `setTextFontPreset`
 
 Preset IDs:
 
 - `0` = `ascii`
-  - select ASCII fallback
-  - normalize text scale to `256` (`1.0x`)
+  - selects the pinned default ASCII font internally
+  - normalizes text scale to `256` (`1.0x`)
 
-- `1` = `jp_small`
-  - Japanese-capable preset
-  - text scale `256` (`1.0x`)
-
-- `2` = `jp_medium`
-  - Japanese-capable preset
-  - text scale `512` (`2.0x`)
-
-- `3` = `jp_large`
-  - Japanese-capable preset
-  - text scale `768` (`3.0x`)
+- `1` = `jp`
+  - selects the built-in Japanese-capable preset internally
+  - normalizes text scale to `256` (`1.0x`)
 
 Errors:
 

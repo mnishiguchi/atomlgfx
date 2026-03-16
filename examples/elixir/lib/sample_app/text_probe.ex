@@ -11,45 +11,47 @@ defmodule SampleApp.TextProbe do
   @ok_bg 0x103020
   @frame 0x202020
 
-  # Built-in numeric fonts (usually ASCII-oriented)
-  @font_ids [1, 2, 4, 6, 7, 8]
-
-  # Driver-defined presets (may be unsupported depending on build)
-  @jp_presets [:jp_small, :jp_medium, :jp_large, :jp]
+  @ascii_preset :ascii
+  @jp_preset :jp
 
   # Layout
   @pad 4
   @line_h 20
   @ascii_row_h 20
   @jp_row_h 28
+  @ascii_sample_x 48
+  @jp_sample_x 120
 
   # Public entry:
   # - Always does the "text smoke" part.
-  # - If there is enough vertical space, also draws the font matrix.
+  # - If there is enough vertical space, also draws the preset matrix.
   def run(port, w, h) when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
-    with :ok <- Port.fill_screen(port, @bg),
-         :ok <- Port.reset_text_state(port, 0),
-         :ok <- Port.set_text_wrap_xy(port, false, false, 0),
-         :ok <- Port.set_text_datum(port, 0, 0),
-         :ok <- Port.set_text_font(port, 1, 0),
-         :ok <- Port.set_text_size_xy(port, 2, 2, 0),
-         :ok <- Port.set_text_size(port, 1, 0),
-         :ok <- Port.set_text_color(port, @fg, nil, 0),
-         :ok <- Port.draw_rect(port, 0, 0, w, h, @frame),
-         {:ok, y_after_smoke} <- draw_text_smoke_block(port, w, h) do
-      if should_draw_font_matrix?(h, y_after_smoke) do
-        case draw_font_matrix_block(port, w, h, y_after_smoke) do
-          :ok ->
-            IO.puts("text_probe ok (smoke + matrix)")
-            :ok
+    run_probe(port, w, h, true)
+  end
 
-          {:error, reason} = err ->
-            IO.puts("text_probe matrix failed: #{Port.format_error(reason)}")
-            err
-        end
-      else
-        IO.puts("text_probe ok (smoke only)")
-        :ok
+  # Smoke-only entry for callers that want it explicitly.
+  def run_smoke(port, w, h) when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
+    run_probe(port, w, h, false)
+  end
+
+  defp run_probe(port, w, h, draw_matrix?) do
+    with :ok <- prepare_probe_canvas(port, w, h),
+         {:ok, y_after_smoke} <- draw_text_smoke_block(port, w, h) do
+      cond do
+        draw_matrix? and should_draw_preset_matrix?(h, y_after_smoke) ->
+          case draw_preset_matrix_block(port, h, y_after_smoke) do
+            :ok ->
+              IO.puts("text_probe ok (smoke + matrix)")
+              :ok
+
+            {:error, reason} = err ->
+              IO.puts("text_probe matrix failed: #{Port.format_error(reason)}")
+              err
+          end
+
+        true ->
+          IO.puts("text_probe ok (smoke only)")
+          :ok
       end
     else
       {:error, reason} = err ->
@@ -58,192 +60,164 @@ defmodule SampleApp.TextProbe do
     end
   end
 
-  # Smoke-only entry for callers that want it explicitly.
-  def run_smoke(port, w, h) when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
+  defp prepare_probe_canvas(port, w, h) do
     with :ok <- Port.fill_screen(port, @bg),
          :ok <- Port.reset_text_state(port, 0),
          :ok <- Port.set_text_wrap_xy(port, false, false, 0),
          :ok <- Port.set_text_datum(port, 0, 0),
-         :ok <- Port.set_text_font(port, 1, 0),
-         :ok <- Port.set_text_size_xy(port, 2, 2, 0),
-         :ok <- Port.set_text_size(port, 1, 0),
-         :ok <- Port.set_text_color(port, @fg, nil, 0),
-         :ok <- Port.draw_rect(port, 0, 0, w, h, @frame),
-         {:ok, _y} <- draw_text_smoke_block(port, w, h) do
-      IO.puts("text_probe ok (smoke only)")
+         :ok <- set_ascii_text_style(port, @fg, 1),
+         :ok <- Port.draw_rect(port, 0, 0, w, h, @frame) do
       :ok
-    else
-      {:error, reason} = err ->
-        IO.puts("text_probe smoke failed: #{Port.format_error(reason)}")
-        err
     end
   end
 
   # -----------------------------------------------------------------------------
   # Text smoke block (top of screen)
   # -----------------------------------------------------------------------------
+  #
+  # Intentionally exercises:
+  # - set_text_font_preset/3
+  # - set_text_size/3
+  # - set_text_size_xy/4
+  # - draw_string/5
   defp draw_text_smoke_block(port, w, h) do
     y0 = 2
+    meta_y = y0 + 14
+    hello_y = y0 + 34
+    wide_y = hello_y + @line_h + 4
+    ascii_y = wide_y + @line_h + 4
+    jp_y = ascii_y + @line_h + 4
+    rule_y = jp_y + @line_h - 2
+    status_y = rule_y + 6
 
-    with :ok <- Port.draw_string_bg(port, @pad, y0, @fg, @ok_bg, 1, "TEXT + FONT PROBE", 0),
-         :ok <- Port.set_text_color(port, @dim, nil, 0),
-         :ok <- Port.draw_string(port, @pad, y0 + 14, "font=1 size=1 datum=0 wrap=false", 0),
-         :ok <- Port.set_text_color(port, @accent, nil, 0),
-         :ok <- Port.set_text_size(port, 2, 0),
-         :ok <- Port.draw_string(port, @pad, y0 + 34, "HELLO", 0),
-         :ok <- Port.set_text_color(port, @warn, nil, 0),
-         :ok <- Port.set_text_size(port, 1, 0),
-         :ok <- Port.set_text_font(port, 1, 0),
-         :ok <- Port.draw_string(port, @pad, y0 + 34 + @line_h + 4, "ASCII 123 !?", 0),
-         :ok <- maybe_use_japanese_font_preset(port),
-         :ok <- Port.set_text_color(port, @fg, nil, 0),
-         :ok <- Port.draw_string(port, @pad, y0 + 34 + @line_h * 2 + 4, "日本語テスト", 0),
+    with :ok <- Port.draw_string_bg(port, @pad, y0, @fg, @ok_bg, 1, "TEXT + PRESET PROBE", 0),
+         :ok <- set_ascii_text_style(port, @dim, 1),
          :ok <-
-           Port.draw_fast_hline(
-             port,
-             @pad,
-             y0 + 34 + @line_h * 3 + 2,
-             max_i(0, w - @pad * 2),
-             0x404040
-           ),
-         :ok <- Port.set_text_font(port, 1, 0),
-         :ok <- Port.set_text_size(port, 1, 0),
-         :ok <- Port.set_text_color(port, @dim, nil, 0),
-         :ok <- Port.draw_string(port, @pad, y0 + 34 + @line_h * 3 + 8, "draw_string ok", 0) do
-      y_next = y0 + 34 + @line_h * 3 + 8 + @line_h
-      {:ok, min_i(y_next, h)}
+           Port.draw_string(port, @pad, meta_y, "preset=ascii size=1 datum=0 wrap=false", 0),
+         :ok <- set_ascii_text_style(port, @accent, 2),
+         :ok <- Port.draw_string(port, @pad, hello_y, "HELLO", 0),
+         :ok <- set_ascii_text_style_xy(port, @accent, 2, 1),
+         :ok <- Port.draw_string(port, @pad, wide_y, "WIDE XY", 0),
+         :ok <- set_ascii_text_style(port, @warn, 1),
+         :ok <- Port.draw_string(port, @pad, ascii_y, "ASCII 123 !?", 0),
+         :ok <- maybe_use_japanese_preset(port),
+         :ok <- Port.set_text_color(port, @fg, nil, 0),
+         :ok <- Port.draw_string(port, @pad, jp_y, "日本語テスト", 0),
+         :ok <- Port.draw_fast_hline(port, @pad, rule_y, max_i(0, w - @pad * 2), 0x404040),
+         :ok <- set_ascii_text_style(port, @dim, 1),
+         :ok <- Port.draw_string(port, @pad, status_y, "draw_string ok / size_xy ok", 0) do
+      {:ok, min_i(status_y + @line_h, h)}
     else
       {:error, _reason} = err ->
         err
     end
   end
 
-  defp maybe_use_japanese_font_preset(port) do
-    # Prefer medium first for readability; then small; then fallbacks.
-    try_japanese_font_presets(port, [:jp_medium, :jp_small, :jp, :jp_large])
-  end
-
-  defp try_japanese_font_presets(_port, []) do
-    IO.puts("text_probe warning: no Japanese font preset available, tofu is expected")
-    :ok
-  end
-
-  defp try_japanese_font_presets(port, [preset | rest]) do
-    case Port.set_text_font_preset(port, preset, 0) do
+  defp maybe_use_japanese_preset(port) do
+    case Port.set_text_font_preset(port, @jp_preset, 0) do
       :ok ->
-        IO.puts("text_probe using font preset #{inspect(preset)}")
+        IO.puts("text_probe using preset #{@jp_preset}")
         :ok
 
       {:error, reason} ->
-        IO.puts("text_probe preset #{inspect(preset)} unavailable: #{Port.format_error(reason)}")
-        try_japanese_font_presets(port, rest)
+        IO.puts("text_probe preset #{@jp_preset} unavailable: #{Port.format_error(reason)}")
+        IO.puts("text_probe warning: no Japanese preset available, tofu is expected")
+        :ok
     end
   end
 
   # -----------------------------------------------------------------------------
-  # Font matrix block (below the smoke block)
+  # Preset matrix block (below the smoke block)
   # -----------------------------------------------------------------------------
-  defp should_draw_font_matrix?(h, y_after_smoke) do
-    min_needed = 2 * @line_h + 3 * @ascii_row_h + 2 * @jp_row_h
+  defp should_draw_preset_matrix?(h, y_after_smoke) do
+    min_needed = 2 * @line_h + @ascii_row_h + @jp_row_h
     y_after_smoke + min_needed < h
   end
 
-  defp draw_font_matrix_block(port, _w, h, y0) do
+  defp draw_preset_matrix_block(port, h, y0) do
     ascii_y0 = y0 + 6
+    jp_y0 = ascii_y0 + 14 + @ascii_row_h + 12
 
-    with :ok <- Port.set_text_font(port, 1, 0),
-         :ok <- Port.set_text_size(port, 1, 0),
-         :ok <- Port.set_text_color(port, @dim, nil, 0),
-         :ok <- Port.draw_string(port, @pad, ascii_y0, "ASCII fonts:", 0),
-         :ok <- draw_ascii_rows(port, @font_ids, ascii_y0 + 14, @ascii_row_h, h),
-         {:ok, jp_y0} <- compute_jp_y0(ascii_y0 + 14, h),
+    with :ok <- draw_ascii_header(port, ascii_y0, h),
+         :ok <- draw_ascii_row(port, ascii_y0 + 14, h),
          :ok <- draw_jp_header(port, jp_y0 - 2, h),
-         :ok <- draw_jp_rows(port, @jp_presets, jp_y0 + 12, @jp_row_h, h) do
+         :ok <- draw_jp_row(port, jp_y0 + 12, h) do
       :ok
     end
   end
 
-  defp compute_jp_y0(ascii_rows_y0, h) do
-    jp_y0 = ascii_rows_y0 + length(@font_ids) * @ascii_row_h + 12
+  defp draw_ascii_header(_port, y, h) when y + 10 >= h, do: :ok
 
-    if jp_y0 + 10 >= h do
-      {:ok, h}
-    else
-      {:ok, jp_y0}
+  defp draw_ascii_header(port, y, _h) do
+    with :ok <- set_ascii_text_style(port, @dim, 1),
+         :ok <- Port.draw_string(port, @pad, y, "ASCII preset:", 0) do
+      :ok
     end
   end
 
-  defp draw_ascii_rows(_port, [], _y0, _row_h, _h), do: :ok
+  defp draw_ascii_row(_port, y, h) when y + 16 >= h, do: :ok
 
-  defp draw_ascii_rows(port, [font_id | rest], y0, row_h, h) do
-    y = y0
+  defp draw_ascii_row(port, y, _h) do
+    label = Atom.to_string(@ascii_preset)
 
-    if y + 16 >= h do
+    with :ok <- set_ascii_text_style(port, @dim, 1),
+         :ok <- Port.draw_string(port, @pad, y, label, 0),
+         :ok <- set_ascii_text_style(port, 0x80FF80, 1),
+         :ok <- Port.draw_string(port, @ascii_sample_x, y, "ABC abc 123 !?", 0) do
       :ok
-    else
-      label = <<"F", :erlang.integer_to_binary(font_id)::binary, ":">>
-
-      with :ok <- Port.set_text_font(port, 1, 0),
-           :ok <- Port.set_text_size(port, 1, 0),
-           :ok <- Port.set_text_color(port, @dim, nil, 0),
-           :ok <- Port.draw_string(port, @pad, y, label, 0),
-           :ok <- Port.set_text_font(port, font_id, 0),
-           :ok <- Port.set_text_size(port, 1, 0),
-           :ok <- Port.set_text_color(port, 0x80FF80, nil, 0),
-           :ok <- Port.draw_string(port, @pad + 24, y, "ABC abc 123 !?", 0) do
-        draw_ascii_rows(port, rest, y0 + row_h, row_h, h)
-      end
     end
   end
 
   defp draw_jp_header(_port, y, h) when y + 10 >= h, do: :ok
 
   defp draw_jp_header(port, y, _h) do
-    with :ok <- Port.set_text_font(port, 1, 0),
-         :ok <- Port.set_text_size(port, 1, 0),
-         :ok <- Port.set_text_color(port, @dim, nil, 0),
+    with :ok <- set_ascii_text_style(port, @dim, 1),
          :ok <- Port.draw_fast_hline(port, @pad, y, 220, 0x404040),
-         :ok <- Port.draw_string(port, @pad, y + 2, "JP presets (preset controls size):", 0) do
+         :ok <- Port.draw_string(port, @pad, y + 2, "Japanese-capable preset:", 0) do
       :ok
     end
   end
 
-  defp draw_jp_rows(_port, [], _y0, _row_h, _h), do: :ok
+  defp draw_jp_row(_port, y, h) when y + 24 >= h, do: :ok
 
-  defp draw_jp_rows(port, [preset | rest], y0, row_h, h) do
-    y = y0
+  defp draw_jp_row(port, y, _h) do
+    label = Atom.to_string(@jp_preset)
 
-    if y + 24 >= h do
-      :ok
-    else
-      label = Atom.to_string(preset)
+    with :ok <- set_ascii_text_style(port, @dim, 1),
+         :ok <- Port.draw_string(port, @pad, y, label, 0) do
+      case Port.set_text_font_preset(port, @jp_preset, 0) do
+        :ok ->
+          IO.puts("text_probe using preset #{@jp_preset}")
 
-      with :ok <- Port.set_text_font(port, 1, 0),
-           :ok <- Port.set_text_size(port, 1, 0),
-           :ok <- Port.set_text_color(port, @dim, nil, 0),
-           :ok <- Port.draw_string(port, @pad, y, label, 0) do
-        case Port.set_text_font_preset(port, preset, 0) do
-          :ok ->
-            IO.puts("text_probe using font preset #{inspect(preset)}")
+          with :ok <- Port.set_text_color(port, @fg, nil, 0),
+               :ok <- Port.draw_string(port, @jp_sample_x, y, "日本語: 設定 戻る 次へ", 0) do
+            :ok
+          end
 
-            with :ok <- Port.set_text_color(port, @fg, nil, 0),
-                 :ok <- Port.draw_string(port, 120, y, "日本語: 設定 戻る 次へ", 0) do
-              draw_jp_rows(port, rest, y0 + row_h, row_h, h)
-            end
+        {:error, reason} ->
+          IO.puts("text_probe preset #{@jp_preset} unavailable: #{Port.format_error(reason)}")
 
-          {:error, reason} ->
-            IO.puts(
-              "text_probe preset #{inspect(preset)} unavailable: #{Port.format_error(reason)}"
-            )
-
-            with :ok <- Port.set_text_font(port, 1, 0),
-                 :ok <- Port.set_text_size(port, 1, 0),
-                 :ok <- Port.set_text_color(port, @warn, nil, 0),
-                 :ok <- Port.draw_string(port, 120, y, "(unsupported)", 0) do
-              draw_jp_rows(port, rest, y0 + row_h, row_h, h)
-            end
-        end
+          with :ok <- set_ascii_text_style(port, @warn, 1),
+               :ok <- Port.draw_string(port, @jp_sample_x, y, "(unsupported)", 0) do
+            :ok
+          end
       end
+    end
+  end
+
+  defp set_ascii_text_style(port, color, scale) do
+    with :ok <- Port.set_text_font_preset(port, @ascii_preset, 0),
+         :ok <- Port.set_text_size(port, scale, 0),
+         :ok <- Port.set_text_color(port, color, nil, 0) do
+      :ok
+    end
+  end
+
+  defp set_ascii_text_style_xy(port, color, scale_x, scale_y) do
+    with :ok <- Port.set_text_font_preset(port, @ascii_preset, 0),
+         :ok <- Port.set_text_size_xy(port, scale_x, scale_y, 0),
+         :ok <- Port.set_text_color(port, color, nil, 0) do
+      :ok
     end
   end
 

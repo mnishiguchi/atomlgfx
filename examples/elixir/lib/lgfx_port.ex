@@ -47,7 +47,6 @@ defmodule LGFXPort do
     - zoom: x1024 fixed-point (`1.0x = 1024`)
     - `dst_target`: `0` for LCD or `1..254` for sprite
   - `set_text_datum/3` is a numeric passthrough. It accepts `0..255` and forwards the raw value to the pinned native driver.
-  - `set_text_font/3` is a numeric passthrough. It accepts `0..255` and forwards the raw value to the pinned native driver.
   - `set_text_size/3` and `set_text_size_xy/4` accept natural Elixir scales and encode them on the wire as x256 fixed-point integers.
     - `1` becomes `256`
     - `1.5` becomes `384`
@@ -65,7 +64,11 @@ defmodule LGFXPort do
   - `set_clip_rect/6` and `clear_clip_rect/2` apply to the selected target.
     LCD and sprite clip states are independent.
   - `create_palette/2` and `set_palette_color/4` manage palette backing for paletted sprite targets.
-  - For stable protocol-owned font selection, prefer `set_text_font_preset/3`.
+  - `set_text_font_preset/3` provides stable protocol-owned font selection.
+    Supported presets are `:ascii` and `:jp`.
+  - Font preset and text scale are independent concerns.
+    - Use `set_text_font_preset/3` to choose the glyph source.
+    - Use `set_text_size/3` or `set_text_size_xy/4` to control rendered size.
   """
 
   alias LGFXPort.Cache
@@ -596,15 +599,12 @@ defmodule LGFXPort do
     do: Text.set_text_wrap_xy(port, wrap_x, wrap_y, target)
 
   @doc """
-  Sets the text font as a raw driver-facing `u8` passthrough.
-
-  Accepted range is `0..255`. For stable protocol-owned font choices, prefer
-  `set_text_font_preset/3`.
-  """
-  def set_text_font(port, font_id, target \\ 0), do: Text.set_text_font(port, font_id, target)
-
-  @doc """
   Sets a stable protocol-owned text font preset.
+
+  Supported presets are `:ascii` and `:jp`.
+
+  This selects the glyph source and normalizes cached text scale to `1.0x`.
+  Use `set_text_size/3` or `set_text_size_xy/4` to control rendered size.
   """
   def set_text_font_preset(port, preset, target \\ 0),
     do: Text.set_text_font_preset(port, preset, target)

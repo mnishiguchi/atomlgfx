@@ -10,7 +10,8 @@
 // Build-time configuration generated from lgfx_port/cmake/lgfx_port_config.h.in.
 #include "lgfx_port/lgfx_port_config.h"
 
-#include "lgfx_port/lgfx_port.h" // LGFX_FONT_PRESET_*, LGFX_TEXT_SCALE_* and other wire constants
+// LGFX_FONT_PRESET_* and other shared wire constants
+#include "lgfx_port/lgfx_port.h" 
 
 // -----------------------------------------------------------------------------
 // Optional debug string constants

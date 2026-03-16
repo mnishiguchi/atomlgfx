@@ -83,8 +83,6 @@ extern "C" {
         .target = target, .datum = datum)                                                                                                          \
     X(set_text_wrap_xy, (lgfx_port_t * port, uint8_t target, bool wrap_x, bool wrap_y),                                                            \
         SET_TEXT_WRAP_XY, set_text_wrap_xy, .target = target, .wrap_x = wrap_x, .wrap_y = wrap_y)                                                  \
-    X(set_text_font, (lgfx_port_t * port, uint8_t target, uint8_t font), SET_TEXT_FONT, set_text_font,                                             \
-        .target = target, .font = font)                                                                                                            \
     X(set_text_font_preset, (lgfx_port_t * port, uint8_t target, uint8_t preset), SET_TEXT_FONT_PRESET,                                            \
         set_text_font_preset, .target = target, .preset = preset)                                                                                  \
     X(set_text_color, (lgfx_port_t * port, uint8_t target, bool fg_is_index, uint32_t fg_value, bool has_bg, bool bg_is_index, uint32_t bg_value), \

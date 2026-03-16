@@ -41,13 +41,7 @@ defmodule SampleApp.DrawStringStress do
   # Exercise println occasionally while keeping the demo mostly deterministic.
   @println_every 19
 
-  # Try enabling JP glyphs once so UTF-8 lines are not guaranteed tofu.
-  # If presets are not compiled in, this will simply log and continue.
-  @jp_presets [:jp_medium, :jp_small, :jp, :jp_large]
-
   def run(port, rounds \\ 500) when is_integer(rounds) and rounds > 0 do
-    :erlang.erase({__MODULE__, :jp_preset})
-
     with {:ok, w} <- Port.width(port, 0),
          {:ok, h} <- Port.height(port, 0) do
       hud_h = min_i(@hud_h, h)
@@ -58,7 +52,6 @@ defmodule SampleApp.DrawStringStress do
       IO.puts("draw_string_stress start w=#{w} h=#{h} rows=#{rows} rounds=#{rounds}")
 
       _ = draw_chrome(port, w, h, text_y0)
-      _ = draw_status(port, w, rounds, -1, 0, 0, rows)
 
       # Keep state deterministic from this module's point of view.
       # Note: reset_text_state resets host cache only; device state remains whatever it was.
@@ -66,14 +59,26 @@ defmodule SampleApp.DrawStringStress do
       _ = Port.set_text_wrap(port, false, 0)
       _ = Port.set_text_color(port, 0xFFFFFF, nil, 0)
 
-      _ = maybe_use_japanese_font_preset(port)
-      _ = Port.set_text_size(port, @main_text_scale, 0)
+      case choose_main_preset(port) do
+        {:ok, main_preset} ->
+          _ = Port.set_text_size(port, @main_text_scale, 0)
+          _ = draw_status(port, w, rounds, -1, 0, 0, rows, main_preset)
 
-      _ = probe_cursor_roundtrip(port, text_y0)
-      _ = probe_invalid_text_guard(port)
-      _ = probe_empty_prints(port, text_y0)
+          _ = probe_cursor_roundtrip(port, text_y0)
+          _ = probe_invalid_text_guard(port)
+          _ = probe_empty_prints(port, text_y0)
 
-      do_run(port, w, rows, rounds, text_y0, 0, 0, 0)
+          do_run(port, w, rows, rounds, text_y0, main_preset, 0, 0, 0)
+
+        {:error, {:failed_to_select_text_preset, jp_reason, ascii_reason}} = err ->
+          IO.puts(
+            "draw_string_stress failed to select text preset: " <>
+              "jp=#{Port.format_error(jp_reason)} " <>
+              "ascii=#{Port.format_error(ascii_reason)}"
+          )
+
+          err
+      end
     else
       {:error, reason} = err ->
         IO.puts("draw_string_stress failed to start: #{Port.format_error(reason)}")
@@ -81,28 +86,27 @@ defmodule SampleApp.DrawStringStress do
     end
   end
 
-  defp maybe_use_japanese_font_preset(port) do
-    try_japanese_font_presets(port, @jp_presets)
-  end
-
-  defp try_japanese_font_presets(_port, []) do
-    IO.puts("draw_string_stress jp preset: none (tofu is expected)")
-    :ok
-  end
-
-  defp try_japanese_font_presets(port, [preset | rest]) do
-    case Port.set_text_font_preset(port, preset, 0) do
+  defp choose_main_preset(port) do
+    case Port.set_text_font_preset(port, :jp, 0) do
       :ok ->
-        :erlang.put({__MODULE__, :jp_preset}, preset)
-        IO.puts("draw_string_stress jp preset: #{inspect(preset)}")
-        :ok
+        IO.puts("draw_string_stress preset: :jp")
+        {:ok, :jp}
 
-      {:error, reason} ->
-        IO.puts(
-          "draw_string_stress jp preset #{inspect(preset)} unavailable: #{Port.format_error(reason)}"
-        )
+      {:error, jp_reason} ->
+        IO.puts("draw_string_stress preset :jp unavailable: #{Port.format_error(jp_reason)}")
 
-        try_japanese_font_presets(port, rest)
+        case Port.set_text_font_preset(port, :ascii, 0) do
+          :ok ->
+            IO.puts("draw_string_stress preset: :ascii")
+            {:ok, :ascii}
+
+          {:error, ascii_reason} ->
+            IO.puts(
+              "draw_string_stress preset :ascii unavailable: #{Port.format_error(ascii_reason)}"
+            )
+
+            {:error, {:failed_to_select_text_preset, jp_reason, ascii_reason}}
+        end
     end
   end
 
@@ -172,7 +176,8 @@ defmodule SampleApp.DrawStringStress do
     :ok
   end
 
-  defp do_run(_port, _w, _rows, rounds, _text_y0, i, ok_count, err_count) when i >= rounds do
+  defp do_run(_port, _w, _rows, rounds, _text_y0, _main_preset, i, ok_count, err_count)
+       when i >= rounds do
     IO.puts("draw_string_stress done rounds=#{rounds} ok=#{ok_count} err=#{err_count}")
 
     if err_count == 0 do
@@ -182,7 +187,7 @@ defmodule SampleApp.DrawStringStress do
     end
   end
 
-  defp do_run(port, w, rows, rounds, text_y0, i, ok_count, err_count) do
+  defp do_run(port, w, rows, rounds, text_y0, main_preset, i, ok_count, err_count) do
     row = rem(i, rows)
     y = text_y0 + row * @line_h
 
@@ -192,7 +197,7 @@ defmodule SampleApp.DrawStringStress do
     # Clear row and draw a small marker strip.
     _ = Port.fill_rect(port, 0, y, w, @line_h, row_bg)
     _ = Port.fill_rect(port, 0, y, 2, @line_h, @row_marker)
-    _ = restore_main_text_style(port)
+    _ = restore_main_text_style(port, main_preset)
     _ = Port.set_text_color(port, fg, nil, 0)
 
     # Fresh runtime binary each iteration (important for lifetime testing).
@@ -213,7 +218,7 @@ defmodule SampleApp.DrawStringStress do
 
     if should_log_progress?(i, rounds) do
       IO.puts("draw_string_stress progress i=#{i}/#{rounds} ok=#{ok_count2} err=#{err_count2}")
-      _ = draw_status(port, w, rounds, i, ok_count2, err_count2, rows)
+      _ = draw_status(port, w, rounds, i, ok_count2, err_count2, rows, main_preset)
     end
 
     if rem(i, @gc_every) == 0 do
@@ -221,7 +226,7 @@ defmodule SampleApp.DrawStringStress do
     end
 
     yield()
-    do_run(port, w, rows, rounds, text_y0, i + 1, ok_count2, err_count2)
+    do_run(port, w, rows, rounds, text_y0, main_preset, i + 1, ok_count2, err_count2)
   end
 
   defp draw_line_with_cursor(port, screen_w, x, y, text, i) do
@@ -239,16 +244,15 @@ defmodule SampleApp.DrawStringStress do
     result
   end
 
-  defp restore_main_text_style(port) do
-    case :erlang.get({__MODULE__, :jp_preset}) do
-      preset when is_atom(preset) ->
-        _ = Port.set_text_font_preset(port, preset, 0)
-
-      _ ->
-        :ok
-    end
-
+  defp restore_main_text_style(port, main_preset) do
+    _ = Port.set_text_font_preset(port, main_preset, 0)
     _ = Port.set_text_size(port, @main_text_scale, 0)
+    :ok
+  end
+
+  defp set_hud_text_style(port) do
+    _ = Port.set_text_font_preset(port, :ascii, 0)
+    _ = Port.set_text_size(port, 1, 0)
     :ok
   end
 
@@ -277,21 +281,22 @@ defmodule SampleApp.DrawStringStress do
     :ok
   end
 
-  defp draw_status(port, screen_w, rounds, i, ok_count, err_count, rows) do
+  defp draw_status(port, screen_w, rounds, i, ok_count, err_count, rows, main_preset) do
     bar_x = 4
     bar_y = @hud_bar_y
     bar_h = @hud_bar_h
     bar_w = max_i(8, screen_w - 8)
 
     _ = Port.fill_rect(port, 0, 0, screen_w, @hud_h, @hud_bg)
+    _ = set_hud_text_style(port)
 
     line1 =
       <<"TXT cursor  ", progress_label(i, rounds)::binary, "  ok:", i2b(ok_count)::binary,
         "  err:", i2b(err_count)::binary>>
 
     line2 =
-      <<"rows:", i2b(rows)::binary, "  lh:", i2b(@line_h)::binary, "  ", jp_label()::binary,
-        "  pln:", i2b(@println_every)::binary>>
+      <<"rows:", i2b(rows)::binary, "  lh:", i2b(@line_h)::binary, "  ",
+        preset_label(main_preset)::binary, "  pln:", i2b(@println_every)::binary>>
 
     _ = Port.draw_string_bg(port, 4, @hud_title_y, @hud_fg, @hud_bg, @hud_title_scale, line1)
     _ = Port.draw_string_bg(port, 4, @hud_meta_y, @hud_dim, @hud_bg, @hud_meta_scale, line2)
@@ -316,19 +321,12 @@ defmodule SampleApp.DrawStringStress do
       _ = Port.fill_rect(port, bar_x, bar_y, fill_w, bar_h, bar_color)
     end
 
-    _ = restore_main_text_style(port)
+    _ = restore_main_text_style(port, main_preset)
     :ok
   end
 
-  defp jp_label do
-    case :erlang.get({__MODULE__, :jp_preset}) do
-      preset when is_atom(preset) ->
-        <<"jp:", :erlang.atom_to_binary(preset, :utf8)::binary>>
-
-      _ ->
-        "jp:none"
-    end
-  end
+  defp preset_label(:jp), do: "preset:jp"
+  defp preset_label(_), do: "preset:ascii"
 
   defp progress_label(i, rounds) do
     if i < 0 do

@@ -55,21 +55,15 @@ static esp_err_t with_nul_terminated_text(
     return err;
 }
 
-static esp_err_t set_jp_font_scaled(uint8_t target, uint16_t text_scale_x256)
+static esp_err_t set_jp_font_default(uint8_t target)
 {
 #if !defined(LGFX_PORT_ENABLE_JP_FONTS) || (LGFX_PORT_ENABLE_JP_FONTS != 1)
     (void) target;
-    (void) text_scale_x256;
     return ESP_ERR_NOT_SUPPORTED;
 #else
-    float text_scale = 0.0f;
-    if (!lgfx_text_scale_x256_to_float(text_scale_x256, &text_scale)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
     return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) {
         gfx->setFont(&ui_font_ja_16_min);
-        gfx->setTextSize(text_scale);
+        gfx->setTextSize(1.0f);
     });
 #endif
 }
@@ -109,12 +103,6 @@ extern "C" esp_err_t lgfx_device_set_text_wrap(uint8_t target, bool wrap_x, bool
     return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextWrap(wrap_x, wrap_y); });
 }
 
-extern "C" esp_err_t lgfx_device_set_text_font(uint8_t target, uint8_t font)
-{
-    // Numeric passthrough. Protocol/domain validation is limited to u8.
-    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextFont(font); });
-}
-
 extern "C" esp_err_t lgfx_device_set_text_font_preset(uint8_t target, uint8_t preset)
 {
     switch (preset) {
@@ -124,14 +112,8 @@ extern "C" esp_err_t lgfx_device_set_text_font_preset(uint8_t target, uint8_t pr
                 gfx->setTextSize(1.0f);
             });
 
-        case LGFX_FONT_PRESET_JP_SMALL:
-            return set_jp_font_scaled(target, LGFX_TEXT_SCALE_JP_SMALL_X256);
-
-        case LGFX_FONT_PRESET_JP_MEDIUM:
-            return set_jp_font_scaled(target, LGFX_TEXT_SCALE_JP_MEDIUM_X256);
-
-        case LGFX_FONT_PRESET_JP_LARGE:
-            return set_jp_font_scaled(target, LGFX_TEXT_SCALE_JP_LARGE_X256);
+        case LGFX_FONT_PRESET_JP:
+            return set_jp_font_default(target);
 
         default:
             return ESP_ERR_INVALID_ARG;
