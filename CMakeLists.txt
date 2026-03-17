@@ -305,7 +305,7 @@ set(LGFX_PORT_TOUCH_BUS_SHARED ON CACHE BOOL "Touch bus_shared")
 # Wiring defaults
 # -----------------------------------------------------------------------------
 #
-# Keep these aligned with src/lgfx_device_state.cpp:
+# Keep these aligned with lgfx_device/lgfx_device_state.cpp:
 # - SPI:   SCLK=7 MOSI=9 MISO=8
 # - LCD:   CS=43 DC=3 RST=2
 # - Touch: CS=44 IRQ=-1
@@ -331,7 +331,7 @@ set(LGFX_PORT_TOUCH_SPI_FREQ_HZ "1000000u" CACHE STRING "Touch SPI frequency (Hz
 
 # Custom minimal Japanese font subset used by the Japanese-capable text preset
 set(LGFX_PORT_JP_FONT_CPP
-    "${CMAKE_CURRENT_LIST_DIR}/src/fonts/generated/ui_font_ja_16_min.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/lgfx_device/fonts/generated/ui_font_ja_16_min.cpp"
     CACHE STRING "Path to custom Japanese font subset .cpp (compiled when LGFX_PORT_ENABLE_JP_FONTS=ON)")
 
 # -----------------------------------------------------------------------------
@@ -360,18 +360,18 @@ idf_component_register(
     "lgfx_port/handlers/clip.c"
 
     # Device adapter
-    "src/lgfx_device_state.cpp"
-    "src/lgfx_device_control.cpp"
-    "src/lgfx_device_text.cpp"
-    "src/lgfx_device_primitives.cpp"
-    "src/lgfx_device_images.cpp"
-    "src/lgfx_device_sprites.cpp"
-    "src/lgfx_device_clip.cpp"
+    "lgfx_device/lgfx_device_state.cpp"
+    "lgfx_device/lgfx_device_control.cpp"
+    "lgfx_device/lgfx_device_text.cpp"
+    "lgfx_device/lgfx_device_primitives.cpp"
+    "lgfx_device/lgfx_device_images.cpp"
+    "lgfx_device/lgfx_device_sprites.cpp"
+    "lgfx_device/lgfx_device_clip.cpp"
   INCLUDE_DIRS
     "include"
   PRIV_INCLUDE_DIRS
     "lgfx_port/include_internal"
-    "src"
+    "lgfx_device"
     "lgfx_port"
     "${LGFX_SRC_ROOT}"
   REQUIRES
@@ -513,7 +513,7 @@ if(LGFX_PORT_ENABLE_JP_FONTS)
     message(FATAL_ERROR
       "Custom Japanese font subset .cpp not found:\n  ${LGFX_PORT_JP_FONT_CPP}\n\n"
       "Set LGFX_PORT_JP_FONT_CPP to the path of your generated subset, e.g.:\n"
-      "  -DLGFX_PORT_JP_FONT_CPP=${CMAKE_CURRENT_LIST_DIR}/src/fonts/generated/ui_font_ja_16_min.cpp\n"
+      "  -DLGFX_PORT_JP_FONT_CPP=${CMAKE_CURRENT_LIST_DIR}/lgfx_device/fonts/generated/ui_font_ja_16_min.cpp\n"
     )
   endif()
 
@@ -527,7 +527,7 @@ list(REMOVE_DUPLICATES LGFX_SRCS)
 # -----------------------------------------------------------------------------
 #
 # Keep SPI and optionally XPT2046.
-# Panel driver selection is handled in src/lgfx_device_state.cpp.
+# Panel driver selection is handled in lgfx_device/lgfx_device_state.cpp.
 # Exclude EPD, I2C, and other touch drivers.
 #
 lgfx_port_filter_out(
