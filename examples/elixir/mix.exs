@@ -25,6 +25,7 @@ defmodule SampleApp.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:lgfx_port, path: "../.."},
       {:exatomvm, github: "atomvm/ExAtomVM"}
     ]
   end

@@ -1,6 +1,58 @@
-# LovyanGFX AtomVM Port Driver
+# atomlgfx
 
-`atomlgfx` is an ESP-IDF component that exposes LovyanGFX to AtomVM Elixir through a synchronous tuple-based port protocol.
+`atomlgfx` is a LovyanGFX integration for AtomVM on ESP32-class boards.
+
+This repository currently serves two closely related deliverables:
+
+- an ESP-IDF component that provides the native `lgfx_port` AtomVM port driver
+- an Elixir package that provides the `LGFXPort` wrapper module for that driver
+
+The native driver and the Elixir wrapper share the same tuple-based protocol and are intended to evolve together.
+
+## What is in this repository
+
+### ESP-IDF component
+
+The native component:
+
+- exposes LovyanGFX to AtomVM through a synchronous tuple-based port protocol
+- compiles LovyanGFX from the vendored submodule
+- owns the native protocol implementation, worker model, and device integration
+
+Key native areas:
+
+- `CMakeLists.txt`
+- `include/`
+- `lgfx_port/`
+- `src/`
+- `third_party/LovyanGFX`
+
+### Elixir package
+
+The Elixir package:
+
+- provides the `LGFXPort` module
+- wraps the tuple protocol with a more idiomatic Elixir API
+- performs Elixir-side argument validation, normalization, and convenience handling
+
+Key Elixir areas:
+
+- `mix.exs`
+- `lib/`
+- `test/`
+
+### Example app
+
+The example app under `examples/elixir` is a consumer of the root `LGFXPort` package.
+
+It exists to exercise the driver and demonstrate usage patterns such as:
+
+- device bring-up
+- primitives
+- text
+- sprites
+- images
+- touch
 
 ## Documentation
 
@@ -10,27 +62,44 @@
 
 ## Quickstart
 
+### 1. Prepare the repository
+
 ```bash
 cd atomlgfx
 
-# Make sure the LovyanGFX submodule is present
 git submodule sync --recursive
 git submodule update --init --recursive
+```
 
-# Build and flash AtomVM firmware (includes this port driver)
+### 2. Build and flash AtomVM firmware with the native driver
+
+```bash
 ./scripts/atomvm_esp32.exs install --target esp32s3 --port /dev/ttyACM0
+```
 
-# Build and flash the Elixir example app
+### 3. Build the root Elixir package
+
+```bash
+mix deps.get
+mix test
+```
+
+### 4. Build and flash the example app
+
+```bash
 cd examples/elixir
 mix deps.get
 mix do clean, atomvm.esp32.flash --port /dev/ttyACM0
+```
 
-# Monitor serial output
+### 5. Monitor serial output
+
+```bash
 cd ../..
 ./scripts/atomvm_esp32.exs monitor --port /dev/ttyACM0
 ```
 
-Before flashing the example app, adjust `LGFXPort.open(...)` in `examples/elixir/lib/lgfx_port.ex` if your board uses different panel settings or pin assignments.
+Before flashing the example app, adjust the example application's `LGFXPort.open(...)` call for your board settings and pin assignments.
 
 ## Protocol at a glance
 
@@ -44,9 +113,9 @@ Requests and responses use this shape:
 
 See `docs/LGFX_PORT_PROTOCOL.md` for the full operation matrix, validation rules, capability bits, and operation semantics.
 
-## Configuration
+## Native configuration
 
-LovyanGFX is vendored as a git submodule under `third_party/LovyanGFX` and compiled as part of this component.
+LovyanGFX is vendored as a git submodule under `third_party/LovyanGFX` and compiled as part of the native component.
 
 Build defaults come from CMake cache variables set by the parent ESP-IDF project or passed via `idf.py -D...`. Selected values may also be overridden later at port open time. When an open-time key is omitted, the build default is used.
 
@@ -79,6 +148,24 @@ idf.py \
   build
 ```
 
+## Elixir package notes
+
+The root Elixir package provides `LGFXPort`, which wraps the native tuple protocol with convenience functions for:
+
+- device lifecycle
+- primitives
+- text
+- sprites and palette operations
+- JPEG drawing
+- RGB565 image transfer
+- touch
+
+Current wrapper notes:
+
+- the native driver uses a singleton device model
+- the wrapper currently assumes a single owning process per port in normal use
+- host and driver should be updated together while the project remains pre-release
+
 ## Contributor note
 
 Generated tables inside `docs/LGFX_PORT_PROTOCOL.md` are synchronized from source metadata.
@@ -92,4 +179,4 @@ elixir scripts/sync_lgfx_protocol_doc.exs --check
 
 This repository is under active development.
 
-The protocol is usable, but the project is still pre-release. Until the first tagged release, host and driver should be updated together.
+The protocol is usable, but the project is still pre-release. Until the first tagged release, the native driver and the Elixir wrapper should be updated together.
