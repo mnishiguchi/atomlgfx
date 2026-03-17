@@ -360,13 +360,13 @@ idf_component_register(
     "lgfx_port/handlers/clip.c"
 
     # Device adapter
-    "lgfx_device/lgfx_device_state.cpp"
-    "lgfx_device/lgfx_device_control.cpp"
-    "lgfx_device/lgfx_device_text.cpp"
-    "lgfx_device/lgfx_device_primitives.cpp"
-    "lgfx_device/lgfx_device_images.cpp"
-    "lgfx_device/lgfx_device_sprites.cpp"
-    "lgfx_device/lgfx_device_clip.cpp"
+    "lgfx_device/state.cpp"
+    "lgfx_device/control.cpp"
+    "lgfx_device/text.cpp"
+    "lgfx_device/primitives.cpp"
+    "lgfx_device/images.cpp"
+    "lgfx_device/sprites.cpp"
+    "lgfx_device/clip.cpp"
   INCLUDE_DIRS
     "include"
   PRIV_INCLUDE_DIRS

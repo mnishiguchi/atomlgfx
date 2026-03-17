@@ -1,4 +1,4 @@
-// src/lgfx_device_images.cpp
+// lgfx_device/images.cpp
 
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"

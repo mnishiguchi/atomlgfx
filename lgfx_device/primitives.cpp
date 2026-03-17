@@ -1,4 +1,4 @@
-// src/lgfx_device_primitives.cpp
+// lgfx_device/primitives.cpp
 
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"

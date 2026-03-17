@@ -1,4 +1,4 @@
-// src/lgfx_device_state.cpp
+// lgfx_device/state.cpp
 #include <new>
 #include <stddef.h>
 #include <stdint.h>

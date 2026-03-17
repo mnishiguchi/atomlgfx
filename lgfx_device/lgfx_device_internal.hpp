@@ -1,4 +1,4 @@
-// src/lgfx_device_internal.hpp
+// lgfx_device/lgfx_device_internal.hpp
 //
 // Internal-only shared contract for split lgfx_device implementation files.
 // Mutable singleton state is owned by src/lgfx_device_state.cpp.
