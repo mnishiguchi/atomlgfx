@@ -1,4 +1,4 @@
-// lgfx_port/lgfx_worker_device.c
+// lgfx_port/worker_device.c
 // Port-thread worker wrappers.
 // Ownership and completion rules: see docs/WORKER_MODEL.md.
 

@@ -1,4 +1,4 @@
-// lgfx_port/lgfx_worker_core.c
+// lgfx_port/worker_core.c
 // Worker task core.
 // Concurrency and ownership model: see docs/WORKER_MODEL.md.
 

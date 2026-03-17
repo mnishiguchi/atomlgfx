@@ -343,8 +343,8 @@ idf_component_register(
     "lgfx_port/lgfx_port.c"
 
     # Worker split
-    "lgfx_port/lgfx_worker_core.c"
-    "lgfx_port/lgfx_worker_device.c"
+    "lgfx_port/worker_core.c"
+    "lgfx_port/worker_device.c"
 
     # Protocol / dispatch / metadata
     "lgfx_port/proto_term.c"
