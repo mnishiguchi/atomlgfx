@@ -23,8 +23,8 @@ Key native areas:
 
 - `CMakeLists.txt`
 - `include/`
+- `lgfx_device/`
 - `lgfx_port/`
-- `src/`
 - `third_party/LovyanGFX`
 
 ### Elixir package
@@ -39,7 +39,6 @@ Key Elixir areas:
 
 - `mix.exs`
 - `lib/`
-- `test/`
 
 ### Example app
 
@@ -81,7 +80,6 @@ git submodule update --init --recursive
 
 ```bash
 mix deps.get
-mix test
 ```
 
 ### 4. Build and flash the example app

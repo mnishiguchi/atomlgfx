@@ -136,7 +136,7 @@ The worker ABI is plain-C transport between the port thread and the device layer
 
 Mailbox ownership stays entirely on the port thread.
 
-Mailbox draining lives in `lgfx_port.c`.
+Mailbox draining lives in `lgfx_port/lgfx_port.c`.
 
 It:
 
@@ -360,7 +360,7 @@ When adding a new worker-visible operation:
 
 - add one row to `worker_jobs.def`
 - keep the row direct and boring
-- add the wrapper in `lgfx_worker_device.c`
+- add the wrapper in `lgfx_port/worker_device.c`
 - keep AtomVM decoding in handlers, not wrappers
 - keep AtomVM and FreeRTOS types out of `worker_jobs.def`
 - deep-copy variable-length payloads before enqueue

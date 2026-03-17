@@ -2,7 +2,12 @@
 
 ## Summary
 
-`atomlgfx` is an ESP-IDF component that exposes LovyanGFX to AtomVM Elixir through a tuple-based port protocol.
+`atomlgfx` is a LovyanGFX integration for AtomVM on ESP32-class boards.
+
+This repository contains two closely related deliverables:
+
+- a native ESP-IDF component that exposes LovyanGFX through the `lgfx_port` AtomVM port driver
+- an Elixir package that provides the `LGFXPort` wrapper for that driver
 
 Core ideas:
 
@@ -46,7 +51,7 @@ Elixir / AtomVM
                 |
                 v
 +------------------------------+
-| src/ device adapter          |
+| lgfx_device/ adapter         |
 | - pinned LovyanGFX surface   |
 | - device semantics           |
 +---------------+--------------+
@@ -72,32 +77,16 @@ Main areas:
   - protocol helpers
   - worker job definitions
 
-- `src/`
+- `lgfx_device/`
   - device-facing adapter layer
   - protocol-agnostic C/C++ around the pinned LovyanGFX submodule
 
+- `lib/`
+  - root Elixir wrapper package
+  - high-level `LGFXPort` API and support modules
+
 - `examples/elixir/`
-  - example Elixir client
-
-- `docs/`
-  - protocol, worker, and architecture docs
-
-Minimal layout view:
-
-```text
-.
-├── include/lgfx_port/
-├── lgfx_port/
-│   ├── handlers/
-│   ├── include_internal/lgfx_port/
-│   ├── lgfx_port.c
-│   ├── lgfx_worker_core.c
-│   ├── lgfx_worker_device.c
-│   └── proto_term.c
-├── src/
-├── docs/
-└── examples/elixir/
-```
+  - example Elixir application that consumes the root package
 
 ## Build defaults and open-time overrides
 
@@ -139,9 +128,7 @@ The protocol-visible operation surface is declared in:
 That metadata drives:
 
 - op atom registration
-
 - dispatch table entries
-
 - validation rules
   - arity
   - allowed flags
@@ -149,7 +136,6 @@ That metadata drives:
   - init-state policy
 
 - capability linkage used by `getCaps`
-
 - generated tables in `docs/LGFX_PORT_PROTOCOL.md`
 
 Worker jobs follow the same pattern:
@@ -197,15 +183,15 @@ Handlers stay intentionally narrow:
 
 Main files:
 
-- `lgfx_port/lgfx_worker_core.c`
-- `lgfx_port/lgfx_worker_device.c`
-- `src/`
+- `lgfx_port/worker_core.c`
+- `lgfx_port/worker_device.c`
+- `lgfx_device/`
 
 Responsibilities:
 
 - execute device work through a worker task and queue
 - bridge handlers to plain C job payloads
-- call the device adapter in `src/`
+- call the device adapter in `lgfx_device/`
 - keep protocol code separate from hardware code
 
 The device layer is authoritative for device-facing semantics such as:
@@ -378,10 +364,13 @@ Generated tables in `docs/LGFX_PORT_PROTOCOL.md` are synchronized from source me
   - `lgfx_port/handlers/*.c`
 
 - worker core:
-  - `lgfx_port/lgfx_worker_core.c`
+  - `lgfx_port/worker_core.c`
 
 - worker wrappers:
-  - `lgfx_port/lgfx_worker_device.c`
+  - `lgfx_port/worker_device.c`
 
 - device-facing adapter:
-  - `src/`
+  - `lgfx_device/`
+
+- root Elixir wrapper:
+  - `lib/`
