@@ -1,58 +1,56 @@
-# LovyanGFX AtomVM Port Protocol (v1)
+# LovyanGFX AtomVM Port Protocol
 
-## Summary
+This document defines the tuple protocol between an AtomVM host application and the native `lgfx_port` driver.
 
-This document defines the tuple protocol between an AtomVM host application and the `lgfx_port` driver.
+See [the architecture overview](architecture.md) for the repository map and [the `lgfx_port` README](../lgfx_port/README.md) for worker and ownership details.
 
-Key points:
+## Scope
 
-- Host and driver communicate using Erlang terms.
-- Large payloads such as text and pixel data use binaries.
-- Validation, dispatch, and capability advertisement are metadata-driven.
-- The implemented operation surface is the one declared in `ops.def`.
-- Open-time config passed through `open_port/2` is outside the request tuple protocol documented here.
-- The sprite surface includes deterministic handle-based `createSprite`, palette lifecycle control via `createPalette` and `setPaletteColor`, destination-aware whole-sprite blit via `pushSprite`, and destination-aware rotate/zoom blit via `pushRotateZoom`.
-- Touch is advertised only when touch support is both enabled and attached.
-- Primitive and text scalar colors have two wire-level interpretations selected by op-specific flags:
-  - default RGB mode accepts `0x00RRGGBB` on the wire and quantizes to RGB565 before entering worker and device layers
-  - indexed mode interprets the corresponding scalar argument as a palette index
-- `setColorDepth(24)` changes target depth, but does not change scalar color mode selection and does not imply full 24-bit input color fidelity for primitive or text operations in default RGB mode.
-- `setTextSize` uses positive x256 fixed-point integer size arguments on the wire, not floats.
+This document covers:
+
+- request and response shapes
+- protocol-visible validation rules
+- data encodings
+- flags and capability bits
+- operation semantics that are part of the external contract
+
+This document does not define:
+
+- open-time config passed through `open_port/2`
+- internal worker implementation details
+- non-contract implementation structure
 
 ## Source of truth
 
-The protocol contract is defined by these sources, each with a different role:
+The protocol contract is defined by these sources:
 
 - `lgfx_port/include_internal/lgfx_port/ops.def`
-  - normative operation surface
-  - op atom
-  - handler
-  - arity range
-  - allowed flags mask
+  - operation surface
+  - arity
+  - allowed flags
   - target policy
   - state policy
-  - `feature_cap_bit`
+  - capability linkage
 
 - `lgfx_port/include_internal/lgfx_port/protocol.h`
   - protocol constants
-  - capability bit names and values
+  - capability bits
   - wire-level limits
 
 - generated `lgfx_port/lgfx_port_config.h`
-  - build knobs and derived gates used by the component
+  - build-derived gates used by the component
 
 - this document
-  - human-readable wire contract
+  - human-readable contract
   - generated tables synchronized from source metadata
 
 Important invariants:
 
-- If an op is not declared in `ops.def`, it is not part of the protocol.
-- `getCaps` derives `FeatureBits` from metadata plus the active dispatch surface.
-- `FeatureBits` contains protocol bits only.
-- A capability bit is meaningful only when backed by at least one real enabled operation.
-- Touch capability is advertised only when touch ops are both compiled in and attached.
-- Generated tables and implementation must agree.
+- if an op is not declared in `ops.def`, it is not part of the protocol
+- `getCaps` derives `FeatureBits` from metadata plus the active dispatch surface
+- `FeatureBits` contains protocol bits only
+- touch is advertised only when touch ops are both compiled in and effectively attached
+- generated tables and implementation must agree
 
 ## Request and response model
 
@@ -114,29 +112,29 @@ Validation is layered:
 - handlers perform op-specific wire decode
 - device-layer code is authoritative for device-facing semantics
 
-Examples of device-layer semantic checks:
+Examples of device-facing semantic checks:
 
 - source or destination sprite existence
 - palette-backed sprite requirements for indexed scalar colors
 - `pushImage` stride normalization and required byte count
-- `drawJpg` decode/render behavior
-- rotate/zoom finite and positive constraints
+- `drawJpg` decode and render behavior
+- rotate and zoom semantic validity
 - deterministic sprite allocation rules
 
 ## Binary payload lifetime
 
-Binaries are used for throughput, but raw pointers from term binaries are request-scoped.
+Raw pointers into caller binaries are request-scoped.
 
 Rule:
 
-- The driver must not retain pointers into caller binaries past the request boundary unless it explicitly manages lifetime.
+- the driver must not retain pointers into caller binaries past the request boundary unless lifetime is explicitly managed
 
-Ownership model:
+Current model:
 
 - deep-copy variable-length payloads before enqueueing worker jobs
 - free the copied payload after the device call completes
 
-That matters especially for `pushImage`, `drawJpg`, and string-bearing operations.
+That matters especially for `drawString`, `print`, `println`, `drawJpg`, and `pushImage`.
 
 ## Common data and encodings
 
@@ -193,7 +191,7 @@ Default RGB mode:
 - wire format is `0x00RRGGBB` as packed RGB888 in `u32`
 - handler decode quantizes that value to RGB565 before entering worker and device layers
 - worker and device layers do not preserve the original RGB888 value for those scalar arguments
-- this default RGB scalar-color contract is the same regardless of target color depth
+- this contract is the same regardless of target color depth
 
 Indexed palette mode:
 
@@ -201,10 +199,10 @@ Indexed palette mode:
 - the corresponding scalar argument is interpreted as a palette index
 - the palette index is carried in the low 8 bits of the decoded scalar value
 - indexed mode is invalid on LCD target
-- indexed mode on a sprite target requires that sprite to have actual palette backing
+- indexed mode on a sprite target requires actual palette backing
 - target color depth alone does not implicitly enable indexed semantics
 
-This applies to scalar color arguments used by primitive and text operations such as:
+This applies to scalar color arguments used by operations such as:
 
 - `fillScreen`
 - `clear`
@@ -226,14 +224,6 @@ This applies to scalar color arguments used by primitive and text operations suc
 - does not change default RGB scalar wire encoding
 - does not select indexed palette mode
 - does not preserve full 24-bit input fidelity for primitive or text operations in default RGB mode
-
-Examples:
-
-- `0x112233` is accepted on the wire in default RGB mode
-- that value is quantized to RGB565 `0x1106` before primitive or text execution
-- on a 16-bit target, primitive and text ops use that RGB565 value directly
-- on a 24-bit target, primitive and text ops still start from the same quantized RGB565 value, not the original `0x112233`
-- indexed palette mode requires both the appropriate flag and a palette-backed sprite target
 
 #### Palette lifecycle colors
 
@@ -430,7 +420,7 @@ Derivation rules:
 - start from `0`
 - walk operations declared in `ops.def`
 - if an op has a non-zero `feature_cap_bit` and is enabled in the built dispatch surface, OR that bit into `FeatureBits`
-- apply real build/runtime gates
+- apply real build and runtime gates
 - mask to known protocol bits before returning
 
 Generated capability vocabulary:
@@ -511,7 +501,6 @@ Behavior:
 Stable protocol-owned font selection is exposed through:
 
 - `setTextFontPreset(PresetIdU8)`
-  - stable protocol-owned preset selection
 
 Font preset and text size are separate concerns:
 
@@ -526,19 +515,11 @@ Args:
 - `setTextSize(ScaleXX256U16)`
 - `setTextSize(ScaleXX256U16, ScaleYX256U16)`
 
-Wire encoding:
-
-- positive x256 fixed-point integer
-- `256` means `1.0x`
-- `384` means `1.5x`
-- `512` means `2.0x`
-
 Rules:
 
 - one-argument form applies the same scale to both axes
 - two-argument form sets both axes explicitly
 - `0` is invalid
-- the worker and device path keep protocol-owned x256 scale values
 - conversion to the pinned LovyanGFX float call shape happens at the final device-call boundary
 
 Errors:
@@ -555,7 +536,6 @@ Rules:
 
 - `DatumU8` must be an integer in `0..255`
 - forwarded as a raw numeric passthrough to the pinned LovyanGFX text-datum API
-- this protocol does not define a smaller stable subset of datum values
 
 Errors:
 
@@ -572,17 +552,8 @@ Rules:
 
 - booleans are accepted as atom `true` / `false`
 - numeric `0` / `1` are also accepted by the handler decode path
-- one-argument form follows LovyanGFX semantics
-  - `setTextWrap(WrapXBool)` means `wrap_x = WrapXBool`, `wrap_y = false`
-
+- one-argument form means `wrap_x = WrapXBool`, `wrap_y = false`
 - two-argument form sets both axes explicitly
-  - `setTextWrap(WrapXBool, WrapYBool)` means `wrap_x = WrapXBool`, `wrap_y = WrapYBool`
-
-Examples:
-
-- `setTextWrap(true)` => wrap horizontally only
-- `setTextWrap(true, true)` => wrap horizontally and vertically
-- `setTextWrap(false)` => disable horizontal and vertical wrapping
 
 ### `setTextFontPreset`
 
@@ -590,11 +561,11 @@ Preset IDs:
 
 - `0` = `ascii`
   - selects the pinned default ASCII font internally
-  - normalizes text scale to `256` (`1.0x`)
+  - normalizes text scale to `256`
 
 - `1` = `jp`
   - selects the built-in Japanese-capable preset internally
-  - normalizes text scale to `256` (`1.0x`)
+  - normalizes text scale to `256`
 
 Errors:
 
@@ -670,24 +641,6 @@ Semantics:
 - `setColorDepth(24)` does not preserve full RGB888 input fidelity for primitive or text operations in default RGB mode
 - `pushImage` remains RGB565-only regardless of target color depth
 
-Examples:
-
-- `setColorDepth(16), fillScreen(0x112233)` in default RGB mode uses quantized RGB565 `0x1106`
-- `setColorDepth(24), fillScreen(0x112233)` in default RGB mode still quantizes to RGB565 `0x1106` before drawing
-- `setColorDepth(4)` selects paletted storage depth, but indexed scalar-color use still requires `createPalette` on that sprite target
-
-### `setTextWrap`
-
-Args:
-
-- `setTextWrap(WrapXBool)`
-- `setTextWrap(WrapXBool, WrapYBool)`
-
-Semantics:
-
-- one-argument form follows LovyanGFX and sets `wrap_y = false`
-- two-argument form sets both axes explicitly
-
 ### `drawJpg`
 
 Request args:
@@ -695,52 +648,13 @@ Request args:
 - `drawJpg(Xi16, Yi16, JpegBinary)`
 - `drawJpg(Xi16, Yi16, MaxWu16, MaxHu16, OffXi16, OffYi16, ScaleXX1024I32, ScaleYX1024I32, JpegBinary)`
 
-Handler-side responsibilities:
+Rules:
 
-- decode tuple fields
-
-- require the final argument to be a binary
-
-- enforce the binary-size cap
-
-- for the short form:
-  - use `MaxW = 0`
-  - use `MaxH = 0`
-  - use `OffX = 0`
-  - use `OffY = 0`
-  - use `ScaleX = 1024`
-  - use `ScaleY = 1024`
-
-- for the extended form:
-  - require `ScaleXX1024I32 > 0`
-  - require `ScaleYX1024I32 > 0`
-
-Device-layer responsibilities:
-
-- decode JPEG from the supplied binary
-- draw to the selected target
-- allow target clipping
-- treat target `0` as LCD and `1..254` as sprite targets
-- return `bad_args` for invalid wire values
-- return `unsupported` only if JPEG support is intentionally unavailable in the build
-- return `internal` or `{internal, EspErr}` for runtime/device failures as appropriate
-
-Ownership rule:
-
-- the driver must not pass a term-binary pointer into any path that can outlive the request unless it first copies or synchronously waits for completion
-- the worker model deep-copies the JPEG payload before enqueueing
-- the copied payload is freed after the device call completes
-
-Conversion model:
-
-- the protocol carries integer x1024 scale values
-- the worker ABI carries those fixed-point values deeper than the handler path
-- conversion to the LovyanGFX float call shape happens at the final device-call boundary
-
-Equivalent formulas:
-
-- `scale_x = ScaleXX1024I32 / 1024.0`
-- `scale_y = ScaleYX1024I32 / 1024.0`
+- the final argument must be a binary
+- the short form implies `MaxW = 0`, `MaxH = 0`, `OffX = 0`, `OffY = 0`, `ScaleX = 1024`, `ScaleY = 1024`
+- extended-form scale values must be positive
+- the selected target may be LCD `0` or sprite `1..254`
+- conversion from x1024 protocol scale to LovyanGFX float happens at the final device boundary
 
 ### `pushImage`
 
@@ -748,30 +662,18 @@ Request args:
 
 - `pushImage(Xi16, Yi16, Wu16, Hu16, StridePixelsU16, DataRgb565Binary)`
 
-Handler-side responsibilities:
+Rules:
 
-- decode tuple fields
-- require `W > 0`
-- require `H > 0`
-- require the final argument to be a binary
-- enforce the binary-size cap
-
-Device-layer responsibilities:
-
-- if `StridePixelsU16 == 0`, normalize effective stride to `W`
-- require effective stride `>= W`
-- require `byte_size(Data)` to be even
-- check overflow and required byte count
-- require `byte_size(Data)` to be large enough for the requested image
-- ignore trailing bytes beyond the required minimum
-
-Ownership rule:
-
-- the driver must not pass a term-binary pointer into any path that can outlive the request unless it first copies or synchronously waits for completion
+- `W > 0`
+- `H > 0`
+- the final argument must be a binary
+- if `StridePixelsU16 == 0`, effective stride becomes `W`
+- effective stride must be `>= W`
+- payload byte size must be even
+- payload must be large enough for the requested image
+- trailing bytes beyond the required minimum are ignored
 
 ### `createSprite`
-
-This is deterministic sprite allocation.
 
 Request-header `Target` is the sprite handle to allocate:
 
@@ -790,9 +692,9 @@ Rules:
 - optional color depth must be valid when provided
 - creation fails if the handle is already in use
 - creation fails if the configured maximum concurrent sprite count is exhausted
-- paletted sprite depths are `1`, `2`, `4`, and `8`
-- true-color sprite depths are `16` and `24`
-- sprite color depth affects target storage format, but does not by itself create palette backing
+- paletted depths are `1`, `2`, `4`, and `8`
+- true-color depths are `16` and `24`
+- paletted depth alone does not create palette backing
 
 ### `createPalette` and `setPaletteColor`
 
@@ -815,16 +717,12 @@ Rules:
 
 - both operations are sprite-only
 - the target sprite must already exist
-- `createPalette` requires a paletted sprite depth (`1`, `2`, `4`, or `8`)
+- `createPalette` requires paletted depth `1`, `2`, `4`, or `8`
 - `createPalette` establishes palette backing for that sprite
-- indexed scalar-color semantics require actual palette backing, not just paletted depth
+- indexed scalar-color semantics require actual palette backing
 - `setPaletteColor` requires an existing palette-backed sprite
 - `Rgb888U32` uses `0x00RRGGBB`
-- valid palette index range depends on sprite depth:
-  - depth `1` => `0..1`
-  - depth `2` => `0..3`
-  - depth `4` => `0..15`
-  - depth `8` => `0..255`
+- valid palette index range depends on sprite depth
 
 ### `pushSprite`
 
@@ -844,11 +742,10 @@ Rules:
 
 - `DstTargetU8 == 0` => LCD destination
 - `DstTargetU8 in 1..254` => destination sprite
-- source sprite existence is resolved in the device layer
-- destination sprite existence is resolved in the device layer when `DstTarget != 0`
+- source and destination existence are resolved in the device layer
 - optional transparent scalar uses RGB565 by default
-- `LGFX_F_TRANSPARENT_INDEX` interprets the optional transparent scalar as a palette index
-- transparent index mode requires the source sprite to be palette-backed
+- `LGFX_F_TRANSPARENT_INDEX` interprets the transparent scalar as a palette index
+- indexed transparent mode requires palette backing on the source sprite
 - edge clipping is allowed
 
 There is no region-based sprite blit op in this protocol.
@@ -864,34 +761,17 @@ Args:
 - `pushRotateZoom(DstTargetU8, DstXi16, DstYi16, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32)`
 - `pushRotateZoom(DstTargetU8, DstXi16, DstYi16, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32, TransparentValue)`
 
-Wire encoding:
-
-- `AngleCentiDegI32` uses centi-degrees
-- `ZoomXX1024I32` uses x1024 fixed-point scale
-- `ZoomYX1024I32` uses x1024 fixed-point scale
-
 Rules:
 
 - destination target rules are the same as `pushSprite`
 - rotation uses the source sprite pivot set by `setPivot`
-- source and destination sprite existence rules are resolved in the device layer
-- both zoom values must represent positive scale
+- source and destination existence rules are resolved in the device layer
+- zoom values must be positive
 - optional transparent scalar uses RGB565 by default
-- `LGFX_F_TRANSPARENT_INDEX` interprets the optional transparent scalar as a palette index
-- transparent index mode requires the source sprite to be palette-backed
+- `LGFX_F_TRANSPARENT_INDEX` interprets the transparent scalar as a palette index
+- indexed transparent mode requires palette backing on the source sprite
 - edge clipping is allowed
-
-Conversion model:
-
-- the protocol carries fixed-point integers
-- the worker ABI carries those fixed-point values deeper than the handler path
-- conversion to the float LovyanGFX call shape happens close to the device call boundary
-
-Equivalent formulas:
-
-- `angle_deg = AngleCentiDegI32 / 100.0`
-- `zoom_x = ZoomXX1024I32 / 1024.0`
-- `zoom_y = ZoomYX1024I32 / 1024.0`
+- conversion from centi-degrees and x1024 fixed-point happens near the device boundary
 
 ## Recommended host smoke checks
 
@@ -922,57 +802,37 @@ Useful checks:
   - indexed primitive or text color mode on a sprite without palette backing fails
   - indexed transparent mode on a non-paletted source sprite fails
 
-- text-wrap path
+- text path
   - `setTextWrap(true)` should map to `wrap_x=true, wrap_y=false`
   - `setTextWrap(true, true)` should set both axes true
-  - one-argument and two-argument forms should remain distinct
-
-- text-scale path
   - `setTextSize(256)` should mean `1.0x`
-  - `setTextSize(384)` should mean `1.5x`
-  - `setTextSize(256, 512)` should mean `1.0x, 2.0x`
   - zero scale should fail
 
 - color contract path
   - primitive and text colors should accept `0x00RRGGBB` in default RGB mode
-  - default RGB scalar-color inputs should quantize before worker/device execution
-  - `setColorDepth(16)` and `setColorDepth(24)` should not change default RGB scalar-color quantization behavior
-  - `setColorDepth(24)` should not imply full RGB888 input fidelity for primitive or text ops in default RGB mode
+  - default RGB scalar-color inputs should quantize before worker and device execution
+  - `setColorDepth(24)` should not imply full RGB888 fidelity for primitive or text ops
   - `pushImage` should remain RGB565-only
 
 - jpg path
-  - valid `drawJpg(X, Y, Bin)` should succeed on LCD
-  - valid `drawJpg(X, Y, Bin)` should succeed on a sprite target
-  - valid extended `drawJpg(...)` with positive x1024 scales should succeed
+  - valid short-form and extended-form calls should succeed
   - zero or negative x1024 scales should fail
   - non-binary payload should fail
   - over-cap binary should fail
   - corrupt JPEG data should fail without crashing the driver
-
-- rotate/zoom path
-  - valid fixed-point call succeeds
-  - zero or invalid zoom fails
-
-- metadata sanity
-  - `getCaps` returns `{caps, ProtoVer, MaxBinaryBytes, MaxSprites, FeatureBits}`
-  - host wrapper protocol version matches `ProtoVer`
 
 ## Maintenance checklist
 
 When adding or changing an operation:
 
 - update `lgfx_port/include_internal/lgfx_port/ops.def`
-
 - implement or update the handler
-
 - update capability, error, or protocol constants if needed
-
 - resync generated protocol tables
   - `elixir scripts/sync_lgfx_protocol_doc.exs`
 
 - verify `getCaps` matches the new `feature_cap_bit`
-
-- update this document only for semantics not obvious from the generated tables
+- update this document only for externally visible semantics not obvious from the generated tables
 
 ## Compatibility rules
 
