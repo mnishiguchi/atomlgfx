@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+#
+# SPDX-License-Identifier: Apache-2.0
+
 import Config
 
 # Shared SPI bus pins (ESP32-S3 GPIO numbers)

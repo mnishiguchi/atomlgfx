@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // lgfx_port/worker_core.c
 // Worker task core.
 // Concurrency and ownership model: see docs/WORKER_MODEL.md.

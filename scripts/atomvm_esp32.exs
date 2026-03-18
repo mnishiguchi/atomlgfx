@@ -1,5 +1,9 @@
 #!/usr/bin/env elixir
 
+# SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule Main do
   @script_file Path.expand(__ENV__.file)
   @script_name Path.basename(@script_file)

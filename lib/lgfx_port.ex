@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+#
+# SPDX-License-Identifier: Apache-2.0
+
 defmodule LGFXPort do
   @moduledoc """
   Elixir client for the `lgfx_port` AtomVM port driver.

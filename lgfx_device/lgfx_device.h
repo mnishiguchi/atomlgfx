@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // lgfx_device/lgfx_device.h
 
 #ifndef __LGFX_DEVICE_H__

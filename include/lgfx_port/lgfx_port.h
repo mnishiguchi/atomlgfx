@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // include/lgfx_port/lgfx_port.h
 #pragma once
 

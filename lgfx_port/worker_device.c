@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // lgfx_port/worker_device.c
 // Port-thread worker wrappers.
 // Ownership and completion rules: see docs/WORKER_MODEL.md.

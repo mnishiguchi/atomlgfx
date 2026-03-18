@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: NONE
+#
+# SPDX-License-Identifier: CC0-1.0
+
 [submodule "third_party/LovyanGFX"]
 	path = third_party/LovyanGFX
 	url = https://github.com/lovyan03/LovyanGFX.git

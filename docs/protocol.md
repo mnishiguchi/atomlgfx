@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # LovyanGFX AtomVM Port Protocol
 
 This document defines the tuple protocol between an AtomVM host application and the native `lgfx_port` driver.

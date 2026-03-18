@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: NONE
+#
+# SPDX-License-Identifier: CC0-1.0
+
+version = 1
+
+[[annotations]]
+path = [
+  ".gitignore",
+  ".gitmodules",
+  ".tool-versions",
+  "REUSE.toml",
+  "examples/elixir/.gitignore",
+  "examples/elixir/mix.lock",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "NONE"
+SPDX-License-Identifier = "CC0-1.0"
+
+[[annotations]]
+path = [
+  ".github/workflows/*.yml",
+  "CMakeLists.txt",
+  "README.md",
+  "docs/**",
+  "include/**",
+  "lgfx_device/README.md",
+  "lgfx_device/*.cpp",
+  "lgfx_device/*.h",
+  "lgfx_device/*.hpp",
+  "lgfx_port/README.md",
+  "lgfx_port/cmake/**",
+  "lgfx_port/handlers/*.c",
+  "lgfx_port/include_internal/**",
+  "lgfx_port/*.c",
+  "lib/**",
+  "mix.exs",
+  "scripts/*.exs",
+  "examples/elixir/.formatter.exs",
+  "examples/elixir/config/**",
+  "examples/elixir/lib/**",
+  "examples/elixir/mix.exs",
+  "examples/elixir/priv/assets/icons/*.rgb565",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Masatoshi Nishiguchi"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "lgfx_device/fonts/generated/ui_font_ja_16_min.cpp"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Masatoshi Nishiguchi"
+SPDX-License-Identifier = "Apache-2.0"
