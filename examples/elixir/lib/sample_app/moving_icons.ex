@@ -3,7 +3,6 @@ defmodule SampleApp.MovingIcons do
 
   import Bitwise
 
-  alias LGFXPort, as: Port
   alias SampleApp.Assets
   import SampleApp.AtomVMCompat, only: [yield: 0]
 
@@ -76,9 +75,9 @@ defmodule SampleApp.MovingIcons do
 
     log_icon_sizes(icons, icon_w, icon_h)
 
-    with {:ok, caps} <- Port.get_caps(port),
+    with {:ok, caps} <- LGFXPort.get_caps(port),
          :ok <- ensure_sprite_support(caps, 6),
-         :ok <- Port.fill_screen(port, @bg),
+         :ok <- LGFXPort.fill_screen(port, @bg),
          {:ok, icon_handles} <- prepare_icon_sprites(port, icons, icon_w, icon_h),
          {:ok, render_target} <- prepare_render_target(port, w, h) do
       try do
@@ -95,7 +94,7 @@ defmodule SampleApp.MovingIcons do
       end
     else
       {:error, reason} ->
-        IO.puts("moving_icons setup failed: #{Port.format_error(reason)}")
+        IO.puts("moving_icons setup failed: #{LGFXPort.format_error(reason)}")
         {:error, reason}
     end
   end
@@ -139,14 +138,14 @@ defmodule SampleApp.MovingIcons do
     pivot_x = div(icon_w, 2)
     pivot_y = div(icon_h, 2)
 
-    with :ok <- Port.create_sprite(port, icon_w, icon_h, sprite_target),
-         :ok <- Port.clear(port, @transparent_key_rgb888, sprite_target),
-         :ok <- Port.push_image_rgb565(port, 0, 0, icon_w, icon_h, pixels, 0, sprite_target),
-         :ok <- Port.set_pivot(port, sprite_target, pivot_x, pivot_y) do
+    with :ok <- LGFXPort.create_sprite(port, icon_w, icon_h, sprite_target),
+         :ok <- LGFXPort.clear(port, @transparent_key_rgb888, sprite_target),
+         :ok <- LGFXPort.push_image_rgb565(port, 0, 0, icon_w, icon_h, pixels, 0, sprite_target),
+         :ok <- LGFXPort.set_pivot(port, sprite_target, pivot_x, pivot_y) do
       :ok
     else
       {:error, reason} ->
-        _ = Port.delete_sprite(port, sprite_target)
+        _ = LGFXPort.delete_sprite(port, sprite_target)
         {:error, {:sprite_setup_failed, sprite_target, reason}}
     end
   end
@@ -206,7 +205,7 @@ defmodule SampleApp.MovingIcons do
   defp create_frame_sprite(port, target, w, h) do
     # Use a fixed depth for now; align with LCD depth later if you expose it via the protocol.
     color_depth = 16
-    Port.create_sprite(port, w, h, color_depth, target)
+    LGFXPort.create_sprite(port, w, h, color_depth, target)
   end
 
   defp cleanup_icon_sprites(port) do
@@ -224,7 +223,7 @@ defmodule SampleApp.MovingIcons do
   end
 
   defp safe_delete_sprite(port, sprite_target) do
-    case Port.delete_sprite(port, sprite_target) do
+    case LGFXPort.delete_sprite(port, sprite_target) do
       :ok -> :ok
       {:error, _} -> :ok
     end
@@ -348,15 +347,15 @@ defmodule SampleApp.MovingIcons do
         loop(port, {w, h, render_target, flip1, objects, icon_handles})
 
       {:error, reason} ->
-        IO.puts("moving_icons render failed: #{Port.format_error(reason)}")
+        IO.puts("moving_icons render failed: #{LGFXPort.format_error(reason)}")
         {:error, reason}
     end
   end
 
   defp render_frame(port, _h, :direct_lcd, _flip0, objects, icon_handles) do
-    with :ok <- Port.fill_screen(port, @bg),
+    with :ok <- LGFXPort.fill_screen(port, @bg),
          :ok <- draw_all_objects_to_target(port, objects, icon_handles, 0, 0),
-         :ok <- Port.display(port) do
+         :ok <- LGFXPort.display(port) do
       {:ok, 0}
     else
       {:error, reason} ->
@@ -378,7 +377,7 @@ defmodule SampleApp.MovingIcons do
   defp render_strips(port, h, strip_h, buf0, buf1, flip0, objects, icon_handles) do
     case render_strips_i(port, h, strip_h, 0, buf0, buf1, flip0, objects, icon_handles) do
       {:ok, flip1} ->
-        case Port.display(port) do
+        case LGFXPort.display(port) do
           :ok -> {:ok, flip1}
           {:error, reason} -> {:error, reason}
         end
@@ -403,9 +402,9 @@ defmodule SampleApp.MovingIcons do
         {0, buf1}
       end
 
-    with :ok <- Port.clear(port, @bg, buf),
+    with :ok <- LGFXPort.clear(port, @bg, buf),
          :ok <- draw_all_objects_to_target(port, objects, icon_handles, buf, y0),
-         :ok <- Port.push_sprite(port, buf, 0, y0) do
+         :ok <- LGFXPort.push_sprite(port, buf, 0, y0) do
       render_strips_i(
         port,
         h,
@@ -451,7 +450,7 @@ defmodule SampleApp.MovingIcons do
 
     result =
       if @use_transparent_key do
-        Port.push_rotate_zoom_to(
+        LGFXPort.push_rotate_zoom_to(
           port,
           src,
           dst_target,
@@ -463,7 +462,7 @@ defmodule SampleApp.MovingIcons do
           @transparent_key_rgb565
         )
       else
-        Port.push_rotate_zoom_to(
+        LGFXPort.push_rotate_zoom_to(
           port,
           src,
           dst_target,
@@ -500,7 +499,7 @@ defmodule SampleApp.MovingIcons do
   end
 
   defp format_local_error({:frame_sprite_alloc_failed, w, h, split_factor, reason}) do
-    "frame sprite alloc failed w=#{w} h=#{h} split_factor=#{split_factor} reason=#{Port.format_error(reason)}"
+    "frame sprite alloc failed w=#{w} h=#{h} split_factor=#{split_factor} reason=#{LGFXPort.format_error(reason)}"
   end
 
   defp format_local_error(reason), do: inspect(reason)

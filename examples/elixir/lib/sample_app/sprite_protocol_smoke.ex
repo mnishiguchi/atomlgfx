@@ -1,7 +1,6 @@
 defmodule SampleApp.SpriteProtocolSmoke do
   @moduledoc false
 
-  alias LGFXPort, as: Port
   import Bitwise
 
   @t_short 5_000
@@ -36,9 +35,9 @@ defmodule SampleApp.SpriteProtocolSmoke do
   # - transparent_value is RGB565 by default, or a palette index when the
   #   transparent-index flag is set
   #
-  # This smoke test assumes the port is already initialized (Port.init/1 + Port.display/1).
+  # This smoke test assumes the port is already initialized (LGFXPort.init/1 + LGFXPort.display/1).
   # In SampleApp, run it after boot_for_display_with_dims/1.
-  def run(port), do: run(port, &Port.raw_call/6)
+  def run(port), do: run(port, &LGFXPort.raw_call/6)
 
   def run(port, raw_call) when is_function(raw_call, 6) do
     reset_note_once_flags()

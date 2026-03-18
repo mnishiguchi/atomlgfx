@@ -1,8 +1,6 @@
 defmodule SampleApp.TextProbe do
   @moduledoc false
 
-  alias LGFXPort, as: Port
-
   @bg 0x000000
   @fg 0xFFFFFF
   @dim 0xA0A0A0
@@ -45,7 +43,7 @@ defmodule SampleApp.TextProbe do
               :ok
 
             {:error, reason} = err ->
-              IO.puts("text_probe matrix failed: #{Port.format_error(reason)}")
+              IO.puts("text_probe matrix failed: #{LGFXPort.format_error(reason)}")
               err
           end
 
@@ -55,18 +53,18 @@ defmodule SampleApp.TextProbe do
       end
     else
       {:error, reason} = err ->
-        IO.puts("text_probe failed: #{Port.format_error(reason)}")
+        IO.puts("text_probe failed: #{LGFXPort.format_error(reason)}")
         err
     end
   end
 
   defp prepare_probe_canvas(port, w, h) do
-    with :ok <- Port.fill_screen(port, @bg),
-         :ok <- Port.reset_text_state(port, 0),
-         :ok <- Port.set_text_wrap_xy(port, false, false, 0),
-         :ok <- Port.set_text_datum(port, 0, 0),
+    with :ok <- LGFXPort.fill_screen(port, @bg),
+         :ok <- LGFXPort.reset_text_state(port, 0),
+         :ok <- LGFXPort.set_text_wrap_xy(port, false, false, 0),
+         :ok <- LGFXPort.set_text_datum(port, 0, 0),
          :ok <- set_ascii_text_style(port, @fg, 1),
-         :ok <- Port.draw_rect(port, 0, 0, w, h, @frame) do
+         :ok <- LGFXPort.draw_rect(port, 0, 0, w, h, @frame) do
       :ok
     end
   end
@@ -90,22 +88,22 @@ defmodule SampleApp.TextProbe do
     rule_y = jp_y + @line_h - 2
     status_y = rule_y + 6
 
-    with :ok <- Port.draw_string_bg(port, @pad, y0, @fg, @ok_bg, 1, "TEXT + PRESET PROBE", 0),
+    with :ok <- LGFXPort.draw_string_bg(port, @pad, y0, @fg, @ok_bg, 1, "TEXT + PRESET PROBE", 0),
          :ok <- set_ascii_text_style(port, @dim, 1),
          :ok <-
-           Port.draw_string(port, @pad, meta_y, "preset=ascii size=1 datum=0 wrap=false", 0),
+           LGFXPort.draw_string(port, @pad, meta_y, "preset=ascii size=1 datum=0 wrap=false", 0),
          :ok <- set_ascii_text_style(port, @accent, 2),
-         :ok <- Port.draw_string(port, @pad, hello_y, "HELLO", 0),
+         :ok <- LGFXPort.draw_string(port, @pad, hello_y, "HELLO", 0),
          :ok <- set_ascii_text_style_xy(port, @accent, 2, 1),
-         :ok <- Port.draw_string(port, @pad, wide_y, "WIDE XY", 0),
+         :ok <- LGFXPort.draw_string(port, @pad, wide_y, "WIDE XY", 0),
          :ok <- set_ascii_text_style(port, @warn, 1),
-         :ok <- Port.draw_string(port, @pad, ascii_y, "ASCII 123 !?", 0),
+         :ok <- LGFXPort.draw_string(port, @pad, ascii_y, "ASCII 123 !?", 0),
          :ok <- maybe_use_japanese_preset(port),
-         :ok <- Port.set_text_color(port, @fg, nil, 0),
-         :ok <- Port.draw_string(port, @pad, jp_y, "日本語テスト", 0),
-         :ok <- Port.draw_fast_hline(port, @pad, rule_y, max_i(0, w - @pad * 2), 0x404040),
+         :ok <- LGFXPort.set_text_color(port, @fg, nil, 0),
+         :ok <- LGFXPort.draw_string(port, @pad, jp_y, "日本語テスト", 0),
+         :ok <- LGFXPort.draw_fast_hline(port, @pad, rule_y, max_i(0, w - @pad * 2), 0x404040),
          :ok <- set_ascii_text_style(port, @dim, 1),
-         :ok <- Port.draw_string(port, @pad, status_y, "draw_string ok / size_xy ok", 0) do
+         :ok <- LGFXPort.draw_string(port, @pad, status_y, "draw_string ok / size_xy ok", 0) do
       {:ok, min_i(status_y + @line_h, h)}
     else
       {:error, _reason} = err ->
@@ -114,13 +112,13 @@ defmodule SampleApp.TextProbe do
   end
 
   defp maybe_use_japanese_preset(port) do
-    case Port.set_text_font_preset(port, @jp_preset, 0) do
+    case LGFXPort.set_text_font_preset(port, @jp_preset, 0) do
       :ok ->
         IO.puts("text_probe using preset #{@jp_preset}")
         :ok
 
       {:error, reason} ->
-        IO.puts("text_probe preset #{@jp_preset} unavailable: #{Port.format_error(reason)}")
+        IO.puts("text_probe preset #{@jp_preset} unavailable: #{LGFXPort.format_error(reason)}")
         IO.puts("text_probe warning: no Japanese preset available, tofu is expected")
         :ok
     end
@@ -150,7 +148,7 @@ defmodule SampleApp.TextProbe do
 
   defp draw_ascii_header(port, y, _h) do
     with :ok <- set_ascii_text_style(port, @dim, 1),
-         :ok <- Port.draw_string(port, @pad, y, "ASCII preset:", 0) do
+         :ok <- LGFXPort.draw_string(port, @pad, y, "ASCII preset:", 0) do
       :ok
     end
   end
@@ -161,9 +159,9 @@ defmodule SampleApp.TextProbe do
     label = Atom.to_string(@ascii_preset)
 
     with :ok <- set_ascii_text_style(port, @dim, 1),
-         :ok <- Port.draw_string(port, @pad, y, label, 0),
+         :ok <- LGFXPort.draw_string(port, @pad, y, label, 0),
          :ok <- set_ascii_text_style(port, 0x80FF80, 1),
-         :ok <- Port.draw_string(port, @ascii_sample_x, y, "ABC abc 123 !?", 0) do
+         :ok <- LGFXPort.draw_string(port, @ascii_sample_x, y, "ABC abc 123 !?", 0) do
       :ok
     end
   end
@@ -172,8 +170,8 @@ defmodule SampleApp.TextProbe do
 
   defp draw_jp_header(port, y, _h) do
     with :ok <- set_ascii_text_style(port, @dim, 1),
-         :ok <- Port.draw_fast_hline(port, @pad, y, 220, 0x404040),
-         :ok <- Port.draw_string(port, @pad, y + 2, "Japanese-capable preset:", 0) do
+         :ok <- LGFXPort.draw_fast_hline(port, @pad, y, 220, 0x404040),
+         :ok <- LGFXPort.draw_string(port, @pad, y + 2, "Japanese-capable preset:", 0) do
       :ok
     end
   end
@@ -184,21 +182,21 @@ defmodule SampleApp.TextProbe do
     label = Atom.to_string(@jp_preset)
 
     with :ok <- set_ascii_text_style(port, @dim, 1),
-         :ok <- Port.draw_string(port, @pad, y, label, 0) do
-      case Port.set_text_font_preset(port, @jp_preset, 0) do
+         :ok <- LGFXPort.draw_string(port, @pad, y, label, 0) do
+      case LGFXPort.set_text_font_preset(port, @jp_preset, 0) do
         :ok ->
           IO.puts("text_probe using preset #{@jp_preset}")
 
-          with :ok <- Port.set_text_color(port, @fg, nil, 0),
-               :ok <- Port.draw_string(port, @jp_sample_x, y, "日本語: 設定 戻る 次へ", 0) do
+          with :ok <- LGFXPort.set_text_color(port, @fg, nil, 0),
+               :ok <- LGFXPort.draw_string(port, @jp_sample_x, y, "日本語: 設定 戻る 次へ", 0) do
             :ok
           end
 
         {:error, reason} ->
-          IO.puts("text_probe preset #{@jp_preset} unavailable: #{Port.format_error(reason)}")
+          IO.puts("text_probe preset #{@jp_preset} unavailable: #{LGFXPort.format_error(reason)}")
 
           with :ok <- set_ascii_text_style(port, @warn, 1),
-               :ok <- Port.draw_string(port, @jp_sample_x, y, "(unsupported)", 0) do
+               :ok <- LGFXPort.draw_string(port, @jp_sample_x, y, "(unsupported)", 0) do
             :ok
           end
       end
@@ -206,17 +204,17 @@ defmodule SampleApp.TextProbe do
   end
 
   defp set_ascii_text_style(port, color, scale) do
-    with :ok <- Port.set_text_font_preset(port, @ascii_preset, 0),
-         :ok <- Port.set_text_size(port, scale, 0),
-         :ok <- Port.set_text_color(port, color, nil, 0) do
+    with :ok <- LGFXPort.set_text_font_preset(port, @ascii_preset, 0),
+         :ok <- LGFXPort.set_text_size(port, scale, 0),
+         :ok <- LGFXPort.set_text_color(port, color, nil, 0) do
       :ok
     end
   end
 
   defp set_ascii_text_style_xy(port, color, scale_x, scale_y) do
-    with :ok <- Port.set_text_font_preset(port, @ascii_preset, 0),
-         :ok <- Port.set_text_size_xy(port, scale_x, scale_y, 0),
-         :ok <- Port.set_text_color(port, color, nil, 0) do
+    with :ok <- LGFXPort.set_text_font_preset(port, @ascii_preset, 0),
+         :ok <- LGFXPort.set_text_size_xy(port, scale_x, scale_y, 0),
+         :ok <- LGFXPort.set_text_color(port, color, nil, 0) do
       :ok
     end
   end

@@ -1,7 +1,6 @@
 defmodule SampleApp do
   @moduledoc false
 
-  alias LGFXPort, as: Port
   alias SampleApp.ClipSmoke
   alias SampleApp.DrawStringStress
   alias SampleApp.JpgSmoke
@@ -102,9 +101,9 @@ defmodule SampleApp do
 
   def start(mode, open_options) when is_atom(mode) and is_list(open_options) do
     effective_open_options = @sample_open_options ++ open_options
-    port = Port.open(effective_open_options)
+    port = LGFXPort.open(effective_open_options)
 
-    log_info("Port opened open_options=#{inspect(effective_open_options)}")
+    log_info("LGFXPort opened open_options=#{inspect(effective_open_options)}")
 
     try do
       case run_mode(port, mode) do
@@ -202,7 +201,7 @@ defmodule SampleApp do
   # -----------------------------------------------------------------------------
 
   defp run_protocol_only(port) do
-    with :ok <- step("ping", Port.ping(port)),
+    with :ok <- step("ping", LGFXPort.ping(port)),
          :ok <- step("protocol_smoke", ProtocolSmoke.run(port)) do
       :ok
     end
@@ -251,11 +250,11 @@ defmodule SampleApp do
   end
 
   defp run_boot_handshake(port) do
-    with :ok <- step("ping", Port.ping(port)),
+    with :ok <- step("ping", LGFXPort.ping(port)),
          :ok <- step("protocol_smoke", ProtocolSmoke.run(port)),
-         :ok <- step("init", Port.init(port)),
+         :ok <- step("init", LGFXPort.init(port)),
          :ok <- step("write_session_smoke", WriteSessionSmoke.run(port)),
-         :ok <- step("display(init)", Port.display(port)) do
+         :ok <- step("display(init)", LGFXPort.display(port)) do
       :ok
     end
   end
@@ -265,11 +264,11 @@ defmodule SampleApp do
 
     log_info("selected rotation=#{rotation} viewport=#{w}x#{h}")
 
-    _ = Port.fill_screen(port, @bg)
-    _ = Port.reset_text_state(port, 0)
-    _ = Port.set_text_wrap(port, false, 0)
-    _ = Port.set_text_size(port, 2, 0)
-    _ = Port.set_text_color(port, @fg, nil, 0)
+    _ = LGFXPort.fill_screen(port, @bg)
+    _ = LGFXPort.reset_text_state(port, 0)
+    _ = LGFXPort.set_text_wrap(port, false, 0)
+    _ = LGFXPort.set_text_size(port, 2, 0)
+    _ = LGFXPort.set_text_color(port, @fg, nil, 0)
 
     :ok
   end
@@ -320,8 +319,8 @@ defmodule SampleApp do
   end
 
   defp apply_rotation(port, rotation) do
-    with :ok <- Port.set_rotation(port, rotation),
-         :ok <- Port.display(port),
+    with :ok <- LGFXPort.set_rotation(port, rotation),
+         :ok <- LGFXPort.display(port),
          {:ok, raw_w, raw_h} <- get_wh(port) do
       {w, h} = normalize_dims_for_rotation(rotation, raw_w, raw_h)
       {:ok, rotation, raw_w, raw_h, w, h}
@@ -373,20 +372,20 @@ defmodule SampleApp do
   # -----------------------------------------------------------------------------
 
   defp get_wh(port) do
-    with {:ok, w} <- Port.width(port, 0),
-         {:ok, h} <- Port.height(port, 0) do
+    with {:ok, w} <- LGFXPort.width(port, 0),
+         {:ok, h} <- LGFXPort.height(port, 0) do
       {:ok, w, h}
     end
   end
 
   defp safe_close_port(port) do
-    case Port.close(port) do
+    case LGFXPort.close(port) do
       :ok ->
-        log_info("Port closed")
+        log_info("LGFXPort closed")
         :ok
 
       {:error, reason} ->
-        log_failure("Port close failed", reason)
+        log_failure("LGFXPort close failed", reason)
         :ok
     end
   end
@@ -410,6 +409,6 @@ defmodule SampleApp do
   end
 
   defp log_failure(prefix, reason) when is_binary(prefix) do
-    IO.puts("#{prefix}: #{Port.format_error(reason)}")
+    IO.puts("#{prefix}: #{LGFXPort.format_error(reason)}")
   end
 end
