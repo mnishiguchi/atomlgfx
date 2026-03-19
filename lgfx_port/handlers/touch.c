@@ -17,7 +17,6 @@
 #include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
 #include "lgfx_port/proto_term.h"
-#include "lgfx_port/worker.h"
 
 static term make_touch_tuple_or_none(
     Context *ctx,
@@ -63,7 +62,7 @@ term lgfx_handle_getTouchRaw(Context *ctx, lgfx_port_t *port, const lgfx_request
     int16_t y = 0;
     uint16_t size = 0;
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_get_touch_raw(port, &touched, &x, &y, &size));
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_device_get_touch_raw(&touched, &x, &y, &size));
 
     term payload = make_touch_tuple_or_none(ctx, port, touched, x, y, size);
     if (term_is_invalid_term(payload)) {
@@ -80,7 +79,7 @@ term lgfx_handle_getTouch(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     int16_t y = 0;
     uint16_t size = 0;
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_get_touch(port, &touched, &x, &y, &size));
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_device_get_touch(&touched, &x, &y, &size));
 
     term payload = make_touch_tuple_or_none(ctx, port, touched, x, y, size);
     if (term_is_invalid_term(payload)) {
@@ -102,7 +101,7 @@ term lgfx_handle_setTouchCalibrate(Context *ctx, lgfx_port_t *port, const lgfx_r
         params[i] = v;
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_set_touch_calibrate(port, params));
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_device_set_touch_calibrate(params));
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
@@ -110,7 +109,7 @@ term lgfx_handle_calibrateTouch(Context *ctx, lgfx_port_t *port, const lgfx_requ
 {
     uint16_t params[8] = { 0 };
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_calibrate_touch(port, params));
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_device_calibrate_touch(params));
 
     term payload = make_u16_tuple_8(ctx, params);
     if (term_is_invalid_term(payload)) {

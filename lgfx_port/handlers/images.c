@@ -16,7 +16,6 @@
 #include "lgfx_port/proto_term.h"
 
 #include "lgfx_port/ops.h"
-#include "lgfx_port/worker.h"
 
 term lgfx_handle_drawJpg(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
@@ -25,7 +24,7 @@ term lgfx_handle_drawJpg(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
     //
     // Handler responsibility here is limited to wire decode.
     // Binary-size capping stays in lgfx_decode_binary_at().
-    // Device/worker code remains authoritative for JPEG decode/render behavior.
+    // Device code remains authoritative for JPEG decode/render behavior.
 
     if (req->arity != 8 && req->arity != 14) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -78,8 +77,7 @@ term lgfx_handle_drawJpg(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
         ctx,
         port,
         req,
-        lgfx_worker_device_draw_jpg(
-            port,
+        lgfx_device_draw_jpg(
             (uint8_t) req->target,
             x,
             y,
@@ -140,8 +138,7 @@ term lgfx_handle_pushImage(Context *ctx, lgfx_port_t *port, const lgfx_request_t
         ctx,
         port,
         req,
-        lgfx_worker_device_push_image_rgb565_strided(
-            port,
+        lgfx_device_push_image_rgb565_strided(
             (uint8_t) req->target,
             x,
             y,

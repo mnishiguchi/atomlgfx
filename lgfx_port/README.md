@@ -14,7 +14,7 @@ It owns:
 - metadata-driven validation
 - handler dispatch
 - reply mapping
-- the worker bridge used to execute device work safely
+- the direct call boundary from AtomVM-facing handlers into `lgfx_device/`
 
 See [the protocol spec](../docs/protocol.md) for wire-level rules and
 [the architecture overview](../docs/architecture.md) for the top-level repository map.
@@ -32,22 +32,14 @@ See [the protocol spec](../docs/protocol.md) for wire-level rules and
 
 - `handlers/*.c`
   - op-specific wire decode
-  - handler-to-worker bridge
+  - direct calls into `lgfx_device_*`
 
-- `worker_core.c`
-  - worker task lifecycle
-  - queue management
-  - stop and shutdown flow
-
-- `worker_device.c`
-  - synchronous worker wrappers
-  - plain-C job construction
+- `include_internal/lgfx_port/handler_decode.h`
+  - tiny shared decode helpers for handlers
+  - cached LCD dimension refresh helper
 
 - `include_internal/lgfx_port/ops.def`
   - protocol-visible operation metadata
-
-- `include_internal/lgfx_port/worker_jobs.def`
-  - worker job metadata
 
 ## Responsibility split
 
@@ -62,16 +54,18 @@ The port thread owns all AtomVM-facing work:
 - reply encoding
 - protocol-visible error state such as `last_error`
 
-### Worker task
+### Handler layer
 
-The worker task owns device execution only:
+Handlers stay wire-oriented and small.
 
-- receive plain C jobs
-- run `lgfx_device_*`
-- free copied payloads
-- notify the waiting caller
+They are responsible for:
 
-The worker must stay term-free.
+- decoding request payload fields
+- translating wire values into the native call shape
+- calling `lgfx_device_*`
+- mapping native results to protocol replies
+
+Handlers should not duplicate device semantics.
 
 ### Device layer
 
@@ -91,89 +85,40 @@ Examples:
 AtomVM message
   -> port thread decodes and validates
   -> handler decodes wire args
-  -> handler calls worker wrapper
-  -> wrapper builds lgfx_job_t
-  -> wrapper enqueues and waits
-  -> worker executes lgfx_device_*
-  -> worker writes err and frees payload
-  -> worker notifies caller
+  -> handler calls lgfx_device_*
   -> handler maps result to protocol reply
 ```
 
 ## Core rules
 
-- AtomVM terms never cross into the worker task.
-- Worker wrappers are synchronous.
-- Queue-by-pointer is safe only because wrappers wait for completion.
-- Variable-length payloads must be deep-copied before enqueue.
+- AtomVM terms stay in `lgfx_port/`.
+- `lgfx_device/` stays free of AtomVM term handling.
 - Handlers decode wire arguments, but should not duplicate device semantics.
+- Protocol metadata lives in `ops.def`.
+- Shared handler-side decode helpers live in `handler_decode.h`.
+- Externally visible protocol changes must be reflected in `../docs/protocol.md`.
 
-## Job model
+## Design intent
 
-`worker_jobs.def` is the canonical worker job list.
+This layer should stay small and explicit.
 
-It drives:
+Policy:
 
-- job kind enum entries
-- union members in `lgfx_job_t`
-- worker dispatch bodies
+- keep AtomVM-facing protocol work in `lgfx_port/`
+- call `lgfx_device_*` directly
+- avoid extra bridging layers unless they solve a real problem
+- keep request decoding close to the handlers that use it
+- keep device truth in `../lgfx_device/`
 
-Important job fields:
-
-- `kind`
-  - which worker action to run
-
-- `notify_task`
-  - caller task handle
-
-- `err`
-  - result written by the worker
-
-- `owned_payload`
-  - optional copied byte buffer owned by the job
-
-## Payload ownership
-
-Wrappers must not enqueue raw pointers into caller-owned term memory.
-
-Current rule:
-
-- allocate and copy payload bytes before enqueue
-- point job fields at the owned copy
-- free the owned copy in the worker after `lgfx_device_*` returns
-
-This applies especially to text, JPEG, and RGB565 image payloads.
-
-## Why completion stays synchronous
-
-Wrappers commonly enqueue pointers to stack-allocated `lgfx_job_t`.
-
-That means the wrapper must not return before the worker finishes.
-
-```text
-stack job + queue-by-pointer + async return = use-after-free
-```
-
-Until ownership changes, synchronous completion is required.
-
-## Shutdown model
-
-Worker shutdown is also synchronous:
-
-- mark worker as stopping
-- send `NULL` stop sentinel
-- wait for acknowledgement
-- delete queue
-- clear worker pointer
-- free worker state
+The goal is not to build another abstraction tower. The goal is to keep the protocol boundary easy to read, easy to change, and hard to misunderstand.
 
 ## When changing this layer
 
-When adding a new worker-visible operation:
+When adding a new protocol-visible operation:
 
-- add one row to `worker_jobs.def`
-- add the wrapper in `worker_device.c`
-- keep AtomVM decoding in handlers
-- keep AtomVM and FreeRTOS types out of `worker_jobs.def`
-- deep-copy variable-length payloads before enqueue
-- preserve synchronous completion unless the ownership model is redesigned
+- add one row to `ops.def`
+- add the handler declaration via `ops.h`
+- implement the handler in `handlers/`
+- keep AtomVM decoding in `lgfx_port/`
+- keep detailed device semantics in `../lgfx_device/`
+- update protocol docs only when the externally visible contract changes

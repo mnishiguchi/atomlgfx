@@ -25,7 +25,7 @@ Both layers share the same tuple-based protocol and are intended to evolve toget
 
 - `lgfx_port/`
   - AtomVM-facing port layer
-  - request decode, dispatch, worker bridge
+  - request decode, dispatch, direct device calls
 
 - `lgfx_device/`
   - LovyanGFX-facing device adapter layer
@@ -43,7 +43,7 @@ Both layers share the same tuple-based protocol and are intended to evolve toget
 
 - [Architecture](docs/architecture.md)
 - [Protocol](docs/protocol.md)
-- [Port layer and worker model](lgfx_port/README.md)
+- [Port layer](lgfx_port/README.md)
 - [Device adapter layer](lgfx_device/README.md)
 
 ## Quickstart

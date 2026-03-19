@@ -216,9 +216,9 @@ extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
     uint8_t dst_target,
     int16_t x,
     int16_t y,
-    float angle_deg,
-    float zoom_x,
-    float zoom_y,
+    int32_t angle_x100,
+    int32_t zoom_x_x1024,
+    int32_t zoom_y_x1024,
     bool has_transparent,
     bool transparent_is_index,
     uint32_t transparent_value)
@@ -231,12 +231,16 @@ extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
         return ESP_ERR_INVALID_ARG;
     }
 
-    // Rotate/zoom semantic validation lives here.
-    if (!std::isfinite(angle_deg) || !std::isfinite(zoom_x) || !std::isfinite(zoom_y)) {
+    // Protocol-native zoom values must remain positive.
+    if (zoom_x_x1024 <= 0 || zoom_y_x1024 <= 0) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (!(zoom_x > 0.0f) || !(zoom_y > 0.0f)) {
+    const float angle_deg = static_cast<float>(angle_x100) / 100.0f;
+    const float zoom_x = static_cast<float>(zoom_x_x1024) / 1024.0f;
+    const float zoom_y = static_cast<float>(zoom_y_x1024) / 1024.0f;
+
+    if (!std::isfinite(angle_deg) || !std::isfinite(zoom_x) || !std::isfinite(zoom_y)) {
         return ESP_ERR_INVALID_ARG;
     }
 

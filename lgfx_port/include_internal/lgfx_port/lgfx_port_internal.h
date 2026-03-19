@@ -65,7 +65,6 @@ typedef struct lgfx_port_t
 {
     GlobalContext *global;
     Context *ctx;
-    void *worker;
 
     lgfx_atoms_t atoms;
     lgfx_last_error_t last_error;

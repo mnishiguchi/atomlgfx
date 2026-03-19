@@ -21,7 +21,6 @@
 #include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
 #include "lgfx_port/proto_term.h"
-#include "lgfx_port/worker.h"
 
 term lgfx_handle_ping(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
@@ -82,7 +81,11 @@ term lgfx_handle_init(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req
         return reply_ok(ctx, port, req, port->atoms.ok);
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_init(port));
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
+        lgfx_device_init_with_open_config(&port->open_config_overrides, (const void *) port));
 
     port->initialized = true;
     lgfx_last_error_clear(port);
@@ -98,7 +101,11 @@ term lgfx_handle_close(Context *ctx, lgfx_port_t *port, const lgfx_request_t *re
         return reply_ok(ctx, port, req, port->atoms.ok);
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_close(port));
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
+        lgfx_device_close_for_owner((const void *) port));
 
     port->initialized = false;
     port->width = 0;
@@ -110,12 +117,12 @@ term lgfx_handle_close(Context *ctx, lgfx_port_t *port, const lgfx_request_t *re
 
 term lgfx_handle_startWrite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_start_write(port));
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_device_start_write());
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 term lgfx_handle_endWrite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_end_write(port));
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_device_end_write());
     return reply_ok(ctx, port, req, port->atoms.ok);
 }

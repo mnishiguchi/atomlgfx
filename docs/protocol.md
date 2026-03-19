@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 This document defines the tuple protocol between an AtomVM host application and the native `lgfx_port` driver.
 
-See [the architecture overview](architecture.md) for the repository map and [the `lgfx_port` README](../lgfx_port/README.md) for worker and ownership details.
+See [the architecture overview](architecture.md) for the repository map and [the `lgfx_port` README](../lgfx_port/README.md) for port-layer and ownership details.
 
 ## Scope
 
@@ -23,7 +23,7 @@ This document covers:
 This document does not define:
 
 - open-time config passed through `open_port/2`
-- internal worker implementation details
+- internal port-layer or device-layer implementation details
 - non-contract implementation structure
 
 ## Source of truth
@@ -43,7 +43,8 @@ The protocol contract is defined by these sources:
   - capability bits
   - wire-level limits
 
-- generated `lgfx_port/lgfx_port_config.h`
+- build-generated `lgfx_port/lgfx_port_config.h`
+  - generated from `lgfx_port/cmake/lgfx_port_config.h.in`
   - build-derived gates used by the component
 
 - this document
@@ -137,8 +138,9 @@ Rule:
 
 Current model:
 
-- deep-copy variable-length payloads before enqueueing worker jobs
-- free the copied payload after the device call completes
+- handlers borrow request binary pointers and pass them directly to `lgfx_device_*` within the same request
+- text and image device calls are synchronous in the current design
+- device code must fully consume those bytes before returning and must not retain the pointer after the call
 
 That matters especially for `drawString`, `print`, `println`, `drawJpg`, and `pushImage`.
 
@@ -195,8 +197,8 @@ Primitive and text scalar colors use two modes.
 Default RGB mode:
 
 - wire format is `0x00RRGGBB` as packed RGB888 in `u32`
-- handler decode quantizes that value to RGB565 before entering worker and device layers
-- worker and device layers do not preserve the original RGB888 value for those scalar arguments
+- handler decode quantizes that value to RGB565 before the device-facing primitive or text call
+- the native primitive and text path does not preserve the original RGB888 value for those scalar arguments
 - this contract is the same regardless of target color depth
 
 Indexed palette mode:
@@ -816,7 +818,7 @@ Useful checks:
 
 - color contract path
   - primitive and text colors should accept `0x00RRGGBB` in default RGB mode
-  - default RGB scalar-color inputs should quantize before worker and device execution
+  - default RGB scalar-color inputs should quantize before device-side primitive or text execution
   - `setColorDepth(24)` should not imply full RGB888 fidelity for primitive or text ops
   - `pushImage` should remain RGB565-only
 
@@ -832,12 +834,16 @@ Useful checks:
 When adding or changing an operation:
 
 - update `lgfx_port/include_internal/lgfx_port/ops.def`
+
 - implement or update the handler
+
 - update capability, error, or protocol constants if needed
+
 - resync generated protocol tables
   - `elixir scripts/sync_lgfx_protocol_doc.exs`
 
 - verify `getCaps` matches the new `feature_cap_bit`
+
 - update this document only for externally visible semantics not obvious from the generated tables
 
 ## Compatibility rules

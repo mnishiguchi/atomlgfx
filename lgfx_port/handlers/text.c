@@ -16,7 +16,6 @@
 #include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
 #include "lgfx_port/proto_term.h"
-#include "lgfx_port/worker.h"
 
 typedef struct
 {
@@ -106,8 +105,7 @@ term lgfx_handle_setTextSize(Context *ctx, lgfx_port_t *port, const lgfx_request
             ctx,
             port,
             req,
-            lgfx_worker_device_set_text_size(
-                port,
+            lgfx_device_set_text_size(
                 (uint8_t) req->target,
                 scale_x256));
 
@@ -129,8 +127,7 @@ term lgfx_handle_setTextSize(Context *ctx, lgfx_port_t *port, const lgfx_request
         ctx,
         port,
         req,
-        lgfx_worker_device_set_text_size_xy(
-            port,
+        lgfx_device_set_text_size_xy(
             (uint8_t) req->target,
             scale_x_x256,
             scale_y_x256));
@@ -149,7 +146,7 @@ term lgfx_handle_setTextDatum(Context *ctx, lgfx_port_t *port, const lgfx_reques
         ctx,
         port,
         req,
-        lgfx_worker_device_set_text_datum(port, (uint8_t) req->target, datum));
+        lgfx_device_set_text_datum((uint8_t) req->target, datum));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -180,7 +177,7 @@ term lgfx_handle_setTextWrap(Context *ctx, lgfx_port_t *port, const lgfx_request
         ctx,
         port,
         req,
-        lgfx_worker_device_set_text_wrap_xy(port, (uint8_t) req->target, wrap_x, wrap_y));
+        lgfx_device_set_text_wrap((uint8_t) req->target, wrap_x, wrap_y));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -198,7 +195,7 @@ term lgfx_handle_setTextFontPreset(Context *ctx, lgfx_port_t *port, const lgfx_r
         ctx,
         port,
         req,
-        lgfx_worker_device_set_text_font_preset(port, (uint8_t) req->target, preset));
+        lgfx_device_set_text_font_preset((uint8_t) req->target, preset));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -232,8 +229,7 @@ term lgfx_handle_setTextColor(Context *ctx, lgfx_port_t *port, const lgfx_reques
         ctx,
         port,
         req,
-        lgfx_worker_device_set_text_color(
-            port,
+        lgfx_device_set_text_color(
             (uint8_t) req->target,
             fg.is_index,
             fg.value,
@@ -260,8 +256,7 @@ term lgfx_handle_setCursor(Context *ctx, lgfx_port_t *port, const lgfx_request_t
         ctx,
         port,
         req,
-        lgfx_worker_device_set_cursor(
-            port,
+        lgfx_device_set_cursor(
             (uint8_t) req->target,
             x,
             y));
@@ -278,8 +273,7 @@ term lgfx_handle_getCursor(Context *ctx, lgfx_port_t *port, const lgfx_request_t
         ctx,
         port,
         req,
-        lgfx_worker_device_get_cursor(
-            port,
+        lgfx_device_get_cursor(
             (uint8_t) req->target,
             &x,
             &y));
@@ -309,8 +303,7 @@ term lgfx_handle_drawString(Context *ctx, lgfx_port_t *port, const lgfx_request_
         ctx,
         port,
         req,
-        lgfx_worker_device_draw_string(
-            port,
+        lgfx_device_draw_string(
             (uint8_t) req->target,
             x,
             y,
@@ -333,8 +326,7 @@ term lgfx_handle_print(Context *ctx, lgfx_port_t *port, const lgfx_request_t *re
         ctx,
         port,
         req,
-        lgfx_worker_device_print(
-            port,
+        lgfx_device_print(
             (uint8_t) req->target,
             bytes,
             len));
@@ -355,8 +347,7 @@ term lgfx_handle_println(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
         ctx,
         port,
         req,
-        lgfx_worker_device_println(
-            port,
+        lgfx_device_println(
             (uint8_t) req->target,
             bytes,
             len));

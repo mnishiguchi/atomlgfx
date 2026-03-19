@@ -90,19 +90,18 @@ The goal is not to mirror all of LovyanGFX. The goal is to provide a small, expl
 
 ## Current model
 
-The current native model separates configuration persistence from live device ownership:
+The current native model separates per-port configuration from live device ownership:
 
 - per-port configuration is stored by the port layer
 - the live LCD device remains singleton-backed
-- this layer executes against that singleton-backed device state
+- this layer resolves owner-aware init, close, and dimension queries using an opaque owner token
 
-That means this layer should stay focused on device truth, not caller identity or protocol envelope handling.
+That means this layer may care about singleton ownership, but it should not care about protocol envelopes or AtomVM terms.
 
 ## When changing this layer
 
 When adding or changing device behavior:
 
 - keep protocol tuple rules in `lgfx_port/` and `../docs/protocol.md`
-- keep worker job definitions in `../lgfx_port/include_internal/lgfx_port/worker_jobs.def`
-- keep this layer focused on target resolution and device semantics
+- keep this layer focused on target resolution, ownership, and device semantics
 - update protocol docs only when the externally visible contract changes

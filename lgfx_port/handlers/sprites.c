@@ -15,7 +15,6 @@
 #include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
 #include "lgfx_port/proto_term.h"
-#include "lgfx_port/worker.h"
 
 // Destination-aware sprite ops handled here:
 //
@@ -44,7 +43,7 @@
 //   - palette index when LGFX_F_TRANSPARENT_INDEX is set
 //
 // Keep the handler wire-oriented: decode fixed-point integers here and carry them
-// unchanged into the worker ABI. Conversion to float happens later at the device
+// unchanged into the device ABI. Conversion to float happens later at the device
 // call boundary.
 
 typedef struct
@@ -234,8 +233,7 @@ term lgfx_handle_createSprite(Context *ctx, lgfx_port_t *port, const lgfx_reques
         ctx,
         port,
         req,
-        lgfx_worker_device_create_sprite(
-            port,
+        lgfx_device_sprite_create_at(
             (uint8_t) req->target,
             args.w,
             args.h,
@@ -246,7 +244,7 @@ term lgfx_handle_createSprite(Context *ctx, lgfx_port_t *port, const lgfx_reques
 
 term lgfx_handle_deleteSprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_delete_sprite(port, (uint8_t) req->target));
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_device_sprite_delete((uint8_t) req->target));
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
@@ -256,7 +254,7 @@ term lgfx_handle_createPalette(Context *ctx, lgfx_port_t *port, const lgfx_reque
         ctx,
         port,
         req,
-        lgfx_worker_device_create_palette(port, (uint8_t) req->target));
+        lgfx_device_sprite_create_palette((uint8_t) req->target));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -273,8 +271,7 @@ term lgfx_handle_setPaletteColor(Context *ctx, lgfx_port_t *port, const lgfx_req
         ctx,
         port,
         req,
-        lgfx_worker_device_set_palette_color(
-            port,
+        lgfx_device_sprite_set_palette_color(
             (uint8_t) req->target,
             args.palette_index,
             args.rgb888));
@@ -294,8 +291,7 @@ term lgfx_handle_setPivot(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
         ctx,
         port,
         req,
-        lgfx_worker_device_set_pivot(
-            port,
+        lgfx_device_set_pivot(
             (uint8_t) req->target,
             args.px,
             args.py));
@@ -315,8 +311,7 @@ term lgfx_handle_pushSprite(Context *ctx, lgfx_port_t *port, const lgfx_request_
         ctx,
         port,
         req,
-        lgfx_worker_device_push_sprite(
-            port,
+        lgfx_device_sprite_push_sprite(
             (uint8_t) req->target,
             args.dst_target,
             args.x,
@@ -340,8 +335,7 @@ term lgfx_handle_pushRotateZoom(Context *ctx, lgfx_port_t *port, const lgfx_requ
         ctx,
         port,
         req,
-        lgfx_worker_device_push_rotate_zoom(
-            port,
+        lgfx_device_sprite_push_rotate_zoom(
             (uint8_t) req->target,
             args.dst_target,
             args.x,

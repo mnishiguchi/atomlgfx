@@ -15,7 +15,6 @@
 #include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
 #include "lgfx_port/proto_term.h"
-#include "lgfx_port/worker.h"
 
 typedef struct
 {
@@ -66,8 +65,7 @@ term lgfx_handle_fillScreen(Context *ctx, lgfx_port_t *port, const lgfx_request_
         ctx,
         port,
         req,
-        lgfx_worker_device_fill_screen(
-            port,
+        lgfx_device_fill_screen(
             (uint8_t) req->target,
             color.is_index,
             color.value));
@@ -87,8 +85,7 @@ term lgfx_handle_clear(Context *ctx, lgfx_port_t *port, const lgfx_request_t *re
         ctx,
         port,
         req,
-        lgfx_worker_device_clear(
-            port,
+        lgfx_device_clear(
             (uint8_t) req->target,
             color.is_index,
             color.value));
@@ -116,8 +113,7 @@ term lgfx_handle_drawPixel(Context *ctx, lgfx_port_t *port, const lgfx_request_t
         ctx,
         port,
         req,
-        lgfx_worker_device_draw_pixel(
-            port,
+        lgfx_device_draw_pixel(
             (uint8_t) req->target,
             x,
             y,
@@ -151,8 +147,7 @@ term lgfx_handle_drawFastVLine(Context *ctx, lgfx_port_t *port, const lgfx_reque
         ctx,
         port,
         req,
-        lgfx_worker_device_draw_fast_vline(
-            port,
+        lgfx_device_draw_fast_vline(
             (uint8_t) req->target,
             x,
             y,
@@ -187,8 +182,7 @@ term lgfx_handle_drawFastHLine(Context *ctx, lgfx_port_t *port, const lgfx_reque
         ctx,
         port,
         req,
-        lgfx_worker_device_draw_fast_hline(
-            port,
+        lgfx_device_draw_fast_hline(
             (uint8_t) req->target,
             x,
             y,
@@ -227,8 +221,7 @@ term lgfx_handle_drawLine(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
         ctx,
         port,
         req,
-        lgfx_worker_device_draw_line(
-            port,
+        lgfx_device_draw_line(
             (uint8_t) req->target,
             x0,
             y0,
@@ -268,8 +261,7 @@ term lgfx_handle_drawRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
         ctx,
         port,
         req,
-        lgfx_worker_device_draw_rect(
-            port,
+        lgfx_device_draw_rect(
             (uint8_t) req->target,
             x,
             y,
@@ -309,8 +301,7 @@ term lgfx_handle_fillRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
         ctx,
         port,
         req,
-        lgfx_worker_device_fill_rect(
-            port,
+        lgfx_device_fill_rect(
             (uint8_t) req->target,
             x,
             y,
@@ -346,8 +337,7 @@ term lgfx_handle_drawCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_
         ctx,
         port,
         req,
-        lgfx_worker_device_draw_circle(
-            port,
+        lgfx_device_draw_circle(
             (uint8_t) req->target,
             x,
             y,
@@ -382,8 +372,7 @@ term lgfx_handle_fillCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_
         ctx,
         port,
         req,
-        lgfx_worker_device_fill_circle(
-            port,
+        lgfx_device_fill_circle(
             (uint8_t) req->target,
             x,
             y,
@@ -411,8 +400,7 @@ term lgfx_handle_drawTriangle(Context *ctx, lgfx_port_t *port, const lgfx_reques
         ctx,
         port,
         req,
-        lgfx_worker_device_draw_triangle(
-            port,
+        lgfx_device_draw_triangle(
             (uint8_t) req->target,
             tri.x0,
             tri.y0,
@@ -443,8 +431,7 @@ term lgfx_handle_fillTriangle(Context *ctx, lgfx_port_t *port, const lgfx_reques
         ctx,
         port,
         req,
-        lgfx_worker_device_fill_triangle(
-            port,
+        lgfx_device_fill_triangle(
             (uint8_t) req->target,
             tri.x0,
             tri.y0,

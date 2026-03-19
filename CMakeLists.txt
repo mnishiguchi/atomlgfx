@@ -393,22 +393,18 @@ idf_component_register(
     # Port entrypoint / lifecycle
     "lgfx_port/lgfx_port.c"
 
-    # Worker split
-    "lgfx_port/worker_core.c"
-    "lgfx_port/worker_device.c"
-
     # Protocol / dispatch / metadata
     "lgfx_port/proto_term.c"
 
     # Handlers
     "lgfx_port/handlers/control.c"
     "lgfx_port/handlers/device.c"
-    "lgfx_port/handlers/primitives.c"
     "lgfx_port/handlers/text.c"
+    "lgfx_port/handlers/primitives.c"
     "lgfx_port/handlers/images.c"
     "lgfx_port/handlers/sprites.c"
-    "lgfx_port/handlers/touch.c"
     "lgfx_port/handlers/clip.c"
+    "lgfx_port/handlers/touch.c"
 
     # Device adapter
     "lgfx_device/state.cpp"

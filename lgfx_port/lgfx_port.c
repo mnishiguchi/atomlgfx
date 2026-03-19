@@ -18,7 +18,7 @@
 // - Request decode -> metadata validation -> dispatch -> reply flow
 //
 // Non-responsibilities:
-// - Device calls (handled by lgfx_worker_*.c / src/lgfx_device*)
+// - Device implementation details (handled by lgfx_device/*)
 // - AtomVM term decoding details (handled by proto_term.c)
 // - Reply encoding helpers (handled by proto_term.c)
 
@@ -43,7 +43,6 @@
 #include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
 #include "lgfx_port/proto_term.h"
-#include "lgfx_port/worker.h"
 
 #ifndef LGFX_PORT_DEBUG
 #define LGFX_PORT_DEBUG 0
@@ -1048,18 +1047,16 @@ static void lgfx_port_teardown(Context *ctx)
      * current ownership outside that window.
      *
      * Global publication, ownership, and ready-state live in
-     * src/lgfx_device_state.cpp.
+     * lgfx_device/state.cpp.
      */
     if (port->initialized) {
-        (void) lgfx_worker_device_close(port);
+        (void) lgfx_device_close_for_owner((const void *) port);
     }
 
     port->initialized = false;
     port->width = 0;
     port->height = 0;
     lgfx_last_error_clear(port);
-
-    lgfx_worker_stop(port);
 
     port->ctx = NULL;
 
@@ -1278,12 +1275,6 @@ static Context *lgfx_port_create_port(GlobalContext *global, term opts)
      * only when a port tries to claim the live device via init().
      */
     port->open_config_overrides = open_config_overrides;
-
-    if (!lgfx_worker_start(port)) {
-        free(port);
-        context_destroy(ctx);
-        return NULL;
-    }
 
     ctx->platform_data = port;
     ctx->native_handler = lgfx_port_native_handler;

@@ -10,9 +10,10 @@ SPDX-License-Identifier: Apache-2.0
 
 - a native ESP-IDF component built around the `lgfx_port` AtomVM port driver
 - an Elixir package that provides the `LGFXPort` wrapper for that driver
-  This document gives the top-level map only. Detailed protocol rules live in
-  [the protocol spec](protocol.md). Port-thread and worker details live in
-  [the `lgfx_port` README](../lgfx_port/README.md).
+
+This document gives the top-level map only. Detailed protocol rules live in
+[the protocol spec](protocol.md). Port-layer details live in
+[the `lgfx_port` README](../lgfx_port/README.md).
 
 ## Big picture
 
@@ -29,15 +30,7 @@ Elixir / AtomVM
 | - reply encode               |
 +---------------+--------------+
                 |
-                | plain C job
-                v
-+------------------------------+
-| worker task                  |
-| - execute device work        |
-| - free copied payloads       |
-| - notify waiting caller      |
-+---------------+--------------+
-                |
+                | direct lgfx_device_* calls
                 v
 +------------------------------+
 | lgfx_device/                 |
@@ -60,7 +53,7 @@ Elixir / AtomVM
   - request envelope handling
   - metadata-driven validation
   - handler dispatch
-  - worker bridge
+  - direct device call boundary
 
 - `lgfx_device/`
   - LovyanGFX-facing adapter layer
@@ -141,11 +134,7 @@ That metadata drives:
 - capability linkage
 - generated tables in `docs/protocol.md`
 
-Worker jobs follow the same pattern:
-
-- `lgfx_port/include_internal/lgfx_port/worker_jobs.def`
-
-The design goal is one declarative source for each surface, with generated or synchronized outputs around it.
+The design goal is one declarative source for the protocol-visible surface, with generated or synchronized outputs around it.
 
 ## Ownership model
 
@@ -159,15 +148,15 @@ This keeps per-port configuration explicit without pretending the underlying har
 
 ## Binary payload rule
 
-Variable-length payloads such as text, JPEG data, and RGB565 image data must not cross the worker boundary by borrowing caller-owned term memory.
+Variable-length payloads such as text, JPEG data, and RGB565 image data must not outlive the request by borrowing caller-owned term memory.
 
 Current rule:
 
-- copy variable-length payloads before enqueue
-- execute device work
-- free the copied payload after completion
+- handlers borrow request binary pointers only for the duration of the current request
+- device calls consume those bytes synchronously
+- device code must not retain borrowed payload pointers after the call returns
 
-The detailed worker and lifetime model is documented in `lgfx_port/README.md`.
+The detailed request and lifetime model is documented in `docs/protocol.md` and `lgfx_port/README.md`.
 
 ## Pinned LovyanGFX policy
 
@@ -185,7 +174,7 @@ Policy:
   - tuple protocol contract
 
 - [`lgfx_port/README.md`](../lgfx_port/README.md)
-  - port layer, worker model, ownership, and job flow
+  - port-layer responsibilities, dispatch, and ownership
 
 - [`lgfx_device/README.md`](../lgfx_device/README.md)
   - device adapter responsibilities and file map

@@ -21,7 +21,6 @@
 #include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
 #include "lgfx_port/proto_term.h"
-#include "lgfx_port/worker.h"
 
 term lgfx_handle_width(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
@@ -35,7 +34,7 @@ term lgfx_handle_width(Context *ctx, lgfx_port_t *port, const lgfx_request_t *re
         ctx,
         port,
         req,
-        lgfx_worker_device_get_target_dims(port, (uint8_t) req->target, &w, &h));
+        lgfx_device_get_target_dims((uint8_t) req->target, &w, &h));
     return reply_ok(ctx, port, req, term_from_int32((int32_t) w));
 }
 
@@ -51,7 +50,7 @@ term lgfx_handle_height(Context *ctx, lgfx_port_t *port, const lgfx_request_t *r
         ctx,
         port,
         req,
-        lgfx_worker_device_get_target_dims(port, (uint8_t) req->target, &w, &h));
+        lgfx_device_get_target_dims((uint8_t) req->target, &w, &h));
     return reply_ok(ctx, port, req, term_from_int32((int32_t) h));
 }
 
@@ -62,7 +61,7 @@ term lgfx_handle_setRotation(Context *ctx, lgfx_port_t *port, const lgfx_request
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_set_rotation(port, (uint8_t) rot));
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_device_set_rotation((uint8_t) rot));
 
     lgfx_refresh_cached_dims(port);
 
@@ -76,7 +75,7 @@ term lgfx_handle_setBrightness(Context *ctx, lgfx_port_t *port, const lgfx_reque
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_set_brightness(port, (uint8_t) b));
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_device_set_brightness((uint8_t) b));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -96,13 +95,13 @@ term lgfx_handle_setColorDepth(Context *ctx, lgfx_port_t *port, const lgfx_reque
         ctx,
         port,
         req,
-        lgfx_worker_device_set_color_depth(port, (uint8_t) req->target, (uint8_t) d));
+        lgfx_device_set_color_depth((uint8_t) req->target, (uint8_t) d));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 term lgfx_handle_display(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_worker_device_display(port));
+    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_device_display());
     return reply_ok(ctx, port, req, port->atoms.ok);
 }

@@ -497,9 +497,11 @@ esp_err_t lgfx_device_sprite_push_sprite(
 /*
  * Rotate/zoom sprite push to LCD or another sprite.
  *
- * Worker/handler layers convert protocol units before calling here:
- * - angle_deg: float degrees
- * - zoom_x / zoom_y: float scale factors (> 0)
+ * Handler / protocol path provides protocol-native numeric forms:
+ * - angle_x100: centi-degrees (9000 == 90.00°)
+ * - zoom_x_x1024 / zoom_y_x1024: x1024 fixed-point (> 0, 1024 == 1.0x)
+ *
+ * Conversion to the LovyanGFX float API happens here at the device boundary.
  *
  * Transparent semantics match lgfx_device_sprite_push_sprite().
  */
@@ -508,9 +510,9 @@ esp_err_t lgfx_device_sprite_push_rotate_zoom(
     uint8_t dst_target,
     int16_t x,
     int16_t y,
-    float angle_deg,
-    float zoom_x,
-    float zoom_y,
+    int32_t angle_x100,
+    int32_t zoom_x_x1024,
+    int32_t zoom_y_x1024,
     bool has_transparent,
     bool transparent_is_index,
     uint32_t transparent_value);

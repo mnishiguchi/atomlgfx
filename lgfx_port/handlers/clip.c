@@ -14,7 +14,6 @@
 #include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
 #include "lgfx_port/proto_term.h"
-#include "lgfx_port/worker.h"
 
 term lgfx_handle_setClipRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
@@ -40,7 +39,7 @@ term lgfx_handle_setClipRect(Context *ctx, lgfx_port_t *port, const lgfx_request
         ctx,
         port,
         req,
-        lgfx_worker_device_set_clip_rect(port, (uint8_t) req->target, x, y, w, h));
+        lgfx_device_set_clip_rect((uint8_t) req->target, x, y, w, h));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
@@ -51,7 +50,7 @@ term lgfx_handle_clearClipRect(Context *ctx, lgfx_port_t *port, const lgfx_reque
         ctx,
         port,
         req,
-        lgfx_worker_device_clear_clip_rect(port, (uint8_t) req->target));
+        lgfx_device_clear_clip_rect((uint8_t) req->target));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
