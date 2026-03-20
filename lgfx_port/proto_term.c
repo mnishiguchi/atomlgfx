@@ -75,11 +75,12 @@ bool lgfx_term_decode_request(
     }
 
     // NOTE:
-    // Envelope validation (proto_ver match, arity bounds, allowed flags, target policy, init-state)
-    // is centralized in lgfx_port.c using ops.def metadata.
+    // Envelope validation (proto_ver match, arity bounds, allowed flags, target
+    // policy, init-state) is centralized in lgfx_port.c using ops.def metadata.
     //
-    // Here we only perform minimal structural decode + integer conversion so callers can
-    // apply consistent policy/metadata validation afterward.
+    // Here we only perform minimal structural decode for the fixed request
+    // header. Op-specific payload decode, including float-aligned numeric
+    // payloads, happens later in handlers via handler_decode.h helpers.
 
     term ver_t = term_get_tuple_element(request, 1);
     uint32_t proto_ver = 0;

@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -17,7 +18,7 @@
 #include "lgfx_port/lgfx_port_config.h"
 
 // LGFX_FONT_PRESET_* and other shared wire constants
-#include "lgfx_port/lgfx_port.h" 
+#include "lgfx_port/lgfx_port.h"
 
 // -----------------------------------------------------------------------------
 // Optional debug string constants
@@ -53,7 +54,7 @@
 // -----------------------------------------------------------------------------
 
 #ifndef LGFX_PORT_PROTO_VER
-#define LGFX_PORT_PROTO_VER 1u
+#define LGFX_PORT_PROTO_VER 2u
 #endif
 
 #ifndef LGFX_PORT_MAX_BINARY_BYTES
@@ -184,14 +185,17 @@ static inline bool lgfx_validate_rgb888(uint32_t rgb888)
     return rgb888 <= 0xFFFFFFu;
 }
 
-// setTextSize wire values use positive x256 fixed-point integers.
-// Examples:
-// - 256 => 1.0x
-// - 384 => 1.5x
-// - 512 => 2.0x
-static inline bool lgfx_validate_text_scale_x256(uint32_t scale_x256)
+// LovyanGFX-like numeric wire values are decoded to C float in the handler layer.
+// Integer and float terms are both accepted on the wire for these positions.
+// Validation here operates on the normalized float value.
+static inline bool lgfx_validate_f32(float value)
 {
-    return scale_x256 >= 1u && scale_x256 <= 65535u;
+    return isfinite((double) value);
+}
+
+static inline bool lgfx_validate_positive_f32(float value)
+{
+    return lgfx_validate_f32(value) && value > 0.0f;
 }
 
 // -----------------------------------------------------------------------------

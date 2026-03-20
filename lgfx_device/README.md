@@ -41,7 +41,7 @@ See [the protocol spec](../docs/protocol.md) for wire-level rules and
   - text operations
   - font preset handling
   - cursor and wrap behavior
-  - text-scale conversion near the LovyanGFX call boundary
+  - direct LovyanGFX-style text-scale handling at the device boundary
 
 - `primitives.cpp`
   - primitive drawing operations
@@ -73,7 +73,7 @@ Examples:
 - whether a destination sprite exists
 - `pushImage` stride and payload validity
 - rotate/zoom semantic validity
-- final conversion from protocol-owned fixed-point values to the pinned LovyanGFX call shape
+- final validation and forwarding of LovyanGFX-style numeric arguments to the pinned LovyanGFX call shape
 
 ## Design intent
 

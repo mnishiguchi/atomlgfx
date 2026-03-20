@@ -289,11 +289,10 @@ esp_err_t lgfx_device_clear_clip_rect(uint8_t target);
 // Font preset IDs are protocol-level constants defined in lgfx_port/lgfx_port.h.
 //
 // setTextSize(scale):
-// - accepts positive x256 fixed-point values from the protocol/worker path
-// - 256 => 1.0x
-// - 384 => 1.5x
+// - accepts positive LovyanGFX-style scale values at this boundary
+// - 1.0 => 1.0x
+// - 1.5 => 1.5x
 // - one-argument form applies the same scale to both axes
-// - conversion to the LovyanGFX float API happens here at the device boundary
 //
 // setTextDatum(datum):
 // - accepts raw u8 values in 0..255
@@ -304,8 +303,8 @@ esp_err_t lgfx_device_clear_clip_rect(uint8_t target);
 // - explicit two-axis form at the device boundary
 // - forwarded to the pinned LovyanGFX two-argument API
 // - one-argument protocol/wrapper calls default wrap_y=false before calling here
-esp_err_t lgfx_device_set_text_size(uint8_t target, uint16_t scale_x256);
-esp_err_t lgfx_device_set_text_size_xy(uint8_t target, uint16_t scale_x_x256, uint16_t scale_y_x256);
+esp_err_t lgfx_device_set_text_size(uint8_t target, float scale);
+esp_err_t lgfx_device_set_text_size_xy(uint8_t target, float scale_x, float scale_y);
 esp_err_t lgfx_device_set_text_datum(uint8_t target, uint8_t datum);
 esp_err_t lgfx_device_set_text_wrap(uint8_t target, bool wrap_x, bool wrap_y);
 esp_err_t lgfx_device_set_cursor(uint8_t target, int16_t x, int16_t y);
@@ -422,13 +421,12 @@ esp_err_t lgfx_device_draw_string(uint8_t target, int16_t x, int16_t y, const ui
 
 // JPEG draw from an in-memory payload.
 //
-// Worker / protocol path provides:
+// Handler / protocol path provides:
 // - target-local x/y
 // - optional max_w / max_h crop bounds (0 means LovyanGFX default behavior)
 // - optional off_x / off_y source offsets
-// - positive x1024 fixed-point scales
+// - positive LovyanGFX-style scale values
 //
-// Conversion to the LovyanGFX float API happens here at the device boundary.
 // The payload must remain valid for the duration of the call only.
 esp_err_t lgfx_device_draw_jpg(
     uint8_t target,
@@ -438,8 +436,8 @@ esp_err_t lgfx_device_draw_jpg(
     uint16_t max_h,
     int16_t off_x,
     int16_t off_y,
-    int32_t scale_x_x1024,
-    int32_t scale_y_x1024,
+    float scale_x,
+    float scale_y,
     const uint8_t *jpeg_bytes,
     size_t jpeg_len);
 
@@ -497,11 +495,9 @@ esp_err_t lgfx_device_sprite_push_sprite(
 /*
  * Rotate/zoom sprite push to LCD or another sprite.
  *
- * Handler / protocol path provides protocol-native numeric forms:
- * - angle_x100: centi-degrees (9000 == 90.00°)
- * - zoom_x_x1024 / zoom_y_x1024: x1024 fixed-point (> 0, 1024 == 1.0x)
- *
- * Conversion to the LovyanGFX float API happens here at the device boundary.
+ * Handler / protocol path provides LovyanGFX-style numeric forms:
+ * - angle: degrees
+ * - zoom_x / zoom_y: positive scale values
  *
  * Transparent semantics match lgfx_device_sprite_push_sprite().
  */
@@ -510,9 +506,9 @@ esp_err_t lgfx_device_sprite_push_rotate_zoom(
     uint8_t dst_target,
     int16_t x,
     int16_t y,
-    int32_t angle_x100,
-    int32_t zoom_x_x1024,
-    int32_t zoom_y_x1024,
+    float angle,
+    float zoom_x,
+    float zoom_y,
     bool has_transparent,
     bool transparent_is_index,
     uint32_t transparent_value);

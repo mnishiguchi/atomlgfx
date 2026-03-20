@@ -7,6 +7,7 @@
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"
 
+#include <cmath>
 #include <new>
 #include <stddef.h>
 #include <string.h>
@@ -18,14 +19,9 @@ extern const lgfx::U8g2font ui_font_ja_16_min;
 namespace
 {
 
-static inline bool lgfx_text_scale_x256_to_float(uint16_t scale_x256, float *out_scale)
+static inline bool lgfx_text_scale_is_valid(float scale)
 {
-    if (!out_scale || scale_x256 == 0) {
-        return false;
-    }
-
-    *out_scale = static_cast<float>(scale_x256) / 256.0f;
-    return true;
+    return std::isfinite(scale) && scale > 0.0f;
 }
 
 template <typename Fn>
@@ -74,22 +70,18 @@ static esp_err_t set_jp_font_default(uint8_t target)
 
 } // namespace
 
-extern "C" esp_err_t lgfx_device_set_text_size(uint8_t target, uint16_t scale_x256)
+extern "C" esp_err_t lgfx_device_set_text_size(uint8_t target, float scale)
 {
-    float scale = 0.0f;
-    if (!lgfx_text_scale_x256_to_float(scale_x256, &scale)) {
+    if (!lgfx_text_scale_is_valid(scale)) {
         return ESP_ERR_INVALID_ARG;
     }
 
     return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextSize(scale); });
 }
 
-extern "C" esp_err_t lgfx_device_set_text_size_xy(uint8_t target, uint16_t scale_x_x256, uint16_t scale_y_x256)
+extern "C" esp_err_t lgfx_device_set_text_size_xy(uint8_t target, float scale_x, float scale_y)
 {
-    float scale_x = 0.0f;
-    float scale_y = 0.0f;
-    if (!lgfx_text_scale_x256_to_float(scale_x_x256, &scale_x)
-        || !lgfx_text_scale_x256_to_float(scale_y_x256, &scale_y)) {
+    if (!lgfx_text_scale_is_valid(scale_x) || !lgfx_text_scale_is_valid(scale_y)) {
         return ESP_ERR_INVALID_ARG;
     }
 

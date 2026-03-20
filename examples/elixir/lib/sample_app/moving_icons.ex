@@ -11,7 +11,7 @@ defmodule SampleApp.MovingIcons do
   import SampleApp.AtomVMCompat, only: [yield: 0]
 
   # -----------------------------------------------------------------------------
-  # Demo config (LovyanGFX-style)
+  # Demo config
   # -----------------------------------------------------------------------------
 
   @obj_count 5
@@ -56,7 +56,9 @@ defmodule SampleApp.MovingIcons do
   @sprite_buf0 10
   @sprite_buf1 11
 
-  # Zoom bounds in protocol units (x1024 fixed-point).
+  # Internal animation zoom units (x1024 fixed-point).
+  # Converted to direct v2 zoom values only at the LGFXPort call boundary.
+  #
   # - 512  = 0.5x
   # - 2048 = 2.0x
   @zoom_min_x1024 512
@@ -246,8 +248,8 @@ defmodule SampleApp.MovingIcons do
   # Object init + move
   # -----------------------------------------------------------------------------
 
-  # Object tuple:
-  # {x, y, dx, dy, img_index, r_cdeg, z_x1024, dr_cdeg, dz_x1024}
+  # Internal object tuple:
+  # {x, y, dx, dy, img_index, angle_cdeg, zoom_x1024, dangle_cdeg, dzoom_x1024}
   defp init_objects(seed, count, w, h) do
     init_objects_i(seed, 0, count, w, h, [])
   end
@@ -274,7 +276,7 @@ defmodule SampleApp.MovingIcons do
     dr_deg = (band3(r5) + 1) * sign(i &&& 2)
     dr_cdeg = dr_deg * 100
 
-    # Zoom and delta-zoom in protocol units:
+    # Internal zoom state:
     # - z_x1024: 1.0..1.9 (step 0.1)
     # - dz_x1024: 0.01..0.10 (step 0.01)
     z10 = rem(r3, 10) + 10
@@ -298,16 +300,16 @@ defmodule SampleApp.MovingIcons do
 
   defp move_objects_i([], _w, _h, acc), do: :lists.reverse(acc)
 
-  defp move_objects_i([{x, y, dx, dy, img, r_cdeg, z_x1024, dr_cdeg, dz_x1024} | rest], w, h, acc) do
-    r2 = wrap_angle_cdeg(r_cdeg + dr_cdeg)
+  defp move_objects_i([{x, y, dx, dy, img, angle_cdeg, zoom_x1024, dangle_cdeg, dzoom_x1024} | rest], w, h, acc) do
+    angle2 = wrap_angle_cdeg(angle_cdeg + dangle_cdeg)
 
     {x2, dx2} = bounce_i16(x + dx, dx, 0, w - 1)
     {y2, dy2} = bounce_i16(y + dy, dy, 0, h - 1)
 
-    z2 = z_x1024 + dz_x1024
-    {z3, dz2} = bounce_i32(z2, dz_x1024, @zoom_min_x1024, @zoom_max_x1024)
+    zoom2 = zoom_x1024 + dzoom_x1024
+    {zoom3, dzoom2} = bounce_i32(zoom2, dzoom_x1024, @zoom_min_x1024, @zoom_max_x1024)
 
-    move_objects_i(rest, w, h, [{x2, y2, dx2, dy2, img, r2, z3, dr_cdeg, dz2} | acc])
+    move_objects_i(rest, w, h, [{x2, y2, dx2, dy2, img, angle2, zoom3, dangle_cdeg, dzoom2} | acc])
   end
 
   defp bounce_i16(pos, delta, min_v, max_v) do
@@ -434,7 +436,7 @@ defmodule SampleApp.MovingIcons do
 
   defp draw_all_objects_to_target_i(
          port,
-         [{x, y, _dx, _dy, img, r_cdeg, z_x1024, _dr, _dz} | rest],
+         [{x, y, _dx, _dy, img, angle_cdeg, zoom_x1024, _dangle, _dzoom} | rest],
          icon_handles,
          dst_target,
          y0
@@ -451,6 +453,8 @@ defmodule SampleApp.MovingIcons do
     # For direct LCD mode, y0 is 0.
     dst_x = x
     dst_y = y - y0
+    angle_deg = deg_from_cdeg(angle_cdeg)
+    zoom = zoom_from_x1024(zoom_x1024)
 
     result =
       if @use_transparent_key do
@@ -460,9 +464,9 @@ defmodule SampleApp.MovingIcons do
           dst_target,
           dst_x,
           dst_y,
-          r_cdeg,
-          z_x1024,
-          z_x1024,
+          angle_deg,
+          zoom,
+          zoom,
           @transparent_key_rgb565
         )
       else
@@ -472,9 +476,9 @@ defmodule SampleApp.MovingIcons do
           dst_target,
           dst_x,
           dst_y,
-          r_cdeg,
-          z_x1024,
-          z_x1024
+          angle_deg,
+          zoom,
+          zoom
         )
       end
 
@@ -496,6 +500,14 @@ defmodule SampleApp.MovingIcons do
     i3 = byte_size(elem(icons, 3))
 
     IO.puts("icon bytes info=#{i0} alert=#{i1} close=#{i2} piyopiyo=#{i3} expected=#{expected}")
+  end
+
+  defp deg_from_cdeg(angle_cdeg) when is_integer(angle_cdeg) do
+    angle_cdeg / 100.0
+  end
+
+  defp zoom_from_x1024(zoom_x1024) when is_integer(zoom_x1024) do
+    zoom_x1024 / 1024.0
   end
 
   defp div_ceil(a, b) when is_integer(a) and is_integer(b) and b > 0 do

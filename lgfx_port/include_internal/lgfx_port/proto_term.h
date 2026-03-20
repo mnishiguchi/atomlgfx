@@ -7,7 +7,9 @@
 // lgfx_port/include_internal/lgfx_port/proto_term.h
 #pragma once
 
+#include <float.h>
 #include <limits.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -147,6 +149,36 @@ static inline bool lgfx_term_to_u16(term t, uint16_t *out)
     }
 
     *out = (uint16_t) v;
+    return true;
+}
+
+// LovyanGFX-like numeric payload positions accept either integer or float terms
+// on the wire and normalize them to C float for downstream handler/device code.
+static inline bool lgfx_term_to_f32(term t, float *out)
+{
+    if (!out) {
+        return false;
+    }
+
+    avm_float_t value = 0;
+
+    if (term_is_float(t)) {
+        value = term_to_float(t);
+    } else if (term_is_integer(t)) {
+        value = (avm_float_t) term_to_int(t);
+    } else {
+        return false;
+    }
+
+    if (!isfinite((double) value)) {
+        return false;
+    }
+
+    if (value < -(avm_float_t) FLT_MAX || value > (avm_float_t) FLT_MAX) {
+        return false;
+    }
+
+    *out = (float) value;
     return true;
 }
 

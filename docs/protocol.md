@@ -59,6 +59,39 @@ Important invariants:
 - touch is advertised only when touch ops are both compiled in and effectively attached
 - generated tables and implementation must agree
 
+## Protocol version history
+
+### v2
+
+`LGFX_PORT_PROTO_VER = 2`.
+
+This version introduces a wire-level breaking change for rotate and scale semantics so they align more directly with LovyanGFX numeric behavior.
+
+Affected paths:
+
+- `setTextSize`
+- `drawJpg` extended scaling
+- `pushRotateZoom`
+
+What changed:
+
+- fixed-point transport encodings were removed from these paths
+- integer and float terms are accepted on the wire for these numeric positions
+- handler decode normalizes those values to native `float`
+- device code validates and forwards LovyanGFX-like numeric values directly
+
+Examples of removed v1-style encodings:
+
+- centi-degrees
+- x256 text scale
+- x1024 image and rotate/zoom scale
+
+Compatibility impact:
+
+- v1 and v2 are not wire-compatible for the affected arguments above
+- host code using protocol v1 must be updated before sending `ProtoVer = 2`
+- unchanged operations keep their existing request shapes and meanings
+
 ## Request and response model
 
 All requests use one tuple shape:
@@ -160,20 +193,28 @@ Common usage:
 - `x`, `y` => `i16`
 - `w`, `h` => `u16`
 
-### Text scale
+### LovyanGFX-like numeric values
 
-`setTextSize` uses positive x256 fixed-point integers on the wire:
+Some numeric arguments use LovyanGFX-like float semantics on the wire.
 
-- `256` => `1.0x`
-- `384` => `1.5x`
-- `512` => `2.0x`
-- `768` => `3.0x`
+Current paths:
+
+- `setTextSize`
+- `drawJpg` extended scaling
+- `pushRotateZoom`
 
 Rules:
 
-- wire form is integer-only
-- `0` is invalid
-- accepted range is `1..65535`
+- integer and float terms are both accepted on the wire
+- values are decoded to native `float` in the handler layer
+- values must be finite
+- scale values must be positive
+
+Examples:
+
+- `1` => `1.0`
+- `1.5` => `1.5`
+- `90` => `90.0`
 
 ### Strings
 
@@ -520,19 +561,21 @@ Font preset and text size are separate concerns:
 
 Args:
 
-- `setTextSize(ScaleXX256U16)`
-- `setTextSize(ScaleXX256U16, ScaleYX256U16)`
+- `setTextSize(ScaleF32)`
+- `setTextSize(ScaleXF32, ScaleYF32)`
 
 Rules:
 
+- integer and float terms are both accepted on the wire
 - one-argument form applies the same scale to both axes
 - two-argument form sets both axes explicitly
-- `0` is invalid
-- conversion to the pinned LovyanGFX float call shape happens at the final device-call boundary
+- scale values must be positive
+- handler decode normalizes the wire value to native `float`
+- device code validates and forwards the final value to the pinned LovyanGFX call surface
 
 Errors:
 
-- zero or out-of-range value => `{error, bad_args}`
+- zero, negative, non-finite, or wrong-type value => `{error, bad_args}`
 
 ### `setTextDatum`
 
@@ -569,11 +612,11 @@ Preset IDs:
 
 - `0` = `ascii`
   - selects the pinned default ASCII font internally
-  - normalizes text scale to `256`
+  - normalizes text scale to `1.0`
 
 - `1` = `jp`
   - selects the built-in Japanese-capable preset internally
-  - normalizes text scale to `256`
+  - normalizes text scale to `1.0`
 
 Errors:
 
@@ -654,15 +697,15 @@ Semantics:
 Request args:
 
 - `drawJpg(Xi16, Yi16, JpegBinary)`
-- `drawJpg(Xi16, Yi16, MaxWu16, MaxHu16, OffXi16, OffYi16, ScaleXX1024I32, ScaleYX1024I32, JpegBinary)`
+- `drawJpg(Xi16, Yi16, MaxWu16, MaxHu16, OffXi16, OffYi16, ScaleXF32, ScaleYF32, JpegBinary)`
 
 Rules:
 
 - the final argument must be a binary
-- the short form implies `MaxW = 0`, `MaxH = 0`, `OffX = 0`, `OffY = 0`, `ScaleX = 1024`, `ScaleY = 1024`
-- extended-form scale values must be positive
+- the short form implies `MaxW = 0`, `MaxH = 0`, `OffX = 0`, `OffY = 0`, `ScaleX = 1.0`, `ScaleY = 1.0`
+- integer and float terms are both accepted for extended-form scale values
+- extended-form scale values must be finite and positive
 - the selected target may be LCD `0` or sprite `1..254`
-- conversion from x1024 protocol scale to LovyanGFX float happens at the final device boundary
 
 ### `pushImage`
 
@@ -766,20 +809,21 @@ Request-header `Target` is the source sprite handle.
 
 Args:
 
-- `pushRotateZoom(DstTargetU8, DstXi16, DstYi16, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32)`
-- `pushRotateZoom(DstTargetU8, DstXi16, DstYi16, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32, TransparentValue)`
+- `pushRotateZoom(DstTargetU8, DstXi16, DstYi16, AngleDegF32, ZoomXF32, ZoomYF32)`
+- `pushRotateZoom(DstTargetU8, DstXi16, DstYi16, AngleDegF32, ZoomXF32, ZoomYF32, TransparentValue)`
 
 Rules:
 
 - destination target rules are the same as `pushSprite`
 - rotation uses the source sprite pivot set by `setPivot`
 - source and destination existence rules are resolved in the device layer
+- integer and float terms are both accepted for angle and zoom values
+- angle and zoom values must be finite
 - zoom values must be positive
 - optional transparent scalar uses RGB565 by default
 - `LGFX_F_TRANSPARENT_INDEX` interprets the transparent scalar as a palette index
 - indexed transparent mode requires palette backing on the source sprite
 - edge clipping is allowed
-- conversion from centi-degrees and x1024 fixed-point happens near the device boundary
 
 ## Recommended host smoke checks
 
@@ -799,6 +843,7 @@ Useful checks:
   - creating the same handle twice fails
   - `setPivot` rejects LCD target
   - valid `pushSprite` to LCD succeeds
+  - valid `pushRotateZoom` with LovyanGFX-like angle and zoom values succeeds
   - missing destination sprite fails for sprite destination
 
 - palette path
@@ -813,7 +858,7 @@ Useful checks:
 - text path
   - `setTextWrap(true)` should map to `wrap_x=true, wrap_y=false`
   - `setTextWrap(true, true)` should set both axes true
-  - `setTextSize(256)` should mean `1.0x`
+  - `setTextSize(1)` should mean `1.0x`
   - zero scale should fail
 
 - color contract path
@@ -824,7 +869,7 @@ Useful checks:
 
 - jpg path
   - valid short-form and extended-form calls should succeed
-  - zero or negative x1024 scales should fail
+  - zero or negative scale should fail
   - non-binary payload should fail
   - over-cap binary should fail
   - corrupt JPEG data should fail without crashing the driver
@@ -854,7 +899,8 @@ This repository is pre-release.
 
 Until the first tagged release:
 
-- breaking protocol changes may happen without bumping `LGFX_PORT_PROTO_VER`
+- breaking protocol changes may still happen during active development
+- when `LGFX_PORT_PROTO_VER` changes, the change should be recorded in this document
 - host and driver should be updated together
 
 After the first release:

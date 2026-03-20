@@ -9,7 +9,7 @@ defmodule SampleApp.SpriteProtocolSmoke do
 
   @t_short 5_000
 
-  @proto_ver 1
+  @proto_ver 2
   @cap_sprite 1 <<< 0
   @cap_palette 1 <<< 4
 
@@ -21,21 +21,21 @@ defmodule SampleApp.SpriteProtocolSmoke do
   @sprite_h 8
   @palette_sprite_depth 8
 
-  @zoom_1x 1024
+  @zoom_1x 1.0
 
-  # pushSprite wire format (protocol v1, destination-aware):
+  # pushSprite wire format (protocol v2, destination-aware):
   # - Non-transparent: [dst_target, x, y]
   # - Transparent:     [dst_target, x, y, transparent_value]
   #
-  # pushRotateZoom wire format (protocol v1, destination-aware):
-  # - Non-transparent: [dst_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024]
-  # - Transparent:     [dst_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024, transparent_value]
+  # pushRotateZoom wire format (protocol v2, destination-aware):
+  # - Non-transparent: [dst_target, x, y, angle_deg, zoom_x, zoom_y]
+  # - Transparent:     [dst_target, x, y, angle_deg, zoom_x, zoom_y, transparent_value]
   #
   # Where:
   # - src sprite handle is the request header Target (1..254)
   # - dst_target: 0 (LCD) or 1..254 (sprite)
-  # - angle_cdeg: centi-degrees (0.01 deg). Example: 90deg => 9000
-  # - zoom_x1024: 1024 = 1.0x
+  # - angle_deg: direct degrees. Example: 90.0 => 90 degrees
+  # - zoom_x / zoom_y: direct zoom values. Example: 1.0 = 1.0x
   # - transparent_value is RGB565 by default, or a palette index when the
   #   transparent-index flag is set
   #
@@ -126,8 +126,8 @@ defmodule SampleApp.SpriteProtocolSmoke do
 
   defp check_push_rotate_zoom_target_zero_bad_target(port, raw_call) do
     # pushRotateZoom is sprite-only: header target must be a sprite handle (1..254).
-    # args: [dst_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024]
-    args = [0, 0, 0, 0, @zoom_1x, @zoom_1x]
+    # args: [dst_target, x, y, angle_deg, zoom_x, zoom_y]
+    args = [0, 0, 0, 0.0, @zoom_1x, @zoom_1x]
 
     case raw_call.(port, :pushRotateZoom, 0, 0, args, @t_short) do
       {:error, :bad_target} ->
@@ -287,8 +287,8 @@ defmodule SampleApp.SpriteProtocolSmoke do
   end
 
   defp check_push_rotate_zoom_to_lcd(port, raw_call, sprite_target) do
-    # args = [dst_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024] with dst_target=0 => LCD
-    args = [0, 28, 4, 0, @zoom_1x, @zoom_1x]
+    # args = [dst_target, x, y, angle_deg, zoom_x, zoom_y] with dst_target=0 => LCD
+    args = [0, 28, 4, 0.0, @zoom_1x, @zoom_1x]
 
     case raw_call.(port, :pushRotateZoom, sprite_target, 0, args, @t_short) do
       {:error, :bad_op} ->
@@ -417,7 +417,7 @@ defmodule SampleApp.SpriteProtocolSmoke do
   end
 
   defp check_indexed_push_rotate_zoom_to_lcd(port, raw_call, sprite_target) do
-    args = [0, 28, 20, 0, @zoom_1x, @zoom_1x, 0]
+    args = [0, 28, 20, 0.0, @zoom_1x, @zoom_1x, 0]
 
     case raw_call.(port, :pushRotateZoom, sprite_target, @f_transparent_index, args, @t_short) do
       {:error, :bad_op} ->

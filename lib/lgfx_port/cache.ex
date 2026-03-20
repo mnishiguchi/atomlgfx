@@ -5,6 +5,9 @@
 defmodule LGFXPort.Cache do
   @moduledoc false
 
+  @min_target 0
+  @max_target 254
+
   def get_open_config(port) do
     case get(open_config_cache_key(port)) do
       value when is_list(value) -> {:ok, value}
@@ -55,14 +58,15 @@ defmodule LGFXPort.Cache do
 
   def reset_runtime_cache(port) do
     erase(max_binary_bytes_cache_key(port))
-    reset_runtime_cache_targets(port, 0)
+    reset_runtime_cache_targets(port, @min_target)
+    :ok
   end
 
   def get(key), do: :erlang.get(key)
   def put(key, value), do: :erlang.put(key, value)
   def erase(key), do: :erlang.erase(key)
 
-  defp reset_runtime_cache_targets(_port, target) when target > 254, do: :ok
+  defp reset_runtime_cache_targets(_port, target) when target > @max_target, do: :ok
 
   defp reset_runtime_cache_targets(port, target) do
     erase_text_cache(port, target)

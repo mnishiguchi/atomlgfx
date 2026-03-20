@@ -14,38 +14,39 @@ defmodule LGFXPort.Text do
   @font_preset_ascii 0
   @font_preset_jp 1
 
-  @text_scale_one_x256 256
-  @text_scale_min_x256 1
-  @text_scale_max_x256 0xFFFF
-
-  @f_text_has_bg 1 <<< 0
-  @f_text_fg_index 1 <<< 2
-  @f_text_bg_index 1 <<< 3
+  @max_f32 3.4028234663852886e38
 
   def set_text_size(port, scale, target \\ 0)
       when is_number(scale) and scale > 0 and target_any(target) do
-    with {:ok, scale_x256} <- normalize_text_scale_x256(scale),
-         :ok <-
-           Protocol.call_ok(port, :setTextSize, target, 0, [scale_x256], Protocol.long_timeout()) do
-      Cache.put_text_size(port, target, {scale_x256, scale_x256})
-      :ok
-    end
-  end
-
-  def set_text_size_xy(port, sx, sy, target \\ 0)
-      when is_number(sx) and sx > 0 and is_number(sy) and sy > 0 and target_any(target) do
-    with {:ok, sx_x256} <- normalize_text_scale_x256(sx),
-         {:ok, sy_x256} <- normalize_text_scale_x256(sy),
+    with {:ok, normalized_scale} <- normalize_text_scale(scale),
          :ok <-
            Protocol.call_ok(
              port,
              :setTextSize,
              target,
              0,
-             [sx_x256, sy_x256],
+             [normalized_scale],
              Protocol.long_timeout()
            ) do
-      Cache.put_text_size(port, target, {sx_x256, sy_x256})
+      Cache.put_text_size(port, target, {normalized_scale, normalized_scale})
+      :ok
+    end
+  end
+
+  def set_text_size_xy(port, sx, sy, target \\ 0)
+      when is_number(sx) and sx > 0 and is_number(sy) and sy > 0 and target_any(target) do
+    with {:ok, normalized_sx} <- normalize_text_scale(sx),
+         {:ok, normalized_sy} <- normalize_text_scale(sy),
+         :ok <-
+           Protocol.call_ok(
+             port,
+             :setTextSize,
+             target,
+             0,
+             [normalized_sx, normalized_sy],
+             Protocol.long_timeout()
+           ) do
+      Cache.put_text_size(port, target, {normalized_sx, normalized_sy})
       :ok
     end
   end
@@ -78,7 +79,7 @@ defmodule LGFXPort.Text do
              Protocol.long_timeout()
            ) do
       Cache.put_text_font_selection(port, target, {:preset, canonical_preset})
-      Cache.put_text_size(port, target, implied_text_scale_x256_for_preset(canonical_preset))
+      Cache.put_text_size(port, target, implied_text_scale_for_preset(canonical_preset))
       :ok
     end
   end
@@ -99,8 +100,8 @@ defmodule LGFXPort.Text do
   end
 
   def get_cursor(port, target \\ 0) when target_any(target) do
-    case Protocol.raw_call(port, :getCursor, target, 0, [], Protocol.long_timeout()) do
-      {:ok, {x, y}} when is_integer(x) and is_integer(y) ->
+    case Protocol.call(port, :getCursor, target, 0, [], Protocol.short_timeout()) do
+      {:ok, {x, y}} when i16(x) and i16(y) ->
         {:ok, {x, y}}
 
       {:ok, other} ->
@@ -182,11 +183,7 @@ defmodule LGFXPort.Text do
   defp font_preset_to_wire(:jp), do: {:ok, @font_preset_jp, :jp}
   defp font_preset_to_wire(other), do: {:error, {:bad_font_preset, other}}
 
-  defp implied_text_scale_x256_for_preset(:ascii),
-    do: {@text_scale_one_x256, @text_scale_one_x256}
-
-  defp implied_text_scale_x256_for_preset(:jp),
-    do: {@text_scale_one_x256, @text_scale_one_x256}
+  defp implied_text_scale_for_preset(_preset), do: {1.0, 1.0}
 
   defp maybe_set_text_color(port, fg_color, bg_color, target) do
     with {:ok, _flags, _args, desired} <- normalize_text_color_args(fg_color, bg_color) do
@@ -198,8 +195,8 @@ defmodule LGFXPort.Text do
   end
 
   defp maybe_set_text_size(port, scale, target) do
-    with {:ok, scale_x256} <- normalize_text_scale_x256(scale) do
-      desired = {scale_x256, scale_x256}
+    with {:ok, normalized_scale} <- normalize_text_scale(scale) do
+      desired = {normalized_scale, normalized_scale}
 
       case Cache.get_text_size(port, target) do
         ^desired -> :ok
@@ -210,17 +207,17 @@ defmodule LGFXPort.Text do
 
   defp normalize_text_color_args(fg_color, nil) do
     with {:ok, fg_flags, fg_arg, fg_desired} <-
-           normalize_text_color_arg(fg_color, @f_text_fg_index, :fg) do
+           normalize_text_color_arg(fg_color, Protocol.text_fg_index_flag(), :fg) do
       {:ok, fg_flags, [fg_arg], {fg_desired, nil}}
     end
   end
 
   defp normalize_text_color_args(fg_color, bg_color) do
     with {:ok, fg_flags, fg_arg, fg_desired} <-
-           normalize_text_color_arg(fg_color, @f_text_fg_index, :fg),
+           normalize_text_color_arg(fg_color, Protocol.text_fg_index_flag(), :fg),
          {:ok, bg_flags, bg_arg, bg_desired} <-
-           normalize_text_color_arg(bg_color, @f_text_bg_index, :bg) do
-      flags = @f_text_has_bg ||| fg_flags ||| bg_flags
+           normalize_text_color_arg(bg_color, Protocol.text_bg_index_flag(), :bg) do
+      flags = Protocol.text_has_bg_flag() ||| fg_flags ||| bg_flags
       {:ok, flags, [fg_arg, bg_arg], {fg_desired, bg_desired}}
     end
   end
@@ -240,19 +237,13 @@ defmodule LGFXPort.Text do
   defp normalize_text_color_arg(other, _index_flag, role),
     do: {:error, {:bad_text_color, role, other}}
 
-  defp normalize_text_scale_x256(value) when is_number(value) and value > 0 do
-    scale_x256 =
-      cond do
-        is_integer(value) -> value * @text_scale_one_x256
-        is_float(value) -> round(value * @text_scale_one_x256)
-      end
-
-    if scale_x256 >= @text_scale_min_x256 and scale_x256 <= @text_scale_max_x256 do
-      {:ok, scale_x256}
-    else
-      {:error, {:bad_text_scale, value}}
-    end
+  defp normalize_text_scale(value) when is_integer(value) and value > 0 and value <= @max_f32 do
+    {:ok, value * 1.0}
   end
 
-  defp normalize_text_scale_x256(value), do: {:error, {:bad_text_scale, value}}
+  defp normalize_text_scale(value) when is_float(value) and value > 0.0 and value <= @max_f32 do
+    {:ok, value}
+  end
+
+  defp normalize_text_scale(value), do: {:error, {:bad_text_scale, value}}
 end

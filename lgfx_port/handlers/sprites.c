@@ -32,19 +32,16 @@
 //
 // - Request shape:
 //   {lgfx, ver, pushRotateZoom, SrcSprite, Flags,
-//      DstTarget, X, Y, AngleCentiDegI32, ZoomXX1024I32, ZoomYX1024I32 [, Transparent]}
+//      DstTarget, X, Y, Angle, ZoomX, ZoomY [, Transparent]}
 //
 // - SrcSprite is the request header Target (sprite-only; 1..254)
 // - DstTarget is 0 (LCD) or 1..254 (sprite)
-// - Angle uses centi-degrees (i32; 9000 == 90.00°)
-// - Zoom uses x1024 fixed-point scale (i32; 1024 == 1.0x)
+// - Angle uses LovyanGFX-like degree semantics
+// - ZoomX / ZoomY use LovyanGFX-like positive scale semantics
+// - integer and float terms are both accepted by handler decode
 // - Transparent is interpreted as:
 //   - RGB565 when LGFX_F_TRANSPARENT_INDEX is not set
 //   - palette index when LGFX_F_TRANSPARENT_INDEX is set
-//
-// Keep the handler wire-oriented: decode fixed-point integers here and carry them
-// unchanged into the device ABI. Conversion to float happens later at the device
-// call boundary.
 
 typedef struct
 {
@@ -80,9 +77,9 @@ typedef struct
     uint8_t dst_target;
     int16_t x;
     int16_t y;
-    int32_t angle_x100;
-    int32_t zoom_x_x1024;
-    int32_t zoom_y_x1024;
+    float angle;
+    float zoom_x;
+    float zoom_y;
     bool has_transparent;
     bool transparent_is_index;
     uint32_t transparent_value;
@@ -186,13 +183,13 @@ static bool decode_push_rotate_zoom_args(const lgfx_request_t *req, lgfx_push_ro
     if (!lgfx_decode_i16_at(req, 7, &out->y)) {
         return false;
     }
-    if (!lgfx_decode_i32_at(req, 8, &out->angle_x100)) {
+    if (!lgfx_decode_f32_at(req, 8, &out->angle)) {
         return false;
     }
-    if (!lgfx_decode_i32_at(req, 9, &out->zoom_x_x1024) || out->zoom_x_x1024 <= 0) {
+    if (!lgfx_decode_f32_at(req, 9, &out->zoom_x)) {
         return false;
     }
-    if (!lgfx_decode_i32_at(req, 10, &out->zoom_y_x1024) || out->zoom_y_x1024 <= 0) {
+    if (!lgfx_decode_f32_at(req, 10, &out->zoom_y)) {
         return false;
     }
 
@@ -340,9 +337,9 @@ term lgfx_handle_pushRotateZoom(Context *ctx, lgfx_port_t *port, const lgfx_requ
             args.dst_target,
             args.x,
             args.y,
-            args.angle_x100,
-            args.zoom_x_x1024,
-            args.zoom_y_x1024,
+            args.angle,
+            args.zoom_x,
+            args.zoom_y,
             args.has_transparent,
             args.transparent_is_index,
             args.transparent_value));

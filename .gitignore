@@ -2,7 +2,9 @@
 #
 # SPDX-License-Identifier: CC0-1.0
 
+/_build/
 /deps/
+/doc/
 /erl_crash.dump
 /mix.lock
 /tmp/

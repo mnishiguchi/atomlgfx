@@ -89,7 +89,7 @@ This layer owns device-facing responsibilities:
 - sprite existence and allocation rules
 - palette-backed behavior
 - image and JPEG device semantics
-- final conversion to the pinned LovyanGFX call surface
+- final validation and forwarding to the pinned LovyanGFX call surface
 
 It should not decode AtomVM terms or build protocol replies.
 

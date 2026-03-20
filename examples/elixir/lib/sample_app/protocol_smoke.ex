@@ -8,7 +8,7 @@ defmodule SampleApp.ProtocolSmoke do
   import Bitwise
 
   @t_short 5_000
-  @proto_ver 1
+  @proto_ver 2
 
   # Protocol FeatureBits (must stay aligned with lgfx_port/include_internal/lgfx_port/protocol.h)
   @cap_sprite 1 <<< 0

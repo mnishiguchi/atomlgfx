@@ -6,6 +6,17 @@ defmodule LGFXPort do
   @moduledoc """
   Elixir client for the `lgfx_port` AtomVM port driver.
 
+  The public API is intentionally shaped like a small LovyanGFX-style wrapper:
+
+  - use natural text scales like `1`, `2`, or `1.5`
+  - use natural rotation angles in degrees
+  - use natural zoom values like `1.0`, `2.0`, or `0.5`
+
+  Rotation and scale APIs use direct LovyanGFX-style numeric semantics.
+
+  Backward-compatible migration helpers are also available for older callers that
+  still use pre-v2 raw numeric forms.
+
   Typical bring-up:
 
       port =
@@ -46,25 +57,16 @@ defmodule LGFXPort do
   - Transparent keys for sprite push operations accept either:
     - RGB565 `u16` values (`0x0000..0xFFFF`)
     - indexed tuples like `{:index, 0}` on palette-backed source sprites
-  - `push_rotate_zoom*` uses protocol units:
-    - angle: centi-degrees (`1.00° = 100`)
-    - zoom: x1024 fixed-point (`1.0x = 1024`)
-    - `dst_target`: `0` for LCD or `1..254` for sprite
   - `set_text_datum/3` is a numeric passthrough. It accepts `0..255` and forwards the raw value to the pinned native driver.
-  - `set_text_size/3` and `set_text_size_xy/4` accept natural Elixir scales and encode them on the wire as x256 fixed-point integers.
-    - `1` becomes `256`
-    - `1.5` becomes `384`
+  - `set_text_size/3` and `set_text_size_xy/4` accept direct LovyanGFX-style scale values.
   - `set_text_wrap/3` follows LovyanGFX one-argument semantics:
     - `set_text_wrap(port, wrap, target)` sets `wrap_x = wrap` and `wrap_y = false`
     - `set_text_wrap_xy/4` sets both axes explicitly
   - `set_cursor/4` and `get_cursor/2` operate on either the LCD target `0` or a sprite target `1..254`.
   - `print/3` and `println/3` use the target's current cursor state.
   - `draw_jpg/5` draws a JPEG binary at `{x, y}` on the selected target.
-  - `draw_jpg/11` exposes the extended `drawJpg` protocol form:
-    - `max_width` / `max_height`
-    - `off_x` / `off_y`
-    - `scale_x1024` / `scale_y1024` use x1024 fixed-point (`1.0x = 1024`)
-  - JPEG payloads must be non-empty and must fit within the driver's advertised `MaxBinaryBytes` limit. No automatic chunking is performed.
+  - `draw_jpg/11` accepts direct LovyanGFX-style scale values.
+  - `draw_jpg_raw/11` accepts old x1024 scale values for migration.
   - `set_clip_rect/6` and `clear_clip_rect/2` apply to the selected target.
     LCD and sprite clip states are independent.
   - `create_palette/2` and `set_palette_color/4` manage palette backing for paletted sprite targets.
@@ -73,6 +75,9 @@ defmodule LGFXPort do
   - Font preset and text scale are independent concerns.
     - Use `set_text_font_preset/3` to choose the glyph source.
     - Use `set_text_size/3` or `set_text_size_xy/4` to control rendered size.
+  - `push_rotate_zoom_to/7`, `/8`, and `/9` use direct degree and zoom values.
+  - `push_rotate_zoom_raw_to/8` and `/9` accept old centi-degree and x1024 zoom values for migration.
+  - `push_rotate_zoom_deg_to/7`, `/8`, and `/9` remain as backward-compatible aliases.
   """
 
   alias LGFXPort.Cache
@@ -411,14 +416,60 @@ defmodule LGFXPort do
     do: Sprites.push_sprite(port, src_target, x, y, transparent)
 
   @doc """
-  Pushes a source sprite to the destination target using protocol-native rotate/zoom units.
+  Pushes a source sprite to the destination target using direct degree and zoom values.
+  """
+  def push_rotate_zoom_to(port, src_target, dst_target, x, y, angle, zoom) do
+    Sprites.push_rotate_zoom_to(port, src_target, dst_target, x, y, angle, zoom)
+  end
 
-  Units:
+  @doc """
+  Pushes a source sprite to the destination target using direct degree and zoom values.
+  """
+  def push_rotate_zoom_to(port, src_target, dst_target, x, y, angle, zoom_x, zoom_y) do
+    Sprites.push_rotate_zoom_to(
+      port,
+      src_target,
+      dst_target,
+      x,
+      y,
+      angle,
+      zoom_x,
+      zoom_y
+    )
+  end
 
-  - angle: centi-degrees (`1.00° = 100`)
-  - zoom: x1024 fixed-point (`1.0x = 1024`)
+  @doc """
+  Pushes a source sprite to the destination target using direct degree and zoom values
+  and a transparent key.
   """
   def push_rotate_zoom_to(
+        port,
+        src_target,
+        dst_target,
+        x,
+        y,
+        angle,
+        zoom_x,
+        zoom_y,
+        transparent
+      ) do
+    Sprites.push_rotate_zoom_to(
+      port,
+      src_target,
+      dst_target,
+      x,
+      y,
+      angle,
+      zoom_x,
+      zoom_y,
+      transparent
+    )
+  end
+
+  @doc """
+  Backward-compatible helper for callers that still use centi-degree and x1024 zoom values.
+  """
+  def push_rotate_zoom_raw_to(
         port,
         src_target,
         dst_target,
@@ -428,7 +479,7 @@ defmodule LGFXPort do
         zoom_x1024,
         zoom_y1024
       ) do
-    Sprites.push_rotate_zoom_to(
+    Sprites.push_rotate_zoom_raw_to(
       port,
       src_target,
       dst_target,
@@ -441,13 +492,10 @@ defmodule LGFXPort do
   end
 
   @doc """
-  Pushes a source sprite to the destination target using protocol-native rotate/zoom units
-  and a transparent key.
-
-  Accepts either an RGB565 integer or an indexed tuple like `{:index, 0}`.
-  Indexed transparent mode is valid only on palette-backed source sprites.
+  Backward-compatible helper for callers that still use centi-degree and x1024 zoom values,
+  with a transparent key.
   """
-  def push_rotate_zoom_to(
+  def push_rotate_zoom_raw_to(
         port,
         src_target,
         dst_target,
@@ -458,7 +506,7 @@ defmodule LGFXPort do
         zoom_y1024,
         transparent
       ) do
-    Sprites.push_rotate_zoom_to(
+    Sprites.push_rotate_zoom_raw_to(
       port,
       src_target,
       dst_target,
@@ -472,36 +520,14 @@ defmodule LGFXPort do
   end
 
   @doc """
-  Convenience wrapper for sprite rotate/zoom push.
-
-  Accepts natural degree and zoom values and converts them to protocol units.
+  Backward-compatible alias for `push_rotate_zoom_to/7`.
   """
-  def push_rotate_zoom_deg_to(
-        port,
-        src_target,
-        dst_target,
-        x,
-        y,
-        angle_deg,
-        zoom_x,
-        zoom_y
-      ) do
-    Sprites.push_rotate_zoom_deg_to(
-      port,
-      src_target,
-      dst_target,
-      x,
-      y,
-      angle_deg,
-      zoom_x,
-      zoom_y
-    )
+  def push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle, zoom) do
+    push_rotate_zoom_to(port, src_target, dst_target, x, y, angle, zoom)
   end
 
   @doc """
-  Convenience wrapper for sprite rotate/zoom push with a transparent key.
-
-  Accepts natural degree and zoom values and converts them to protocol units.
+  Backward-compatible alias for `push_rotate_zoom_to/8`.
   """
   def push_rotate_zoom_deg_to(
         port,
@@ -509,34 +535,38 @@ defmodule LGFXPort do
         dst_target,
         x,
         y,
-        angle_deg,
+        angle,
+        zoom_x,
+        zoom_y
+      ) do
+    push_rotate_zoom_to(port, src_target, dst_target, x, y, angle, zoom_x, zoom_y)
+  end
+
+  @doc """
+  Backward-compatible alias for `push_rotate_zoom_to/9`.
+  """
+  def push_rotate_zoom_deg_to(
+        port,
+        src_target,
+        dst_target,
+        x,
+        y,
+        angle,
         zoom_x,
         zoom_y,
         transparent
       ) do
-    Sprites.push_rotate_zoom_deg_to(
+    push_rotate_zoom_to(
       port,
       src_target,
       dst_target,
       x,
       y,
-      angle_deg,
+      angle,
       zoom_x,
       zoom_y,
       transparent
     )
-  end
-
-  @doc """
-  Convenience wrapper for uniform sprite rotate/zoom push.
-
-  Uses the same zoom factor for both axes.
-
-  For uniform zoom with transparency, call
-  `push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom, zoom, transparent)`.
-  """
-  def push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom) do
-    Sprites.push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle_deg, zoom)
   end
 
   @doc """
@@ -566,14 +596,12 @@ defmodule LGFXPort do
   def calibrate_touch(port), do: Touch.calibrate_touch(port)
 
   @doc """
-  Sets text size using natural Elixir scale values.
-
-  These are encoded on the wire as x256 fixed-point integers.
+  Sets text size using direct LovyanGFX-style scale values.
   """
   def set_text_size(port, scale, target \\ 0), do: Text.set_text_size(port, scale, target)
 
   @doc """
-  Sets text size independently for both axes using natural Elixir scale values.
+  Sets text size independently for both axes using direct LovyanGFX-style scale values.
   """
   def set_text_size_xy(port, sx, sy, target \\ 0), do: Text.set_text_size_xy(port, sx, sy, target)
 
@@ -668,9 +696,40 @@ defmodule LGFXPort do
   @doc """
   Draws a JPEG binary using the extended `drawJpg` protocol form.
 
-  Scale values use x1024 fixed-point units (`1.0x = 1024`).
+  `scale_x` and `scale_y` are direct values like `1`, `2`, or `0.5`.
   """
   def draw_jpg(
+        port,
+        x,
+        y,
+        max_width,
+        max_height,
+        off_x,
+        off_y,
+        scale_x,
+        scale_y,
+        jpeg,
+        target \\ 0
+      ) do
+    Images.draw_jpg(
+      port,
+      x,
+      y,
+      max_width,
+      max_height,
+      off_x,
+      off_y,
+      scale_x,
+      scale_y,
+      jpeg,
+      target
+    )
+  end
+
+  @doc """
+  Backward-compatible helper for callers that still use old x1024 scale values.
+  """
+  def draw_jpg_raw(
         port,
         x,
         y,
@@ -683,7 +742,7 @@ defmodule LGFXPort do
         jpeg,
         target \\ 0
       ) do
-    Images.draw_jpg(
+    Images.draw_jpg_raw(
       port,
       x,
       y,
@@ -701,8 +760,7 @@ defmodule LGFXPort do
   @doc """
   Convenience wrapper for extended JPEG drawing.
 
-  Accepts a single natural Elixir scale value for both axes and converts it to
-  protocol x1024 fixed-point units.
+  Accepts a single natural Elixir scale value for both axes.
   """
   def draw_jpg_scaled(
         port,
@@ -733,8 +791,7 @@ defmodule LGFXPort do
   @doc """
   Convenience wrapper for extended JPEG drawing.
 
-  Accepts independent natural Elixir scale values for X and Y and converts them
-  to protocol x1024 fixed-point units.
+  Accepts independent direct scale values for X and Y.
   """
   def draw_jpg_scaled(
         port,

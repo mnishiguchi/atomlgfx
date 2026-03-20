@@ -7,6 +7,7 @@
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"
 
+#include <cmath>
 #include <limits.h>
 #include <new>
 #include <stddef.h>
@@ -29,6 +30,11 @@ static inline void rgb565_be_to_host_u16(const uint8_t *src_be, uint16_t *dst, s
     }
 }
 
+static inline bool lgfx_scale_is_valid(float scale)
+{
+    return std::isfinite(scale) && scale > 0.0f;
+}
+
 // Reuse a static row buffer for common widths; fall back to heap allocation for wider rows.
 static constexpr size_t MAX_LINE_PIXELS = 480;
 static uint16_t linebuf[MAX_LINE_PIXELS];
@@ -43,8 +49,8 @@ extern "C" esp_err_t lgfx_device_draw_jpg(
     uint16_t max_h,
     int16_t off_x,
     int16_t off_y,
-    int32_t scale_x_x1024,
-    int32_t scale_y_x1024,
+    float scale_x,
+    float scale_y,
     const uint8_t *jpeg_bytes,
     size_t jpeg_len)
 {
@@ -52,7 +58,7 @@ extern "C" esp_err_t lgfx_device_draw_jpg(
         return ESP_ERR_INVALID_ARG;
     }
 
-    if (scale_x_x1024 <= 0 || scale_y_x1024 <= 0) {
+    if (!lgfx_scale_is_valid(scale_x) || !lgfx_scale_is_valid(scale_y)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -72,9 +78,6 @@ extern "C" esp_err_t lgfx_device_draw_jpg(
     }
 
     lgfx::v1::PointerWrapper data(jpeg_bytes, (uint32_t) jpeg_len);
-
-    const float scale_x = ((float) scale_x_x1024) / 1024.0f;
-    const float scale_y = ((float) scale_y_x1024) / 1024.0f;
 
     const bool ok = gfx->drawJpg(
         &data,

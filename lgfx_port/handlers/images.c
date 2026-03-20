@@ -20,11 +20,15 @@
 term lgfx_handle_drawJpg(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     // {lgfx, ver, drawJpg, target, flags, X, Y, JpegBinary}
-    // {lgfx, ver, drawJpg, target, flags, X, Y, MaxW, MaxH, OffX, OffY, ScaleXX1024, ScaleYX1024, JpegBinary}
+    // {lgfx, ver, drawJpg, target, flags, X, Y, MaxW, MaxH, OffX, OffY, ScaleX, ScaleY, JpegBinary}
+    //
+    // ScaleX / ScaleY use LovyanGFX-like numeric scale semantics on the wire.
+    // Integer and float terms are both accepted by handler decode.
     //
     // Handler responsibility here is limited to wire decode.
     // Binary-size capping stays in lgfx_decode_binary_at().
-    // Device code remains authoritative for JPEG decode/render behavior.
+    // Device code remains authoritative for JPEG decode/render behavior
+    // and scale validity.
 
     if (req->arity != 8 && req->arity != 14) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -36,8 +40,8 @@ term lgfx_handle_drawJpg(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
     uint16_t max_h = 0;
     int16_t off_x = 0;
     int16_t off_y = 0;
-    int32_t scale_x_x1024 = 1024;
-    int32_t scale_y_x1024 = 1024;
+    float scale_x = 1.0f;
+    float scale_y = 1.0f;
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -59,10 +63,10 @@ term lgfx_handle_drawJpg(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
         if (!lgfx_decode_i16_at(req, 10, &off_y)) {
             return reply_error(ctx, port, req, port->atoms.bad_args, 0);
         }
-        if (!lgfx_decode_i32_at(req, 11, &scale_x_x1024) || scale_x_x1024 <= 0) {
+        if (!lgfx_decode_f32_at(req, 11, &scale_x)) {
             return reply_error(ctx, port, req, port->atoms.bad_args, 0);
         }
-        if (!lgfx_decode_i32_at(req, 12, &scale_y_x1024) || scale_y_x1024 <= 0) {
+        if (!lgfx_decode_f32_at(req, 12, &scale_y)) {
             return reply_error(ctx, port, req, port->atoms.bad_args, 0);
         }
     }
@@ -85,8 +89,8 @@ term lgfx_handle_drawJpg(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
             max_h,
             off_x,
             off_y,
-            scale_x_x1024,
-            scale_y_x1024,
+            scale_x,
+            scale_y,
             bytes,
             len));
 

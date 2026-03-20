@@ -96,8 +96,8 @@ term lgfx_handle_setTextSize(Context *ctx, lgfx_port_t *port, const lgfx_request
     const int arity = req->arity;
 
     if (arity == 6) {
-        uint16_t scale_x256 = 0;
-        if (!lgfx_decode_text_scale_x256_at(req, 5, &scale_x256)) {
+        float scale = 0.0f;
+        if (!lgfx_decode_f32_at(req, 5, &scale)) {
             return reply_error(ctx, port, req, port->atoms.bad_args, 0);
         }
 
@@ -107,19 +107,19 @@ term lgfx_handle_setTextSize(Context *ctx, lgfx_port_t *port, const lgfx_request
             req,
             lgfx_device_set_text_size(
                 (uint8_t) req->target,
-                scale_x256));
+                scale));
 
         return reply_ok(ctx, port, req, port->atoms.ok);
     }
 
-    uint16_t scale_x_x256 = 0;
-    uint16_t scale_y_x256 = 0;
+    float scale_x = 0.0f;
+    float scale_y = 0.0f;
 
-    if (!lgfx_decode_text_scale_x256_at(req, 5, &scale_x_x256)) {
+    if (!lgfx_decode_f32_at(req, 5, &scale_x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    if (!lgfx_decode_text_scale_x256_at(req, 6, &scale_y_x256)) {
+    if (!lgfx_decode_f32_at(req, 6, &scale_y)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -129,8 +129,8 @@ term lgfx_handle_setTextSize(Context *ctx, lgfx_port_t *port, const lgfx_request
         req,
         lgfx_device_set_text_size_xy(
             (uint8_t) req->target,
-            scale_x_x256,
-            scale_y_x256));
+            scale_x,
+            scale_y));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
