@@ -54,7 +54,7 @@
 // -----------------------------------------------------------------------------
 
 #ifndef LGFX_PORT_PROTO_VER
-#define LGFX_PORT_PROTO_VER 2u
+#define LGFX_PORT_PROTO_VER 1u
 #endif
 
 #ifndef LGFX_PORT_MAX_BINARY_BYTES

@@ -12,7 +12,7 @@ defmodule LGFXPort.Protocol do
 
   alias LGFXPort.Cache
 
-  @proto_ver 2
+  @proto_ver 1
 
   @t_short 5_000
   @t_long 10_000

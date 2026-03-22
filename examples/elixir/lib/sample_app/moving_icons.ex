@@ -57,7 +57,7 @@ defmodule SampleApp.MovingIcons do
   @sprite_buf1 11
 
   # Internal animation zoom units (x1024 fixed-point).
-  # Converted to direct v2 zoom values only at the LGFXPort call boundary.
+  # Converted to direct zoom values only at the LGFXPort call boundary.
   #
   # - 512  = 0.5x
   # - 2048 = 2.0x
@@ -300,7 +300,12 @@ defmodule SampleApp.MovingIcons do
 
   defp move_objects_i([], _w, _h, acc), do: :lists.reverse(acc)
 
-  defp move_objects_i([{x, y, dx, dy, img, angle_cdeg, zoom_x1024, dangle_cdeg, dzoom_x1024} | rest], w, h, acc) do
+  defp move_objects_i(
+         [{x, y, dx, dy, img, angle_cdeg, zoom_x1024, dangle_cdeg, dzoom_x1024} | rest],
+         w,
+         h,
+         acc
+       ) do
     angle2 = wrap_angle_cdeg(angle_cdeg + dangle_cdeg)
 
     {x2, dx2} = bounce_i16(x + dx, dx, 0, w - 1)

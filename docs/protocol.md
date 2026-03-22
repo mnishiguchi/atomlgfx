@@ -61,39 +61,6 @@ Important invariants:
 - touch is advertised only when touch ops are both compiled in and effectively attached
 - generated reference tables and implementation must agree
 
-## Protocol version history
-
-### v2
-
-`LGFX_PORT_PROTO_VER = 2`.
-
-This version introduces a wire-level breaking change for rotate and scale semantics so they align more directly with LovyanGFX numeric behavior.
-
-Affected paths:
-
-- `setTextSize`
-- `drawJpg` extended scaling
-- `pushRotateZoom`
-
-What changed:
-
-- fixed-point transport encodings were removed from these paths
-- integer and float terms are accepted on the wire for these numeric positions
-- handler decode normalizes those values to native `float`
-- device code validates and forwards LovyanGFX-like numeric values directly
-
-Examples of removed v1-style encodings:
-
-- centi-degrees
-- x256 text scale
-- x1024 image and rotate/zoom scale
-
-Compatibility impact:
-
-- v1 and v2 are not wire-compatible for the affected arguments above
-- host code using protocol v1 must be updated before sending `ProtoVer = 2`
-- unchanged operations keep their existing request shapes and meanings
-
 ## Request and response model
 
 All requests use one tuple shape:
@@ -806,18 +773,7 @@ When adding or changing an operation:
 
 ## Compatibility rules
 
-### Pre-release note
-
-This repository is pre-release.
-
-Until the first tagged release:
-
-- breaking protocol changes may still happen during active development
-- when `LGFX_PORT_PROTO_VER` changes, the change should be recorded in this document
-- host and driver should be updated together
-
-After the first release:
-
+- host and driver should be updated together when `LGFX_PORT_PROTO_VER` changes
 - breaking protocol changes must bump `LGFX_PORT_PROTO_VER`
 
 ### Compatible changes

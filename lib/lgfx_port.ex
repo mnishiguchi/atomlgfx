@@ -14,9 +14,6 @@ defmodule LGFXPort do
 
   Rotation and scale APIs use direct LovyanGFX-style numeric semantics.
 
-  Backward-compatible migration helpers are also available for older callers that
-  still use pre-v2 raw numeric forms.
-
   Typical bring-up:
 
       port =
@@ -66,7 +63,6 @@ defmodule LGFXPort do
   - `print/3` and `println/3` use the target's current cursor state.
   - `draw_jpg/5` draws a JPEG binary at `{x, y}` on the selected target.
   - `draw_jpg/11` accepts direct LovyanGFX-style scale values.
-  - `draw_jpg_raw/11` accepts old x1024 scale values for migration.
   - `set_clip_rect/6` and `clear_clip_rect/2` apply to the selected target.
     LCD and sprite clip states are independent.
   - `create_palette/2` and `set_palette_color/4` manage palette backing for paletted sprite targets.
@@ -76,8 +72,6 @@ defmodule LGFXPort do
     - Use `set_text_font_preset/3` to choose the glyph source.
     - Use `set_text_size/3` or `set_text_size_xy/4` to control rendered size.
   - `push_rotate_zoom_to/7`, `/8`, and `/9` use direct degree and zoom values.
-  - `push_rotate_zoom_raw_to/8` and `/9` accept old centi-degree and x1024 zoom values for migration.
-  - `push_rotate_zoom_deg_to/7`, `/8`, and `/9` remain as backward-compatible aliases.
   """
 
   alias LGFXPort.Cache
@@ -467,109 +461,6 @@ defmodule LGFXPort do
   end
 
   @doc """
-  Backward-compatible helper for callers that still use centi-degree and x1024 zoom values.
-  """
-  def push_rotate_zoom_raw_to(
-        port,
-        src_target,
-        dst_target,
-        x,
-        y,
-        angle_centi_deg,
-        zoom_x1024,
-        zoom_y1024
-      ) do
-    Sprites.push_rotate_zoom_raw_to(
-      port,
-      src_target,
-      dst_target,
-      x,
-      y,
-      angle_centi_deg,
-      zoom_x1024,
-      zoom_y1024
-    )
-  end
-
-  @doc """
-  Backward-compatible helper for callers that still use centi-degree and x1024 zoom values,
-  with a transparent key.
-  """
-  def push_rotate_zoom_raw_to(
-        port,
-        src_target,
-        dst_target,
-        x,
-        y,
-        angle_centi_deg,
-        zoom_x1024,
-        zoom_y1024,
-        transparent
-      ) do
-    Sprites.push_rotate_zoom_raw_to(
-      port,
-      src_target,
-      dst_target,
-      x,
-      y,
-      angle_centi_deg,
-      zoom_x1024,
-      zoom_y1024,
-      transparent
-    )
-  end
-
-  @doc """
-  Backward-compatible alias for `push_rotate_zoom_to/7`.
-  """
-  def push_rotate_zoom_deg_to(port, src_target, dst_target, x, y, angle, zoom) do
-    push_rotate_zoom_to(port, src_target, dst_target, x, y, angle, zoom)
-  end
-
-  @doc """
-  Backward-compatible alias for `push_rotate_zoom_to/8`.
-  """
-  def push_rotate_zoom_deg_to(
-        port,
-        src_target,
-        dst_target,
-        x,
-        y,
-        angle,
-        zoom_x,
-        zoom_y
-      ) do
-    push_rotate_zoom_to(port, src_target, dst_target, x, y, angle, zoom_x, zoom_y)
-  end
-
-  @doc """
-  Backward-compatible alias for `push_rotate_zoom_to/9`.
-  """
-  def push_rotate_zoom_deg_to(
-        port,
-        src_target,
-        dst_target,
-        x,
-        y,
-        angle,
-        zoom_x,
-        zoom_y,
-        transparent
-      ) do
-    push_rotate_zoom_to(
-      port,
-      src_target,
-      dst_target,
-      x,
-      y,
-      angle,
-      zoom_x,
-      zoom_y,
-      transparent
-    )
-  end
-
-  @doc """
   Returns the current touch point in screen-space coordinates.
 
   Returns `{:ok, :none}` or `{:ok, {x, y, size}}`.
@@ -721,37 +612,6 @@ defmodule LGFXPort do
       off_y,
       scale_x,
       scale_y,
-      jpeg,
-      target
-    )
-  end
-
-  @doc """
-  Backward-compatible helper for callers that still use old x1024 scale values.
-  """
-  def draw_jpg_raw(
-        port,
-        x,
-        y,
-        max_width,
-        max_height,
-        off_x,
-        off_y,
-        scale_x1024,
-        scale_y1024,
-        jpeg,
-        target \\ 0
-      ) do
-    Images.draw_jpg_raw(
-      port,
-      x,
-      y,
-      max_width,
-      max_height,
-      off_x,
-      off_y,
-      scale_x1024,
-      scale_y1024,
       jpeg,
       target
     )

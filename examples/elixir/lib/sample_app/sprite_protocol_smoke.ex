@@ -9,7 +9,7 @@ defmodule SampleApp.SpriteProtocolSmoke do
 
   @t_short 5_000
 
-  @proto_ver 2
+  @proto_ver 1
   @cap_sprite 1 <<< 0
   @cap_palette 1 <<< 4
 
@@ -23,11 +23,11 @@ defmodule SampleApp.SpriteProtocolSmoke do
 
   @zoom_1x 1.0
 
-  # pushSprite wire format (protocol v2, destination-aware):
+  # pushSprite wire format (destination-aware):
   # - Non-transparent: [dst_target, x, y]
   # - Transparent:     [dst_target, x, y, transparent_value]
   #
-  # pushRotateZoom wire format (protocol v2, destination-aware):
+  # pushRotateZoom wire format (destination-aware):
   # - Non-transparent: [dst_target, x, y, angle_deg, zoom_x, zoom_y]
   # - Transparent:     [dst_target, x, y, angle_deg, zoom_x, zoom_y, transparent_value]
   #
@@ -39,8 +39,7 @@ defmodule SampleApp.SpriteProtocolSmoke do
   # - transparent_value is RGB565 by default, or a palette index when the
   #   transparent-index flag is set
   #
-  # This smoke test assumes the port is already initialized (LGFXPort.init/1 + LGFXPort.display/1).
-  # In SampleApp, run it after boot_for_display_with_dims/1.
+  # This smoke test assumes the port is already initialized.
   def run(port), do: run(port, &LGFXPort.raw_call/6)
 
   def run(port, raw_call) when is_function(raw_call, 6) do

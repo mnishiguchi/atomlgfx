@@ -55,43 +55,6 @@ defmodule LGFXPort.Images do
     end
   end
 
-  # Backward-compatible helper for callers that still have old x1024 scale values.
-  def draw_jpg_raw(
-        port,
-        x,
-        y,
-        max_width,
-        max_height,
-        off_x,
-        off_y,
-        scale_x1024,
-        scale_y1024,
-        jpeg,
-        target \\ 0
-      )
-      when i16(x) and i16(y) and
-             u16(max_width) and
-             u16(max_height) and
-             i16(off_x) and i16(off_y) and
-             positive_i32(scale_x1024) and
-             positive_i32(scale_y1024) and
-             is_binary(jpeg) and
-             target_any(target) do
-    draw_jpg(
-      port,
-      x,
-      y,
-      max_width,
-      max_height,
-      off_x,
-      off_y,
-      scale_x1024 / 1024.0,
-      scale_y1024 / 1024.0,
-      jpeg,
-      target
-    )
-  end
-
   def draw_jpg_scaled(port, x, y, max_width, max_height, off_x, off_y, scale, jpeg, target \\ 0)
       when i16(x) and i16(y) and
              u16(max_width) and
