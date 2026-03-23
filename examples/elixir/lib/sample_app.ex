@@ -105,7 +105,7 @@ defmodule SampleApp do
 
   def start(mode, open_options) when is_atom(mode) and is_list(open_options) do
     effective_open_options = @sample_open_options ++ open_options
-    port = LGFXPort.open(effective_open_options)
+    {:ok, port} = LGFXPort.open(effective_open_options)
 
     log_info("LGFXPort opened open_options=#{inspect(effective_open_options)}")
 

@@ -41,7 +41,7 @@ mix deps.get
 ## Basic usage
 
 ```elixir
-port = LGFXPort.open(panel_driver: :ili9488, width: 320, height: 480)
+{:ok, port} = LGFXPort.open(panel_driver: :ili9488, width: 320, height: 480)
 
 :ok = LGFXPort.init(port)
 :ok = LGFXPort.display(port)

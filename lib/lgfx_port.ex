@@ -16,7 +16,7 @@ defmodule LGFXPort do
 
   Typical bring-up:
 
-      port =
+      {:ok, port} =
         LGFXPort.open(
           panel_driver: :ili9341_2,
           width: 240,
@@ -110,7 +110,7 @@ defmodule LGFXPort do
     normalized_open_config = OpenConfig.normalize_open_options!(options)
     port = open_port_fun.({:spawn_driver, @port_name}, normalized_open_config)
     Cache.remember_open_config(port, normalized_open_config)
-    port
+    {:ok, port}
   end
 
   @doc """
