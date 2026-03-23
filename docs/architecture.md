@@ -9,7 +9,7 @@ SPDX-License-Identifier: Apache-2.0
 `atomlgfx` is split into two closely related deliverables:
 
 - a native ESP-IDF component built around the `lgfx_port` AtomVM port driver
-- an Elixir package that provides the `LGFXPort` wrapper for that driver
+- an Elixir package that provides the `AtomLGFX` wrapper for that driver
 
 This document gives the top-level map only. Detailed protocol rules live in
 [the protocol spec](protocol.md). Port-layer details live in
@@ -62,7 +62,7 @@ Elixir / AtomVM
 
 - `lib/`
   - root Elixir wrapper package
-  - high-level `LGFXPort` API
+  - high-level `AtomLGFX` API
 
 - `examples/elixir/`
   - example application that consumes the root package

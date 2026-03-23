@@ -2,14 +2,14 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule LGFXPort.MixProject do
+defmodule AtomLGFX.MixProject do
   use Mix.Project
 
   @version "0.1.0"
 
   def project do
     [
-      app: :lgfx_port,
+      app: :atomlgfx,
       version: @version,
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
@@ -33,12 +33,12 @@ defmodule LGFXPort.MixProject do
   end
 
   defp description do
-    "Elixir wrapper for the lgfx_port AtomVM LovyanGFX driver"
+    "Elixir wrapper for the AtomVM LovyanGFX driver"
   end
 
   defp package do
     [
-      name: "lgfx_port",
+      name: "atomlgfx",
       licenses: ["Apache-2.0"],
       files: [
         "lib",
@@ -55,7 +55,7 @@ defmodule LGFXPort.MixProject do
 
   defp docs do
     [
-      main: "LGFXPort",
+      main: "AtomLGFX",
       extras: [
         "README.md"
       ]

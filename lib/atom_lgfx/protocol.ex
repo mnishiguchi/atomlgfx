@@ -2,15 +2,15 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule LGFXPort.Protocol do
+defmodule AtomLGFX.Protocol do
   @moduledoc false
 
   @compile {:no_warn_undefined, :port}
 
   import Bitwise
-  import LGFXPort.Guards
+  import AtomLGFX.Guards
 
-  alias LGFXPort.Cache
+  alias AtomLGFX.Cache
 
   @proto_ver 1
 

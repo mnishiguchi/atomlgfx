@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule LGFXPort.Sprites do
+defmodule AtomLGFX.Sprites do
   @moduledoc false
 
-  import LGFXPort.Guards
+  import AtomLGFX.Guards
 
-  alias LGFXPort.Protocol
+  alias AtomLGFX.Protocol
 
   @valid_color_depths [1, 2, 4, 8, 16, 24]
   @max_f32 3.4028234663852886e38

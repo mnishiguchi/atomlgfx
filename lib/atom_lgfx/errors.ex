@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule LGFXPort.Errors do
+defmodule AtomLGFX.Errors do
   @moduledoc false
 
   def format_error(:empty_text),

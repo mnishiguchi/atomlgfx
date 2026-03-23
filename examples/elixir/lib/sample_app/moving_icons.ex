@@ -57,7 +57,7 @@ defmodule SampleApp.MovingIcons do
   @sprite_buf1 11
 
   # Internal animation zoom units (x1024 fixed-point).
-  # Converted to direct zoom values only at the LGFXPort call boundary.
+  # Converted to direct zoom values only at the AtomLGFX call boundary.
   #
   # - 512  = 0.5x
   # - 2048 = 2.0x
@@ -81,9 +81,9 @@ defmodule SampleApp.MovingIcons do
 
     log_icon_sizes(icons, icon_w, icon_h)
 
-    with {:ok, caps} <- LGFXPort.get_caps(port),
+    with {:ok, caps} <- AtomLGFX.get_caps(port),
          :ok <- ensure_sprite_support(caps, 6),
-         :ok <- LGFXPort.fill_screen(port, @bg),
+         :ok <- AtomLGFX.fill_screen(port, @bg),
          {:ok, icon_handles} <- prepare_icon_sprites(port, icons, icon_w, icon_h),
          {:ok, render_target} <- prepare_render_target(port, w, h) do
       try do
@@ -100,7 +100,7 @@ defmodule SampleApp.MovingIcons do
       end
     else
       {:error, reason} ->
-        IO.puts("moving_icons setup failed: #{LGFXPort.format_error(reason)}")
+        IO.puts("moving_icons setup failed: #{AtomLGFX.format_error(reason)}")
         {:error, reason}
     end
   end
@@ -144,14 +144,14 @@ defmodule SampleApp.MovingIcons do
     pivot_x = div(icon_w, 2)
     pivot_y = div(icon_h, 2)
 
-    with :ok <- LGFXPort.create_sprite(port, icon_w, icon_h, sprite_target),
-         :ok <- LGFXPort.clear(port, @transparent_key_rgb888, sprite_target),
-         :ok <- LGFXPort.push_image_rgb565(port, 0, 0, icon_w, icon_h, pixels, 0, sprite_target),
-         :ok <- LGFXPort.set_pivot(port, sprite_target, pivot_x, pivot_y) do
+    with :ok <- AtomLGFX.create_sprite(port, icon_w, icon_h, sprite_target),
+         :ok <- AtomLGFX.clear(port, @transparent_key_rgb888, sprite_target),
+         :ok <- AtomLGFX.push_image_rgb565(port, 0, 0, icon_w, icon_h, pixels, 0, sprite_target),
+         :ok <- AtomLGFX.set_pivot(port, sprite_target, pivot_x, pivot_y) do
       :ok
     else
       {:error, reason} ->
-        _ = LGFXPort.delete_sprite(port, sprite_target)
+        _ = AtomLGFX.delete_sprite(port, sprite_target)
         {:error, {:sprite_setup_failed, sprite_target, reason}}
     end
   end
@@ -211,7 +211,7 @@ defmodule SampleApp.MovingIcons do
   defp create_frame_sprite(port, target, w, h) do
     # Use a fixed depth for now; align with LCD depth later if you expose it via the protocol.
     color_depth = 16
-    LGFXPort.create_sprite(port, w, h, color_depth, target)
+    AtomLGFX.create_sprite(port, w, h, color_depth, target)
   end
 
   defp cleanup_icon_sprites(port) do
@@ -229,7 +229,7 @@ defmodule SampleApp.MovingIcons do
   end
 
   defp safe_delete_sprite(port, sprite_target) do
-    case LGFXPort.delete_sprite(port, sprite_target) do
+    case AtomLGFX.delete_sprite(port, sprite_target) do
       :ok -> :ok
       {:error, _} -> :ok
     end
@@ -358,15 +358,15 @@ defmodule SampleApp.MovingIcons do
         loop(port, {w, h, render_target, flip1, objects, icon_handles})
 
       {:error, reason} ->
-        IO.puts("moving_icons render failed: #{LGFXPort.format_error(reason)}")
+        IO.puts("moving_icons render failed: #{AtomLGFX.format_error(reason)}")
         {:error, reason}
     end
   end
 
   defp render_frame(port, _h, :direct_lcd, _flip0, objects, icon_handles) do
-    with :ok <- LGFXPort.fill_screen(port, @bg),
+    with :ok <- AtomLGFX.fill_screen(port, @bg),
          :ok <- draw_all_objects_to_target(port, objects, icon_handles, 0, 0),
-         :ok <- LGFXPort.display(port) do
+         :ok <- AtomLGFX.display(port) do
       {:ok, 0}
     else
       {:error, reason} ->
@@ -388,7 +388,7 @@ defmodule SampleApp.MovingIcons do
   defp render_strips(port, h, strip_h, buf0, buf1, flip0, objects, icon_handles) do
     case render_strips_i(port, h, strip_h, 0, buf0, buf1, flip0, objects, icon_handles) do
       {:ok, flip1} ->
-        case LGFXPort.display(port) do
+        case AtomLGFX.display(port) do
           :ok -> {:ok, flip1}
           {:error, reason} -> {:error, reason}
         end
@@ -413,9 +413,9 @@ defmodule SampleApp.MovingIcons do
         {0, buf1}
       end
 
-    with :ok <- LGFXPort.clear(port, @bg, buf),
+    with :ok <- AtomLGFX.clear(port, @bg, buf),
          :ok <- draw_all_objects_to_target(port, objects, icon_handles, buf, y0),
-         :ok <- LGFXPort.push_sprite(port, buf, 0, y0) do
+         :ok <- AtomLGFX.push_sprite(port, buf, 0, y0) do
       render_strips_i(
         port,
         h,
@@ -463,7 +463,7 @@ defmodule SampleApp.MovingIcons do
 
     result =
       if @use_transparent_key do
-        LGFXPort.push_rotate_zoom_to(
+        AtomLGFX.push_rotate_zoom_to(
           port,
           src,
           dst_target,
@@ -475,7 +475,7 @@ defmodule SampleApp.MovingIcons do
           @transparent_key_rgb565
         )
       else
-        LGFXPort.push_rotate_zoom_to(
+        AtomLGFX.push_rotate_zoom_to(
           port,
           src,
           dst_target,
@@ -520,7 +520,7 @@ defmodule SampleApp.MovingIcons do
   end
 
   defp format_local_error({:frame_sprite_alloc_failed, w, h, split_factor, reason}) do
-    "frame sprite alloc failed w=#{w} h=#{h} split_factor=#{split_factor} reason=#{LGFXPort.format_error(reason)}"
+    "frame sprite alloc failed w=#{w} h=#{h} split_factor=#{split_factor} reason=#{AtomLGFX.format_error(reason)}"
   end
 
   defp format_local_error(reason), do: inspect(reason)

@@ -26,11 +26,11 @@ defmodule SampleApp.ClipSmoke do
         :ok
       else
         {:error, reason} = err ->
-          IO.puts("clip_smoke failed: #{LGFXPort.format_error(reason)}")
+          IO.puts("clip_smoke failed: #{AtomLGFX.format_error(reason)}")
           err
       end
     after
-      _ = LGFXPort.clear_clip_rect(port, 0)
+      _ = AtomLGFX.clear_clip_rect(port, 0)
       _ = safe_delete_sprite(port, @sprite_target)
     end
   end
@@ -40,29 +40,29 @@ defmodule SampleApp.ClipSmoke do
     cross_y = clip_y + div(clip_h, 2)
     cross_x = clip_x + div(clip_w, 2)
 
-    with :ok <- LGFXPort.clear_clip_rect(port, 0),
-         :ok <- LGFXPort.fill_screen(port, @bg),
-         :ok <- LGFXPort.draw_rect(port, 0, 0, w, h, @frame, 0),
-         :ok <- LGFXPort.draw_string_bg(port, 4, 2, @fg, @bg, 1, "CLIP SMOKE", 0),
-         :ok <- LGFXPort.set_text_color(port, @dim, nil, 0),
-         :ok <- LGFXPort.draw_string(port, 4, 14, "LCD target clip rect", 0),
-         :ok <- LGFXPort.draw_rect(port, clip_x, clip_y, clip_w, clip_h, @frame, 0),
-         :ok <- LGFXPort.set_clip_rect(port, clip_x, clip_y, clip_w, clip_h, 0),
-         :ok <- LGFXPort.fill_rect(port, 0, 0, w, h, @lcd_fill, 0),
-         :ok <- LGFXPort.draw_fast_hline(port, 0, cross_y, w, @lcd_accent, 0),
-         :ok <- LGFXPort.draw_fast_vline(port, cross_x, 0, h, @lcd_accent, 0),
-         :ok <- LGFXPort.set_text_color(port, @fg, nil, 0),
-         :ok <- LGFXPort.draw_string(port, clip_x + 4, clip_y + 4, "lcd clipped", 0),
-         :ok <- LGFXPort.clear_clip_rect(port, 0),
-         :ok <- LGFXPort.draw_rect(port, clip_x, clip_y, clip_w, clip_h, @lcd_accent, 0),
-         :ok <- LGFXPort.set_text_color(port, @dim, nil, 0),
-         :ok <- LGFXPort.draw_string(port, 4, status_y, "lcd clip set/clear ok", 0) do
+    with :ok <- AtomLGFX.clear_clip_rect(port, 0),
+         :ok <- AtomLGFX.fill_screen(port, @bg),
+         :ok <- AtomLGFX.draw_rect(port, 0, 0, w, h, @frame, 0),
+         :ok <- AtomLGFX.draw_string_bg(port, 4, 2, @fg, @bg, 1, "CLIP SMOKE", 0),
+         :ok <- AtomLGFX.set_text_color(port, @dim, nil, 0),
+         :ok <- AtomLGFX.draw_string(port, 4, 14, "LCD target clip rect", 0),
+         :ok <- AtomLGFX.draw_rect(port, clip_x, clip_y, clip_w, clip_h, @frame, 0),
+         :ok <- AtomLGFX.set_clip_rect(port, clip_x, clip_y, clip_w, clip_h, 0),
+         :ok <- AtomLGFX.fill_rect(port, 0, 0, w, h, @lcd_fill, 0),
+         :ok <- AtomLGFX.draw_fast_hline(port, 0, cross_y, w, @lcd_accent, 0),
+         :ok <- AtomLGFX.draw_fast_vline(port, cross_x, 0, h, @lcd_accent, 0),
+         :ok <- AtomLGFX.set_text_color(port, @fg, nil, 0),
+         :ok <- AtomLGFX.draw_string(port, clip_x + 4, clip_y + 4, "lcd clipped", 0),
+         :ok <- AtomLGFX.clear_clip_rect(port, 0),
+         :ok <- AtomLGFX.draw_rect(port, clip_x, clip_y, clip_w, clip_h, @lcd_accent, 0),
+         :ok <- AtomLGFX.set_text_color(port, @dim, nil, 0),
+         :ok <- AtomLGFX.draw_string(port, 4, status_y, "lcd clip set/clear ok", 0) do
       :ok
     end
   end
 
   defp maybe_draw_sprite_clip_smoke(port, w, h) do
-    case LGFXPort.supports_sprite?(port) do
+    case AtomLGFX.supports_sprite?(port) do
       {:ok, true} ->
         draw_sprite_clip_smoke(port, w, h)
 
@@ -88,13 +88,13 @@ defmodule SampleApp.ClipSmoke do
     clip_h = max_i(8, sprite_h - 12)
 
     with :ok <- safe_delete_sprite(port, @sprite_target),
-         :ok <- LGFXPort.create_sprite(port, sprite_w, sprite_h, 16, @sprite_target),
-         :ok <- LGFXPort.clear(port, @bg, @sprite_target),
-         :ok <- LGFXPort.draw_rect(port, 0, 0, sprite_w, sprite_h, @frame, @sprite_target),
-         :ok <- LGFXPort.set_clip_rect(port, clip_x, clip_y, clip_w, clip_h, @sprite_target),
-         :ok <- LGFXPort.fill_rect(port, 0, 0, sprite_w, sprite_h, @sprite_fill, @sprite_target),
+         :ok <- AtomLGFX.create_sprite(port, sprite_w, sprite_h, 16, @sprite_target),
+         :ok <- AtomLGFX.clear(port, @bg, @sprite_target),
+         :ok <- AtomLGFX.draw_rect(port, 0, 0, sprite_w, sprite_h, @frame, @sprite_target),
+         :ok <- AtomLGFX.set_clip_rect(port, clip_x, clip_y, clip_w, clip_h, @sprite_target),
+         :ok <- AtomLGFX.fill_rect(port, 0, 0, sprite_w, sprite_h, @sprite_fill, @sprite_target),
          :ok <-
-           LGFXPort.draw_fast_hline(
+           AtomLGFX.draw_fast_hline(
              port,
              0,
              clip_y + div(clip_h, 2),
@@ -103,7 +103,7 @@ defmodule SampleApp.ClipSmoke do
              @sprite_target
            ),
          :ok <-
-           LGFXPort.draw_fast_vline(
+           AtomLGFX.draw_fast_vline(
              port,
              clip_x + div(clip_w, 2),
              0,
@@ -111,9 +111,9 @@ defmodule SampleApp.ClipSmoke do
              @sprite_frame,
              @sprite_target
            ),
-         :ok <- LGFXPort.clear_clip_rect(port, @sprite_target),
+         :ok <- AtomLGFX.clear_clip_rect(port, @sprite_target),
          :ok <-
-           LGFXPort.draw_rect(
+           AtomLGFX.draw_rect(
              port,
              clip_x,
              clip_y,
@@ -122,9 +122,9 @@ defmodule SampleApp.ClipSmoke do
              @sprite_frame,
              @sprite_target
            ),
-         :ok <- LGFXPort.push_sprite(port, @sprite_target, dst_x, dst_y),
-         :ok <- LGFXPort.set_text_color(port, @dim, nil, 0),
-         :ok <- LGFXPort.draw_string(port, 4, max_i(0, dst_y - 12), "sprite target clip rect", 0) do
+         :ok <- AtomLGFX.push_sprite(port, @sprite_target, dst_x, dst_y),
+         :ok <- AtomLGFX.set_text_color(port, @dim, nil, 0),
+         :ok <- AtomLGFX.draw_string(port, 4, max_i(0, dst_y - 12), "sprite target clip rect", 0) do
       :ok
     else
       {:error, reason} ->
@@ -133,7 +133,7 @@ defmodule SampleApp.ClipSmoke do
   end
 
   defp safe_delete_sprite(port, sprite_target) do
-    case LGFXPort.delete_sprite(port, sprite_target) do
+    case AtomLGFX.delete_sprite(port, sprite_target) do
       :ok -> :ok
       {:error, _} -> :ok
     end

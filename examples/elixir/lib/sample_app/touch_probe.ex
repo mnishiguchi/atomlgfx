@@ -37,7 +37,7 @@ defmodule SampleApp.TouchProbe do
   @invert_y false
 
   def run(port, w, h) when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
-    with {:ok, true} <- LGFXPort.supports_touch?(port),
+    with {:ok, true} <- AtomLGFX.supports_touch?(port),
          :ok <- draw_static_ui(port, w, h) do
       loop(port, w, h, nil, nil, nil)
     else
@@ -47,12 +47,12 @@ defmodule SampleApp.TouchProbe do
   end
 
   defp draw_static_ui(port, w, _h) do
-    with :ok <- LGFXPort.fill_screen(port, @bg),
-         :ok <- LGFXPort.fill_rect(port, 0, 0, w, @hud_h, @hud_bg),
-         :ok <- LGFXPort.draw_fast_hline(port, 0, @hud_h - 1, w, 0x303030),
-         :ok <- LGFXPort.draw_string_bg(port, 4, 0, @hud_fg, @hud_bg, 1, "TOUCH PROBE", 0),
+    with :ok <- AtomLGFX.fill_screen(port, @bg),
+         :ok <- AtomLGFX.fill_rect(port, 0, 0, w, @hud_h, @hud_bg),
+         :ok <- AtomLGFX.draw_fast_hline(port, 0, @hud_h - 1, w, 0x303030),
+         :ok <- AtomLGFX.draw_string_bg(port, 4, 0, @hud_fg, @hud_bg, 1, "TOUCH PROBE", 0),
          :ok <-
-           LGFXPort.draw_string_bg(
+           AtomLGFX.draw_string_bg(
              port,
              4,
              14,
@@ -62,7 +62,7 @@ defmodule SampleApp.TouchProbe do
              "touch=green raw=magenta hold TL to exit",
              0
            ),
-         :ok <- LGFXPort.draw_string(port, 4, @hud_h + 6, "Tap / drag on the panel", 0) do
+         :ok <- AtomLGFX.draw_string(port, 4, @hud_h + 6, "Tap / drag on the panel", 0) do
       :ok
     end
   end
@@ -71,14 +71,14 @@ defmodule SampleApp.TouchProbe do
     now_ms = :erlang.monotonic_time(:millisecond)
 
     touch =
-      case LGFXPort.get_touch(port) do
+      case AtomLGFX.get_touch(port) do
         {:ok, :none} -> nil
         {:ok, {x, y, size}} -> normalize_touch({x, y, size}, w, h)
         {:error, reason} -> {:error, {:get_touch_failed, reason}}
       end
 
     raw =
-      case LGFXPort.get_touch_raw(port) do
+      case AtomLGFX.get_touch_raw(port) do
         {:ok, :none} -> nil
         {:ok, {x, y, size}} -> normalize_touch({x, y, size}, w, h)
         {:error, reason} -> {:error, {:get_touch_raw_failed, reason}}
@@ -114,10 +114,10 @@ defmodule SampleApp.TouchProbe do
     line1 = <<"touch ", touch_label(touch)::binary>>
     line2 = <<"raw   ", touch_label(raw)::binary>>
 
-    with :ok <- LGFXPort.fill_rect(port, 0, 0, w, @hud_h, @hud_bg),
-         :ok <- LGFXPort.draw_fast_hline(port, 0, @hud_h - 1, w, 0x303030),
-         :ok <- LGFXPort.draw_string_bg(port, 4, 0, @hud_fg, @hud_bg, 1, line1, 0),
-         :ok <- LGFXPort.draw_string_bg(port, 4, 14, @hud_dim, @hud_bg, 1, line2, 0) do
+    with :ok <- AtomLGFX.fill_rect(port, 0, 0, w, @hud_h, @hud_bg),
+         :ok <- AtomLGFX.draw_fast_hline(port, 0, @hud_h - 1, w, 0x303030),
+         :ok <- AtomLGFX.draw_string_bg(port, 4, 0, @hud_fg, @hud_bg, 1, line1, 0),
+         :ok <- AtomLGFX.draw_string_bg(port, 4, 14, @hud_dim, @hud_bg, 1, line2, 0) do
       :ok
     end
   end
@@ -144,7 +144,7 @@ defmodule SampleApp.TouchProbe do
     rect_h = max_i(0, y1 - y0 + 1)
 
     if rect_w > 0 and rect_h > 0 do
-      LGFXPort.fill_rect(port, x0, y0, rect_w, rect_h, @bg)
+      AtomLGFX.fill_rect(port, x0, y0, rect_w, rect_h, @bg)
     else
       :ok
     end
@@ -168,10 +168,10 @@ defmodule SampleApp.TouchProbe do
   end
 
   defp maybe_hline(_port, _x, _y, len, _color) when len <= 0, do: :ok
-  defp maybe_hline(port, x, y, len, color), do: LGFXPort.draw_fast_hline(port, x, y, len, color)
+  defp maybe_hline(port, x, y, len, color), do: AtomLGFX.draw_fast_hline(port, x, y, len, color)
 
   defp maybe_vline(_port, _x, _y, len, _color) when len <= 0, do: :ok
-  defp maybe_vline(port, x, y, len, color), do: LGFXPort.draw_fast_vline(port, x, y, len, color)
+  defp maybe_vline(port, x, y, len, color), do: AtomLGFX.draw_fast_vline(port, x, y, len, color)
 
   # Clips a 1D span [pos, pos+len) to [min, max_excl)
   defp clip_span(pos, len, min, max_excl) do

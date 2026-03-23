@@ -38,8 +38,8 @@ defmodule SampleApp.PushImageStress do
   @pattern_checker 2
 
   def run(port, rounds \\ 300) when is_integer(rounds) and rounds > 0 do
-    with {:ok, w} <- LGFXPort.width(port, 0),
-         {:ok, h} <- LGFXPort.height(port, 0) do
+    with {:ok, w} <- AtomLGFX.width(port, 0),
+         {:ok, h} <- AtomLGFX.height(port, 0) do
       hud_h = min_i(@hud_h, h)
       stage_y = hud_h
       stage_h = max_i(1, h - hud_h)
@@ -100,7 +100,7 @@ defmodule SampleApp.PushImageStress do
 
     pixels = make_pixels_rgb565(w, h, stride_pixels, pattern_id, i)
 
-    result = LGFXPort.push_image_rgb565(port, x, y, w, h, pixels, stride_pixels, 0)
+    result = AtomLGFX.push_image_rgb565(port, x, y, w, h, pixels, stride_pixels, 0)
 
     {ok_count2, err_count2} =
       case result do
@@ -109,7 +109,7 @@ defmodule SampleApp.PushImageStress do
 
         {:error, reason} ->
           IO.puts(
-            "push_image_stress error i=#{i} x=#{x} y=#{y} w=#{w} h=#{h} stride=#{stride_pixels} reason=#{LGFXPort.format_error(reason)}"
+            "push_image_stress error i=#{i} x=#{x} y=#{y} w=#{w} h=#{h} stride=#{stride_pixels} reason=#{AtomLGFX.format_error(reason)}"
           )
 
           {ok_count, err_count + 1}
@@ -149,15 +149,15 @@ defmodule SampleApp.PushImageStress do
   # ---------------------------------------------------------------------------
 
   defp draw_chrome(port, w, h, stage_y) do
-    _ = LGFXPort.fill_screen(port, @bg)
+    _ = AtomLGFX.fill_screen(port, @bg)
 
     if stage_y > 0 do
-      _ = LGFXPort.fill_rect(port, 0, 0, w, stage_y, @hud_bg)
-      _ = LGFXPort.draw_fast_hline(port, 0, stage_y - 1, w, @divider)
+      _ = AtomLGFX.fill_rect(port, 0, 0, w, stage_y, @hud_bg)
+      _ = AtomLGFX.draw_fast_hline(port, 0, stage_y - 1, w, @divider)
     end
 
     if h > stage_y do
-      _ = LGFXPort.fill_rect(port, 0, stage_y, w, h - stage_y, @stage_bg)
+      _ = AtomLGFX.fill_rect(port, 0, stage_y, w, h - stage_y, @stage_bg)
     end
 
     :ok
@@ -180,7 +180,7 @@ defmodule SampleApp.PushImageStress do
     bar_h = @hud_bar_h
     bar_w = max_i(8, screen_w - 2 * @hud_x)
 
-    _ = LGFXPort.fill_rect(port, 0, 0, screen_w, hud_h, @hud_bg)
+    _ = AtomLGFX.fill_rect(port, 0, 0, screen_w, hud_h, @hud_bg)
 
     line1 =
       <<"IMG ", progress_label(i, rounds)::binary, "  ok:", i2b(ok_count)::binary, "  err:",
@@ -191,7 +191,7 @@ defmodule SampleApp.PushImageStress do
         stride_label(stride_pixels, case_w)::binary, "  ", pattern_label(pattern_id)::binary>>
 
     _ =
-      LGFXPort.draw_string_bg(
+      AtomLGFX.draw_string_bg(
         port,
         @hud_x,
         @hud_line1_y,
@@ -202,7 +202,7 @@ defmodule SampleApp.PushImageStress do
       )
 
     _ =
-      LGFXPort.draw_string_bg(
+      AtomLGFX.draw_string_bg(
         port,
         @hud_x,
         @hud_line2_y,
@@ -212,7 +212,7 @@ defmodule SampleApp.PushImageStress do
         line2
       )
 
-    _ = LGFXPort.fill_rect(port, bar_x, bar_y, bar_w, bar_h, @progress_bg)
+    _ = AtomLGFX.fill_rect(port, bar_x, bar_y, bar_w, bar_h, @progress_bg)
 
     fill_w =
       cond do
@@ -229,12 +229,12 @@ defmodule SampleApp.PushImageStress do
       end
 
     if fill_w > 0 do
-      _ = LGFXPort.fill_rect(port, bar_x, bar_y, fill_w, bar_h, bar_color)
+      _ = AtomLGFX.fill_rect(port, bar_x, bar_y, fill_w, bar_h, bar_color)
     end
 
     if fill_w < bar_w do
       tick_x = bar_x + fill_w
-      _ = LGFXPort.draw_fast_vline(port, tick_x, bar_y, bar_h, @hud_accent)
+      _ = AtomLGFX.draw_fast_vline(port, tick_x, bar_y, bar_h, @hud_accent)
     end
 
     :ok
@@ -468,13 +468,13 @@ defmodule SampleApp.PushImageStress do
     stride = 3
     pixels = solid_row(w, 0x07E0) |> :binary.copy(h)
 
-    case LGFXPort.push_image_rgb565(port, 0, 0, w, h, pixels, stride, 0) do
+    case AtomLGFX.push_image_rgb565(port, 0, 0, w, h, pixels, stride, 0) do
       {:error, {:bad_stride, ^stride, ^w}} ->
         IO.puts("invalid_stride_probe ok")
         :ok
 
       {:error, reason} ->
-        IO.puts("invalid_stride_probe unexpected_error=#{LGFXPort.format_error(reason)}")
+        IO.puts("invalid_stride_probe unexpected_error=#{AtomLGFX.format_error(reason)}")
         :ok
 
       :ok ->

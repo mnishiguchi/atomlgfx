@@ -2,14 +2,14 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule LGFXPort.Text do
+defmodule AtomLGFX.Text do
   @moduledoc false
 
   import Bitwise
-  import LGFXPort.Guards
+  import AtomLGFX.Guards
 
-  alias LGFXPort.Cache
-  alias LGFXPort.Protocol
+  alias AtomLGFX.Cache
+  alias AtomLGFX.Protocol
 
   @font_preset_ascii 0
   @font_preset_jp 1

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule LGFXPort do
+defmodule AtomLGFX do
   @moduledoc """
   Elixir client for the `lgfx_port` AtomVM port driver.
 
@@ -17,7 +17,7 @@ defmodule LGFXPort do
   Typical bring-up:
 
       {:ok, port} =
-        LGFXPort.open(
+        AtomLGFX.open(
           panel_driver: :ili9341_2,
           width: 240,
           height: 320,
@@ -28,9 +28,9 @@ defmodule LGFXPort do
           touch_cs_gpio: 44
         )
 
-      :ok = LGFXPort.ping(port)
-      :ok = LGFXPort.init(port)
-      :ok = LGFXPort.display(port)
+      :ok = AtomLGFX.ping(port)
+      :ok = AtomLGFX.init(port)
+      :ok = AtomLGFX.display(port)
 
   Lifecycle notes:
 
@@ -74,17 +74,17 @@ defmodule LGFXPort do
   - `push_rotate_zoom_to/7`, `/8`, and `/9` use direct degree and zoom values.
   """
 
-  alias LGFXPort.Cache
-  alias LGFXPort.Clip
-  alias LGFXPort.Device
-  alias LGFXPort.Errors
-  alias LGFXPort.Images
-  alias LGFXPort.OpenConfig
-  alias LGFXPort.Primitives
-  alias LGFXPort.Protocol
-  alias LGFXPort.Sprites
-  alias LGFXPort.Text
-  alias LGFXPort.Touch
+  alias AtomLGFX.Cache
+  alias AtomLGFX.Clip
+  alias AtomLGFX.Device
+  alias AtomLGFX.Errors
+  alias AtomLGFX.Images
+  alias AtomLGFX.OpenConfig
+  alias AtomLGFX.Primitives
+  alias AtomLGFX.Protocol
+  alias AtomLGFX.Sprites
+  alias AtomLGFX.Text
+  alias AtomLGFX.Touch
 
   @port_name "lgfx_port"
 
@@ -101,7 +101,7 @@ defmodule LGFXPort do
 
   def open(other) do
     raise ArgumentError,
-          "LGFXPort.open/1 expects a keyword list or proplist, got: #{inspect(other)}"
+          "AtomLGFX.open/1 expects a keyword list or proplist, got: #{inspect(other)}"
   end
 
   @doc false

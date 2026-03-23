@@ -33,21 +33,21 @@ defmodule SampleApp.JpgSmoke do
 
     status_y = max_i(0, h - 14)
 
-    with :ok <- LGFXPort.fill_screen(port, @bg),
-         :ok <- LGFXPort.reset_text_state(port, 0),
-         :ok <- LGFXPort.set_text_wrap(port, false, 0),
-         :ok <- LGFXPort.set_text_font_preset(port, :ascii, 0),
-         :ok <- LGFXPort.set_text_size(port, 1, 0),
-         :ok <- LGFXPort.set_text_color(port, @fg, nil, 0),
-         :ok <- LGFXPort.draw_rect(port, 0, 0, w, h, @frame, 0),
-         :ok <- LGFXPort.draw_string_bg(port, 4, 2, @fg, @bg, 1, "JPG SMOKE", 0),
-         :ok <- LGFXPort.set_text_color(port, @dim, nil, 0),
-         :ok <- LGFXPort.draw_string(port, 4, 14, "short form + scaled form", 0),
-         :ok <- LGFXPort.draw_rect(port, left_x - 1, top_y - 1, 10, 10, @frame, 0),
-         :ok <- LGFXPort.draw_jpg(port, left_x, top_y, @jpeg_8x8, 0),
-         :ok <- LGFXPort.draw_string(port, left_x, top_y + 14, "raw 8x8", 0),
+    with :ok <- AtomLGFX.fill_screen(port, @bg),
+         :ok <- AtomLGFX.reset_text_state(port, 0),
+         :ok <- AtomLGFX.set_text_wrap(port, false, 0),
+         :ok <- AtomLGFX.set_text_font_preset(port, :ascii, 0),
+         :ok <- AtomLGFX.set_text_size(port, 1, 0),
+         :ok <- AtomLGFX.set_text_color(port, @fg, nil, 0),
+         :ok <- AtomLGFX.draw_rect(port, 0, 0, w, h, @frame, 0),
+         :ok <- AtomLGFX.draw_string_bg(port, 4, 2, @fg, @bg, 1, "JPG SMOKE", 0),
+         :ok <- AtomLGFX.set_text_color(port, @dim, nil, 0),
+         :ok <- AtomLGFX.draw_string(port, 4, 14, "short form + scaled form", 0),
+         :ok <- AtomLGFX.draw_rect(port, left_x - 1, top_y - 1, 10, 10, @frame, 0),
+         :ok <- AtomLGFX.draw_jpg(port, left_x, top_y, @jpeg_8x8, 0),
+         :ok <- AtomLGFX.draw_string(port, left_x, top_y + 14, "raw 8x8", 0),
          :ok <-
-           LGFXPort.draw_rect(
+           AtomLGFX.draw_rect(
              port,
              right_x - 1,
              top_y - 1,
@@ -57,7 +57,7 @@ defmodule SampleApp.JpgSmoke do
              0
            ),
          :ok <-
-           LGFXPort.draw_jpg_scaled(
+           AtomLGFX.draw_jpg_scaled(
              port,
              right_x,
              top_y,
@@ -70,17 +70,17 @@ defmodule SampleApp.JpgSmoke do
              @jpeg_8x8,
              0
            ),
-         :ok <- LGFXPort.set_text_color(port, @accent, nil, 0),
-         :ok <- LGFXPort.draw_string(port, right_x, top_y + scaled_box_h + 4, "scaled 4x", 0),
-         :ok <- LGFXPort.set_text_font_preset(port, :ascii, 0),
-         :ok <- LGFXPort.set_text_size(port, 1, 0),
-         :ok <- LGFXPort.set_text_color(port, @dim, nil, 0),
-         :ok <- LGFXPort.draw_string(port, 4, status_y, "draw_jpg ok", 0) do
+         :ok <- AtomLGFX.set_text_color(port, @accent, nil, 0),
+         :ok <- AtomLGFX.draw_string(port, right_x, top_y + scaled_box_h + 4, "scaled 4x", 0),
+         :ok <- AtomLGFX.set_text_font_preset(port, :ascii, 0),
+         :ok <- AtomLGFX.set_text_size(port, 1, 0),
+         :ok <- AtomLGFX.set_text_color(port, @dim, nil, 0),
+         :ok <- AtomLGFX.draw_string(port, 4, status_y, "draw_jpg ok", 0) do
       IO.puts("jpg_smoke ok")
       :ok
     else
       {:error, reason} = err ->
-        IO.puts("jpg_smoke failed: #{LGFXPort.format_error(reason)}")
+        IO.puts("jpg_smoke failed: #{AtomLGFX.format_error(reason)}")
         err
     end
   end

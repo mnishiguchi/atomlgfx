@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule LGFXPort.Clip do
+defmodule AtomLGFX.Clip do
   @moduledoc false
 
-  import LGFXPort.Guards
+  import AtomLGFX.Guards
 
-  alias LGFXPort.Protocol
+  alias AtomLGFX.Protocol
 
   def set_clip_rect(port, x, y, width, height, target \\ 0)
       when i16(x) and i16(y) and

@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule LGFXPort.Images do
+defmodule AtomLGFX.Images do
   @moduledoc false
 
-  import LGFXPort.Guards
+  import AtomLGFX.Guards
 
-  alias LGFXPort.Protocol
+  alias AtomLGFX.Protocol
 
   @max_f32 3.4028234663852886e38
 

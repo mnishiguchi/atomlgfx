@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 This repository provides an ESP-IDF component that exposes a native AtomVM port driver backed by LovyanGFX.
 
-The component is intended for AtomVM firmware on ESP32-class boards. It implements the native side of the `LGFXPort` API used by the Elixir package in this repository.
+The component is intended for AtomVM firmware on ESP32-class boards. It implements the native side of the `AtomLGFX` API used by the Elixir package in this repository.
 
 ## What this component provides
 

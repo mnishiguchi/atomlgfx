@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Elixir package
 
-This repository provides an Elixir package named `LGFXPort` for AtomVM.
+This repository provides an Elixir package named `AtomLGFX` for AtomVM.
 
 It is a wrapper around the native `lgfx_port` driver in this repository. The
 package provides the Elixir-facing API, convenience helpers, and wrapper-side
@@ -22,12 +22,12 @@ pre-release.
 
 ## Installation
 
-Add `lgfx_port` to your dependencies in `mix.exs`.
+Add `atomlgfx` to your dependencies in `mix.exs`.
 
 ```elixir
 defp deps do
   [
-    {:lgfx_port, git: "https://github.com/mnishiguchi/atomlgfx.git", branch: "main"}
+    {:atomlgfx, git: "https://github.com/mnishiguchi/atomlgfx.git", branch: "main"}
   ]
 end
 ```
@@ -41,20 +41,20 @@ mix deps.get
 ## Basic usage
 
 ```elixir
-{:ok, port} = LGFXPort.open(panel_driver: :ili9488, width: 320, height: 480)
+{:ok, port} = AtomLGFX.open(panel_driver: :ili9488, width: 320, height: 480)
 
-:ok = LGFXPort.init(port)
-:ok = LGFXPort.display(port)
+:ok = AtomLGFX.init(port)
+:ok = AtomLGFX.display(port)
 
-:ok = LGFXPort.fill_screen(port, 0x000000)
-:ok = LGFXPort.set_text_font_preset(port, :jp)
-:ok = LGFXPort.set_text_size(port, 2)
-:ok = LGFXPort.set_text_color(port, 0xFFFFFF, 0x000000)
+:ok = AtomLGFX.fill_screen(port, 0x000000)
+:ok = AtomLGFX.set_text_font_preset(port, :jp)
+:ok = AtomLGFX.set_text_size(port, 2)
+:ok = AtomLGFX.set_text_color(port, 0xFFFFFF, 0x000000)
 
-:ok = LGFXPort.draw_string(port, 16, 16, "こんにちは")
-:ok = LGFXPort.draw_string(port, 16, 56, "日本語テキスト")
+:ok = AtomLGFX.draw_string(port, 16, 16, "こんにちは")
+:ok = AtomLGFX.draw_string(port, 16, 56, "日本語テキスト")
 
-:ok = LGFXPort.display(port)
+:ok = AtomLGFX.display(port)
 ```
 
 Adjust options and function calls to match your board and target device.
@@ -65,7 +65,7 @@ The package wraps the shared native protocol rather than redefining it.
 
 At a high level:
 
-- Elixir code calls `LGFXPort`
+- Elixir code calls `AtomLGFX`
 - the wrapper builds and sends protocol requests
 - the native driver executes the request
 - replies are returned as `{ok, result}` or `{error, reason}`

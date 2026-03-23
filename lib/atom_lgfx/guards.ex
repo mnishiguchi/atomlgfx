@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule LGFXPort.Guards do
+defmodule AtomLGFX.Guards do
   @moduledoc false
 
   defguard i16(v) when is_integer(v) and v >= -0x8000 and v <= 0x7FFF

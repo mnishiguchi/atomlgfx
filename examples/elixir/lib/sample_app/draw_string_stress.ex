@@ -45,8 +45,8 @@ defmodule SampleApp.DrawStringStress do
   @println_every 19
 
   def run(port, rounds \\ 500) when is_integer(rounds) and rounds > 0 do
-    with {:ok, w} <- LGFXPort.width(port, 0),
-         {:ok, h} <- LGFXPort.height(port, 0) do
+    with {:ok, w} <- AtomLGFX.width(port, 0),
+         {:ok, h} <- AtomLGFX.height(port, 0) do
       hud_h = min_i(@hud_h, h)
       text_y0 = hud_h
       text_h = max_i(1, h - hud_h)
@@ -58,13 +58,13 @@ defmodule SampleApp.DrawStringStress do
 
       # Keep state deterministic from this module's point of view.
       # Note: reset_text_state resets host cache only; device state remains whatever it was.
-      _ = LGFXPort.reset_text_state(port, 0)
-      _ = LGFXPort.set_text_wrap(port, false, 0)
-      _ = LGFXPort.set_text_color(port, 0xFFFFFF, nil, 0)
+      _ = AtomLGFX.reset_text_state(port, 0)
+      _ = AtomLGFX.set_text_wrap(port, false, 0)
+      _ = AtomLGFX.set_text_color(port, 0xFFFFFF, nil, 0)
 
       case choose_main_preset(port) do
         {:ok, main_preset} ->
-          _ = LGFXPort.set_text_size(port, @main_text_scale, 0)
+          _ = AtomLGFX.set_text_size(port, @main_text_scale, 0)
           _ = draw_status(port, w, rounds, -1, 0, 0, rows, main_preset)
 
           _ = probe_cursor_roundtrip(port, text_y0)
@@ -76,36 +76,36 @@ defmodule SampleApp.DrawStringStress do
         {:error, {:failed_to_select_text_preset, jp_reason, ascii_reason}} = err ->
           IO.puts(
             "draw_string_stress failed to select text preset: " <>
-              "jp=#{LGFXPort.format_error(jp_reason)} " <>
-              "ascii=#{LGFXPort.format_error(ascii_reason)}"
+              "jp=#{AtomLGFX.format_error(jp_reason)} " <>
+              "ascii=#{AtomLGFX.format_error(ascii_reason)}"
           )
 
           err
       end
     else
       {:error, reason} = err ->
-        IO.puts("draw_string_stress failed to start: #{LGFXPort.format_error(reason)}")
+        IO.puts("draw_string_stress failed to start: #{AtomLGFX.format_error(reason)}")
         err
     end
   end
 
   defp choose_main_preset(port) do
-    case LGFXPort.set_text_font_preset(port, :jp, 0) do
+    case AtomLGFX.set_text_font_preset(port, :jp, 0) do
       :ok ->
         IO.puts("draw_string_stress preset: :jp")
         {:ok, :jp}
 
       {:error, jp_reason} ->
-        IO.puts("draw_string_stress preset :jp unavailable: #{LGFXPort.format_error(jp_reason)}")
+        IO.puts("draw_string_stress preset :jp unavailable: #{AtomLGFX.format_error(jp_reason)}")
 
-        case LGFXPort.set_text_font_preset(port, :ascii, 0) do
+        case AtomLGFX.set_text_font_preset(port, :ascii, 0) do
           :ok ->
             IO.puts("draw_string_stress preset: :ascii")
             {:ok, :ascii}
 
           {:error, ascii_reason} ->
             IO.puts(
-              "draw_string_stress preset :ascii unavailable: #{LGFXPort.format_error(ascii_reason)}"
+              "draw_string_stress preset :ascii unavailable: #{AtomLGFX.format_error(ascii_reason)}"
             )
 
             {:error, {:failed_to_select_text_preset, jp_reason, ascii_reason}}
@@ -117,8 +117,8 @@ defmodule SampleApp.DrawStringStress do
     probe_x = @x
     probe_y = text_y0
 
-    with :ok <- LGFXPort.set_cursor(port, probe_x, probe_y, 0),
-         {:ok, {^probe_x, ^probe_y}} <- LGFXPort.get_cursor(port, 0) do
+    with :ok <- AtomLGFX.set_cursor(port, probe_x, probe_y, 0),
+         {:ok, {^probe_x, ^probe_y}} <- AtomLGFX.get_cursor(port, 0) do
       IO.puts("cursor_probe ok x=#{probe_x} y=#{probe_y}")
       :ok
     else
@@ -127,19 +127,19 @@ defmodule SampleApp.DrawStringStress do
         :ok
 
       {:error, reason} ->
-        IO.puts("cursor_probe failed: #{LGFXPort.format_error(reason)}")
+        IO.puts("cursor_probe failed: #{AtomLGFX.format_error(reason)}")
         :ok
     end
   end
 
   defp probe_invalid_text_guard(port) do
     # Client-side validation probe: empty binaries must be rejected for draw_string.
-    case LGFXPort.draw_string(port, @x, 0, <<>>, 0) do
+    case AtomLGFX.draw_string(port, @x, 0, <<>>, 0) do
       {:error, :empty_text} ->
         IO.puts("invalid_text_probe ok (empty_text)")
 
       {:error, reason} ->
-        IO.puts("invalid_text_probe ok (got #{LGFXPort.format_error(reason)})")
+        IO.puts("invalid_text_probe ok (got #{AtomLGFX.format_error(reason)})")
 
       :ok ->
         IO.puts("invalid_text_probe unexpected_ok")
@@ -152,25 +152,25 @@ defmodule SampleApp.DrawStringStress do
   end
 
   defp probe_empty_prints(port, text_y0) do
-    _ = LGFXPort.set_cursor(port, @x, text_y0, 0)
+    _ = AtomLGFX.set_cursor(port, @x, text_y0, 0)
 
-    case LGFXPort.print(port, <<>>, 0) do
+    case AtomLGFX.print(port, <<>>, 0) do
       :ok ->
         IO.puts("empty_print_probe ok")
 
       {:error, reason} ->
-        IO.puts("empty_print_probe failed: #{LGFXPort.format_error(reason)}")
+        IO.puts("empty_print_probe failed: #{AtomLGFX.format_error(reason)}")
 
       other ->
         IO.puts("empty_print_probe unexpected_reply=#{inspect(other)}")
     end
 
-    case LGFXPort.println(port, <<>>, 0) do
+    case AtomLGFX.println(port, <<>>, 0) do
       :ok ->
         IO.puts("empty_println_probe ok")
 
       {:error, reason} ->
-        IO.puts("empty_println_probe failed: #{LGFXPort.format_error(reason)}")
+        IO.puts("empty_println_probe failed: #{AtomLGFX.format_error(reason)}")
 
       other ->
         IO.puts("empty_println_probe unexpected_reply=#{inspect(other)}")
@@ -198,10 +198,10 @@ defmodule SampleApp.DrawStringStress do
     fg = row_fg_color(i)
 
     # Clear row and draw a small marker strip.
-    _ = LGFXPort.fill_rect(port, 0, y, w, @line_h, row_bg)
-    _ = LGFXPort.fill_rect(port, 0, y, 2, @line_h, @row_marker)
+    _ = AtomLGFX.fill_rect(port, 0, y, w, @line_h, row_bg)
+    _ = AtomLGFX.fill_rect(port, 0, y, 2, @line_h, @row_marker)
     _ = restore_main_text_style(port, main_preset)
-    _ = LGFXPort.set_text_color(port, fg, nil, 0)
+    _ = AtomLGFX.set_text_color(port, fg, nil, 0)
 
     # Fresh runtime binary each iteration (important for lifetime testing).
     text = make_line(i)
@@ -212,7 +212,7 @@ defmodule SampleApp.DrawStringStress do
           {ok_count + 1, err_count}
 
         {:error, reason} ->
-          IO.puts("draw_string_stress error i=#{i}: #{LGFXPort.format_error(reason)}")
+          IO.puts("draw_string_stress error i=#{i}: #{AtomLGFX.format_error(reason)}")
           {ok_count, err_count + 1}
       end
 
@@ -234,28 +234,28 @@ defmodule SampleApp.DrawStringStress do
 
   defp draw_line_with_cursor(port, screen_w, x, y, text, i) do
     result =
-      with :ok <- LGFXPort.set_clip_rect(port, 0, y, screen_w, @line_h, 0),
-           :ok <- LGFXPort.set_cursor(port, x, y, 0) do
+      with :ok <- AtomLGFX.set_clip_rect(port, 0, y, screen_w, @line_h, 0),
+           :ok <- AtomLGFX.set_cursor(port, x, y, 0) do
         if use_println?(i) do
-          LGFXPort.println(port, text, 0)
+          AtomLGFX.println(port, text, 0)
         else
-          LGFXPort.print(port, text, 0)
+          AtomLGFX.print(port, text, 0)
         end
       end
 
-    _ = LGFXPort.clear_clip_rect(port, 0)
+    _ = AtomLGFX.clear_clip_rect(port, 0)
     result
   end
 
   defp restore_main_text_style(port, main_preset) do
-    _ = LGFXPort.set_text_font_preset(port, main_preset, 0)
-    _ = LGFXPort.set_text_size(port, @main_text_scale, 0)
+    _ = AtomLGFX.set_text_font_preset(port, main_preset, 0)
+    _ = AtomLGFX.set_text_size(port, @main_text_scale, 0)
     :ok
   end
 
   defp set_hud_text_style(port) do
-    _ = LGFXPort.set_text_font_preset(port, :ascii, 0)
-    _ = LGFXPort.set_text_size(port, 1, 0)
+    _ = AtomLGFX.set_text_font_preset(port, :ascii, 0)
+    _ = AtomLGFX.set_text_size(port, 1, 0)
     :ok
   end
 
@@ -270,15 +270,15 @@ defmodule SampleApp.DrawStringStress do
   # ---------------------------------------------------------------------------
 
   defp draw_chrome(port, w, h, text_y0) do
-    _ = LGFXPort.fill_screen(port, @bg)
+    _ = AtomLGFX.fill_screen(port, @bg)
 
     if text_y0 > 0 do
-      _ = LGFXPort.fill_rect(port, 0, 0, w, text_y0, @hud_bg)
-      _ = LGFXPort.draw_fast_hline(port, 0, text_y0 - 1, w, @divider)
+      _ = AtomLGFX.fill_rect(port, 0, 0, w, text_y0, @hud_bg)
+      _ = AtomLGFX.draw_fast_hline(port, 0, text_y0 - 1, w, @divider)
     end
 
     if h > text_y0 do
-      _ = LGFXPort.fill_rect(port, 0, text_y0, w, h - text_y0, @console_bg)
+      _ = AtomLGFX.fill_rect(port, 0, text_y0, w, h - text_y0, @console_bg)
     end
 
     :ok
@@ -290,7 +290,7 @@ defmodule SampleApp.DrawStringStress do
     bar_h = @hud_bar_h
     bar_w = max_i(8, screen_w - 8)
 
-    _ = LGFXPort.fill_rect(port, 0, 0, screen_w, @hud_h, @hud_bg)
+    _ = AtomLGFX.fill_rect(port, 0, 0, screen_w, @hud_h, @hud_bg)
     _ = set_hud_text_style(port)
 
     line1 =
@@ -301,10 +301,10 @@ defmodule SampleApp.DrawStringStress do
       <<"rows:", i2b(rows)::binary, "  lh:", i2b(@line_h)::binary, "  ",
         preset_label(main_preset)::binary, "  pln:", i2b(@println_every)::binary>>
 
-    _ = LGFXPort.draw_string_bg(port, 4, @hud_title_y, @hud_fg, @hud_bg, @hud_title_scale, line1)
-    _ = LGFXPort.draw_string_bg(port, 4, @hud_meta_y, @hud_dim, @hud_bg, @hud_meta_scale, line2)
+    _ = AtomLGFX.draw_string_bg(port, 4, @hud_title_y, @hud_fg, @hud_bg, @hud_title_scale, line1)
+    _ = AtomLGFX.draw_string_bg(port, 4, @hud_meta_y, @hud_dim, @hud_bg, @hud_meta_scale, line2)
 
-    _ = LGFXPort.fill_rect(port, bar_x, bar_y, bar_w, bar_h, @progress_bg)
+    _ = AtomLGFX.fill_rect(port, bar_x, bar_y, bar_w, bar_h, @progress_bg)
 
     fill_w =
       cond do
@@ -321,7 +321,7 @@ defmodule SampleApp.DrawStringStress do
       end
 
     if fill_w > 0 do
-      _ = LGFXPort.fill_rect(port, bar_x, bar_y, fill_w, bar_h, bar_color)
+      _ = AtomLGFX.fill_rect(port, bar_x, bar_y, fill_w, bar_h, bar_color)
     end
 
     _ = restore_main_text_style(port, main_preset)

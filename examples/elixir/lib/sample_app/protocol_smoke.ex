@@ -28,7 +28,7 @@ defmodule SampleApp.ProtocolSmoke do
   @known_caps_mask @cap_sprite ||| @cap_pushimage ||| @cap_last_error ||| @cap_touch |||
                      @cap_palette
 
-  def run(port), do: run(port, &LGFXPort.raw_call/6)
+  def run(port), do: run(port, &AtomLGFX.raw_call/6)
 
   def run(port, raw_call) when is_function(raw_call, 6) do
     with :ok <- check_local_cap_constants(),

@@ -6,9 +6,9 @@ defmodule SampleApp.TouchCalibrate do
   @moduledoc false
 
   def run(port, _w, _h) do
-    with {:ok, true} <- LGFXPort.supports_touch?(port),
-         {:ok, params} <- LGFXPort.calibrate_touch(port),
-         :ok <- LGFXPort.set_touch_calibrate(port, params) do
+    with {:ok, true} <- AtomLGFX.supports_touch?(port),
+         {:ok, params} <- AtomLGFX.calibrate_touch(port),
+         :ok <- AtomLGFX.set_touch_calibrate(port, params) do
       IO.puts("touch_calibrate ok params=#{inspect(params)}")
       :ok
     else

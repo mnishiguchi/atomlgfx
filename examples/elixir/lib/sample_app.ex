@@ -41,10 +41,10 @@ defmodule SampleApp do
 
   # Sample board wiring profile.
   #
-  # These are open-time overrides passed explicitly to LGFXPort.open/1 so the
+  # These are open-time overrides passed explicitly to AtomLGFX.open/1 so the
   # bring-up example does not depend entirely on build-time defaults.
   #
-  # Duplicate keys are allowed by LGFXPort.open/1; later keys win. Callers may
+  # Duplicate keys are allowed by AtomLGFX.open/1; later keys win. Callers may
   # pass extra open options to start/2 to override any of these.
   @sample_open_options [
     lcd_spi_host: :spi2_host,
@@ -105,9 +105,9 @@ defmodule SampleApp do
 
   def start(mode, open_options) when is_atom(mode) and is_list(open_options) do
     effective_open_options = @sample_open_options ++ open_options
-    {:ok, port} = LGFXPort.open(effective_open_options)
+    {:ok, port} = AtomLGFX.open(effective_open_options)
 
-    log_info("LGFXPort opened open_options=#{inspect(effective_open_options)}")
+    log_info("AtomLGFX opened open_options=#{inspect(effective_open_options)}")
 
     try do
       case run_mode(port, mode) do
@@ -205,7 +205,7 @@ defmodule SampleApp do
   # -----------------------------------------------------------------------------
 
   defp run_protocol_only(port) do
-    with :ok <- step("ping", LGFXPort.ping(port)),
+    with :ok <- step("ping", AtomLGFX.ping(port)),
          :ok <- step("protocol_smoke", ProtocolSmoke.run(port)) do
       :ok
     end
@@ -254,11 +254,11 @@ defmodule SampleApp do
   end
 
   defp run_boot_handshake(port) do
-    with :ok <- step("ping", LGFXPort.ping(port)),
+    with :ok <- step("ping", AtomLGFX.ping(port)),
          :ok <- step("protocol_smoke", ProtocolSmoke.run(port)),
-         :ok <- step("init", LGFXPort.init(port)),
+         :ok <- step("init", AtomLGFX.init(port)),
          :ok <- step("write_session_smoke", WriteSessionSmoke.run(port)),
-         :ok <- step("display(init)", LGFXPort.display(port)) do
+         :ok <- step("display(init)", AtomLGFX.display(port)) do
       :ok
     end
   end
@@ -268,11 +268,11 @@ defmodule SampleApp do
 
     log_info("selected rotation=#{rotation} viewport=#{w}x#{h}")
 
-    _ = LGFXPort.fill_screen(port, @bg)
-    _ = LGFXPort.reset_text_state(port, 0)
-    _ = LGFXPort.set_text_wrap(port, false, 0)
-    _ = LGFXPort.set_text_size(port, 2, 0)
-    _ = LGFXPort.set_text_color(port, @fg, nil, 0)
+    _ = AtomLGFX.fill_screen(port, @bg)
+    _ = AtomLGFX.reset_text_state(port, 0)
+    _ = AtomLGFX.set_text_wrap(port, false, 0)
+    _ = AtomLGFX.set_text_size(port, 2, 0)
+    _ = AtomLGFX.set_text_color(port, @fg, nil, 0)
 
     :ok
   end
@@ -323,8 +323,8 @@ defmodule SampleApp do
   end
 
   defp apply_rotation(port, rotation) do
-    with :ok <- LGFXPort.set_rotation(port, rotation),
-         :ok <- LGFXPort.display(port),
+    with :ok <- AtomLGFX.set_rotation(port, rotation),
+         :ok <- AtomLGFX.display(port),
          {:ok, raw_w, raw_h} <- get_wh(port) do
       {w, h} = normalize_dims_for_rotation(rotation, raw_w, raw_h)
       {:ok, rotation, raw_w, raw_h, w, h}
@@ -376,20 +376,20 @@ defmodule SampleApp do
   # -----------------------------------------------------------------------------
 
   defp get_wh(port) do
-    with {:ok, w} <- LGFXPort.width(port, 0),
-         {:ok, h} <- LGFXPort.height(port, 0) do
+    with {:ok, w} <- AtomLGFX.width(port, 0),
+         {:ok, h} <- AtomLGFX.height(port, 0) do
       {:ok, w, h}
     end
   end
 
   defp safe_close_port(port) do
-    case LGFXPort.close(port) do
+    case AtomLGFX.close(port) do
       :ok ->
-        log_info("LGFXPort closed")
+        log_info("AtomLGFX closed")
         :ok
 
       {:error, reason} ->
-        log_failure("LGFXPort close failed", reason)
+        log_failure("AtomLGFX close failed", reason)
         :ok
     end
   end
@@ -413,6 +413,6 @@ defmodule SampleApp do
   end
 
   defp log_failure(prefix, reason) when is_binary(prefix) do
-    IO.puts("#{prefix}: #{LGFXPort.format_error(reason)}")
+    IO.puts("#{prefix}: #{AtomLGFX.format_error(reason)}")
   end
 end

@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule LGFXPort.Primitives do
+defmodule AtomLGFX.Primitives do
   @moduledoc false
 
-  import LGFXPort.Guards
+  import AtomLGFX.Guards
 
-  alias LGFXPort.Protocol
+  alias AtomLGFX.Protocol
 
   def fill_screen(port, color, target \\ 0)
       when target_any(target) do

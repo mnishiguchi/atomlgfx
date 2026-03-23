@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule LGFXPort.Device do
+defmodule AtomLGFX.Device do
   @moduledoc false
 
-  import LGFXPort.Guards
+  import AtomLGFX.Guards
 
-  alias LGFXPort.Protocol
+  alias AtomLGFX.Protocol
 
   @valid_color_depths [1, 2, 4, 8, 16, 24]
 

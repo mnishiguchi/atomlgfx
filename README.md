@@ -11,7 +11,7 @@ SPDX-License-Identifier: Apache-2.0
 This repository contains two closely related deliverables:
 
 - an ESP-IDF component that provides the native `lgfx_port` AtomVM port driver
-- an Elixir package that provides the `LGFXPort` wrapper module for that driver
+- an Elixir package that provides the `AtomLGFX` wrapper module for that driver
 
 Both layers share the same tuple-based protocol and are intended to evolve together.
 

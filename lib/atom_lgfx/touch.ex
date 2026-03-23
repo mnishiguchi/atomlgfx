@@ -2,10 +2,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule LGFXPort.Touch do
+defmodule AtomLGFX.Touch do
   @moduledoc false
 
-  alias LGFXPort.Protocol
+  alias AtomLGFX.Protocol
 
   def get_touch(port) do
     with {:ok, payload} <- Protocol.call(port, :getTouch, 0, 0, [], Protocol.short_timeout()) do

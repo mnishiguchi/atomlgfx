@@ -40,7 +40,7 @@ defmodule SampleApp.SpriteProtocolSmoke do
   #   transparent-index flag is set
   #
   # This smoke test assumes the port is already initialized.
-  def run(port), do: run(port, &LGFXPort.raw_call/6)
+  def run(port), do: run(port, &AtomLGFX.raw_call/6)
 
   def run(port, raw_call) when is_function(raw_call, 6) do
     reset_note_once_flags()

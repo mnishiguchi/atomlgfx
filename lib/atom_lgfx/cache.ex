@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule LGFXPort.Cache do
+defmodule AtomLGFX.Cache do
   @moduledoc false
 
   @min_target 0
