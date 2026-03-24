@@ -443,6 +443,28 @@ esp_err_t lgfx_device_fill_arc(
     float angle1,
     bool color_is_index,
     uint32_t color_value);
+esp_err_t lgfx_device_draw_bezier3(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    bool color_is_index,
+    uint32_t color_value);
+esp_err_t lgfx_device_draw_bezier4(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    int16_t x3,
+    int16_t y3,
+    bool color_is_index,
+    uint32_t color_value);
 esp_err_t lgfx_device_draw_triangle(
     uint8_t target,
     int16_t x0,

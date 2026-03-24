@@ -302,6 +302,48 @@ extern "C" esp_err_t lgfx_device_fill_arc(
         });
 }
 
+extern "C" esp_err_t lgfx_device_draw_bezier3(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->drawBezier(x0, y0, x1, y1, x2, y2, scalar_color);
+        });
+}
+
+extern "C" esp_err_t lgfx_device_draw_bezier4(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    int16_t x3,
+    int16_t y3,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->drawBezier(x0, y0, x1, y1, x2, y2, x3, y3, scalar_color);
+        });
+}
+
 extern "C" esp_err_t lgfx_device_draw_triangle(
     uint8_t target,
     int16_t x0,

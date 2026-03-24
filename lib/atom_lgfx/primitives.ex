@@ -132,6 +132,23 @@ defmodule AtomLGFX.Primitives do
     end
   end
 
+  def draw_bezier(port, x0, y0, x1, y1, x2, y2, color, target \\ 0)
+      when i16(x0) and i16(y0) and
+             i16(x1) and i16(y1) and
+             i16(x2) and i16(y2) and
+             target_any(target) do
+    scalar_call(port, :drawBezier, target, [x0, y0, x1, y1, x2, y2, color])
+  end
+
+  def draw_bezier(port, x0, y0, x1, y1, x2, y2, x3, y3, color, target \\ 0)
+      when i16(x0) and i16(y0) and
+             i16(x1) and i16(y1) and
+             i16(x2) and i16(y2) and
+             i16(x3) and i16(y3) and
+             target_any(target) do
+    scalar_call(port, :drawBezier, target, [x0, y0, x1, y1, x2, y2, x3, y3, color])
+  end
+
   def draw_triangle(port, x0, y0, x1, y1, x2, y2, color, target \\ 0)
       when i16(x0) and i16(y0) and
              i16(x1) and i16(y1) and
