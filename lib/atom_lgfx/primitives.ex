@@ -9,6 +9,8 @@ defmodule AtomLGFX.Primitives do
 
   alias AtomLGFX.Protocol
 
+  @max_f32 3.4028234663852886e38
+
   def fill_screen(port, color, target \\ 0)
       when target_any(target) do
     scalar_call(port, :fillScreen, target, [color])
@@ -108,6 +110,28 @@ defmodule AtomLGFX.Primitives do
     scalar_call(port, :fillEllipse, target, [x, y, radius_x, radius_y, color])
   end
 
+  def draw_arc(port, x, y, radius0, radius1, angle0, angle1, color, target \\ 0)
+      when i16(x) and i16(y) and
+             u16(radius0) and
+             u16(radius1) and
+             target_any(target) do
+    with {:ok, angle0} <- normalize_angle(angle0),
+         {:ok, angle1} <- normalize_angle(angle1) do
+      scalar_call(port, :drawArc, target, [x, y, radius0, radius1, angle0, angle1, color])
+    end
+  end
+
+  def fill_arc(port, x, y, radius0, radius1, angle0, angle1, color, target \\ 0)
+      when i16(x) and i16(y) and
+             u16(radius0) and
+             u16(radius1) and
+             target_any(target) do
+    with {:ok, angle0} <- normalize_angle(angle0),
+         {:ok, angle1} <- normalize_angle(angle1) do
+      scalar_call(port, :fillArc, target, [x, y, radius0, radius1, angle0, angle1, color])
+    end
+  end
+
   def draw_triangle(port, x0, y0, x1, y1, x2, y2, color, target \\ 0)
       when i16(x0) and i16(y0) and
              i16(x1) and i16(y1) and
@@ -162,4 +186,15 @@ defmodule AtomLGFX.Primitives do
   defp normalize_scalar_color_arg(other) do
     {:error, {:bad_scalar_color, other}}
   end
+
+  defp normalize_angle(value)
+       when is_integer(value) and value >= -@max_f32 and value <= @max_f32 do
+    {:ok, value * 1.0}
+  end
+
+  defp normalize_angle(value) when is_float(value) and value >= -@max_f32 and value <= @max_f32 do
+    {:ok, value}
+  end
+
+  defp normalize_angle(value), do: {:error, {:bad_angle, value}}
 end

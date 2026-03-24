@@ -70,6 +70,8 @@ This table documents the implemented protocol surface.
 | `fillCircle` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `9` | `requires_init` | - |
 | `drawEllipse` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `10` | `requires_init` | - |
 | `fillEllipse` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `10` | `requires_init` | - |
+| `drawArc` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `12` | `requires_init` | - |
+| `fillArc` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `12` | `requires_init` | - |
 | `drawTriangle` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `12` | `requires_init` | - |
 | `fillTriangle` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `12` | `requires_init` | - |
 | `setTextSize` | `LGFX_OP_TARGET_ANY` | `F0` | `6/7` | `requires_init` | - |

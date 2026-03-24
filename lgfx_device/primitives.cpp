@@ -7,8 +7,15 @@
 #include "lgfx_device.h"
 #include "lgfx_device_internal.hpp"
 
+#include <cmath>
+
 namespace
 {
+
+static inline bool lgfx_arc_angle_is_valid(float angle)
+{
+    return std::isfinite(angle);
+}
 
 template <typename DrawFn>
 static esp_err_t lgfx_with_validated_target_color(
@@ -244,6 +251,54 @@ extern "C" esp_err_t lgfx_device_fill_ellipse(
         color_value,
         [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
             gfx->fillEllipse(x, y, rx, ry, scalar_color);
+        });
+}
+
+extern "C" esp_err_t lgfx_device_draw_arc(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t r0,
+    uint16_t r1,
+    float angle0,
+    float angle1,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    if (!lgfx_arc_angle_is_valid(angle0) || !lgfx_arc_angle_is_valid(angle1)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return lgfx_with_validated_target_color(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->drawArc(x, y, r0, r1, angle0, angle1, scalar_color);
+        });
+}
+
+extern "C" esp_err_t lgfx_device_fill_arc(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t r0,
+    uint16_t r1,
+    float angle0,
+    float angle1,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    if (!lgfx_arc_angle_is_valid(angle0) || !lgfx_arc_angle_is_valid(angle1)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return lgfx_with_validated_target_color(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->fillArc(x, y, r0, r1, angle0, angle1, scalar_color);
         });
 }
 

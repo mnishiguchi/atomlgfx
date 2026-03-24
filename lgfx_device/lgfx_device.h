@@ -423,6 +423,26 @@ esp_err_t lgfx_device_fill_ellipse(
     uint16_t ry,
     bool color_is_index,
     uint32_t color_value);
+esp_err_t lgfx_device_draw_arc(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t r0,
+    uint16_t r1,
+    float angle0,
+    float angle1,
+    bool color_is_index,
+    uint32_t color_value);
+esp_err_t lgfx_device_fill_arc(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t r0,
+    uint16_t r1,
+    float angle0,
+    float angle1,
+    bool color_is_index,
+    uint32_t color_value);
 esp_err_t lgfx_device_draw_triangle(
     uint8_t target,
     int16_t x0,

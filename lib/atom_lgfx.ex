@@ -358,6 +358,22 @@ defmodule AtomLGFX do
     do: Primitives.fill_ellipse(port, x, y, radius_x, radius_y, color, target)
 
   @doc """
+  Draws an arc outline using the given scalar color.
+
+  Angles are passed in degrees.
+  """
+  def draw_arc(port, x, y, radius0, radius1, angle0, angle1, color, target \\ 0),
+    do: Primitives.draw_arc(port, x, y, radius0, radius1, angle0, angle1, color, target)
+
+  @doc """
+  Fills an arc using the given scalar color.
+
+  Angles are passed in degrees.
+  """
+  def fill_arc(port, x, y, radius0, radius1, angle0, angle1, color, target \\ 0),
+    do: Primitives.fill_arc(port, x, y, radius0, radius1, angle0, angle1, color, target)
+
+  @doc """
   Draws a triangle outline using the given scalar color.
   """
   def draw_triangle(port, x0, y0, x1, y1, x2, y2, color, target \\ 0),

@@ -9,27 +9,38 @@ defmodule SampleApp.ShapeSmoke do
   @outline 0xF5F7FA
   @round_rect_fill 0x2E86DE
   @ellipse_fill 0xF39C12
+  @arc_fill 0x27AE60
 
   def run(port, w, h) when is_integer(w) and is_integer(h) and w > 0 and h > 0 do
     margin = 12
-    gap = 16
+    gap = 12
+
+    top_height = max(div(h - margin * 2 - gap * 2, 3), 20)
+    mid_height = top_height
+    bottom_height = max(h - margin * 2 - gap * 2 - top_height - mid_height, 20)
+
     shape_width = max(w - margin * 2, 24)
-    shape_height = max(div(h - margin * 2 - gap, 2), 24)
 
     round_rect_x = margin
     round_rect_y = margin
 
     ellipse_center_x = margin + div(shape_width, 2)
-    ellipse_center_y = margin + shape_height + gap + div(shape_height, 2)
+    ellipse_center_y = margin + top_height + gap + div(mid_height, 2)
+
+    arc_center_x = margin + div(shape_width, 2)
+    arc_center_y = margin + top_height + gap + mid_height + gap + div(bottom_height, 2)
 
     round_rect_radius =
       min(
-        max(div(min(shape_width, shape_height), 6), 4),
+        max(div(min(shape_width, top_height), 6), 4),
         24
       )
 
     ellipse_radius_x = max(div(shape_width, 2) - 4, 4)
-    ellipse_radius_y = max(div(shape_height, 2) - 4, 4)
+    ellipse_radius_y = max(div(mid_height, 2) - 4, 4)
+
+    arc_outer_radius = max(div(min(shape_width, bottom_height), 2) - 4, 8)
+    arc_inner_radius = max(arc_outer_radius - 18, 4)
 
     with :ok <- AtomLGFX.fill_screen(port, @bg),
          :ok <-
@@ -38,7 +49,7 @@ defmodule SampleApp.ShapeSmoke do
              round_rect_x,
              round_rect_y,
              shape_width,
-             shape_height,
+             top_height,
              round_rect_radius,
              @round_rect_fill
            ),
@@ -48,7 +59,7 @@ defmodule SampleApp.ShapeSmoke do
              round_rect_x,
              round_rect_y,
              shape_width,
-             shape_height,
+             top_height,
              round_rect_radius,
              @outline
            ),
@@ -68,6 +79,28 @@ defmodule SampleApp.ShapeSmoke do
              ellipse_center_y,
              ellipse_radius_x,
              ellipse_radius_y,
+             @outline
+           ),
+         :ok <-
+           AtomLGFX.fill_arc(
+             port,
+             arc_center_x,
+             arc_center_y,
+             arc_inner_radius,
+             arc_outer_radius,
+             -30,
+             210,
+             @arc_fill
+           ),
+         :ok <-
+           AtomLGFX.draw_arc(
+             port,
+             arc_center_x,
+             arc_center_y,
+             arc_inner_radius,
+             arc_outer_radius,
+             -30,
+             210,
              @outline
            ) do
       :ok

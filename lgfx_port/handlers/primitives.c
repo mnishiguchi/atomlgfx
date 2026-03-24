@@ -28,6 +28,16 @@ typedef struct
 
 typedef struct
 {
+    int16_t x;
+    int16_t y;
+    uint16_t r0;
+    uint16_t r1;
+    float angle0;
+    float angle1;
+} lgfx_arc_args_t;
+
+typedef struct
+{
     bool is_index;
     uint32_t value;
 } lgfx_wire_color_t;
@@ -40,6 +50,17 @@ static bool decode_triangle_i16(const lgfx_request_t *req, lgfx_triangle_i16_t *
         && lgfx_decode_i16_at(req, 8, &out->y1)
         && lgfx_decode_i16_at(req, 9, &out->x2)
         && lgfx_decode_i16_at(req, 10, &out->y2);
+}
+
+static bool decode_arc_args(const lgfx_request_t *req, lgfx_arc_args_t *out)
+{
+    return out
+        && lgfx_decode_i16_at(req, 5, &out->x)
+        && lgfx_decode_i16_at(req, 6, &out->y)
+        && lgfx_decode_u16_at(req, 7, &out->r0)
+        && lgfx_decode_u16_at(req, 8, &out->r1)
+        && lgfx_decode_f32_at(req, 9, &out->angle0)
+        && lgfx_decode_f32_at(req, 10, &out->angle1);
 }
 
 static bool decode_wire_color_at(const lgfx_request_t *req, int index, lgfx_wire_color_t *out)
@@ -547,6 +568,72 @@ term lgfx_handle_fillEllipse(Context *ctx, lgfx_port_t *port, const lgfx_request
             y,
             rx,
             ry,
+            color.is_index,
+            color.value));
+
+    return reply_ok(ctx, port, req, port->atoms.ok);
+}
+
+term lgfx_handle_drawArc(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    lgfx_arc_args_t arc = { 0 };
+    lgfx_wire_color_t color = { 0 };
+
+    if (!decode_arc_args(req, &arc)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (arc.r0 == 0 || arc.r1 == 0) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!decode_wire_color_at(req, 11, &color)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
+        lgfx_device_draw_arc(
+            (uint8_t) req->target,
+            arc.x,
+            arc.y,
+            arc.r0,
+            arc.r1,
+            arc.angle0,
+            arc.angle1,
+            color.is_index,
+            color.value));
+
+    return reply_ok(ctx, port, req, port->atoms.ok);
+}
+
+term lgfx_handle_fillArc(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    lgfx_arc_args_t arc = { 0 };
+    lgfx_wire_color_t color = { 0 };
+
+    if (!decode_arc_args(req, &arc)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (arc.r0 == 0 || arc.r1 == 0) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!decode_wire_color_at(req, 11, &color)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
+        lgfx_device_fill_arc(
+            (uint8_t) req->target,
+            arc.x,
+            arc.y,
+            arc.r0,
+            arc.r1,
+            arc.angle0,
+            arc.angle1,
             color.is_index,
             color.value));
 

@@ -44,6 +44,8 @@ X(drawCircle, lgfx_handle_drawCircle, ATOM_STR("\x0A", "drawCircle"), 9, 9, LGFX
 X(fillCircle, lgfx_handle_fillCircle, ATOM_STR("\x0A", "fillCircle"), 9, 9, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(drawEllipse, lgfx_handle_drawEllipse, ATOM_STR("\x0B", "drawEllipse"), 10, 10, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(fillEllipse, lgfx_handle_fillEllipse, ATOM_STR("\x0B", "fillEllipse"), 10, 10, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(drawArc, lgfx_handle_drawArc, ATOM_STR("\x07", "drawArc"), 12, 12, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(fillArc, lgfx_handle_fillArc, ATOM_STR("\x07", "fillArc"), 12, 12, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(drawTriangle, lgfx_handle_drawTriangle, ATOM_STR("\x0C", "drawTriangle"), 12, 12, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(fillTriangle, lgfx_handle_fillTriangle, ATOM_STR("\x0C", "fillTriangle"), 12, 12, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 
