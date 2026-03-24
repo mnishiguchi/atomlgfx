@@ -25,6 +25,7 @@ X(endWrite, lgfx_handle_endWrite, ATOM_STR("\x08", "endWrite"), 5, 5, 0, LGFX_OP
 X(setRotation, lgfx_handle_setRotation, ATOM_STR("\x0B", "setRotation"), 6, 6, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(setBrightness, lgfx_handle_setBrightness, ATOM_STR("\x0D", "setBrightness"), 6, 6, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(setColorDepth, lgfx_handle_setColorDepth, ATOM_STR("\x0D", "setColorDepth"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
+X(setSwapBytes, lgfx_handle_setSwapBytes, ATOM_STR("\x0C", "setSwapBytes"), 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0)
 X(display, lgfx_handle_display, ATOM_STR("\x07", "display"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, 0)
 
 //

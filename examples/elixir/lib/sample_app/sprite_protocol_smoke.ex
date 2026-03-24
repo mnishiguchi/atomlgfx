@@ -36,8 +36,8 @@ defmodule SampleApp.SpriteProtocolSmoke do
   # - dst_target: 0 (LCD) or 1..254 (sprite)
   # - angle_deg: direct degrees. Example: 90.0 => 90 degrees
   # - zoom_x / zoom_y: direct zoom values. Example: 1.0 = 1.0x
-  # - transparent_value is RGB565 by default, or a palette index when the
-  #   transparent-index flag is set
+  # - transparent_value uses the non-index display-color contract by default,
+  #   or a palette index when the transparent-index flag is set
   #
   # This smoke test assumes the port is already initialized.
   def run(port), do: run(port, &AtomLGFX.raw_call/6)
@@ -231,14 +231,14 @@ defmodule SampleApp.SpriteProtocolSmoke do
 
   defp check_draw_into_sprite(port, raw_call, sprite_target) do
     # Use a few target-aware primitives to ensure the sprite accepts drawing.
-    with {:ok, _} <- raw_call.(port, :clear, sprite_target, 0, [0x000000], @t_short),
+    with {:ok, _} <- raw_call.(port, :clear, sprite_target, 0, [0x0000], @t_short),
          {:ok, _} <-
            raw_call.(
              port,
              :fillRect,
              sprite_target,
              0,
-             [0, 0, @sprite_w, @sprite_h, 0x002244],
+             [0, 0, @sprite_w, @sprite_h, 0x0108],
              @t_short
            ),
          {:ok, _} <-
@@ -247,10 +247,10 @@ defmodule SampleApp.SpriteProtocolSmoke do
              :drawRect,
              sprite_target,
              0,
-             [0, 0, @sprite_w, @sprite_h, 0xFFFFFF],
+             [0, 0, @sprite_w, @sprite_h, 0xFFFF],
              @t_short
            ),
-         {:ok, _} <- raw_call.(port, :drawPixel, sprite_target, 0, [1, 1, 0xFF0000], @t_short) do
+         {:ok, _} <- raw_call.(port, :drawPixel, sprite_target, 0, [1, 1, 0xF800], @t_short) do
       :ok
     else
       {:error, reason} ->

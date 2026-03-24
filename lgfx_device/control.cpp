@@ -174,6 +174,11 @@ extern "C" esp_err_t lgfx_device_set_color_depth(uint8_t target, uint8_t depth)
     return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setColorDepth(depth); });
 }
 
+extern "C" esp_err_t lgfx_device_set_swap_bytes(uint8_t target, bool enabled)
+{
+    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setSwapBytes(enabled); });
+}
+
 extern "C" esp_err_t lgfx_device_get_touch(
     bool *out_touched,
     int16_t *out_x,

@@ -5,13 +5,13 @@
 defmodule SampleApp.ShapeSmoke do
   @moduledoc false
 
-  @bg 0x101418
-  @outline 0xF5F7FA
-  @round_rect_fill 0x2E86DE
-  @ellipse_fill 0xF39C12
-  @arc_fill 0x27AE60
-  @bezier3_color 0xE91E63
-  @bezier4_color 0x00BCD4
+  @bg 0x10A3
+  @outline 0xF7BF
+  @round_rect_fill 0x2C3B
+  @ellipse_fill 0xF4E2
+  @arc_fill 0x256C
+  @bezier3_color 0xE8EC
+  @bezier4_color 0x05FA
 
   def run(port, w, h) when is_integer(w) and is_integer(h) and w > 0 and h > 0 do
     margin = 12

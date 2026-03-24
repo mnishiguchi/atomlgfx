@@ -21,7 +21,7 @@ typedef struct
 {
     bool is_index;
     uint32_t value;
-} lgfx_wire_color_t;
+} lgfx_display_color_or_index_t;
 
 static bool decode_font_preset(term preset_t, uint8_t *out_preset)
 {
@@ -45,10 +45,10 @@ static bool decode_text_color_at(
     const lgfx_request_t *req,
     int index,
     uint32_t index_flag,
-    lgfx_wire_color_t *out)
+    lgfx_display_color_or_index_t *out)
 {
     return out
-        && lgfx_decode_color_or_index_at(
+        && lgfx_decode_display_color_or_index_at(
             req,
             index,
             index_flag,
@@ -213,12 +213,12 @@ term lgfx_handle_setTextColor(Context *ctx, lgfx_port_t *port, const lgfx_reques
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    lgfx_wire_color_t fg = { 0 };
+    lgfx_display_color_or_index_t fg = { 0 };
     if (!decode_text_color_at(req, 5, LGFX_F_TEXT_FG_INDEX, &fg)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    lgfx_wire_color_t bg = { 0 };
+    lgfx_display_color_or_index_t bg = { 0 };
     if (has_bg) {
         if (!decode_text_color_at(req, 6, LGFX_F_TEXT_BG_INDEX, &bg)) {
             return reply_error(ctx, port, req, port->atoms.bad_args, 0);

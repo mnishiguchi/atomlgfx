@@ -5,14 +5,14 @@
 defmodule SampleApp.ClipSmoke do
   @moduledoc false
 
-  @bg 0x000000
-  @fg 0xFFFFFF
-  @dim 0x909090
-  @frame 0x404040
-  @lcd_fill 0x103060
-  @lcd_accent 0xFFD040
-  @sprite_fill 0x204010
-  @sprite_frame 0x80FF80
+  @bg 0x0000
+  @fg 0xFFFF
+  @dim 0x9492
+  @frame 0x4208
+  @lcd_fill 0x118C
+  @lcd_accent 0xFE88
+  @sprite_fill 0x2202
+  @sprite_frame 0x87F0
 
   @sprite_target 20
 

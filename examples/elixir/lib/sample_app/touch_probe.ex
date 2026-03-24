@@ -7,16 +7,15 @@ defmodule SampleApp.TouchProbe do
 
   import SampleApp.AtomVMCompat, only: [yield: 0]
 
-  @bg 0x000000
+  @bg 0x0000
+  @hud_bg 0x1082
+  @hud_fg 0xFFFF
+  @hud_dim 0xA514
+  @cross_color 0x07E0
+  @raw_color 0xF81F
+  @rule_color 0x3186
 
   @hud_h 32
-  @hud_bg 0x101010
-  @hud_fg 0xFFFFFF
-  @hud_dim 0xA0A0A0
-
-  @cross_color 0x00FF00
-  @raw_color 0xFF00FF
-
   @cross_half 10
   @erase_pad 4
 
@@ -49,7 +48,7 @@ defmodule SampleApp.TouchProbe do
   defp draw_static_ui(port, w, _h) do
     with :ok <- AtomLGFX.fill_screen(port, @bg),
          :ok <- AtomLGFX.fill_rect(port, 0, 0, w, @hud_h, @hud_bg),
-         :ok <- AtomLGFX.draw_fast_hline(port, 0, @hud_h - 1, w, 0x303030),
+         :ok <- AtomLGFX.draw_fast_hline(port, 0, @hud_h - 1, w, @rule_color),
          :ok <- AtomLGFX.draw_string_bg(port, 4, 0, @hud_fg, @hud_bg, 1, "TOUCH PROBE", 0),
          :ok <-
            AtomLGFX.draw_string_bg(
@@ -115,7 +114,7 @@ defmodule SampleApp.TouchProbe do
     line2 = <<"raw   ", touch_label(raw)::binary>>
 
     with :ok <- AtomLGFX.fill_rect(port, 0, 0, w, @hud_h, @hud_bg),
-         :ok <- AtomLGFX.draw_fast_hline(port, 0, @hud_h - 1, w, 0x303030),
+         :ok <- AtomLGFX.draw_fast_hline(port, 0, @hud_h - 1, w, @rule_color),
          :ok <- AtomLGFX.draw_string_bg(port, 4, 0, @hud_fg, @hud_bg, 1, line1, 0),
          :ok <- AtomLGFX.draw_string_bg(port, 4, 14, @hud_dim, @hud_bg, 1, line2, 0) do
       :ok

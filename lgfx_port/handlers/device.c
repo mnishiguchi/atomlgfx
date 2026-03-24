@@ -8,7 +8,7 @@
 //
 // Device-facing protocol handlers:
 // - width / height
-// - setRotation / setBrightness / setColorDepth
+// - setRotation / setBrightness / setColorDepth / setSwapBytes
 // - display
 #include <stdint.h>
 
@@ -96,6 +96,23 @@ term lgfx_handle_setColorDepth(Context *ctx, lgfx_port_t *port, const lgfx_reque
         port,
         req,
         lgfx_device_set_color_depth((uint8_t) req->target, (uint8_t) d));
+
+    return reply_ok(ctx, port, req, port->atoms.ok);
+}
+
+term lgfx_handle_setSwapBytes(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    bool enabled = false;
+
+    if (!lgfx_decode_bool_term(port, lgfx_req_elem(req, 5), &enabled)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
+        lgfx_device_set_swap_bytes((uint8_t) req->target, enabled));
 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }

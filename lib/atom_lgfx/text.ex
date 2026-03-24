@@ -222,12 +222,12 @@ defmodule AtomLGFX.Text do
     end
   end
 
-  defp normalize_text_color_arg(color, _index_flag, _role) when color888(color) do
-    {:ok, 0, color, {:rgb888, color}}
+  defp normalize_text_color_arg(color, _index_flag, _role) when rgb565(color) do
+    {:ok, 0, color, {:rgb565, color}}
   end
 
-  defp normalize_text_color_arg({:rgb888, color}, _index_flag, _role) when color888(color) do
-    {:ok, 0, color, {:rgb888, color}}
+  defp normalize_text_color_arg({:rgb565, color}, _index_flag, _role) when rgb565(color) do
+    {:ok, 0, color, {:rgb565, color}}
   end
 
   defp normalize_text_color_arg({:index, index}, index_flag, _role) when palette_index(index) do

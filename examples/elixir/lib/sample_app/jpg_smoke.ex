@@ -5,11 +5,11 @@
 defmodule SampleApp.JpgSmoke do
   @moduledoc false
 
-  @bg 0x000000
-  @fg 0xFFFFFF
-  @dim 0xA0A0A0
-  @frame 0x303030
-  @accent 0x40D0FF
+  @bg 0x0000
+  @fg 0xFFFF
+  @dim 0xA514
+  @frame 0x3186
+  @accent 0x469F
 
   # Tiny embedded 8x8 red JPEG.
   # Keeping this inline avoids adding a dedicated asset file just for smoke testing.

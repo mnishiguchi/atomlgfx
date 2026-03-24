@@ -46,10 +46,10 @@ mix deps.get
 :ok = AtomLGFX.init(port)
 :ok = AtomLGFX.display(port)
 
-:ok = AtomLGFX.fill_screen(port, 0x000000)
+:ok = AtomLGFX.fill_screen(port, 0x0000)
 :ok = AtomLGFX.set_text_font_preset(port, :jp)
 :ok = AtomLGFX.set_text_size(port, 2)
-:ok = AtomLGFX.set_text_color(port, 0xFFFFFF, 0x000000)
+:ok = AtomLGFX.set_text_color(port, 0xFFFF, 0x0000)
 
 :ok = AtomLGFX.draw_string(port, 16, 16, "こんにちは")
 :ok = AtomLGFX.draw_string(port, 16, 56, "日本語テキスト")

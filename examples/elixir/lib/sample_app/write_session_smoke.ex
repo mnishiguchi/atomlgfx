@@ -5,8 +5,8 @@
 defmodule SampleApp.WriteSessionSmoke do
   @moduledoc false
 
-  @bg 0x000000
-  @fg 0xFFFFFF
+  @bg 0x0000
+  @fg 0xFFFF
 
   def run(port) do
     with :ok <- AtomLGFX.start_write(port),

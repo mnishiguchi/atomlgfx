@@ -47,4 +47,9 @@ defmodule AtomLGFX.Device do
       when is_integer(depth) and depth in @valid_color_depths and target_any(target) do
     Protocol.call_ok(port, :setColorDepth, target, 0, [depth], Protocol.long_timeout())
   end
+
+  def set_swap_bytes(port, enabled, target \\ 0)
+      when is_boolean(enabled) and target_any(target) do
+    Protocol.call_ok(port, :setSwapBytes, target, 0, [enabled], Protocol.long_timeout())
+  end
 end

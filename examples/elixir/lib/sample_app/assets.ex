@@ -3,7 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule SampleApp.Assets do
-  @moduledoc false
+  @moduledoc """
+  Static binary assets used by the Elixir examples.
+
+  This module exposes bundled icon binaries.
+  """
 
   @icon_w 32
   @icon_h 32
@@ -22,5 +26,8 @@ defmodule SampleApp.Assets do
   def icon_w, do: @icon_w
   def icon_h, do: @icon_h
 
+  @doc """
+  Returns one bundled icon binary.
+  """
   def icon(name), do: Map.fetch!(@icons, name)
 end

@@ -90,6 +90,11 @@ defmodule AtomLGFX.Images do
     draw_jpg(port, x, y, max_width, max_height, off_x, off_y, scale_x, scale_y, jpeg, target)
   end
 
+  # Raw pushImage contract:
+  # - pixels are ordinary RGB565 data encoded as little-endian 16-bit words
+  # - this wrapper forwards that payload as-is
+  # - chunking preserves row byte order exactly
+  # - target-specific byte swapping remains controlled by set_swap_bytes/3
   def push_image_rgb565(port, x, y, width, height, pixels, stride_pixels \\ 0, target \\ 0)
       when i16(x) and i16(y) and
              u16(width) and

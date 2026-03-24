@@ -195,32 +195,31 @@ Examples:
 
 This protocol distinguishes four related color domains:
 
-- scalar colors used by primitive and text operations
+- display colors used by primitive and text operations
 - palette lifecycle colors
-- sprite transparent scalar colors
+- palette indices
 - `pushImage` pixel blobs
 
-#### Scalar colors used by primitive and text operations
+#### Display colors used by primitive, text, and non-index transparent sprite operations
 
-Primitive and text scalar colors use two modes.
+Non-index display colors use RGB565 on the wire.
 
-Default RGB mode:
-
-- wire format is `0x00RRGGBB` as packed RGB888 in `u32`
-- handler decode quantizes that value to RGB565 before the device-facing primitive or text call
-- the native primitive and text path does not preserve the original RGB888 value for those scalar arguments
+- wire format is RGB565 in `u16`
+- the handler forwards that value as the display color used by the device-facing primitive or text path
 - this contract is the same regardless of target color depth
+- `setColorDepth(Target, 24)` changes the destination target depth but does not change the display-color wire format
+- `setColorDepth(Target, 24)` does not by itself imply palette-index semantics
 
 Indexed palette mode:
 
 - enabled only by op-specific flags
 - the corresponding scalar argument is interpreted as a palette index
 - the palette index is carried in the low 8 bits of the decoded scalar value
-- indexed mode is invalid on LCD target
+- indexed mode is invalid on LCD target for primitive and text color arguments
 - indexed mode on a sprite target requires actual palette backing
 - target color depth alone does not implicitly enable indexed semantics
 
-This applies to scalar color arguments used by operations such as:
+This applies to non-index display-color arguments used by operations such as:
 
 - `fillScreen`
 - `clear`
@@ -230,47 +229,47 @@ This applies to scalar color arguments used by operations such as:
 - `drawLine`
 - `drawRect`
 - `fillRect`
+- `drawRoundRect`
+- `fillRoundRect`
 - `drawCircle`
 - `fillCircle`
+- `drawEllipse`
+- `fillEllipse`
+- `drawArc`
+- `fillArc`
+- `drawBezier`
 - `drawTriangle`
 - `fillTriangle`
 - `setTextColor`
-
-`setColorDepth(Target, 24)`:
-
-- changes the destination target depth
-- does not change default RGB scalar wire encoding
-- does not select indexed palette mode
-- does not preserve full 24-bit input fidelity for primitive or text operations in default RGB mode
+- `pushSprite` optional transparent value
+- `pushRotateZoom` optional transparent value
 
 #### Palette lifecycle colors
 
 Palette lifecycle operations use RGB888 directly on the wire.
 
 - `setPaletteColor` takes `0x00RRGGBB` packed RGB888 in `u32`
-- palette lifecycle arguments are not reinterpreted as RGB565 scalar colors
+- palette lifecycle arguments are not reinterpreted as RGB565 display colors
 - `createPalette` establishes palette backing for an existing paletted sprite target
 - `setPaletteColor` writes one palette entry on that palette-backed sprite
 
-#### Sprite transparent scalar colors
+#### Palette indices
 
-`pushSprite` and `pushRotateZoom` use an optional transparent scalar argument.
+Palette indices are explicit, flag-selected argument interpretations.
 
-Default transparent mode:
-
-- the optional transparent argument is RGB565
-
-Indexed transparent mode:
-
-- enabled by `LGFX_F_TRANSPARENT_INDEX`
-- the optional transparent argument is interpreted as a palette index
-- indexed transparent mode requires the source sprite to have actual palette backing
+- indexed primitive color uses `LGFX_F_COLOR_INDEX`
+- indexed text foreground uses `LGFX_F_TEXT_FG_INDEX`
+- indexed text background uses `LGFX_F_TEXT_BG_INDEX`
+- indexed transparent sprite color uses `LGFX_F_TRANSPARENT_INDEX`
+- indexed semantics require actual palette backing where documented
+- indexed semantics are never implied by color depth alone
 
 #### `pushImage` pixel blobs
 
 - RGB565 only
-- big-endian per pixel (`hi lo`)
+- little-endian per pixel (`lo hi`) as ordinary 16-bit RGB565 words
 - unaffected by `setColorDepth`
+- target-side byte swapping remains controlled separately by `setSwapBytes`
 
 ## Error reasons
 
@@ -513,7 +512,7 @@ Defined protocol flags:
   - `setTextColor` includes a background scalar argument
 
 - `LGFX_F_COLOR_INDEX = 1 bsl 1`
-  - primitive op color argument is interpreted as a palette index instead of default RGB input
+  - primitive op color argument is interpreted as a palette index instead of a non-index display color
 
 - `LGFX_F_TEXT_FG_INDEX = 1 bsl 2`
   - `setTextColor` foreground scalar argument is interpreted as a palette index
@@ -539,7 +538,7 @@ Args:
 
 Semantics:
 
-- foreground and background scalar colors independently support default RGB mode or indexed palette mode
+- foreground and background scalar colors independently support non-index display-color mode or indexed palette mode
 - foreground indexed mode is selected by `LGFX_F_TEXT_FG_INDEX`
 - background indexed mode is selected by `LGFX_F_TEXT_BG_INDEX`
 - background presence is selected by `LGFX_F_TEXT_HAS_BG`
@@ -566,10 +565,9 @@ Allowed values:
 Semantics:
 
 - changes the destination target color depth
-- does not change the wire format used by default RGB scalar colors for primitive or text operations
+- does not change the wire format used by non-index display colors
 - does not by itself enable indexed scalar-color semantics
 - does not by itself create palette backing for a sprite
-- `setColorDepth(24)` does not preserve full RGB888 input fidelity for primitive or text operations in default RGB mode
 - `pushImage` remains RGB565-only regardless of target color depth
 
 ### `drawJpg`
@@ -674,7 +672,7 @@ Rules:
 - `DstTargetU8 == 0` => LCD destination
 - `DstTargetU8 in 1..254` => destination sprite
 - source and destination existence are resolved in the device layer
-- optional transparent scalar uses RGB565 by default
+- optional transparent scalar uses the non-index display-color contract by default
 - `LGFX_F_TRANSPARENT_INDEX` interprets the transparent scalar as a palette index
 - indexed transparent mode requires palette backing on the source sprite
 - edge clipping is allowed
@@ -700,7 +698,7 @@ Rules:
 - integer and float terms are both accepted for angle and zoom values
 - angle and zoom values must be finite
 - zoom values must be positive
-- optional transparent scalar uses RGB565 by default
+- optional transparent scalar uses the non-index display-color contract by default
 - `LGFX_F_TRANSPARENT_INDEX` interprets the transparent scalar as a palette index
 - indexed transparent mode requires palette backing on the source sprite
 - edge clipping is allowed
@@ -742,51 +740,54 @@ Useful checks:
   - zero scale should fail
 
 - color contract path
-  - primitive and text colors should accept `0x00RRGGBB` in default RGB mode
-  - default RGB scalar-color inputs should quantize before device-side primitive or text execution
-  - `setColorDepth(24)` should not imply full RGB888 fidelity for primitive or text ops
+  - primitive and text colors should accept RGB565 in non-index mode
+  - `pushSprite` and `pushRotateZoom` transparent values should use the same non-index display-color contract
+  - indexed primitive or text color mode should still require explicit index flags
+  - `setColorDepth(24)` should not change the non-index display-color wire format
+  - `setPaletteColor` should remain RGB888-only
   - `pushImage` should remain RGB565-only
 
 - jpg path
   - valid short-form and extended-form calls should succeed
   - zero or negative scale should fail
   - non-binary payload should fail
-  - over-cap binary should fail
   - corrupt JPEG data should fail without crashing the driver
+
+- binary limit path
+  - over-cap binary should fail
 
 ## Maintenance checklist
 
-When adding or changing an operation:
+When changing the protocol surface or behavior, verify all of the following:
 
-- update `lgfx_port/include_internal/lgfx_port/ops.def`
-
-- implement or update the handler
-
-- update capability, error, or protocol constants if needed
-
-- resync generated protocol reference tables
-  - `elixir scripts/sync_lgfx_protocol_doc.exs`
-
-- verify `getCaps` matches the new `feature_cap_bit`
-
-- update this document only for externally visible semantics not obvious from the generated reference tables
+- `ops.def` metadata still matches the implementation
+- generated protocol-reference tables still match source metadata
+- `getCaps()` advertisement still reflects the real dispatch surface
+- allowed flags and arity still match the handler decode paths
+- request and response shapes in this document still match the implementation
+- smoke checks still cover the main happy paths and contract edges
+- sample host code still uses the current scalar color contract
+- palette lifecycle examples still use packed RGB888
+- `pushImage` examples still use RGB565 payloads
 
 ## Compatibility rules
 
-- host and driver should be updated together when `LGFX_PORT_PROTO_VER` changes
-- breaking protocol changes must bump `LGFX_PORT_PROTO_VER`
+Treat these changes as protocol-affecting and bump `LGFX_PORT_PROTO_VER` when they occur:
 
-### Compatible changes
+- changing request tuple shape
+- changing response shape
+- changing operation meaning
+- changing argument order
+- changing argument interpretation
+- changing flag meaning
+- changing accepted wire encoding
+- changing canonical error reason for an existing contract violation
+- removing an implemented op from the protocol surface
 
-- add new operations
-- add new capability bits
-- add new error reasons without reinterpreting existing ones
-- tighten validation only when it rejects requests already invalid by contract
-- add optional error detail tuples while preserving `{error, Reason}`
+Changes that normally do not require a protocol bump:
 
-### Breaking changes
-
-- change the request tuple shape for existing ops
-- change argument order or meaning
-- reinterpret existing flags
-- change RGB565 byte order for `pushImage`
+- internal refactors that preserve the external contract
+- implementation changes behind an unchanged request and response surface
+- documentation clarifications that do not alter semantics
+- adding new operations guarded by normal capability discovery
+- adding new internal detail while preserving existing opaque error matching

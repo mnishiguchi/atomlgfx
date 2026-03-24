@@ -6,9 +6,9 @@ defmodule SampleApp.MovingIcons do
   @moduledoc false
 
   import Bitwise
+  import SampleApp.AtomVMCompat, only: [yield: 0]
 
   alias SampleApp.Assets
-  import SampleApp.AtomVMCompat, only: [yield: 0]
 
   # -----------------------------------------------------------------------------
   # Demo config
@@ -34,14 +34,13 @@ defmodule SampleApp.MovingIcons do
   # Icon sprites are authored with a solid background color. Use a transparent-color key so
   # that background pixels do not overwrite what is already in the destination.
   #
-  # - Protocol expects the transparent key as RGB565 u16.
+  # - Non-index display colors use RGB565 on the wire.
   # - `0x0000` matches the upstream LovyanGFX demo (`transparent=0`).
   @use_transparent_key true
-  @transparent_key_rgb888 0x000000
-  @transparent_key_rgb565 0x0000
+  @transparent_key_color565 0x0000
 
-  # Background fill color for the playfield and frame buffers (RGB888).
-  @bg 0x000000
+  # Background fill color for the playfield and frame buffers (RGB565).
+  @bg 0x0000
 
   # Capability bit: sprite operations available.
   @cap_sprite 1 <<< 0
@@ -145,12 +144,15 @@ defmodule SampleApp.MovingIcons do
     pivot_y = div(icon_h, 2)
 
     with :ok <- AtomLGFX.create_sprite(port, icon_w, icon_h, sprite_target),
-         :ok <- AtomLGFX.clear(port, @transparent_key_rgb888, sprite_target),
+         :ok <- AtomLGFX.clear(port, @transparent_key_color565, sprite_target),
+         :ok <- AtomLGFX.set_swap_bytes(port, true, sprite_target),
          :ok <- AtomLGFX.push_image_rgb565(port, 0, 0, icon_w, icon_h, pixels, 0, sprite_target),
+         :ok <- AtomLGFX.set_swap_bytes(port, false, sprite_target),
          :ok <- AtomLGFX.set_pivot(port, sprite_target, pivot_x, pivot_y) do
       :ok
     else
       {:error, reason} ->
+        _ = AtomLGFX.set_swap_bytes(port, false, sprite_target)
         _ = AtomLGFX.delete_sprite(port, sprite_target)
         {:error, {:sprite_setup_failed, sprite_target, reason}}
     end
@@ -354,7 +356,6 @@ defmodule SampleApp.MovingIcons do
     case render_frame(port, h, render_target, flip0, objects, icon_handles) do
       {:ok, flip1} ->
         yield()
-
         loop(port, {w, h, render_target, flip1, objects, icon_handles})
 
       {:error, reason} ->
@@ -472,7 +473,7 @@ defmodule SampleApp.MovingIcons do
           angle_deg,
           zoom,
           zoom,
-          @transparent_key_rgb565
+          @transparent_key_color565
         )
       else
         AtomLGFX.push_rotate_zoom_to(

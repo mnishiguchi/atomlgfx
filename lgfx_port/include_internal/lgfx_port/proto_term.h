@@ -91,7 +91,7 @@ static inline bool lgfx_validate_u16(uint32_t v)
 
 static inline bool lgfx_validate_color888(uint32_t c)
 {
-    // 0x00RRGGBB only.
+    // Packed RGB888 only: 0x00RRGGBB.
     return (c & 0xFF000000u) == 0;
 }
 
@@ -182,30 +182,10 @@ static inline bool lgfx_term_to_f32(term t, float *out)
     return true;
 }
 
-static inline uint16_t lgfx_color888_to_rgb565(uint32_t color888)
-{
-    const uint8_t r = (uint8_t) ((color888 >> 16) & 0xFFu);
-    const uint8_t g = (uint8_t) ((color888 >> 8) & 0xFFu);
-    const uint8_t b = (uint8_t) (color888 & 0xFFu);
-
-    return (uint16_t) (((uint16_t) (r & 0xF8u) << 8)
-        | ((uint16_t) (g & 0xFCu) << 3)
-        | ((uint16_t) (b >> 3)));
-}
-
 static inline bool lgfx_term_to_color565(term color_t, uint16_t *out_color565)
 {
-    uint32_t color888 = 0;
-
-    if (!lgfx_term_to_u32(color_t, &color888)) {
-        return false;
-    }
-    if (!lgfx_validate_color888(color888)) {
-        return false;
-    }
-
-    *out_color565 = lgfx_color888_to_rgb565(color888);
-    return true;
+    // Non-index display colors use RGB565 on the wire.
+    return lgfx_term_to_u16(color_t, out_color565);
 }
 
 // -----------------------------------------------------------------------------

@@ -34,8 +34,8 @@ defmodule AtomLGFX.Cache do
   end
 
   # Stored as normalized descriptors, for example:
-  # - {{:rgb888, 0x112233}, nil}
-  # - {{:index, 3}, {:rgb888, 0x000000}}
+  # - {{:rgb565, 0xF81F}, nil}
+  # - {{:index, 3}, {:rgb565, 0x0000}}
   # - {{:index, 1}, {:index, 0}}
   def get_text_color(port, target), do: get(text_color_cache_key(port, target))
   def put_text_color(port, target, value), do: put(text_color_cache_key(port, target), value)

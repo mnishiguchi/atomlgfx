@@ -55,6 +55,7 @@ This table documents the implemented protocol surface.
 | `setRotation` | `T0/bad_target` | `F0` | `6` | `requires_init` | - |
 | `setBrightness` | `T0/bad_target` | `F0` | `6` | `requires_init` | - |
 | `setColorDepth` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
+| `setSwapBytes` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - |
 | `display` | `T0/bad_target` | `F0` | `5` | `requires_init` | - |
 | `fillScreen` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `6` | `requires_init` | - |
 | `clear` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `6` | `requires_init` | - |

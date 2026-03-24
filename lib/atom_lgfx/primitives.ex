@@ -188,11 +188,11 @@ defmodule AtomLGFX.Primitives do
     end
   end
 
-  defp normalize_scalar_color_arg(color) when color888(color) do
+  defp normalize_scalar_color_arg(color) when rgb565(color) do
     {:ok, 0, color}
   end
 
-  defp normalize_scalar_color_arg({:rgb888, color}) when color888(color) do
+  defp normalize_scalar_color_arg({:rgb565, color}) when rgb565(color) do
     {:ok, 0, color}
   end
 

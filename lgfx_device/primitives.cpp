@@ -17,6 +17,30 @@ static inline bool lgfx_arc_angle_is_valid(float angle)
     return std::isfinite(angle);
 }
 
+static inline uint32_t lgfx_rgb565_to_rgb888(uint16_t color565)
+{
+    const uint8_t r5 = static_cast<uint8_t>((color565 >> 11) & 0x1Fu);
+    const uint8_t g6 = static_cast<uint8_t>((color565 >> 5) & 0x3Fu);
+    const uint8_t b5 = static_cast<uint8_t>(color565 & 0x1Fu);
+
+    const uint8_t r8 = static_cast<uint8_t>((r5 << 3) | (r5 >> 2));
+    const uint8_t g8 = static_cast<uint8_t>((g6 << 2) | (g6 >> 4));
+    const uint8_t b8 = static_cast<uint8_t>((b5 << 3) | (b5 >> 2));
+
+    return (static_cast<uint32_t>(r8) << 16)
+        | (static_cast<uint32_t>(g8) << 8)
+        | static_cast<uint32_t>(b8);
+}
+
+static inline uint32_t lgfx_resolve_draw_scalar_color(bool color_is_index, uint32_t color_value)
+{
+    if (color_is_index) {
+        return color_value;
+    }
+
+    return lgfx_rgb565_to_rgb888(static_cast<uint16_t>(color_value & 0xFFFFu));
+}
+
 template <typename DrawFn>
 static esp_err_t lgfx_with_validated_target_color(
     uint8_t target,
@@ -32,7 +56,8 @@ static esp_err_t lgfx_with_validated_target_color(
             return;
         }
 
-        draw_fn(gfx, color_value);
+        const uint32_t resolved_color = lgfx_resolve_draw_scalar_color(color_is_index, color_value);
+        draw_fn(gfx, resolved_color);
     });
 
     if (err != ESP_OK) {

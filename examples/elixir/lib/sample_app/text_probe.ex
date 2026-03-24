@@ -5,13 +5,13 @@
 defmodule SampleApp.TextProbe do
   @moduledoc false
 
-  @bg 0x000000
-  @fg 0xFFFFFF
-  @dim 0xA0A0A0
-  @accent 0x00D0FF
-  @warn 0xFFD040
-  @ok_bg 0x103020
-  @frame 0x202020
+  @bg 0x0000
+  @fg 0xFFFF
+  @dim 0xA514
+  @accent 0x069F
+  @warn 0xFE88
+  @ok_bg 0x1184
+  @frame 0x2104
 
   @ascii_preset :ascii
   @jp_preset :jp
@@ -105,7 +105,7 @@ defmodule SampleApp.TextProbe do
          :ok <- maybe_use_japanese_preset(port),
          :ok <- AtomLGFX.set_text_color(port, @fg, nil, 0),
          :ok <- AtomLGFX.draw_string(port, @pad, jp_y, "日本語テスト", 0),
-         :ok <- AtomLGFX.draw_fast_hline(port, @pad, rule_y, max_i(0, w - @pad * 2), 0x404040),
+         :ok <- AtomLGFX.draw_fast_hline(port, @pad, rule_y, max_i(0, w - @pad * 2), 0x4208),
          :ok <- set_ascii_text_style(port, @dim, 1),
          :ok <- AtomLGFX.draw_string(port, @pad, status_y, "draw_string ok / size_xy ok", 0) do
       {:ok, min_i(status_y + @line_h, h)}
@@ -164,7 +164,7 @@ defmodule SampleApp.TextProbe do
 
     with :ok <- set_ascii_text_style(port, @dim, 1),
          :ok <- AtomLGFX.draw_string(port, @pad, y, label, 0),
-         :ok <- set_ascii_text_style(port, 0x80FF80, 1),
+         :ok <- set_ascii_text_style(port, 0x87F0, 1),
          :ok <- AtomLGFX.draw_string(port, @ascii_sample_x, y, "ABC abc 123 !?", 0) do
       :ok
     end
@@ -174,7 +174,7 @@ defmodule SampleApp.TextProbe do
 
   defp draw_jp_header(port, y, _h) do
     with :ok <- set_ascii_text_style(port, @dim, 1),
-         :ok <- AtomLGFX.draw_fast_hline(port, @pad, y, 220, 0x404040),
+         :ok <- AtomLGFX.draw_fast_hline(port, @pad, y, 220, 0x4208),
          :ok <- AtomLGFX.draw_string(port, @pad, y + 2, "Japanese-capable preset:", 0) do
       :ok
     end

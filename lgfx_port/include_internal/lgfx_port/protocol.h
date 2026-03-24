@@ -226,10 +226,10 @@ static inline bool lgfx_validate_positive_f32(float value)
 // -----------------------------------------------------------------------------
 
 #define LGFX_F_TEXT_HAS_BG (1u << 0) // setTextColor: background color is provided
-#define LGFX_F_COLOR_INDEX (1u << 1) // primitives: color argument is palette index, not rgb565
-#define LGFX_F_TEXT_FG_INDEX (1u << 2) // setTextColor: fg is palette index, not rgb565
-#define LGFX_F_TEXT_BG_INDEX (1u << 3) // setTextColor: bg is palette index, not rgb565
-#define LGFX_F_TRANSPARENT_INDEX (1u << 4) // sprite push transparent value is palette index, not rgb565
+#define LGFX_F_COLOR_INDEX (1u << 1) // primitives: color argument is palette index, not non-index display color
+#define LGFX_F_TEXT_FG_INDEX (1u << 2) // setTextColor: fg is palette index, not non-index display color
+#define LGFX_F_TEXT_BG_INDEX (1u << 3) // setTextColor: bg is palette index, not non-index display color
+#define LGFX_F_TRANSPARENT_INDEX (1u << 4) // sprite push transparent value is palette index, not non-index display color
 
 #ifndef F_TEXT_HAS_BG
 #define F_TEXT_HAS_BG LGFX_F_TEXT_HAS_BG

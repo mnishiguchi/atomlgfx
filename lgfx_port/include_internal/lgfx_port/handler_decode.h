@@ -97,6 +97,16 @@ static inline bool lgfx_decode_color565_at(const lgfx_request_t *req, int index,
     return lgfx_term_to_color565(lgfx_req_elem(req, index), out);
 }
 
+/*
+ * Non-index display colors use RGB565 on the wire.
+ *
+ * This helper exists to make that protocol-level intent explicit at call sites.
+ */
+static inline bool lgfx_decode_display_color_at(const lgfx_request_t *req, int index, uint16_t *out)
+{
+    return lgfx_decode_color565_at(req, index, out);
+}
+
 static inline bool lgfx_decode_rgb888_at(const lgfx_request_t *req, int index, uint32_t *out)
 {
     uint32_t rgb888 = 0;
@@ -168,7 +178,7 @@ static inline bool lgfx_req_has_flag(const lgfx_request_t *req, uint32_t flag)
     return req && ((req->flags & flag) != 0u);
 }
 
-static inline bool lgfx_decode_color_or_index_at(
+static inline bool lgfx_decode_display_color_or_index_at(
     const lgfx_request_t *req,
     int index,
     uint32_t index_flag,
@@ -190,12 +200,12 @@ static inline bool lgfx_decode_color_or_index_at(
         return true;
     }
 
-    uint16_t rgb565 = 0;
-    if (!lgfx_decode_color565_at(req, index, &rgb565)) {
+    uint16_t display_color = 0;
+    if (!lgfx_decode_display_color_at(req, index, &display_color)) {
         return false;
     }
 
     *out_is_index = false;
-    *out_value = (uint32_t) rgb565;
+    *out_value = (uint32_t) display_color;
     return true;
 }

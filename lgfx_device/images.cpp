@@ -18,15 +18,15 @@
 namespace
 {
 
-static inline uint16_t be16_at(const uint8_t *p)
+static inline uint16_t le16_at(const uint8_t *p)
 {
-    return (uint16_t(p[0]) << 8) | uint16_t(p[1]);
+    return uint16_t(p[0]) | (uint16_t(p[1]) << 8);
 }
 
-static inline void rgb565_be_to_host_u16(const uint8_t *src_be, uint16_t *dst, size_t n_pixels)
+static inline void rgb565_le_to_host_u16(const uint8_t *src_le, uint16_t *dst, size_t n_pixels)
 {
     for (size_t i = 0; i < n_pixels; i++) {
-        dst[i] = be16_at(src_be + (i * 2u));
+        dst[i] = le16_at(src_le + (i * 2u));
     }
 }
 
@@ -101,10 +101,10 @@ extern "C" esp_err_t lgfx_device_push_image_rgb565_strided(
     uint16_t w,
     uint16_t h,
     uint16_t stride_pixels,
-    const uint8_t *pixels_be,
+    const uint8_t *pixels_le,
     size_t pixels_len)
 {
-    if (!pixels_be || w == 0 || h == 0) {
+    if (!pixels_le || w == 0 || h == 0) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -140,7 +140,12 @@ extern "C" esp_err_t lgfx_device_push_image_rgb565_strided(
         return ESP_ERR_NOT_FOUND;
     }
 
-    // Input rows are RGB565 big-endian with optional stride padding.
+    // Input rows are ordinary RGB565 16-bit words encoded little-endian with
+    // optional stride padding.
+    //
+    // This keeps the payload contract aligned with common LovyanGFX-style
+    // uint16_t RGB565 image buffers. Target-specific byte swapping remains
+    // controlled by setSwapBytes(target, enabled).
     const size_t row_bytes = (size_t) stride_pixels * 2u;
 
     uint16_t *rowbuf = nullptr;
@@ -156,8 +161,8 @@ extern "C" esp_err_t lgfx_device_push_image_rgb565_strided(
     }
 
     for (uint16_t row = 0; row < h; row++) {
-        const uint8_t *src = pixels_be + ((size_t) row * row_bytes);
-        rgb565_be_to_host_u16(src, rowbuf, (size_t) w);
+        const uint8_t *src = pixels_le + ((size_t) row * row_bytes);
+        rgb565_le_to_host_u16(src, rowbuf, (size_t) w);
         gfx->pushImage(x, (int16_t) (y + row), w, 1, rowbuf);
     }
 

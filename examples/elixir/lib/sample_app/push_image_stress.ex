@@ -7,16 +7,17 @@ defmodule SampleApp.PushImageStress do
 
   import SampleApp.AtomVMCompat, only: [yield: 0]
 
-  @bg 0x101010
-  @hud_bg 0x181818
-  @hud_fg 0xFFFFFF
-  @hud_dim 0xB0B0B0
-  @hud_accent 0x909090
-  @hud_ok 0xD0D0D0
-  @hud_err 0x707070
-  @divider 0x505050
-  @stage_bg 0x080808
-  @progress_bg 0x2A2A2A
+  alias AtomLGFX.Color
+
+  @bg 0x1082
+  @hud_bg 0x18C3
+  @hud_fg 0xFFFF
+  @hud_dim 0xB596
+  @hud_ok 0xD69A
+  @hud_err 0x738E
+  @divider 0x528A
+  @stage_bg 0x0841
+  @progress_bg 0x2945
 
   @hud_h 40
   @hud_x 4
@@ -26,64 +27,54 @@ defmodule SampleApp.PushImageStress do
   @hud_bar_y 26
   @hud_bar_h 6
 
-  @poison565 0xF81F
+  @solid_a Color.white()
+  @solid_b Color.yellow()
 
-  # Progress log interval (also forces GC on this cadence)
   @progress_every 25
   @gc_every 16
 
-  # 3 simple patterns are enough to catch obvious corruption/stride issues.
-  @pattern_solid 0
-  @pattern_stripes 1
-  @pattern_checker 2
-
   def run(port, rounds \\ 300) when is_integer(rounds) and rounds > 0 do
-    with {:ok, w} <- AtomLGFX.width(port, 0),
-         {:ok, h} <- AtomLGFX.height(port, 0) do
-      hud_h = min_i(@hud_h, h)
-      stage_y = hud_h
-      stage_h = max_i(1, h - hud_h)
+    try do
+      with {:ok, w} <- AtomLGFX.width(port, 0),
+           {:ok, h} <- AtomLGFX.height(port, 0),
+           :ok <- AtomLGFX.set_swap_bytes(port, true, 0) do
+        hud_h = min_i(@hud_h, h)
+        stage_y = hud_h
+        stage_h = max_i(1, h - hud_h)
 
-      IO.puts("push_image_stress start w=#{w} h=#{h} rounds=#{rounds}")
+        IO.puts("push_image_stress start w=#{w} h=#{h} rounds=#{rounds}")
 
-      draw_chrome(port, w, h, stage_y)
-      draw_status(port, w, rounds, -1, 0, 0, {0, 0}, 0, @pattern_solid)
+        draw_chrome(port, w, h, stage_y)
+        draw_status(port, w, rounds, -1, 0, 0, {0, 0}, 0)
 
-      :ok = invalid_stride_probe(port)
+        :ok = invalid_stride_probe(port)
 
-      cases = build_cases(w, stage_h)
+        cases = build_cases(w, stage_h)
+        {ok_count, err_count} = run_i(port, rounds, 0, w, stage_y, stage_h, cases, 0, 0)
 
-      {ok_count, err_count} =
-        run_i(port, rounds, 0, w, stage_y, stage_h, cases, 0, 0)
+        draw_status(
+          port,
+          w,
+          rounds,
+          rounds - 1,
+          ok_count,
+          err_count,
+          pick_case(cases, max_i(0, rounds - 1)),
+          choose_stride_pixels(max_i(0, rounds - 1), elem(pick_case(cases, max_i(0, rounds - 1)), 0))
+        )
 
-      draw_status(
-        port,
-        w,
-        rounds,
-        rounds - 1,
-        ok_count,
-        err_count,
-        pick_case(cases, max_i(0, rounds - 1)),
-        choose_stride_pixels(
-          max_i(0, rounds - 1),
-          elem(pick_case(cases, max_i(0, rounds - 1)), 0)
-        ),
-        rem(max_i(0, rounds - 1), 3)
-      )
+        IO.puts("push_image_stress done rounds=#{rounds} ok=#{ok_count} err=#{err_count}")
 
-      IO.puts("push_image_stress done rounds=#{rounds} ok=#{ok_count} err=#{err_count}")
-
-      if err_count == 0 do
-        :ok
-      else
-        {:error, {:push_image_stress_failed, err_count}}
+        if err_count == 0 do
+          :ok
+        else
+          {:error, {:push_image_stress_failed, err_count}}
+        end
       end
+    after
+      _ = AtomLGFX.set_swap_bytes(port, false, 0)
     end
   end
-
-  # ---------------------------------------------------------------------------
-  # Main loop
-  # ---------------------------------------------------------------------------
 
   defp run_i(_port, rounds, i, _screen_w, _stage_y, _stage_h, _cases, ok_count, err_count)
        when i >= rounds do
@@ -96,9 +87,7 @@ defmodule SampleApp.PushImageStress do
     y = stage_y + pick_y(i, stage_h, h)
 
     stride_pixels = choose_stride_pixels(i, w)
-    pattern_id = rem(i, 3)
-
-    pixels = make_pixels_rgb565(w, h, stride_pixels, pattern_id, i)
+    pixels = make_pixels_rgb565(w, h, stride_pixels, i)
 
     result = AtomLGFX.push_image_rgb565(port, x, y, w, h, pixels, stride_pixels, 0)
 
@@ -117,18 +106,7 @@ defmodule SampleApp.PushImageStress do
 
     if should_log_progress?(i, rounds) do
       IO.puts("push_image_stress progress i=#{i}/#{rounds} ok=#{ok_count2} err=#{err_count2}")
-
-      draw_status(
-        port,
-        screen_w,
-        rounds,
-        i,
-        ok_count2,
-        err_count2,
-        {w, h},
-        stride_pixels,
-        pattern_id
-      )
+      draw_status(port, screen_w, rounds, i, ok_count2, err_count2, {w, h}, stride_pixels)
     end
 
     if rem(i, @gc_every) == 0 do
@@ -143,10 +121,6 @@ defmodule SampleApp.PushImageStress do
   defp should_log_progress?(i, rounds) do
     i == 0 or i == rounds - 1 or rem(i, @progress_every) == 0
   end
-
-  # ---------------------------------------------------------------------------
-  # HUD / UI
-  # ---------------------------------------------------------------------------
 
   defp draw_chrome(port, w, h, stage_y) do
     _ = AtomLGFX.fill_screen(port, @bg)
@@ -163,17 +137,7 @@ defmodule SampleApp.PushImageStress do
     :ok
   end
 
-  defp draw_status(
-         port,
-         screen_w,
-         rounds,
-         i,
-         ok_count,
-         err_count,
-         {case_w, case_h},
-         stride_pixels,
-         pattern_id
-       ) do
+  defp draw_status(port, screen_w, rounds, i, ok_count, err_count, {case_w, case_h}, stride_pixels) do
     hud_h = @hud_h
     bar_x = @hud_x
     bar_y = @hud_bar_y
@@ -188,7 +152,7 @@ defmodule SampleApp.PushImageStress do
 
     line2 =
       <<i2b(case_w)::binary, "x", i2b(case_h)::binary, "  st:",
-        stride_label(stride_pixels, case_w)::binary, "  ", pattern_label(pattern_id)::binary>>
+        stride_label(stride_pixels, case_w)::binary, "  solid">>
 
     _ =
       AtomLGFX.draw_string_bg(
@@ -232,11 +196,6 @@ defmodule SampleApp.PushImageStress do
       _ = AtomLGFX.fill_rect(port, bar_x, bar_y, fill_w, bar_h, bar_color)
     end
 
-    if fill_w < bar_w do
-      tick_x = bar_x + fill_w
-      _ = AtomLGFX.draw_fast_vline(port, tick_x, bar_y, bar_h, @hud_accent)
-    end
-
     :ok
   end
 
@@ -248,21 +207,11 @@ defmodule SampleApp.PushImageStress do
     end
   end
 
-  defp pattern_label(@pattern_solid), do: "solid"
-  defp pattern_label(@pattern_stripes), do: "stripe"
-  defp pattern_label(@pattern_checker), do: "check"
-  defp pattern_label(_), do: "?"
-
   defp stride_label(0, _w), do: "tight"
   defp stride_label(stride, w) when stride == w, do: "w"
   defp stride_label(stride, w), do: <<i2b(stride)::binary, "(+", i2b(stride - w)::binary, ")">>
 
-  # ---------------------------------------------------------------------------
-  # Case matrix
-  # ---------------------------------------------------------------------------
-
   defp build_cases(screen_w, stage_h) do
-    # Keep coverage broad, but avoid giant allocations on AtomVM.
     c1 = clamp_case(1, 1, screen_w, stage_h)
     c2 = clamp_case(2, 2, screen_w, stage_h)
     c3 = clamp_case(3, 5, screen_w, stage_h)
@@ -272,12 +221,8 @@ defmodule SampleApp.PushImageStress do
     c7 = clamp_case(100, 37, screen_w, stage_h)
     c8 = clamp_case(screen_w, 1, screen_w, stage_h)
     c9 = clamp_case(1, min_i(288, stage_h), screen_w, stage_h)
-
-    # Previously these were too large for the VM heap when repeatedly generated.
     c10 = clamp_case(screen_w, 8, screen_w, stage_h)
     c11 = clamp_case(screen_w, 32, screen_w, stage_h)
-
-    # One moderate rectangle to keep area coverage
     c12 = clamp_case(160, 64, screen_w, stage_h)
 
     {c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12}
@@ -291,10 +236,6 @@ defmodule SampleApp.PushImageStress do
     idx = rem(i, tuple_size(cases))
     elem(cases, idx)
   end
-
-  # ---------------------------------------------------------------------------
-  # Position / stride selection
-  # ---------------------------------------------------------------------------
 
   defp pick_x(i, screen_w, w) do
     max_x = max_i(0, screen_w - w)
@@ -325,148 +266,48 @@ defmodule SampleApp.PushImageStress do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # Pixel generation (AtomVM-friendly)
-  # ---------------------------------------------------------------------------
-
-  # Returns a binary laid out with the requested stride.
-  # If stride_pixels0 == 0, the returned binary is tightly packed (stride = w).
-  defp make_pixels_rgb565(w, h, stride_pixels0, pattern_id, iter) do
+  # Raw pushImage payloads use ordinary RGB565 data encoded as little-endian
+  # 16-bit words. This stress test keeps the payload simple on purpose:
+  # one solid color, optional stride padding, repeated many times.
+  defp make_pixels_rgb565(w, h, stride_pixels0, iter) do
     stride =
       case stride_pixels0 do
         0 -> w
         s -> s
       end
 
+    color = solid_color(iter)
+    row = solid_row(w, color)
     pad_pixels = stride - w
-
-    visible_row =
-      case pattern_id do
-        @pattern_solid ->
-          solid_row(w, solid_color(iter))
-
-        @pattern_stripes ->
-          stripes_row(w, stripes_colors(iter))
-
-        _ ->
-          checker_row(w, 0)
-      end
 
     pad_bin =
       if pad_pixels > 0 do
-        :binary.copy(<<@poison565::16-big>>, pad_pixels)
+        :binary.copy(Color.rgb565_le(color), pad_pixels)
       else
         <<>>
       end
 
-    case pattern_id do
-      @pattern_checker ->
-        row_a = <<checker_row(w, rem(iter, 2))::binary, pad_bin::binary>>
-        row_b = <<checker_row(w, rem(iter + 1, 2))::binary, pad_bin::binary>>
-        alternating_rows_binary(h, row_a, row_b)
-
-      _ ->
-        row = <<visible_row::binary, pad_bin::binary>>
-        :binary.copy(row, h)
-    end
+    full_row = <<row::binary, pad_bin::binary>>
+    :binary.copy(full_row, h)
   end
 
   defp solid_color(iter) do
-    case rem(iter, 6) do
-      0 -> 0xF800
-      1 -> 0x07E0
-      2 -> 0x001F
-      3 -> 0xFFE0
-      4 -> 0xF81F
-      _ -> 0x07FF
-    end
-  end
-
-  defp stripes_colors(iter) do
-    case rem(iter, 3) do
-      0 -> {0xFFFF, 0x0000}
-      1 -> {0xFFE0, 0x001F}
-      _ -> {0x07FF, 0x780F}
+    if rem(iter, 2) == 0 do
+      @solid_a
+    else
+      @solid_b
     end
   end
 
   defp solid_row(w, color565) do
-    :binary.copy(<<color565::16-big>>, w)
+    :binary.copy(Color.rgb565_le(color565), w)
   end
-
-  # 2-pixel vertical stripes: A A B B A A B B ...
-  defp stripes_row(w, {c1, c2}) do
-    group = <<c1::16-big, c1::16-big, c2::16-big, c2::16-big>>
-    groups = div(w, 4)
-    rem_pixels = rem(w, 4)
-    base = :binary.copy(group, groups)
-
-    tail =
-      case rem_pixels do
-        0 -> <<>>
-        1 -> <<c1::16-big>>
-        2 -> <<c1::16-big, c1::16-big>>
-        _ -> <<c1::16-big, c1::16-big, c2::16-big>>
-      end
-
-    <<base::binary, tail::binary>>
-  end
-
-  # 1-pixel checker row: A B A B ... (phase flips starting color)
-  defp checker_row(w, phase) do
-    {c_first, c_second} =
-      if rem(phase, 2) == 0 do
-        {0xFFFF, 0x0000}
-      else
-        {0x0000, 0xFFFF}
-      end
-
-    pair = <<c_first::16-big, c_second::16-big>>
-    pairs = div(w, 2)
-    rem_pixels = rem(w, 2)
-    base = :binary.copy(pair, pairs)
-
-    tail =
-      if rem_pixels == 1 do
-        <<c_first::16-big>>
-      else
-        <<>>
-      end
-
-    <<base::binary, tail::binary>>
-  end
-
-  defp alternating_rows_binary(h, row_a, row_b) do
-    alternating_rows_iolist(h, row_a, row_b, 0, [])
-    |> :lists.reverse()
-    |> :erlang.iolist_to_binary()
-  end
-
-  defp alternating_rows_iolist(h, _row_a, _row_b, y, acc) when y >= h do
-    acc
-  end
-
-  defp alternating_rows_iolist(h, row_a, row_b, y, acc) do
-    row =
-      if rem(y, 2) == 0 do
-        row_a
-      else
-        row_b
-      end
-
-    alternating_rows_iolist(h, row_a, row_b, y + 1, [row | acc])
-  end
-
-  # ---------------------------------------------------------------------------
-  # Probe cases
-  # ---------------------------------------------------------------------------
 
   defp invalid_stride_probe(port) do
-    # stride < w must be rejected by the Elixir client-side validation
     w = 4
     h = 2
     stride = 3
-    pixels = solid_row(w, 0x07E0) |> :binary.copy(h)
+    pixels = solid_row(w, @solid_a) |> :binary.copy(h)
 
     case AtomLGFX.push_image_rgb565(port, 0, 0, w, h, pixels, stride, 0) do
       {:error, {:bad_stride, ^stride, ^w}} ->
@@ -482,10 +323,6 @@ defmodule SampleApp.PushImageStress do
         :ok
     end
   end
-
-  # ---------------------------------------------------------------------------
-  # Tiny helpers (AtomVM-safe)
-  # ---------------------------------------------------------------------------
 
   defp i2b(i), do: :erlang.integer_to_binary(i)
 

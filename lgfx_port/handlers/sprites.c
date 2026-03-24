@@ -24,8 +24,8 @@
 //
 // - SrcSprite is the request header Target (sprite-only; 1..254)
 // - DstTarget is 0 (LCD) or 1..254 (sprite)
-// - Transparent is interpreted as:
-//   - RGB565 when LGFX_F_TRANSPARENT_INDEX is not set
+// - Transparent scalar interpretation:
+//   - non-index display color when LGFX_F_TRANSPARENT_INDEX is not set
 //   - palette index when LGFX_F_TRANSPARENT_INDEX is set
 //
 // pushRotateZoom wire payload convention used in this handler:
@@ -39,8 +39,8 @@
 // - Angle uses LovyanGFX-like degree semantics
 // - ZoomX / ZoomY use LovyanGFX-like positive scale semantics
 // - integer and float terms are both accepted by handler decode
-// - Transparent is interpreted as:
-//   - RGB565 when LGFX_F_TRANSPARENT_INDEX is not set
+// - Transparent scalar interpretation:
+//   - non-index display color when LGFX_F_TRANSPARENT_INDEX is not set
 //   - palette index when LGFX_F_TRANSPARENT_INDEX is set
 
 typedef struct
@@ -147,7 +147,7 @@ static bool decode_push_sprite_args(const lgfx_request_t *req, lgfx_push_sprite_
     out->transparent_value = 0;
 
     if (req->arity == 9) {
-        if (!lgfx_decode_color_or_index_at(
+        if (!lgfx_decode_display_color_or_index_at(
                 req,
                 8,
                 LGFX_F_TRANSPARENT_INDEX,
@@ -198,7 +198,7 @@ static bool decode_push_rotate_zoom_args(const lgfx_request_t *req, lgfx_push_ro
     out->transparent_value = 0;
 
     if (req->arity == 12) {
-        if (!lgfx_decode_color_or_index_at(
+        if (!lgfx_decode_display_color_or_index_at(
                 req,
                 11,
                 LGFX_F_TRANSPARENT_INDEX,

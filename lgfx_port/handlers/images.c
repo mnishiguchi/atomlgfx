@@ -101,6 +101,10 @@ term lgfx_handle_pushImage(Context *ctx, lgfx_port_t *port, const lgfx_request_t
 {
     // {lgfx, ver, pushImage, target, flags, X, Y, W, H, StridePixels, DataRgb565Binary}
     //
+    // DataRgb565Binary carries ordinary RGB565 image data encoded as little-endian
+    // 16-bit words. Target-specific byte swapping remains controlled by
+    // setSwapBytes(Target, Bool).
+    //
     // Handler responsibility here is limited to wire decode.
     // Binary-size capping stays in lgfx_decode_binary_at().
     // Device code remains authoritative for:

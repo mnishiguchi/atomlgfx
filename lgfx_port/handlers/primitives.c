@@ -40,7 +40,7 @@ typedef struct
 {
     bool is_index;
     uint32_t value;
-} lgfx_wire_color_t;
+} lgfx_display_color_or_index_t;
 
 static bool decode_triangle_i16(const lgfx_request_t *req, lgfx_triangle_i16_t *out)
 {
@@ -63,10 +63,13 @@ static bool decode_arc_args(const lgfx_request_t *req, lgfx_arc_args_t *out)
         && lgfx_decode_f32_at(req, 10, &out->angle1);
 }
 
-static bool decode_wire_color_at(const lgfx_request_t *req, int index, lgfx_wire_color_t *out)
+static bool decode_primitive_display_color_or_index_at(
+    const lgfx_request_t *req,
+    int index,
+    lgfx_display_color_or_index_t *out)
 {
     return out
-        && lgfx_decode_color_or_index_at(
+        && lgfx_decode_display_color_or_index_at(
             req,
             index,
             LGFX_F_COLOR_INDEX,
@@ -76,9 +79,9 @@ static bool decode_wire_color_at(const lgfx_request_t *req, int index, lgfx_wire
 
 term lgfx_handle_fillScreen(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
-    if (!decode_wire_color_at(req, 5, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 5, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -96,9 +99,9 @@ term lgfx_handle_fillScreen(Context *ctx, lgfx_port_t *port, const lgfx_request_
 
 term lgfx_handle_clear(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
-    if (!decode_wire_color_at(req, 5, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 5, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -118,7 +121,7 @@ term lgfx_handle_drawPixel(Context *ctx, lgfx_port_t *port, const lgfx_request_t
 {
     int16_t x = 0;
     int16_t y = 0;
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -126,7 +129,7 @@ term lgfx_handle_drawPixel(Context *ctx, lgfx_port_t *port, const lgfx_request_t
     if (!lgfx_decode_i16_at(req, 6, &y)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!decode_wire_color_at(req, 7, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 7, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -149,7 +152,7 @@ term lgfx_handle_drawFastVLine(Context *ctx, lgfx_port_t *port, const lgfx_reque
     int16_t x = 0;
     int16_t y = 0;
     uint16_t h = 0;
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -160,7 +163,7 @@ term lgfx_handle_drawFastVLine(Context *ctx, lgfx_port_t *port, const lgfx_reque
     if (!lgfx_decode_u16_at(req, 7, &h) || h == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!decode_wire_color_at(req, 8, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 8, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -184,7 +187,7 @@ term lgfx_handle_drawFastHLine(Context *ctx, lgfx_port_t *port, const lgfx_reque
     int16_t x = 0;
     int16_t y = 0;
     uint16_t w = 0;
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -195,7 +198,7 @@ term lgfx_handle_drawFastHLine(Context *ctx, lgfx_port_t *port, const lgfx_reque
     if (!lgfx_decode_u16_at(req, 7, &w) || w == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!decode_wire_color_at(req, 8, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 8, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -220,7 +223,7 @@ term lgfx_handle_drawLine(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     int16_t y0 = 0;
     int16_t x1 = 0;
     int16_t y1 = 0;
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x0)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -234,7 +237,7 @@ term lgfx_handle_drawLine(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     if (!lgfx_decode_i16_at(req, 8, &y1)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!decode_wire_color_at(req, 9, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 9, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -260,7 +263,7 @@ term lgfx_handle_drawRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     int16_t y = 0;
     uint16_t w = 0;
     uint16_t h = 0;
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -274,7 +277,7 @@ term lgfx_handle_drawRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     if (!lgfx_decode_u16_at(req, 8, &h) || h == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!decode_wire_color_at(req, 9, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 9, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -300,7 +303,7 @@ term lgfx_handle_fillRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     int16_t y = 0;
     uint16_t w = 0;
     uint16_t h = 0;
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -314,7 +317,7 @@ term lgfx_handle_fillRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     if (!lgfx_decode_u16_at(req, 8, &h) || h == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!decode_wire_color_at(req, 9, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 9, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -341,7 +344,7 @@ term lgfx_handle_drawRoundRect(Context *ctx, lgfx_port_t *port, const lgfx_reque
     uint16_t w = 0;
     uint16_t h = 0;
     uint16_t r = 0;
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -358,7 +361,7 @@ term lgfx_handle_drawRoundRect(Context *ctx, lgfx_port_t *port, const lgfx_reque
     if (!lgfx_decode_u16_at(req, 9, &r) || r == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!decode_wire_color_at(req, 10, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 10, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -386,7 +389,7 @@ term lgfx_handle_fillRoundRect(Context *ctx, lgfx_port_t *port, const lgfx_reque
     uint16_t w = 0;
     uint16_t h = 0;
     uint16_t r = 0;
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -403,7 +406,7 @@ term lgfx_handle_fillRoundRect(Context *ctx, lgfx_port_t *port, const lgfx_reque
     if (!lgfx_decode_u16_at(req, 9, &r) || r == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!decode_wire_color_at(req, 10, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 10, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -429,7 +432,7 @@ term lgfx_handle_drawCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_
     int16_t x = 0;
     int16_t y = 0;
     uint16_t r = 0;
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -440,7 +443,7 @@ term lgfx_handle_drawCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_
     if (!lgfx_decode_u16_at(req, 7, &r) || r == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!decode_wire_color_at(req, 8, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 8, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -464,7 +467,7 @@ term lgfx_handle_fillCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_
     int16_t x = 0;
     int16_t y = 0;
     uint16_t r = 0;
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -475,7 +478,7 @@ term lgfx_handle_fillCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_
     if (!lgfx_decode_u16_at(req, 7, &r) || r == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!decode_wire_color_at(req, 8, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 8, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -500,7 +503,7 @@ term lgfx_handle_drawEllipse(Context *ctx, lgfx_port_t *port, const lgfx_request
     int16_t y = 0;
     uint16_t rx = 0;
     uint16_t ry = 0;
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -514,7 +517,7 @@ term lgfx_handle_drawEllipse(Context *ctx, lgfx_port_t *port, const lgfx_request
     if (!lgfx_decode_u16_at(req, 8, &ry) || ry == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!decode_wire_color_at(req, 9, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 9, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -540,7 +543,7 @@ term lgfx_handle_fillEllipse(Context *ctx, lgfx_port_t *port, const lgfx_request
     int16_t y = 0;
     uint16_t rx = 0;
     uint16_t ry = 0;
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -554,7 +557,7 @@ term lgfx_handle_fillEllipse(Context *ctx, lgfx_port_t *port, const lgfx_request
     if (!lgfx_decode_u16_at(req, 8, &ry) || ry == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!decode_wire_color_at(req, 9, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 9, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -577,7 +580,7 @@ term lgfx_handle_fillEllipse(Context *ctx, lgfx_port_t *port, const lgfx_request
 term lgfx_handle_drawArc(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     lgfx_arc_args_t arc = { 0 };
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!decode_arc_args(req, &arc)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -585,7 +588,7 @@ term lgfx_handle_drawArc(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
     if (arc.r0 == 0 || arc.r1 == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!decode_wire_color_at(req, 11, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 11, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -610,7 +613,7 @@ term lgfx_handle_drawArc(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
 term lgfx_handle_fillArc(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     lgfx_arc_args_t arc = { 0 };
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!decode_arc_args(req, &arc)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -618,7 +621,7 @@ term lgfx_handle_fillArc(Context *ctx, lgfx_port_t *port, const lgfx_request_t *
     if (arc.r0 == 0 || arc.r1 == 0) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
-    if (!decode_wire_color_at(req, 11, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 11, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -650,7 +653,7 @@ term lgfx_handle_drawBezier(Context *ctx, lgfx_port_t *port, const lgfx_request_
     int16_t y2 = 0;
     int16_t x3 = 0;
     int16_t y3 = 0;
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!lgfx_decode_i16_at(req, 5, &x0)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
@@ -672,7 +675,7 @@ term lgfx_handle_drawBezier(Context *ctx, lgfx_port_t *port, const lgfx_request_
     }
 
     if (req->arity == 12) {
-        if (!decode_wire_color_at(req, 11, &color)) {
+        if (!decode_primitive_display_color_or_index_at(req, 11, &color)) {
             return reply_error(ctx, port, req, port->atoms.bad_args, 0);
         }
 
@@ -701,7 +704,7 @@ term lgfx_handle_drawBezier(Context *ctx, lgfx_port_t *port, const lgfx_request_
         if (!lgfx_decode_i16_at(req, 12, &y3)) {
             return reply_error(ctx, port, req, port->atoms.bad_args, 0);
         }
-        if (!decode_wire_color_at(req, 13, &color)) {
+        if (!decode_primitive_display_color_or_index_at(req, 13, &color)) {
             return reply_error(ctx, port, req, port->atoms.bad_args, 0);
         }
 
@@ -731,13 +734,13 @@ term lgfx_handle_drawBezier(Context *ctx, lgfx_port_t *port, const lgfx_request_
 term lgfx_handle_drawTriangle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     lgfx_triangle_i16_t tri = { 0 };
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!decode_triangle_i16(req, &tri)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    if (!decode_wire_color_at(req, 11, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 11, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
@@ -762,13 +765,13 @@ term lgfx_handle_drawTriangle(Context *ctx, lgfx_port_t *port, const lgfx_reques
 term lgfx_handle_fillTriangle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     lgfx_triangle_i16_t tri = { 0 };
-    lgfx_wire_color_t color = { 0 };
+    lgfx_display_color_or_index_t color = { 0 };
 
     if (!decode_triangle_i16(req, &tri)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 
-    if (!decode_wire_color_at(req, 11, &color)) {
+    if (!decode_primitive_display_color_or_index_at(req, 11, &color)) {
         return reply_error(ctx, port, req, port->atoms.bad_args, 0);
     }
 

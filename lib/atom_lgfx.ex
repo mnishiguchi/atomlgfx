@@ -48,12 +48,13 @@ defmodule AtomLGFX do
 
   - Omitted open options keep build defaults.
   - `get_touch/1` and `get_touch_raw/1` return `{:ok, :none}` or `{:ok, {x, y, size}}`.
-  - Primitive and text scalar colors accept either:
-    - RGB888 integers like `0x112233`
+  - Primitive and text display colors accept either:
+    - RGB565 integers like `0xF81F`
     - indexed tuples like `{:index, 3}` on palette-backed sprite targets
   - Transparent keys for sprite push operations accept either:
     - RGB565 `u16` values (`0x0000..0xFFFF`)
     - indexed tuples like `{:index, 0}` on palette-backed source sprites
+  - `AtomLGFX.Color` provides small helpers for RGB565 display colors, RGB888 palette colors, and indexed color descriptors.
   - `set_text_datum/3` is a numeric passthrough. It accepts `0..255` and forwards the raw value to the pinned native driver.
   - `set_text_size/3` and `set_text_size_xy/4` accept direct LovyanGFX-style scale values.
   - `set_text_wrap/3` follows LovyanGFX one-argument semantics:
@@ -72,6 +73,9 @@ defmodule AtomLGFX do
     - Use `set_text_font_preset/3` to choose the glyph source.
     - Use `set_text_size/3` or `set_text_size_xy/4` to control rendered size.
   - `push_rotate_zoom_to/7`, `/8`, and `/9` use direct degree and zoom values.
+  - `push_image_rgb565/8` expects ordinary RGB565 pixel data encoded as
+    little-endian 16-bit words.
+  - `set_swap_bytes/3` controls target-specific byte swapping for raw image upload.
   """
 
   alias AtomLGFX.Cache
@@ -243,6 +247,13 @@ defmodule AtomLGFX do
   def set_color_depth(port, depth, target \\ 0), do: Device.set_color_depth(port, depth, target)
 
   @doc """
+  Enables or disables LovyanGFX byte swapping for the selected target.
+
+  Target `0` is the LCD. Targets `1..254` are sprite handles.
+  """
+  def set_swap_bytes(port, enabled, target \\ 0), do: Device.set_swap_bytes(port, enabled, target)
+
+  @doc """
   Closes the native device owned by this port and clears runtime caches.
 
   This does not close the BEAM port handle itself and does not forget the
@@ -270,17 +281,17 @@ defmodule AtomLGFX do
   def clear_clip_rect(port, target \\ 0), do: Clip.clear_clip_rect(port, target)
 
   @doc """
-  Fills the selected target with the given scalar color.
+  Fills the selected target with the given display color.
 
-  Accepts either RGB888 integers like `0x112233` or indexed tuples like `{:index, 3}`.
+  Accepts either RGB565 integers like `0xF81F` or indexed tuples like `{:index, 3}`.
   Indexed color mode is valid only on palette-backed sprite targets.
   """
   def fill_screen(port, color, target \\ 0), do: Primitives.fill_screen(port, color, target)
 
   @doc """
-  Clears the selected target with the given scalar color.
+  Clears the selected target with the given display color.
 
-  Accepts either RGB888 integers like `0x112233` or indexed tuples like `{:index, 3}`.
+  Accepts either RGB565 integers like `0xF81F` or indexed tuples like `{:index, 3}`.
   Indexed color mode is valid only on palette-backed sprite targets.
   """
   def clear(port, color, target \\ 0), do: Primitives.clear(port, color, target)
@@ -587,7 +598,7 @@ defmodule AtomLGFX do
   @doc """
   Sets the text foreground color, and optionally the background color.
 
-  Accepts RGB888 integers like `0x112233` or indexed tuples like `{:index, 3}`.
+  Accepts RGB565 integers like `0xF81F` or indexed tuples like `{:index, 3}`.
   Indexed color mode is valid only on palette-backed sprite targets.
   """
   def set_text_color(port, fg_color, bg_color \\ nil, target \\ 0),
@@ -736,9 +747,24 @@ defmodule AtomLGFX do
   @doc """
   Pushes an RGB565 image binary to the selected target.
 
-  The payload is interpreted as big-endian RGB565 pixels. Large payloads may be
-  chunked automatically by the Elixir wrapper to stay within the driver's
-  advertised binary limit.
+  The payload is interpreted as ordinary RGB565 data encoded as little-endian
+  16-bit words.
+
+  This matches the common LovyanGFX-style `uint16_t*` RGB565 image-buffer model.
+  Target-specific byte swapping remains controlled by `set_swap_bytes/3`.
+
+  Use `AtomLGFX.Color.rgb565_le/1` or `AtomLGFX.Color.pixels_le/1` for ordinary
+  raw image payloads.
+
+  Use `AtomLGFX.Color.rgb565_be/1` or `AtomLGFX.Color.pixels_swap565/1` when you
+  need explicit pre-swapped RGB565 bytes analogous to upstream LovyanGFX
+  `swap565_t`-style data.
+
+  `AtomLGFX.Color.swap565/1` is the scalar RGB565 endian-conversion helper, not
+  a raw binary encoder.
+
+  Large payloads may be chunked automatically by the Elixir wrapper to stay
+  within the driver's advertised binary limit.
   """
   def push_image_rgb565(port, x, y, width, height, pixels, stride_pixels \\ 0, target \\ 0) do
     Images.push_image_rgb565(port, x, y, width, height, pixels, stride_pixels, target)

@@ -24,6 +24,30 @@ static inline bool lgfx_text_scale_is_valid(float scale)
     return std::isfinite(scale) && scale > 0.0f;
 }
 
+static inline uint32_t lgfx_rgb565_to_rgb888(uint16_t color565)
+{
+    const uint8_t r5 = static_cast<uint8_t>((color565 >> 11) & 0x1Fu);
+    const uint8_t g6 = static_cast<uint8_t>((color565 >> 5) & 0x3Fu);
+    const uint8_t b5 = static_cast<uint8_t>(color565 & 0x1Fu);
+
+    const uint8_t r8 = static_cast<uint8_t>((r5 << 3) | (r5 >> 2));
+    const uint8_t g8 = static_cast<uint8_t>((g6 << 2) | (g6 >> 4));
+    const uint8_t b8 = static_cast<uint8_t>((b5 << 3) | (b5 >> 2));
+
+    return (static_cast<uint32_t>(r8) << 16)
+        | (static_cast<uint32_t>(g8) << 8)
+        | static_cast<uint32_t>(b8);
+}
+
+static inline uint32_t lgfx_resolve_text_scalar_color(bool color_is_index, uint32_t color_value)
+{
+    if (color_is_index) {
+        return color_value;
+    }
+
+    return lgfx_rgb565_to_rgb888(static_cast<uint16_t>(color_value & 0xFFFFu));
+}
+
 template <typename Fn>
 static esp_err_t with_nul_terminated_text(
     const uint8_t *text,
@@ -133,17 +157,21 @@ extern "C" esp_err_t lgfx_device_set_text_color(
             return;
         }
 
+        const uint32_t resolved_fg = lgfx_resolve_text_scalar_color(fg_is_index, fg_value);
+
         if (has_bg) {
             bg_validation_err = lgfx_dev::validate_target_scalar_color(target, gfx, bg_is_index, bg_value);
             if (bg_validation_err != ESP_OK) {
                 return;
             }
 
+            const uint32_t resolved_bg = lgfx_resolve_text_scalar_color(bg_is_index, bg_value);
+
             gfx->setTextColor(
-                static_cast<uint32_t>(fg_value),
-                static_cast<uint32_t>(bg_value));
+                static_cast<uint32_t>(resolved_fg),
+                static_cast<uint32_t>(resolved_bg));
         } else {
-            gfx->setTextColor(static_cast<uint32_t>(fg_value));
+            gfx->setTextColor(static_cast<uint32_t>(resolved_fg));
         }
     });
 

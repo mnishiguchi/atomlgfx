@@ -264,6 +264,7 @@ esp_err_t lgfx_device_display(void);
 // Common ops (LCD or sprite target)
 // ----------------------------------------------------------------------------
 esp_err_t lgfx_device_set_color_depth(uint8_t target, uint8_t depth);
+esp_err_t lgfx_device_set_swap_bytes(uint8_t target, bool enabled);
 esp_err_t lgfx_device_set_pivot(uint8_t target, int16_t px, int16_t py);
 
 // ----------------------------------------------------------------------------
@@ -517,6 +518,9 @@ esp_err_t lgfx_device_draw_jpg(
     const uint8_t *jpeg_bytes,
     size_t jpeg_len);
 
+// Raw pushImage contract:
+// - payload is ordinary RGB565 data encoded as little-endian 16-bit words
+// - target-specific byte swapping remains controlled by setSwapBytes(target, enabled)
 esp_err_t lgfx_device_push_image_rgb565_strided(
     uint8_t target,
     int16_t x,
@@ -524,7 +528,7 @@ esp_err_t lgfx_device_push_image_rgb565_strided(
     uint16_t w,
     uint16_t h,
     uint16_t stride_pixels, // 0 => tightly packed (== w)
-    const uint8_t *pixels_be, // RGB565 big-endian pixels: hi, lo
+    const uint8_t *pixels_le, // RGB565 little-endian 16-bit words
     size_t pixels_len);
 
 // ----------------------------------------------------------------------------

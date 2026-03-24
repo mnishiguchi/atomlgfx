@@ -7,20 +7,18 @@ defmodule SampleApp.DrawStringStress do
 
   import SampleApp.AtomVMCompat, only: [yield: 0]
 
-  @bg 0x101010
-  @hud_bg 0x181818
-  @hud_fg 0xFFFFFF
-  @hud_dim 0xB0B0B0
-  @hud_ok 0xC8C8C8
-  @hud_err 0x707070
-  @divider 0x505050
-
-  @console_bg 0x0C0C0C
-  @row_bg_a 0x141414
-  @row_bg_b 0x1C1C1C
-  @row_marker 0x606060
-
-  @progress_bg 0x2A2A2A
+  @bg 0x1082
+  @hud_bg 0x18C3
+  @hud_fg 0xFFFF
+  @hud_dim 0xB596
+  @hud_ok 0xCE59
+  @hud_err 0x738E
+  @divider 0x528A
+  @console_bg 0x0861
+  @row_bg_a 0x10A2
+  @row_bg_b 0x18E3
+  @row_marker 0x630C
+  @progress_bg 0x2945
 
   @hud_h 52
   @hud_title_y 2
@@ -60,7 +58,7 @@ defmodule SampleApp.DrawStringStress do
       # Note: reset_text_state resets host cache only; device state remains whatever it was.
       _ = AtomLGFX.reset_text_state(port, 0)
       _ = AtomLGFX.set_text_wrap(port, false, 0)
-      _ = AtomLGFX.set_text_color(port, 0xFFFFFF, nil, 0)
+      _ = AtomLGFX.set_text_color(port, 0xFFFF, nil, 0)
 
       case choose_main_preset(port) do
         {:ok, main_preset} ->
@@ -349,12 +347,12 @@ defmodule SampleApp.DrawStringStress do
 
   defp row_fg_color(i) do
     case rem(i, 6) do
-      0 -> 0xFFFFFF
-      1 -> 0xE8E8E8
-      2 -> 0xD8D8D8
-      3 -> 0xC8C8C8
-      4 -> 0xB8B8B8
-      _ -> 0xF0F0F0
+      0 -> 0xFFFF
+      1 -> 0xEF5D
+      2 -> 0xDEDB
+      3 -> 0xCE59
+      4 -> 0xBDF7
+      _ -> 0xF79E
     end
   end
 

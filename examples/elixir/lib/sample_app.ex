@@ -6,6 +6,7 @@ defmodule SampleApp do
   @moduledoc false
 
   alias SampleApp.ClipSmoke
+  alias SampleApp.ColorSmoke
   alias SampleApp.DrawStringStress
   alias SampleApp.JpgSmoke
   alias SampleApp.MovingIcons
@@ -31,6 +32,7 @@ defmodule SampleApp do
     :touch,
     :calibrate,
     :stress,
+    :colors,
     :moving_icons,
     :all
   ]
@@ -38,8 +40,8 @@ defmodule SampleApp do
   @push_rounds 300
   @text_rounds 500
 
-  @bg 0x000000
-  @fg 0xFFFFFF
+  @bg 0x0000
+  @fg 0xFFFF
 
   # Sample board wiring profile.
   #
@@ -49,6 +51,7 @@ defmodule SampleApp do
   # Duplicate keys are allowed by AtomLGFX.open/1; later keys win. Callers may
   # pass extra open options to start/2 to override any of these.
   @sample_open_options [
+    rgb_order: false,
     lcd_spi_host: :spi2_host,
     touch_spi_host: :spi2_host,
     lcd_bus_shared: true,
@@ -183,6 +186,12 @@ defmodule SampleApp do
   defp run_mode(port, :stress) do
     with_boot(port, fn ->
       run_stress_suite(port)
+    end)
+  end
+
+  defp run_mode(port, :colors) do
+    with_boot_dims(port, fn w, h ->
+      step("color_smoke", ColorSmoke.run(port, w, h))
     end)
   end
 
