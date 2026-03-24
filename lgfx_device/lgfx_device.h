@@ -387,8 +387,42 @@ esp_err_t lgfx_device_draw_fast_hline(uint8_t target, int16_t x, int16_t y, uint
 esp_err_t lgfx_device_draw_line(uint8_t target, int16_t x0, int16_t y0, int16_t x1, int16_t y1, bool color_is_index, uint32_t color_value);
 esp_err_t lgfx_device_draw_rect(uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, bool color_is_index, uint32_t color_value);
 esp_err_t lgfx_device_fill_rect(uint8_t target, int16_t x, int16_t y, uint16_t w, uint16_t h, bool color_is_index, uint32_t color_value);
+esp_err_t lgfx_device_draw_round_rect(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t r,
+    bool color_is_index,
+    uint32_t color_value);
+esp_err_t lgfx_device_fill_round_rect(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t r,
+    bool color_is_index,
+    uint32_t color_value);
 esp_err_t lgfx_device_draw_circle(uint8_t target, int16_t x, int16_t y, uint16_t r, bool color_is_index, uint32_t color_value);
 esp_err_t lgfx_device_fill_circle(uint8_t target, int16_t x, int16_t y, uint16_t r, bool color_is_index, uint32_t color_value);
+esp_err_t lgfx_device_draw_ellipse(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t rx,
+    uint16_t ry,
+    bool color_is_index,
+    uint32_t color_value);
+esp_err_t lgfx_device_fill_ellipse(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t rx,
+    uint16_t ry,
+    bool color_is_index,
+    uint32_t color_value);
 esp_err_t lgfx_device_draw_triangle(
     uint8_t target,
     int16_t x0,

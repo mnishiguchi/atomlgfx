@@ -313,6 +313,96 @@ term lgfx_handle_fillRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
+term lgfx_handle_drawRoundRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    int16_t x = 0;
+    int16_t y = 0;
+    uint16_t w = 0;
+    uint16_t h = 0;
+    uint16_t r = 0;
+    lgfx_wire_color_t color = { 0 };
+
+    if (!lgfx_decode_i16_at(req, 5, &x)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!lgfx_decode_i16_at(req, 6, &y)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!lgfx_decode_u16_at(req, 7, &w) || w == 0) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!lgfx_decode_u16_at(req, 8, &h) || h == 0) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!lgfx_decode_u16_at(req, 9, &r) || r == 0) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!decode_wire_color_at(req, 10, &color)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
+        lgfx_device_draw_round_rect(
+            (uint8_t) req->target,
+            x,
+            y,
+            w,
+            h,
+            r,
+            color.is_index,
+            color.value));
+
+    return reply_ok(ctx, port, req, port->atoms.ok);
+}
+
+term lgfx_handle_fillRoundRect(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    int16_t x = 0;
+    int16_t y = 0;
+    uint16_t w = 0;
+    uint16_t h = 0;
+    uint16_t r = 0;
+    lgfx_wire_color_t color = { 0 };
+
+    if (!lgfx_decode_i16_at(req, 5, &x)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!lgfx_decode_i16_at(req, 6, &y)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!lgfx_decode_u16_at(req, 7, &w) || w == 0) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!lgfx_decode_u16_at(req, 8, &h) || h == 0) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!lgfx_decode_u16_at(req, 9, &r) || r == 0) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!decode_wire_color_at(req, 10, &color)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
+        lgfx_device_fill_round_rect(
+            (uint8_t) req->target,
+            x,
+            y,
+            w,
+            h,
+            r,
+            color.is_index,
+            color.value));
+
+    return reply_ok(ctx, port, req, port->atoms.ok);
+}
+
 term lgfx_handle_drawCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     int16_t x = 0;
@@ -377,6 +467,86 @@ term lgfx_handle_fillCircle(Context *ctx, lgfx_port_t *port, const lgfx_request_
             x,
             y,
             r,
+            color.is_index,
+            color.value));
+
+    return reply_ok(ctx, port, req, port->atoms.ok);
+}
+
+term lgfx_handle_drawEllipse(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    int16_t x = 0;
+    int16_t y = 0;
+    uint16_t rx = 0;
+    uint16_t ry = 0;
+    lgfx_wire_color_t color = { 0 };
+
+    if (!lgfx_decode_i16_at(req, 5, &x)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!lgfx_decode_i16_at(req, 6, &y)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!lgfx_decode_u16_at(req, 7, &rx) || rx == 0) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!lgfx_decode_u16_at(req, 8, &ry) || ry == 0) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!decode_wire_color_at(req, 9, &color)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
+        lgfx_device_draw_ellipse(
+            (uint8_t) req->target,
+            x,
+            y,
+            rx,
+            ry,
+            color.is_index,
+            color.value));
+
+    return reply_ok(ctx, port, req, port->atoms.ok);
+}
+
+term lgfx_handle_fillEllipse(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    int16_t x = 0;
+    int16_t y = 0;
+    uint16_t rx = 0;
+    uint16_t ry = 0;
+    lgfx_wire_color_t color = { 0 };
+
+    if (!lgfx_decode_i16_at(req, 5, &x)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!lgfx_decode_i16_at(req, 6, &y)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!lgfx_decode_u16_at(req, 7, &rx) || rx == 0) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!lgfx_decode_u16_at(req, 8, &ry) || ry == 0) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+    if (!decode_wire_color_at(req, 9, &color)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+
+    LGFX_RETURN_IF_ESP_ERR(
+        ctx,
+        port,
+        req,
+        lgfx_device_fill_ellipse(
+            (uint8_t) req->target,
+            x,
+            y,
+            rx,
+            ry,
             color.is_index,
             color.value));
 

@@ -64,8 +64,12 @@ This table documents the implemented protocol surface.
 | `drawLine` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `10` | `requires_init` | - |
 | `drawRect` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `10` | `requires_init` | - |
 | `fillRect` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `10` | `requires_init` | - |
+| `drawRoundRect` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `11` | `requires_init` | - |
+| `fillRoundRect` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `11` | `requires_init` | - |
 | `drawCircle` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `9` | `requires_init` | - |
 | `fillCircle` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `9` | `requires_init` | - |
+| `drawEllipse` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `10` | `requires_init` | - |
+| `fillEllipse` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `10` | `requires_init` | - |
 | `drawTriangle` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `12` | `requires_init` | - |
 | `fillTriangle` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_COLOR_INDEX)` | `12` | `requires_init` | - |
 | `setTextSize` | `LGFX_OP_TARGET_ANY` | `F0` | `6/7` | `requires_init` | - |

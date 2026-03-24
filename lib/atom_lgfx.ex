@@ -322,6 +322,18 @@ defmodule AtomLGFX do
     do: Primitives.fill_rect(port, x, y, width, height, color, target)
 
   @doc """
+  Draws a rounded rectangle outline using the given scalar color.
+  """
+  def draw_round_rect(port, x, y, width, height, radius, color, target \\ 0),
+    do: Primitives.draw_round_rect(port, x, y, width, height, radius, color, target)
+
+  @doc """
+  Fills a rounded rectangle using the given scalar color.
+  """
+  def fill_round_rect(port, x, y, width, height, radius, color, target \\ 0),
+    do: Primitives.fill_round_rect(port, x, y, width, height, radius, color, target)
+
+  @doc """
   Draws a circle outline using the given scalar color.
   """
   def draw_circle(port, x, y, radius, color, target \\ 0),
@@ -332,6 +344,18 @@ defmodule AtomLGFX do
   """
   def fill_circle(port, x, y, radius, color, target \\ 0),
     do: Primitives.fill_circle(port, x, y, radius, color, target)
+
+  @doc """
+  Draws an ellipse outline using the given scalar color.
+  """
+  def draw_ellipse(port, x, y, radius_x, radius_y, color, target \\ 0),
+    do: Primitives.draw_ellipse(port, x, y, radius_x, radius_y, color, target)
+
+  @doc """
+  Fills an ellipse using the given scalar color.
+  """
+  def fill_ellipse(port, x, y, radius_x, radius_y, color, target \\ 0),
+    do: Primitives.fill_ellipse(port, x, y, radius_x, radius_y, color, target)
 
   @doc """
   Draws a triangle outline using the given scalar color.

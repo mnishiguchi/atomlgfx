@@ -60,6 +60,24 @@ defmodule AtomLGFX.Primitives do
     scalar_call(port, :fillRect, target, [x, y, width, height, color])
   end
 
+  def draw_round_rect(port, x, y, width, height, radius, color, target \\ 0)
+      when i16(x) and i16(y) and
+             u16(width) and
+             u16(height) and
+             u16(radius) and
+             target_any(target) do
+    scalar_call(port, :drawRoundRect, target, [x, y, width, height, radius, color])
+  end
+
+  def fill_round_rect(port, x, y, width, height, radius, color, target \\ 0)
+      when i16(x) and i16(y) and
+             u16(width) and
+             u16(height) and
+             u16(radius) and
+             target_any(target) do
+    scalar_call(port, :fillRoundRect, target, [x, y, width, height, radius, color])
+  end
+
   def draw_circle(port, x, y, radius, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(radius) and
@@ -72,6 +90,22 @@ defmodule AtomLGFX.Primitives do
              u16(radius) and
              target_any(target) do
     scalar_call(port, :fillCircle, target, [x, y, radius, color])
+  end
+
+  def draw_ellipse(port, x, y, radius_x, radius_y, color, target \\ 0)
+      when i16(x) and i16(y) and
+             u16(radius_x) and
+             u16(radius_y) and
+             target_any(target) do
+    scalar_call(port, :drawEllipse, target, [x, y, radius_x, radius_y, color])
+  end
+
+  def fill_ellipse(port, x, y, radius_x, radius_y, color, target \\ 0)
+      when i16(x) and i16(y) and
+             u16(radius_x) and
+             u16(radius_y) and
+             target_any(target) do
+    scalar_call(port, :fillEllipse, target, [x, y, radius_x, radius_y, color])
   end
 
   def draw_triangle(port, x0, y0, x1, y1, x2, y2, color, target \\ 0)

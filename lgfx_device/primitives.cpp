@@ -143,6 +143,44 @@ extern "C" esp_err_t lgfx_device_fill_rect(
         [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->fillRect(x, y, w, h, scalar_color); });
 }
 
+extern "C" esp_err_t lgfx_device_draw_round_rect(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t r,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->drawRoundRect(x, y, w, h, r, scalar_color);
+        });
+}
+
+extern "C" esp_err_t lgfx_device_fill_round_rect(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t r,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->fillRoundRect(x, y, w, h, r, scalar_color);
+        });
+}
+
 extern "C" esp_err_t lgfx_device_draw_circle(
     uint8_t target,
     int16_t x,
@@ -171,6 +209,42 @@ extern "C" esp_err_t lgfx_device_fill_circle(
         color_is_index,
         color_value,
         [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->fillCircle(x, y, r, scalar_color); });
+}
+
+extern "C" esp_err_t lgfx_device_draw_ellipse(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t rx,
+    uint16_t ry,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->drawEllipse(x, y, rx, ry, scalar_color);
+        });
+}
+
+extern "C" esp_err_t lgfx_device_fill_ellipse(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t rx,
+    uint16_t ry,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->fillEllipse(x, y, rx, ry, scalar_color);
+        });
 }
 
 extern "C" esp_err_t lgfx_device_draw_triangle(

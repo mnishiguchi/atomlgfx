@@ -11,6 +11,7 @@ defmodule SampleApp do
   alias SampleApp.MovingIcons
   alias SampleApp.ProtocolSmoke
   alias SampleApp.PushImageStress
+  alias SampleApp.ShapeSmoke
   alias SampleApp.SpriteProtocolSmoke
   alias SampleApp.TextProbe
   alias SampleApp.TouchCalibrate
@@ -25,6 +26,7 @@ defmodule SampleApp do
     :clip,
     :jpg,
     :sprites,
+    :shapes,
     :text,
     :touch,
     :calibrate,
@@ -89,6 +91,7 @@ defmodule SampleApp do
   # - :clip          -> clipping smoke (requires boot)
   # - :jpg           -> JPEG decode / draw smoke (requires boot)
   # - :sprites       -> sprite protocol smoke (requires boot)
+  # - :shapes        -> round-rect + ellipse smoke (requires boot)
   # - :text          -> text + font probe (requires boot)
   # - :touch         -> touch probe (requires boot)
   # - :calibrate     -> interactive touch calibration (requires boot)
@@ -150,6 +153,12 @@ defmodule SampleApp do
   defp run_mode(port, :sprites) do
     with_boot(port, fn ->
       step("sprite_protocol_smoke", SpriteProtocolSmoke.run(port))
+    end)
+  end
+
+  defp run_mode(port, :shapes) do
+    with_boot_dims(port, fn w, h ->
+      step("shape_smoke", ShapeSmoke.run(port, w, h))
     end)
   end
 
