@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Repo-wide policy checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  reuse-check:
+    name: REUSE compliance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install REUSE tool
+        run: python -m pip install --upgrade pip reuse
+
+      - name: Check REUSE compliance
+        run: reuse lint --plain
+
+  docs-protocol-check:
+    name: Protocol docs and SPDX headers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "27"
+          elixir-version: "1.17"
+
+      - name: Check protocol docs are up to date
+        run: elixir scripts/sync_lgfx_protocol_doc.exs --check
