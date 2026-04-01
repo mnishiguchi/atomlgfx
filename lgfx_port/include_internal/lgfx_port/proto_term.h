@@ -18,6 +18,9 @@
 #include "context.h"
 #include "term.h" // AtomVM core term API
 
+#include "lgfx_port/lgfx_port_internal.h"
+#include "lgfx_port/protocol.h" // protocol constants / limits
+
 // -----------------------------------------------------------------------------
 // AtomVM compatibility
 // -----------------------------------------------------------------------------
@@ -32,28 +35,13 @@
 #define term_from_int32(v) term_from_int((avm_int_t) (v))
 #endif
 
-#include "lgfx_port/protocol.h" // protocol constants / limits
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Forward declaration; implementations live in proto_term.c.
-typedef struct lgfx_port_t lgfx_port_t;
-
 // -----------------------------------------------------------------------------
 // Request decode surface
 // -----------------------------------------------------------------------------
-
-typedef struct lgfx_request_t
-{
-    uint32_t proto_ver;
-    term op;
-    uint32_t target;
-    uint32_t flags;
-    term request_tuple;
-    int arity;
-} lgfx_request_t;
 
 // Decode {lgfx, ProtoVer, Op, Target, Flags, ...}.
 // Structural decode only; policy validation happens in lgfx_port.c.
@@ -81,23 +69,17 @@ bool lgfx_is_error_reply(Context *ctx, lgfx_port_t *port, term reply, term *out_
 
 static inline bool lgfx_validate_i16(int32_t v)
 {
-    return v >= -32768 && v <= 32767;
+    return v >= INT16_MIN && v <= INT16_MAX;
 }
 
 static inline bool lgfx_validate_u16(uint32_t v)
 {
-    return v <= 65535u;
-}
-
-static inline bool lgfx_validate_color888(uint32_t c)
-{
-    // Packed RGB888 only: 0x00RRGGBB.
-    return (c & 0xFF000000u) == 0;
+    return v <= UINT16_MAX;
 }
 
 static inline bool lgfx_term_to_u32(term t, uint32_t *out)
 {
-    if (!term_is_integer(t)) {
+    if (!out || !term_is_integer(t)) {
         return false;
     }
 
@@ -117,7 +99,7 @@ static inline bool lgfx_term_to_u32(term t, uint32_t *out)
 
 static inline bool lgfx_term_to_i32(term t, int32_t *out)
 {
-    if (!term_is_integer(t)) {
+    if (!out || !term_is_integer(t)) {
         return false;
     }
 
@@ -133,7 +115,7 @@ static inline bool lgfx_term_to_i32(term t, int32_t *out)
 static inline bool lgfx_term_to_i16(term t, int16_t *out)
 {
     int32_t v = 0;
-    if (!lgfx_term_to_i32(t, &v) || !lgfx_validate_i16(v)) {
+    if (!out || !lgfx_term_to_i32(t, &v) || !lgfx_validate_i16(v)) {
         return false;
     }
 
@@ -144,7 +126,7 @@ static inline bool lgfx_term_to_i16(term t, int16_t *out)
 static inline bool lgfx_term_to_u16(term t, uint16_t *out)
 {
     uint32_t v = 0;
-    if (!lgfx_term_to_u32(t, &v) || !lgfx_validate_u16(v)) {
+    if (!out || !lgfx_term_to_u32(t, &v) || !lgfx_validate_u16(v)) {
         return false;
     }
 
@@ -196,11 +178,26 @@ static inline bool lgfx_term_to_color565(term color_t, uint16_t *out_color565)
 term lgfx_reply_from_esp_err(Context *ctx, lgfx_port_t *port, esp_err_t err);
 
 // esp_err -> protocol reply mapping with last_error update.
-term lgfx_reply_from_esp_err_req(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, esp_err_t err);
+term lgfx_reply_from_esp_err_req(
+    Context *ctx,
+    lgfx_port_t *port,
+    const lgfx_request_t *req,
+    esp_err_t err);
 
 // Reply constructors with last_error update.
-term lgfx_reply_ok_req(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, term payload);
-term lgfx_reply_error_req(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, term reason, int32_t esp_err);
+term lgfx_reply_ok_req(
+    Context *ctx,
+    lgfx_port_t *port,
+    const lgfx_request_t *req,
+    term payload);
+
+term lgfx_reply_error_req(
+    Context *ctx,
+    lgfx_port_t *port,
+    const lgfx_request_t *req,
+    term reason,
+    int32_t esp_err);
+
 term lgfx_reply_error_detail_req(
     Context *ctx,
     lgfx_port_t *port,
@@ -209,7 +206,6 @@ term lgfx_reply_error_detail_req(
     term detail,
     int32_t esp_err);
 
-// Handler-facing wrappers.
 #define LGFX_RETURN_IF_ESP_ERR(ctx, port, req, esp_expr)                     \
     do {                                                                     \
         esp_err_t __err = (esp_expr);                                        \
@@ -224,13 +220,22 @@ static inline term reply_ok(Context *ctx, lgfx_port_t *port, const lgfx_request_
 }
 
 static inline term reply_error(
-    Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, term reason, int32_t esp_err)
+    Context *ctx,
+    lgfx_port_t *port,
+    const lgfx_request_t *req,
+    term reason,
+    int32_t esp_err)
 {
     return lgfx_reply_error_req(ctx, port, req, reason, esp_err);
 }
 
 static inline term reply_error_detail(
-    Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, term reason, term detail, int32_t esp_err)
+    Context *ctx,
+    lgfx_port_t *port,
+    const lgfx_request_t *req,
+    term reason,
+    term detail,
+    int32_t esp_err)
 {
     return lgfx_reply_error_detail_req(ctx, port, req, reason, detail, esp_err);
 }

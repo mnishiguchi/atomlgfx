@@ -4,8 +4,8 @@
 
 // lgfx_device/images.cpp
 
-#include "lgfx_device.h"
-#include "lgfx_device_internal.hpp"
+#include "lgfx_device/lgfx_device.h"
+#include "lgfx_device/lgfx_device_internal.hpp"
 
 #include <cmath>
 #include <limits.h>
@@ -72,7 +72,7 @@ extern "C" esp_err_t lgfx_device_draw_jpg(
         return err;
     }
 
-    lgfx::LGFXBase *gfx = lgfx_dev::resolve_target_locked(target);
+    lgfx::LGFXBase *gfx = lgfx_dev::resolve_render_target_locked(target);
     if (!gfx) {
         return ESP_ERR_NOT_FOUND;
     }
@@ -135,7 +135,7 @@ extern "C" esp_err_t lgfx_device_push_image_rgb565_strided(
         return err;
     }
 
-    lgfx::LGFXBase *gfx = lgfx_dev::resolve_target_locked(target);
+    lgfx::LGFXBase *gfx = lgfx_dev::resolve_render_target_locked(target);
     if (!gfx) {
         return ESP_ERR_NOT_FOUND;
     }

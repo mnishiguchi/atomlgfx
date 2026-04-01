@@ -14,6 +14,9 @@ defmodule AtomLGFX.Errors do
   def format_error(:empty_jpeg),
     do: "JPEG binary must not be empty"
 
+  def format_error(:empty_batch),
+    do: "batch must not be empty"
+
   def format_error(:missing_scalar_color),
     do: "missing scalar color"
 
@@ -87,6 +90,9 @@ defmodule AtomLGFX.Errors do
 
   def format_error({:bad_touch_calibrate_params, value}),
     do: "bad touch calibration params #{inspect(value)}"
+
+  def format_error({:bad_batch_command, value}),
+    do: "bad batch command #{inspect(value)}"
 
   def format_error({:unexpected_reply, value}),
     do: "unexpected port reply #{inspect(value)}"

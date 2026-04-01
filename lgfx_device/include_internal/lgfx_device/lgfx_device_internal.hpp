@@ -17,7 +17,7 @@
 #include <LovyanGFX.hpp>
 
 #include "esp_err.h"
-#include "lgfx_device.h"
+#include "lgfx_device/lgfx_device.h"
 
 namespace lgfx_dev
 {
@@ -76,6 +76,11 @@ esp_err_t lock_ready(ScopedLcdLock &lock);
 esp_err_t start_write();
 esp_err_t end_write();
 
+// Locked write-session helpers.
+// Caller must already hold the LCD lock and have passed ready-state checks.
+esp_err_t start_write_locked();
+esp_err_t end_write_locked();
+
 // -----------------------------------------------------------------------------
 // Shared state accessors (must be called while LCD lock is held unless noted)
 // -----------------------------------------------------------------------------
@@ -85,6 +90,51 @@ lgfx::LGFX_Device *lcd_device_locked();
 
 // Resolve target 0 => LCD, 1..MAX_HANDLE => sprite. Returns nullptr if invalid/missing.
 lgfx::LGFXBase *resolve_target_locked(uint8_t target);
+
+// Resolve logical render target as a generic drawing target.
+//
+// Current behavior:
+// - target 0 resolves to the active native presentation strip while a strip
+//   frame is open
+// - otherwise target 0 falls back to the live LCD
+// - sprite targets resolve normally
+//
+// This keeps LCD control helpers bound to the real device while allowing
+// logical LCD drawing to be redirected through the native presentation layer.
+lgfx::LGFXBase *resolve_render_target_locked(uint8_t target);
+
+// Resolve logical render surface for sprite push APIs.
+//
+// LovyanGFX sprite push APIs require a LovyanGFX* destination rather than a
+// generic LGFXBase*.
+//
+// Current behavior matches resolve_render_target_locked() for LCD target 0:
+// - use the active native presentation strip while a strip frame is open
+// - otherwise fall back to the live LCD
+lgfx::LovyanGFX *resolve_render_surface_locked(uint8_t target);
+
+// Internal presentation / composition state helpers.
+//
+// Current native presentation model:
+// - strip buffers are allocated lazily
+// - allocation uses adaptive double strip buffers
+// - target 0 drawing is redirected only while a native strip frame is active
+// - fallback remains direct LCD rendering when strip allocation is unavailable
+bool presentation_enabled_locked();
+esp_err_t presentation_reset_locked();
+esp_err_t presentation_configure_locked(
+    uint16_t lcd_width,
+    uint16_t lcd_height,
+    uint16_t strip_height);
+uint16_t presentation_strip_height_locked();
+esp_err_t presentation_ensure_buffers_locked();
+esp_err_t presentation_begin_strip_locked(uint16_t y0);
+esp_err_t presentation_present_strip_locked();
+esp_err_t presentation_rebuild_locked();
+esp_err_t presentation_present_locked();
+esp_err_t presentation_destroy_buffers_locked();
+esp_err_t presentation_set_color_depth_locked(uint8_t depth);
+esp_err_t presentation_set_swap_bytes_locked(bool enabled);
 
 // Resolve sprite handle only (1..MAX_HANDLE). Returns nullptr if invalid/missing.
 lgfx::LGFX_Sprite *resolve_sprite_locked(uint8_t handle);
@@ -277,7 +327,7 @@ static inline esp_err_t validate_sprite_transparent_scalar(
 }
 
 // -----------------------------------------------------------------------------
-// Shared wrappers (inline templates)
+// Shared wrappers (ordinary sync path)
 // -----------------------------------------------------------------------------
 
 template <typename F>
@@ -321,6 +371,28 @@ inline esp_err_t with_target(uint8_t target, F &&fn)
 }
 
 template <typename F>
+inline esp_err_t with_render_target(uint8_t target, F &&fn)
+{
+    if (!protocol_valid_target(target)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    ScopedLcdLock lock;
+    esp_err_t err = lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    lgfx::LGFXBase *gfx = resolve_render_target_locked(target);
+    if (!gfx) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    fn(gfx);
+    return ESP_OK;
+}
+
+template <typename F>
 inline esp_err_t with_sprite(uint8_t handle, F &&fn)
 {
     if (!lgfx_device_is_sprite_target(handle)) {
@@ -341,6 +413,158 @@ inline esp_err_t with_sprite(uint8_t handle, F &&fn)
     fn(spr);
     return ESP_OK;
 }
+
+// -----------------------------------------------------------------------------
+// Shared wrappers (batch path; caller already holds LCD lock)
+// -----------------------------------------------------------------------------
+
+template <typename F>
+inline esp_err_t with_lcd_locked(F &&fn)
+{
+    auto *d = lcd_device_locked();
+    if (!d) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    fn(d);
+    return ESP_OK;
+}
+
+template <typename F>
+inline esp_err_t with_target_locked(uint8_t target, F &&fn)
+{
+    if (!protocol_valid_target(target)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    lgfx::LGFXBase *gfx = resolve_target_locked(target);
+    if (!gfx) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    fn(gfx);
+    return ESP_OK;
+}
+
+template <typename F>
+inline esp_err_t with_render_target_locked(uint8_t target, F &&fn)
+{
+    if (!protocol_valid_target(target)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    lgfx::LGFXBase *gfx = resolve_render_target_locked(target);
+    if (!gfx) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    fn(gfx);
+    return ESP_OK;
+}
+
+template <typename F>
+inline esp_err_t with_sprite_locked(uint8_t handle, F &&fn)
+{
+    if (!lgfx_device_is_sprite_target(handle)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    lgfx::LGFX_Sprite *spr = resolve_sprite_locked(handle);
+    if (!spr) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    fn(spr);
+    return ESP_OK;
+}
+
+// -----------------------------------------------------------------------------
+// Internal locked op entry points (batch-only hot path)
+// -----------------------------------------------------------------------------
+
+esp_err_t fill_screen_locked(
+    uint8_t target,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t fill_rect_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t draw_line_locked(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t set_clip_rect_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h);
+
+esp_err_t clear_clip_rect_locked(uint8_t target);
+
+esp_err_t set_text_size_locked(
+    uint8_t target,
+    float scale_x,
+    float scale_y);
+
+esp_err_t set_text_datum_locked(
+    uint8_t target,
+    uint8_t datum);
+
+esp_err_t set_text_wrap_locked(
+    uint8_t target,
+    bool wrap_x,
+    bool wrap_y);
+
+esp_err_t set_text_font_preset_locked(
+    uint8_t target,
+    lgfx_font_preset_t preset);
+
+esp_err_t set_text_color_locked(
+    uint8_t target,
+    bool fg_is_index,
+    uint32_t fg_value,
+    bool has_bg,
+    bool bg_is_index,
+    uint32_t bg_value);
+
+esp_err_t set_cursor_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y);
+
+esp_err_t push_sprite_locked(
+    uint8_t src_handle,
+    uint8_t dst_target,
+    int16_t dst_x,
+    int16_t dst_y,
+    bool has_transparent,
+    bool transparent_is_index,
+    uint32_t transparent_value);
+
+esp_err_t push_rotate_zoom_locked(
+    uint8_t src_handle,
+    uint8_t dst_target,
+    int16_t dst_x,
+    int16_t dst_y,
+    float angle,
+    float zoom_x,
+    float zoom_y,
+    bool has_transparent,
+    bool transparent_is_index,
+    uint32_t transparent_value);
 
 } // namespace lgfx_dev
 

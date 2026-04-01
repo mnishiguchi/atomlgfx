@@ -3,18 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // lgfx_device/state.cpp
+
 #include <new>
 #include <stddef.h>
 #include <stdint.h>
-
-#include <LovyanGFX.hpp>
-
-// Generated build config
-#include "lgfx_port/lgfx_port_config.h"
-
-#if (LGFX_PORT_ENABLE_TOUCH == 1)
-#include <lgfx/v1/touch/Touch_XPT2046.hpp>
-#endif
 
 #include "esp_err.h"
 #include "esp_log.h"
@@ -23,66 +15,9 @@
 #include "freertos/portmacro.h"
 #include "freertos/semphr.h"
 
-#include "lgfx_device.h"
-#include "lgfx_device_internal.hpp"
-
-// ----------------------------------------------------------------------------
-// Semantic config validation
-// ----------------------------------------------------------------------------
-// Keep only checks that prevent silent misconfiguration or narrowing surprises.
-
-#ifndef LGFX_PORT_PANEL_DRIVER_ILI9341_2
-#error "LGFX_PORT_PANEL_DRIVER_ILI9341_2 must be defined by lgfx_port_config.h"
-#endif
-
-#ifndef LGFX_PORT_PANEL_DRIVER_ST7789
-#error "LGFX_PORT_PANEL_DRIVER_ST7789 must be defined by lgfx_port_config.h"
-#endif
-
-#define LGFX_PORT_ASSERT_BOOL01(name) \
-    static_assert(((name) == 0) || ((name) == 1), #name " must be 0 or 1")
-
-LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_ENABLE_TOUCH);
-LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_PANEL_DRIVER_ILI9488);
-LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_PANEL_DRIVER_ILI9341);
-LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_PANEL_DRIVER_ILI9341_2);
-LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_PANEL_DRIVER_ST7789);
-LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_SPI_3WIRE);
-LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_USE_LOCK);
-LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_READABLE);
-LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_INVERT);
-LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_RGB_ORDER);
-LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_DLEN_16BIT);
-LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_LCD_BUS_SHARED);
-
-#if (LGFX_PORT_ENABLE_TOUCH == 1)
-LGFX_PORT_ASSERT_BOOL01(LGFX_PORT_TOUCH_BUS_SHARED);
-#endif
-
-#undef LGFX_PORT_ASSERT_BOOL01
-
-static_assert(
-    (LGFX_PORT_PANEL_DRIVER_ILI9488
-        + LGFX_PORT_PANEL_DRIVER_ILI9341
-        + LGFX_PORT_PANEL_DRIVER_ILI9341_2
-        + LGFX_PORT_PANEL_DRIVER_ST7789)
-        == 1,
-    "Exactly one panel driver must be selected");
-
-static_assert((LGFX_PORT_MAX_SPRITES) >= 1u && (LGFX_PORT_MAX_SPRITES) <= 254u,
-    "LGFX_PORT_MAX_SPRITES must be in 1..254");
-static_assert((LGFX_PORT_PANEL_WIDTH) >= 1 && (LGFX_PORT_PANEL_WIDTH) <= 65535u,
-    "LGFX_PORT_PANEL_WIDTH must be in 1..65535");
-static_assert((LGFX_PORT_PANEL_HEIGHT) >= 1 && (LGFX_PORT_PANEL_HEIGHT) <= 65535u,
-    "LGFX_PORT_PANEL_HEIGHT must be in 1..65535");
-static_assert((LGFX_PORT_LCD_SPI_MODE) >= 0 && (LGFX_PORT_LCD_SPI_MODE) <= 3,
-    "LGFX_PORT_LCD_SPI_MODE must be in 0..3");
-static_assert((LGFX_PORT_LCD_OFFSET_ROTATION) <= 7u,
-    "LGFX_PORT_LCD_OFFSET_ROTATION must be in 0..7");
-
-#if (LGFX_PORT_ENABLE_TOUCH == 1)
-static_assert((LGFX_PORT_TOUCH_OFFSET_ROTATION) <= 7u, "LGFX_PORT_TOUCH_OFFSET_ROTATION must be 0..7");
-#endif
+#include "lgfx_device/lgfx_device.h"
+#include "lgfx_device/lgfx_device_internal.hpp"
+#include "lgfx_device/state_runtime.hpp"
 
 namespace
 {
@@ -96,8 +31,7 @@ static constexpr const char *TAG = "lgfx_device";
 // Protects singleton publication state. Keep critical sections short and allocation-free.
 static portMUX_TYPE g_publication_mux = portMUX_INITIALIZER_UNLOCKED;
 
-class PiyopiyoLGFX;
-static PiyopiyoLGFX *g_lcd_device = nullptr;
+static lgfx::LGFX_Device *g_lcd_device = nullptr;
 static SemaphoreHandle_t g_lcd_mutex = nullptr;
 
 // Live singleton owner token. Null means no current owner.
@@ -107,56 +41,11 @@ static const void *g_device_owner_token = nullptr;
 static bool g_device_ready = false;
 
 // ----------------------------------------------------------------------------
-// Build-default panel driver selection
-// ----------------------------------------------------------------------------
-
-#if (LGFX_PORT_PANEL_DRIVER_ILI9488 == 1)
-static constexpr lgfx_panel_driver_id_t BUILD_PANEL_DRIVER_ID = LGFX_PANEL_DRIVER_ID_ILI9488;
-#elif (LGFX_PORT_PANEL_DRIVER_ILI9341 == 1)
-static constexpr lgfx_panel_driver_id_t BUILD_PANEL_DRIVER_ID = LGFX_PANEL_DRIVER_ID_ILI9341;
-#elif (LGFX_PORT_PANEL_DRIVER_ILI9341_2 == 1)
-static constexpr lgfx_panel_driver_id_t BUILD_PANEL_DRIVER_ID = LGFX_PANEL_DRIVER_ID_ILI9341_2;
-#elif (LGFX_PORT_PANEL_DRIVER_ST7789 == 1)
-static constexpr lgfx_panel_driver_id_t BUILD_PANEL_DRIVER_ID = LGFX_PANEL_DRIVER_ID_ST7789;
-#else
-#error "Unsupported LGFX panel driver selection"
-#endif
-
-static inline const char *panel_driver_name(lgfx_panel_driver_id_t driver_id)
-{
-    switch (driver_id) {
-        case LGFX_PANEL_DRIVER_ID_ILI9488:
-            return "ILI9488";
-        case LGFX_PANEL_DRIVER_ID_ILI9341:
-            return "ILI9341";
-        case LGFX_PANEL_DRIVER_ID_ILI9341_2:
-            return "ILI9341_2";
-        case LGFX_PANEL_DRIVER_ID_ST7789:
-            return "ST7789";
-        default:
-            return "unknown";
-    }
-}
-
-static inline bool is_known_panel_driver_id(lgfx_panel_driver_id_t driver_id)
-{
-    switch (driver_id) {
-        case LGFX_PANEL_DRIVER_ID_ILI9488:
-        case LGFX_PANEL_DRIVER_ID_ILI9341:
-        case LGFX_PANEL_DRIVER_ID_ILI9341_2:
-        case LGFX_PANEL_DRIVER_ID_ST7789:
-            return true;
-        default:
-            return false;
-    }
-}
-
-// ----------------------------------------------------------------------------
 // Shared compile-time constants
 // ----------------------------------------------------------------------------
 
-static constexpr uint16_t PANEL_W = (uint16_t) (LGFX_PORT_PANEL_WIDTH);
-static constexpr uint16_t PANEL_H = (uint16_t) (LGFX_PORT_PANEL_HEIGHT);
+static_assert((LGFX_PORT_MAX_SPRITES) >= 1u && (LGFX_PORT_MAX_SPRITES) <= 254u,
+    "LGFX_PORT_MAX_SPRITES must be in 1..254");
 
 static constexpr uint16_t MAX_SPRITES = static_cast<uint16_t>(LGFX_PORT_MAX_SPRITES);
 static constexpr uint8_t MAX_HANDLE = 254;
@@ -167,10 +56,169 @@ static constexpr uint8_t MAX_HANDLE = 254;
 
 struct DevicePublicationSnapshot
 {
-    PiyopiyoLGFX *lcd;
+    lgfx::LGFX_Device *lcd;
     const void *owner_token;
     bool ready;
 };
+
+// Internal LCD presentation state.
+//
+// Current behavior:
+//
+// - target 0 resolves to the active native strip buffer only while a strip
+//   frame is open
+// - presentation_present_strip_locked() blits that strip to the live LCD at y0
+// - display() remains the final LCD flush
+// - public target numbering stays unchanged
+//
+// This is a transitional native presentation layer:
+// - strip buffers are allocated lazily
+// - allocation uses adaptive double strip buffers
+// - failure falls back to direct LCD rendering
+// - the current Elixir demo may still own higher-level strip orchestration
+struct LcdPresentationState
+{
+    bool enabled;
+    bool attempted;
+
+    uint16_t lcd_width;
+    uint16_t lcd_height;
+    uint16_t strip_height;
+    uint16_t current_strip_y;
+
+    bool frame_active;
+    bool swap_bytes_enabled;
+
+    uint8_t next_buffer_index;
+
+    lgfx::LGFX_Sprite *front;
+    lgfx::LGFX_Sprite *back;
+    lgfx::LGFX_Sprite *current;
+};
+
+static LcdPresentationState g_presentation = {};
+
+static inline void reset_presentation_state_locked()
+{
+    g_presentation.enabled = false;
+    g_presentation.attempted = false;
+    g_presentation.lcd_width = 0;
+    g_presentation.lcd_height = 0;
+    g_presentation.strip_height = 0;
+    g_presentation.current_strip_y = 0;
+    g_presentation.frame_active = false;
+    g_presentation.swap_bytes_enabled = false;
+    g_presentation.next_buffer_index = 0;
+    g_presentation.front = nullptr;
+    g_presentation.back = nullptr;
+    g_presentation.current = nullptr;
+}
+
+static inline void destroy_presentation_sprite(lgfx::LGFX_Sprite *&spr)
+{
+    if (spr != nullptr) {
+        spr->deleteSprite();
+        delete spr;
+        spr = nullptr;
+    }
+}
+
+static inline uint16_t clamp_requested_strip_height(uint16_t lcd_h, uint16_t requested)
+{
+    if (lcd_h == 0) {
+        return 0;
+    }
+
+    if (requested == 0 || requested > lcd_h) {
+        return (lcd_h > 160) ? 160 : lcd_h;
+    }
+
+    return requested;
+}
+
+static inline uint16_t next_smaller_strip_height(uint16_t current)
+{
+    if (current <= 1) {
+        return 0;
+    }
+
+    uint16_t next = current / 2;
+    return next == 0 ? 1 : next;
+}
+
+static lgfx::LGFX_Sprite *create_presentation_strip_sprite(
+    lgfx::LGFX_Device *lcd,
+    uint16_t strip_w,
+    uint16_t strip_h,
+    bool swap_bytes_enabled)
+{
+    auto *spr = new (std::nothrow) lgfx::LGFX_Sprite(lcd);
+    if (!spr) {
+        return nullptr;
+    }
+
+    const uint8_t depth = static_cast<uint8_t>(lcd->getColorDepth());
+    if (depth != 0) {
+        spr->setColorDepth(depth);
+    }
+
+    spr->createSprite(strip_w, strip_h);
+    if (spr->getBuffer() == nullptr) {
+        delete spr;
+        return nullptr;
+    }
+
+    spr->setSwapBytes(swap_bytes_enabled);
+    spr->setTextSize(1.0f);
+    spr->setTextDatum(textdatum_t::top_left);
+    return spr;
+}
+
+static esp_err_t presentation_try_allocate_locked(
+    lgfx::LGFX_Device *lcd,
+    uint16_t lcd_w,
+    uint16_t lcd_h,
+    uint16_t strip_h)
+{
+    lgfx::LGFX_Sprite *front = create_presentation_strip_sprite(
+        lcd,
+        lcd_w,
+        strip_h,
+        g_presentation.swap_bytes_enabled);
+
+    if (!front) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    lgfx::LGFX_Sprite *back = create_presentation_strip_sprite(
+        lcd,
+        lcd_w,
+        strip_h,
+        g_presentation.swap_bytes_enabled);
+
+    if (!back) {
+        destroy_presentation_sprite(front);
+        return ESP_ERR_NO_MEM;
+    }
+
+    destroy_presentation_sprite(g_presentation.front);
+    destroy_presentation_sprite(g_presentation.back);
+
+    g_presentation.front = front;
+    g_presentation.back = back;
+    g_presentation.current = nullptr;
+
+    g_presentation.enabled = true;
+    g_presentation.attempted = true;
+    g_presentation.lcd_width = lcd_w;
+    g_presentation.lcd_height = lcd_h;
+    g_presentation.strip_height = strip_h;
+    g_presentation.current_strip_y = 0;
+    g_presentation.frame_active = false;
+    g_presentation.next_buffer_index = 0;
+
+    return ESP_OK;
+}
 
 static DevicePublicationSnapshot snapshot_device_publication()
 {
@@ -206,566 +254,16 @@ static inline bool snapshot_is_fully_unpublished(const DevicePublicationSnapshot
 }
 
 // ----------------------------------------------------------------------------
-// Native runtime config
+// Sprite registry
 // ----------------------------------------------------------------------------
-
-struct LgfxRuntimeConfig
-{
-    struct SpiBusConfig
-    {
-        int host;
-        uint8_t mode;
-        uint32_t freq_write_hz;
-        uint32_t freq_read_hz;
-        int dma_channel;
-        bool spi_3wire;
-        bool use_lock;
-        int pin_sclk;
-        int pin_mosi;
-        int pin_miso;
-        int pin_dc;
-    };
-
-    struct PanelConfig
-    {
-        lgfx_panel_driver_id_t driver_id;
-        const char *driver_name;
-        uint16_t width;
-        uint16_t height;
-        int pin_cs;
-        int pin_rst;
-        int pin_busy;
-        int offset_x;
-        int offset_y;
-        uint8_t offset_rotation;
-        uint8_t dummy_read_pixel;
-        uint8_t dummy_read_bits;
-        bool readable;
-        bool invert;
-        bool rgb_order;
-        bool dlen_16bit;
-        bool bus_shared;
-    };
-
-    struct TouchConfig
-    {
-        bool compiled;
-        bool attached;
-        int pin_cs;
-        int pin_irq;
-        int spi_host;
-        uint32_t spi_freq_hz;
-        uint8_t offset_rotation;
-        bool bus_shared;
-    };
-
-    SpiBusConfig lcd_bus;
-    PanelConfig lcd_panel;
-    TouchConfig touch;
-};
-
-static void apply_panel_driver_baseline(
-    LgfxRuntimeConfig &config,
-    lgfx_panel_driver_id_t driver_id)
-{
-    config.lcd_panel.driver_id = driver_id;
-    config.lcd_panel.driver_name = panel_driver_name(driver_id);
-
-    switch (driver_id) {
-        case LGFX_PANEL_DRIVER_ID_ILI9488:
-            config.lcd_panel.width = 320;
-            config.lcd_panel.height = 480;
-            config.lcd_panel.offset_rotation = 0;
-            config.lcd_panel.dummy_read_pixel = 8;
-            config.lcd_panel.dummy_read_bits = 1;
-            config.lcd_panel.readable = false;
-            config.lcd_panel.invert = false;
-            config.lcd_panel.rgb_order = false;
-            config.lcd_panel.dlen_16bit = false;
-            config.touch.offset_rotation = 0;
-            break;
-
-        case LGFX_PANEL_DRIVER_ID_ILI9341:
-            config.lcd_panel.width = 240;
-            config.lcd_panel.height = 320;
-            config.lcd_panel.offset_rotation = 0;
-            config.lcd_panel.dummy_read_pixel = 8;
-            config.lcd_panel.dummy_read_bits = 1;
-            config.lcd_panel.readable = false;
-            config.lcd_panel.invert = false;
-            config.lcd_panel.rgb_order = false;
-            config.lcd_panel.dlen_16bit = false;
-            config.touch.offset_rotation = 0;
-            break;
-
-        case LGFX_PANEL_DRIVER_ID_ILI9341_2:
-            config.lcd_panel.width = 240;
-            config.lcd_panel.height = 320;
-            config.lcd_panel.offset_rotation = 4;
-            config.lcd_panel.dummy_read_pixel = 8;
-            config.lcd_panel.dummy_read_bits = 1;
-            config.lcd_panel.readable = false;
-            config.lcd_panel.invert = true;
-            config.lcd_panel.rgb_order = false;
-            config.lcd_panel.dlen_16bit = false;
-            config.touch.offset_rotation = 4;
-            break;
-
-        case LGFX_PANEL_DRIVER_ID_ST7789:
-            config.lcd_panel.width = 240;
-            config.lcd_panel.height = 240;
-            config.lcd_panel.offset_rotation = 0;
-            config.lcd_panel.dummy_read_pixel = 16;
-            config.lcd_panel.dummy_read_bits = 1;
-            config.lcd_panel.readable = false;
-            config.lcd_panel.invert = false;
-            config.lcd_panel.rgb_order = false;
-            config.lcd_panel.dlen_16bit = false;
-            config.touch.offset_rotation = 0;
-            break;
-
-        default:
-            break;
-    }
-}
-
-static LgfxRuntimeConfig runtime_config_from_build_defaults()
-{
-    LgfxRuntimeConfig config = {};
-
-    config.lcd_bus.host = (int) (LGFX_PORT_LCD_SPI_HOST);
-    config.lcd_bus.mode = (uint8_t) (LGFX_PORT_LCD_SPI_MODE);
-    config.lcd_bus.freq_write_hz = (uint32_t) (LGFX_PORT_LCD_FREQ_WRITE_HZ);
-    config.lcd_bus.freq_read_hz = (uint32_t) (LGFX_PORT_LCD_FREQ_READ_HZ);
-    config.lcd_bus.dma_channel = (int) (LGFX_PORT_LCD_DMA_CHANNEL);
-    config.lcd_bus.spi_3wire = ((LGFX_PORT_LCD_SPI_3WIRE) != 0);
-    config.lcd_bus.use_lock = ((LGFX_PORT_LCD_USE_LOCK) != 0);
-    config.lcd_bus.pin_sclk = (int) (LGFX_PORT_SPI_SCLK_GPIO);
-    config.lcd_bus.pin_mosi = (int) (LGFX_PORT_SPI_MOSI_GPIO);
-    config.lcd_bus.pin_miso = (int) (LGFX_PORT_SPI_MISO_GPIO);
-    config.lcd_bus.pin_dc = (int) (LGFX_PORT_LCD_DC_GPIO);
-
-    config.lcd_panel.driver_id = BUILD_PANEL_DRIVER_ID;
-    config.lcd_panel.driver_name = panel_driver_name(BUILD_PANEL_DRIVER_ID);
-    config.lcd_panel.width = (uint16_t) (LGFX_PORT_PANEL_WIDTH);
-    config.lcd_panel.height = (uint16_t) (LGFX_PORT_PANEL_HEIGHT);
-    config.lcd_panel.pin_cs = (int) (LGFX_PORT_LCD_CS_GPIO);
-    config.lcd_panel.pin_rst = (int) (LGFX_PORT_LCD_RST_GPIO);
-    config.lcd_panel.pin_busy = (int) (LGFX_PORT_LCD_PIN_BUSY);
-    config.lcd_panel.offset_x = (int) (LGFX_PORT_LCD_OFFSET_X);
-    config.lcd_panel.offset_y = (int) (LGFX_PORT_LCD_OFFSET_Y);
-    config.lcd_panel.offset_rotation = (uint8_t) (LGFX_PORT_LCD_OFFSET_ROTATION);
-    config.lcd_panel.dummy_read_pixel = (uint8_t) (LGFX_PORT_LCD_DUMMY_READ_PIXEL);
-    config.lcd_panel.dummy_read_bits = (uint8_t) (LGFX_PORT_LCD_DUMMY_READ_BITS);
-    config.lcd_panel.readable = ((LGFX_PORT_LCD_READABLE) != 0);
-    config.lcd_panel.invert = ((LGFX_PORT_LCD_INVERT) != 0);
-    config.lcd_panel.rgb_order = ((LGFX_PORT_LCD_RGB_ORDER) != 0);
-    config.lcd_panel.dlen_16bit = ((LGFX_PORT_LCD_DLEN_16BIT) != 0);
-    config.lcd_panel.bus_shared = ((LGFX_PORT_LCD_BUS_SHARED) != 0);
-
-    config.touch.compiled = ((LGFX_PORT_ENABLE_TOUCH) != 0);
-    config.touch.pin_cs = (int) (LGFX_PORT_TOUCH_CS_GPIO);
-    config.touch.pin_irq = (int) (LGFX_PORT_TOUCH_IRQ_GPIO);
-    config.touch.spi_host = (int) (LGFX_PORT_TOUCH_SPI_HOST);
-    config.touch.spi_freq_hz = (uint32_t) (LGFX_PORT_TOUCH_SPI_FREQ_HZ);
-    config.touch.offset_rotation = (uint8_t) (LGFX_PORT_TOUCH_OFFSET_ROTATION);
-    config.touch.bus_shared = ((LGFX_PORT_TOUCH_BUS_SHARED) != 0);
-    config.touch.attached = config.touch.compiled && (config.touch.pin_cs >= 0);
-
-    return config;
-}
-
-static void apply_open_config_overrides(
-    LgfxRuntimeConfig &config,
-    const lgfx_open_config_overrides_t &overrides)
-{
-    if (overrides.has_panel_driver) {
-        apply_panel_driver_baseline(config, overrides.panel_driver);
-    }
-
-    if (overrides.has_width) {
-        config.lcd_panel.width = overrides.width;
-    }
-
-    if (overrides.has_height) {
-        config.lcd_panel.height = overrides.height;
-    }
-
-    if (overrides.has_offset_x) {
-        config.lcd_panel.offset_x = (int) overrides.offset_x;
-    }
-
-    if (overrides.has_offset_y) {
-        config.lcd_panel.offset_y = (int) overrides.offset_y;
-    }
-
-    if (overrides.has_offset_rotation) {
-        config.lcd_panel.offset_rotation = overrides.offset_rotation;
-    }
-
-    if (overrides.has_readable) {
-        config.lcd_panel.readable = (overrides.readable != 0);
-    }
-
-    if (overrides.has_invert) {
-        config.lcd_panel.invert = (overrides.invert != 0);
-    }
-
-    if (overrides.has_rgb_order) {
-        config.lcd_panel.rgb_order = (overrides.rgb_order != 0);
-    }
-
-    if (overrides.has_dlen_16bit) {
-        config.lcd_panel.dlen_16bit = (overrides.dlen_16bit != 0);
-    }
-
-    if (overrides.has_lcd_spi_mode) {
-        config.lcd_bus.mode = overrides.lcd_spi_mode;
-    }
-
-    if (overrides.has_lcd_freq_write_hz) {
-        config.lcd_bus.freq_write_hz = overrides.lcd_freq_write_hz;
-    }
-
-    if (overrides.has_lcd_freq_read_hz) {
-        config.lcd_bus.freq_read_hz = overrides.lcd_freq_read_hz;
-    }
-
-    if (overrides.has_lcd_dma_channel) {
-        config.lcd_bus.dma_channel = (int) overrides.lcd_dma_channel;
-    }
-
-    if (overrides.has_lcd_spi_3wire) {
-        config.lcd_bus.spi_3wire = (overrides.lcd_spi_3wire != 0);
-    }
-
-    if (overrides.has_lcd_use_lock) {
-        config.lcd_bus.use_lock = (overrides.lcd_use_lock != 0);
-    }
-
-    if (overrides.has_lcd_bus_shared) {
-        config.lcd_panel.bus_shared = (overrides.lcd_bus_shared != 0);
-    }
-
-    if (overrides.has_spi_sclk_gpio) {
-        config.lcd_bus.pin_sclk = (int) overrides.spi_sclk_gpio;
-    }
-
-    if (overrides.has_spi_mosi_gpio) {
-        config.lcd_bus.pin_mosi = (int) overrides.spi_mosi_gpio;
-    }
-
-    if (overrides.has_spi_miso_gpio) {
-        config.lcd_bus.pin_miso = (int) overrides.spi_miso_gpio;
-    }
-
-    if (overrides.has_lcd_spi_host) {
-        config.lcd_bus.host = (int) overrides.lcd_spi_host;
-    }
-
-    if (overrides.has_lcd_cs_gpio) {
-        config.lcd_panel.pin_cs = (int) overrides.lcd_cs_gpio;
-    }
-
-    if (overrides.has_lcd_dc_gpio) {
-        config.lcd_bus.pin_dc = (int) overrides.lcd_dc_gpio;
-    }
-
-    if (overrides.has_lcd_rst_gpio) {
-        config.lcd_panel.pin_rst = (int) overrides.lcd_rst_gpio;
-    }
-
-    if (overrides.has_lcd_pin_busy) {
-        config.lcd_panel.pin_busy = (int) overrides.lcd_pin_busy;
-    }
-
-    if (overrides.has_touch_cs_gpio) {
-        config.touch.pin_cs = (int) overrides.touch_cs_gpio;
-    }
-
-    if (overrides.has_touch_irq_gpio) {
-        config.touch.pin_irq = (int) overrides.touch_irq_gpio;
-    }
-
-    if (overrides.has_touch_spi_host) {
-        config.touch.spi_host = (int) overrides.touch_spi_host;
-    }
-
-    if (overrides.has_touch_spi_freq_hz) {
-        config.touch.spi_freq_hz = overrides.touch_spi_freq_hz;
-    }
-
-    if (overrides.has_touch_offset_rotation) {
-        config.touch.offset_rotation = overrides.touch_offset_rotation;
-    }
-
-    if (overrides.has_touch_bus_shared) {
-        config.touch.bus_shared = (overrides.touch_bus_shared != 0);
-    }
-
-    config.touch.attached = config.touch.compiled && (config.touch.pin_cs >= 0);
-}
-
-static bool validate_runtime_config(const LgfxRuntimeConfig &config, const char **reason)
-{
-    if (!is_known_panel_driver_id(config.lcd_panel.driver_id)) {
-        *reason = "panel_driver must be ili9488, ili9341, ili9341_2, or st7789";
-        return false;
-    }
-
-    if (config.lcd_panel.width == 0) {
-        *reason = "width must be > 0";
-        return false;
-    }
-
-    if (config.lcd_panel.height == 0) {
-        *reason = "height must be > 0";
-        return false;
-    }
-
-    if (config.lcd_panel.offset_rotation > 7) {
-        *reason = "offset_rotation must be in 0..7";
-        return false;
-    }
-
-    if (config.lcd_bus.mode > 3) {
-        *reason = "lcd_spi_mode must be in 0..3";
-        return false;
-    }
-
-    if (config.touch.offset_rotation > 7) {
-        *reason = "touch_offset_rotation must be in 0..7";
-        return false;
-    }
-
-    return true;
-}
-
-static LgfxRuntimeConfig runtime_config_with_overrides(const lgfx_open_config_overrides_t *overrides)
-{
-    LgfxRuntimeConfig config = runtime_config_from_build_defaults();
-
-    if (overrides != nullptr) {
-        apply_open_config_overrides(config, *overrides);
-    }
-
-    return config;
-}
-
-static void log_runtime_config(const LgfxRuntimeConfig &config)
-{
-    ESP_LOGI(
-        TAG,
-        "effective config panel=%s size=%ux%u offset=(%d,%d) rot=%u readable=%u invert=%u rgb_order=%u dlen_16bit=%u bus_shared=%u",
-        config.lcd_panel.driver_name,
-        (unsigned) config.lcd_panel.width,
-        (unsigned) config.lcd_panel.height,
-        config.lcd_panel.offset_x,
-        config.lcd_panel.offset_y,
-        (unsigned) config.lcd_panel.offset_rotation,
-        (unsigned) config.lcd_panel.readable,
-        (unsigned) config.lcd_panel.invert,
-        (unsigned) config.lcd_panel.rgb_order,
-        (unsigned) config.lcd_panel.dlen_16bit,
-        (unsigned) config.lcd_panel.bus_shared);
-
-    ESP_LOGI(
-        TAG,
-        "effective bus host=%d mode=%u write_hz=%u read_hz=%u dma=%d sclk=%d mosi=%d miso=%d dc=%d spi_3wire=%u use_lock=%u",
-        config.lcd_bus.host,
-        (unsigned) config.lcd_bus.mode,
-        (unsigned) config.lcd_bus.freq_write_hz,
-        (unsigned) config.lcd_bus.freq_read_hz,
-        config.lcd_bus.dma_channel,
-        config.lcd_bus.pin_sclk,
-        config.lcd_bus.pin_mosi,
-        config.lcd_bus.pin_miso,
-        config.lcd_bus.pin_dc,
-        (unsigned) config.lcd_bus.spi_3wire,
-        (unsigned) config.lcd_bus.use_lock);
-
-    if (config.touch.compiled) {
-        ESP_LOGI(
-            TAG,
-            "effective touch compiled=1 attached=%u cs=%d irq=%d host=%d freq=%u offset_rotation=%u bus_shared=%u",
-            (unsigned) config.touch.attached,
-            config.touch.pin_cs,
-            config.touch.pin_irq,
-            config.touch.spi_host,
-            (unsigned) config.touch.spi_freq_hz,
-            (unsigned) config.touch.offset_rotation,
-            (unsigned) config.touch.bus_shared);
-    } else {
-        ESP_LOGI(TAG, "effective touch compiled=0");
-    }
-}
-
-template <typename PanelT>
-static void configure_selected_panel(
-    PanelT &panel,
-    lgfx::Bus_SPI &bus,
-    const LgfxRuntimeConfig &runtime_config)
-{
-    panel.setBus(&bus);
-
-    auto cfg = panel.config();
-
-    cfg.pin_cs = runtime_config.lcd_panel.pin_cs;
-    cfg.pin_rst = runtime_config.lcd_panel.pin_rst;
-    cfg.pin_busy = runtime_config.lcd_panel.pin_busy;
-
-    cfg.panel_width = runtime_config.lcd_panel.width;
-    cfg.panel_height = runtime_config.lcd_panel.height;
-
-    cfg.offset_x = runtime_config.lcd_panel.offset_x;
-    cfg.offset_y = runtime_config.lcd_panel.offset_y;
-    cfg.offset_rotation = runtime_config.lcd_panel.offset_rotation;
-
-    cfg.dummy_read_pixel = runtime_config.lcd_panel.dummy_read_pixel;
-    cfg.dummy_read_bits = runtime_config.lcd_panel.dummy_read_bits;
-
-    cfg.readable = runtime_config.lcd_panel.readable;
-    cfg.invert = runtime_config.lcd_panel.invert;
-    cfg.rgb_order = runtime_config.lcd_panel.rgb_order;
-    cfg.dlen_16bit = runtime_config.lcd_panel.dlen_16bit;
-
-    cfg.bus_shared = runtime_config.lcd_panel.bus_shared;
-
-    panel.config(cfg);
-}
-
-#if (LGFX_PORT_ENABLE_TOUCH == 1)
-template <typename PanelT>
-static void configure_touch_if_needed(
-    PanelT &panel,
-    lgfx::Touch_XPT2046 &touch,
-    const LgfxRuntimeConfig &runtime_config)
-{
-    if (runtime_config.touch.attached) {
-        auto cfg = touch.config();
-
-        cfg.spi_host = static_cast<spi_host_device_t>(runtime_config.touch.spi_host);
-        cfg.freq = runtime_config.touch.spi_freq_hz;
-
-        cfg.pin_sclk = runtime_config.lcd_bus.pin_sclk;
-        cfg.pin_mosi = runtime_config.lcd_bus.pin_mosi;
-        cfg.pin_miso = runtime_config.lcd_bus.pin_miso;
-
-        cfg.pin_cs = runtime_config.touch.pin_cs;
-        cfg.pin_int = runtime_config.touch.pin_irq;
-
-        cfg.bus_shared = runtime_config.touch.bus_shared;
-        cfg.offset_rotation = runtime_config.touch.offset_rotation;
-
-        touch.config(cfg);
-        panel.setTouch(&touch);
-
-        ESP_LOGI(
-            TAG,
-            "touch attached: cs=%d irq=%d host=%d freq=%u offset_rotation=%u",
-            runtime_config.touch.pin_cs,
-            runtime_config.touch.pin_irq,
-            runtime_config.touch.spi_host,
-            (unsigned) runtime_config.touch.spi_freq_hz,
-            (unsigned) runtime_config.touch.offset_rotation);
-    } else if (runtime_config.touch.compiled) {
-        ESP_LOGI(TAG, "touch compiled but unattached (effective touch_cs_gpio=-1)");
-    }
-}
-#endif
-
-class PiyopiyoLGFX : public lgfx::LGFX_Device
-{
-    LgfxRuntimeConfig runtime_config_;
-    lgfx::Bus_SPI bus_;
-    lgfx::Panel_Device *selected_panel_ = nullptr;
-
-    lgfx::Panel_ILI9488 panel_ili9488_;
-    lgfx::Panel_ILI9341 panel_ili9341_;
-    lgfx::Panel_ILI9341_2 panel_ili9341_2_;
-    lgfx::Panel_ST7789 panel_st7789_;
-
-#if (LGFX_PORT_ENABLE_TOUCH == 1)
-    lgfx::Touch_XPT2046 touch_;
-#endif
-
-public:
-    explicit PiyopiyoLGFX(const LgfxRuntimeConfig &runtime_config)
-        : runtime_config_(runtime_config)
-    {
-        ESP_LOGI(
-            TAG,
-            "panel driver=%s size=%ux%u",
-            runtime_config_.lcd_panel.driver_name,
-            (unsigned) runtime_config_.lcd_panel.width,
-            (unsigned) runtime_config_.lcd_panel.height);
-
-        {
-            auto cfg = bus_.config();
-
-            cfg.spi_host = static_cast<spi_host_device_t>(runtime_config_.lcd_bus.host);
-            cfg.spi_mode = runtime_config_.lcd_bus.mode;
-            cfg.freq_write = runtime_config_.lcd_bus.freq_write_hz;
-            cfg.freq_read = runtime_config_.lcd_bus.freq_read_hz;
-            cfg.spi_3wire = runtime_config_.lcd_bus.spi_3wire;
-            cfg.use_lock = runtime_config_.lcd_bus.use_lock;
-            cfg.dma_channel = runtime_config_.lcd_bus.dma_channel;
-
-            cfg.pin_sclk = runtime_config_.lcd_bus.pin_sclk;
-            cfg.pin_mosi = runtime_config_.lcd_bus.pin_mosi;
-            cfg.pin_miso = runtime_config_.lcd_bus.pin_miso;
-            cfg.pin_dc = runtime_config_.lcd_bus.pin_dc;
-
-            bus_.config(cfg);
-        }
-
-        switch (runtime_config_.lcd_panel.driver_id) {
-            case LGFX_PANEL_DRIVER_ID_ILI9488:
-                configure_selected_panel(panel_ili9488_, bus_, runtime_config_);
-#if (LGFX_PORT_ENABLE_TOUCH == 1)
-                configure_touch_if_needed(panel_ili9488_, touch_, runtime_config_);
-#endif
-                selected_panel_ = &panel_ili9488_;
-                break;
-
-            case LGFX_PANEL_DRIVER_ID_ILI9341:
-                configure_selected_panel(panel_ili9341_, bus_, runtime_config_);
-#if (LGFX_PORT_ENABLE_TOUCH == 1)
-                configure_touch_if_needed(panel_ili9341_, touch_, runtime_config_);
-#endif
-                selected_panel_ = &panel_ili9341_;
-                break;
-
-            case LGFX_PANEL_DRIVER_ID_ILI9341_2:
-                configure_selected_panel(panel_ili9341_2_, bus_, runtime_config_);
-#if (LGFX_PORT_ENABLE_TOUCH == 1)
-                configure_touch_if_needed(panel_ili9341_2_, touch_, runtime_config_);
-#endif
-                selected_panel_ = &panel_ili9341_2_;
-                break;
-
-            case LGFX_PANEL_DRIVER_ID_ST7789:
-                configure_selected_panel(panel_st7789_, bus_, runtime_config_);
-#if (LGFX_PORT_ENABLE_TOUCH == 1)
-                configure_touch_if_needed(panel_st7789_, touch_, runtime_config_);
-#endif
-                selected_panel_ = &panel_st7789_;
-                break;
-
-            default:
-                ESP_LOGE(TAG, "unsupported runtime panel_driver=%d", (int) runtime_config_.lcd_panel.driver_id);
-                break;
-        }
-
-        if (selected_panel_ != nullptr) {
-            setPanel(selected_panel_);
-        }
-    }
-};
 
 static constexpr size_t SPRITE_SLOTS = (size_t) MAX_HANDLE + 1u; // handle 0 reserved for LCD
 static lgfx::LGFX_Sprite *sprites[SPRITE_SLOTS] = { 0 };
 static uint16_t sprite_count = 0;
+
+// ----------------------------------------------------------------------------
+// Mutex helpers
+// ----------------------------------------------------------------------------
 
 static inline void ensure_lcd_mutex_created()
 {
@@ -827,7 +325,7 @@ static inline lgfx::LGFXBase *resolve_target(uint8_t target)
     return sprites[target];
 }
 
-static inline void force_end_write_all(PiyopiyoLGFX *lcd)
+static inline void force_end_write_all(lgfx::LGFX_Device *lcd)
 {
     if (lcd == nullptr) {
         return;
@@ -861,18 +359,18 @@ static esp_err_t ensure_published_device_for_owner(
         return ESP_ERR_INVALID_STATE;
     }
 
-    LgfxRuntimeConfig config = runtime_config_with_overrides(overrides);
+    lgfx_dev::LgfxRuntimeConfig config = lgfx_dev::runtime_config_with_overrides(overrides);
 
     const char *validation_error = nullptr;
-    if (!validate_runtime_config(config, &validation_error)) {
+    if (!lgfx_dev::validate_runtime_config(config, &validation_error)) {
         ESP_LOGE(TAG, "invalid open-time runtime config: %s", validation_error);
         return ESP_ERR_INVALID_ARG;
     }
 
-    log_runtime_config(config);
+    lgfx_dev::log_runtime_config(config);
 
     // Allocate outside the critical section because new may allocate.
-    PiyopiyoLGFX *created = new (std::nothrow) PiyopiyoLGFX(config);
+    lgfx::LGFX_Device *created = lgfx_dev::create_lcd_device(config);
     if (!created) {
         ESP_LOGE(TAG, "failed to allocate LGFX device");
         return ESP_ERR_NO_MEM;
@@ -892,7 +390,7 @@ static esp_err_t ensure_published_device_for_owner(
 
     // If we lost the race, destroy the extra instance.
     if (created) {
-        delete created;
+        lgfx_dev::destroy_lcd_device(created);
     }
 
     return publish_err;
@@ -999,6 +497,28 @@ esp_err_t end_write()
     return ESP_OK;
 }
 
+esp_err_t start_write_locked()
+{
+    auto *lcd = lcd_device_locked();
+    if (!lcd) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    lcd->startWrite();
+    return ESP_OK;
+}
+
+esp_err_t end_write_locked()
+{
+    auto *lcd = lcd_device_locked();
+    if (!lcd) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    lcd->endWrite();
+    return ESP_OK;
+}
+
 lgfx::LGFX_Device *lcd_device_locked()
 {
     return g_lcd_device;
@@ -1007,6 +527,254 @@ lgfx::LGFX_Device *lcd_device_locked()
 lgfx::LGFXBase *resolve_target_locked(uint8_t target)
 {
     return ::resolve_target(target);
+}
+
+lgfx::LGFXBase *resolve_render_target_locked(uint8_t target)
+{
+    if (target != 0) {
+        return ::resolve_target(target);
+    }
+
+    if (g_presentation.enabled && g_presentation.frame_active && g_presentation.current != nullptr) {
+        return g_presentation.current;
+    }
+
+    return g_lcd_device;
+}
+
+lgfx::LovyanGFX *resolve_render_surface_locked(uint8_t target)
+{
+    if (target != 0) {
+        return nullptr;
+    }
+
+    if (g_presentation.enabled && g_presentation.frame_active && g_presentation.current != nullptr) {
+        return g_presentation.current;
+    }
+
+    return g_lcd_device;
+}
+
+bool presentation_enabled_locked()
+{
+    return g_presentation.enabled;
+}
+
+esp_err_t presentation_reset_locked()
+{
+    reset_presentation_state_locked();
+    return ESP_OK;
+}
+
+esp_err_t presentation_configure_locked(uint16_t lcd_w, uint16_t lcd_h, uint16_t strip_h)
+{
+    g_presentation.enabled = false;
+    g_presentation.attempted = false;
+    g_presentation.lcd_width = lcd_w;
+    g_presentation.lcd_height = lcd_h;
+    g_presentation.strip_height = strip_h;
+    g_presentation.current_strip_y = 0;
+    g_presentation.frame_active = false;
+    g_presentation.next_buffer_index = 0;
+    g_presentation.front = nullptr;
+    g_presentation.back = nullptr;
+    g_presentation.current = nullptr;
+    return ESP_OK;
+}
+
+uint16_t presentation_strip_height_locked()
+{
+    return g_presentation.strip_height;
+}
+
+esp_err_t presentation_ensure_buffers_locked()
+{
+    if (g_presentation.enabled && g_presentation.front != nullptr && g_presentation.back != nullptr) {
+        return ESP_OK;
+    }
+
+    if (g_presentation.attempted) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    auto *lcd = lcd_device_locked();
+    if (!lcd) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    uint16_t lcd_w = g_presentation.lcd_width;
+    uint16_t lcd_h = g_presentation.lcd_height;
+
+    if (lcd_w == 0 || lcd_h == 0) {
+        lcd_w = static_cast<uint16_t>(lcd->width());
+        lcd_h = static_cast<uint16_t>(lcd->height());
+    }
+
+    uint16_t strip_h = clamp_requested_strip_height(lcd_h, g_presentation.strip_height);
+    g_presentation.attempted = true;
+
+    while (strip_h != 0) {
+        esp_err_t err = presentation_try_allocate_locked(lcd, lcd_w, lcd_h, strip_h);
+        if (err == ESP_OK) {
+            ESP_LOGI(
+                TAG,
+                "presentation strips enabled width=%u height=%u strip_h=%u",
+                static_cast<unsigned>(lcd_w),
+                static_cast<unsigned>(lcd_h),
+                static_cast<unsigned>(strip_h));
+            return ESP_OK;
+        }
+
+        strip_h = next_smaller_strip_height(strip_h);
+    }
+
+    g_presentation.enabled = false;
+    g_presentation.current = nullptr;
+    destroy_presentation_sprite(g_presentation.front);
+    destroy_presentation_sprite(g_presentation.back);
+    return ESP_ERR_NO_MEM;
+}
+
+esp_err_t presentation_begin_strip_locked(uint16_t y0)
+{
+    if (!g_presentation.enabled) {
+        esp_err_t err = presentation_ensure_buffers_locked();
+        if (err == ESP_ERR_NO_MEM) {
+            return ESP_ERR_NOT_SUPPORTED;
+        }
+
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+
+    if (y0 >= g_presentation.lcd_height) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    lgfx::LGFX_Sprite *next = (g_presentation.next_buffer_index == 0) ? g_presentation.front : g_presentation.back;
+
+    if (next == nullptr) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    g_presentation.next_buffer_index ^= 1;
+    g_presentation.current = next;
+    g_presentation.current_strip_y = y0;
+    g_presentation.frame_active = true;
+
+    next->clearClipRect();
+    next->setCursor(0, 0);
+    next->setTextSize(1.0f);
+    next->setTextDatum(textdatum_t::top_left);
+
+    return ESP_OK;
+}
+
+esp_err_t presentation_present_strip_locked()
+{
+    if (!g_presentation.enabled) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    auto *lcd = lcd_device_locked();
+    if (!lcd) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    auto *current = g_presentation.current;
+    if (!g_presentation.frame_active || current == nullptr) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    current->pushSprite(lcd, 0, static_cast<int32_t>(g_presentation.current_strip_y));
+    g_presentation.current = nullptr;
+    g_presentation.frame_active = false;
+    return ESP_OK;
+}
+
+esp_err_t presentation_rebuild_locked()
+{
+    auto *lcd = lcd_device_locked();
+    if (!lcd) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    const bool swap_bytes_enabled = g_presentation.swap_bytes_enabled;
+
+    const uint16_t lcd_w = static_cast<uint16_t>(lcd->width());
+    const uint16_t lcd_h = static_cast<uint16_t>(lcd->height());
+    const uint16_t strip_h = g_presentation.strip_height;
+
+    (void) presentation_destroy_buffers_locked();
+    (void) presentation_configure_locked(lcd_w, lcd_h, strip_h);
+
+    g_presentation.swap_bytes_enabled = swap_bytes_enabled;
+    lcd->setSwapBytes(swap_bytes_enabled);
+
+    // Do not auto-reallocate native strip buffers here.
+    // Keep native strip presentation dormant until explicitly requested
+    // through presentation_begin_strip_locked().
+    return ESP_OK;
+}
+
+esp_err_t presentation_present_locked()
+{
+    if (!g_presentation.enabled) {
+        return ESP_OK;
+    }
+
+    if (g_presentation.frame_active) {
+        return presentation_present_strip_locked();
+    }
+
+    return ESP_OK;
+}
+
+esp_err_t presentation_destroy_buffers_locked()
+{
+    g_presentation.current = nullptr;
+    destroy_presentation_sprite(g_presentation.front);
+    destroy_presentation_sprite(g_presentation.back);
+    reset_presentation_state_locked();
+    return ESP_OK;
+}
+
+esp_err_t presentation_set_color_depth_locked(uint8_t depth)
+{
+    auto *lcd = lcd_device_locked();
+    if (!lcd) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    lcd->setColorDepth(depth);
+
+    if (!g_presentation.enabled && !g_presentation.attempted) {
+        return ESP_OK;
+    }
+
+    return presentation_rebuild_locked();
+}
+
+esp_err_t presentation_set_swap_bytes_locked(bool enabled)
+{
+    auto *lcd = lcd_device_locked();
+    if (!lcd) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    lcd->setSwapBytes(enabled);
+    g_presentation.swap_bytes_enabled = enabled;
+
+    if (g_presentation.front != nullptr) {
+        g_presentation.front->setSwapBytes(enabled);
+    }
+
+    if (g_presentation.back != nullptr) {
+        g_presentation.back->setSwapBytes(enabled);
+    }
+
+    return ESP_OK;
 }
 
 lgfx::LGFX_Sprite *resolve_sprite_locked(uint8_t handle)
@@ -1108,10 +876,10 @@ extern "C" esp_err_t lgfx_device_get_dims_for_open_config(
         release_lcd_mutex();
     }
 
-    LgfxRuntimeConfig config = runtime_config_with_overrides(overrides);
+    lgfx_dev::LgfxRuntimeConfig config = lgfx_dev::runtime_config_with_overrides(overrides);
 
     const char *validation_error = nullptr;
-    if (!validate_runtime_config(config, &validation_error)) {
+    if (!lgfx_dev::validate_runtime_config(config, &validation_error)) {
         ESP_LOGE(TAG, "invalid open-time runtime config for get_dims: %s", validation_error);
         return ESP_ERR_INVALID_ARG;
     }
@@ -1143,14 +911,6 @@ extern "C" esp_err_t lgfx_device_init_with_open_config(
     }
 
     if (!g_device_ready) {
-        LgfxRuntimeConfig config = runtime_config_with_overrides(overrides);
-
-#if (LGFX_PORT_ENABLE_TOUCH == 1)
-        if (config.touch.compiled && !config.touch.attached) {
-            ESP_LOGW(TAG, "touch enabled but not attached (effective touch_cs_gpio=-1)");
-        }
-#endif
-
         ESP_LOGI(TAG, "init/begin");
         snapshot.lcd->begin();
         g_device_ready = true;
@@ -1160,8 +920,70 @@ extern "C" esp_err_t lgfx_device_init_with_open_config(
         snapshot.lcd->setTextDatum(textdatum_t::top_left);
     }
 
+    // Tear down any previously allocated native presentation buffers before
+    // reseeding presentation state for this init call.
+    (void) lgfx_dev::presentation_destroy_buffers_locked();
+    (void) lgfx_dev::presentation_configure_locked(
+        static_cast<uint16_t>(snapshot.lcd->width()),
+        static_cast<uint16_t>(snapshot.lcd->height()),
+        160);
+
+    // Do not allocate native strip buffers during init yet.
+    // The current Elixir MovingIcons sample still owns its own strip sprites.
+    // Eager native strip allocation here causes two strip-buffer systems to
+    // coexist and increases memory pressure unnecessarily.
+
     release_lcd_mutex();
     return ESP_OK;
+}
+
+extern "C" esp_err_t lgfx_device_presentation_get_strip_height(uint16_t *out_strip_height)
+{
+    if (out_strip_height == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    lgfx_dev::ScopedLcdLock lock;
+    esp_err_t err = lgfx_dev::lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    if (!lgfx_dev::presentation_enabled_locked()) {
+        err = lgfx_dev::presentation_ensure_buffers_locked();
+        if (err == ESP_ERR_NO_MEM) {
+            return ESP_ERR_NOT_SUPPORTED;
+        }
+
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+
+    *out_strip_height = lgfx_dev::presentation_strip_height_locked();
+    return ESP_OK;
+}
+
+extern "C" esp_err_t lgfx_device_presentation_begin_strip(uint16_t y0)
+{
+    lgfx_dev::ScopedLcdLock lock;
+    esp_err_t err = lgfx_dev::lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    return lgfx_dev::presentation_begin_strip_locked(y0);
+}
+
+extern "C" esp_err_t lgfx_device_presentation_present_strip(void)
+{
+    lgfx_dev::ScopedLcdLock lock;
+    esp_err_t err = lgfx_dev::lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    return lgfx_dev::presentation_present_strip_locked();
 }
 
 static esp_err_t lgfx_device_deinit_for_owner(const void *owner_token)
@@ -1195,10 +1017,11 @@ static esp_err_t lgfx_device_deinit_for_owner(const void *owner_token)
     // Keep the held mutex handle so it can be deleted at the end.
     SemaphoreHandle_t mutex_to_delete = g_lcd_mutex;
 
+    (void) lgfx_dev::presentation_destroy_buffers_locked();
     lgfx_dev::destroy_all_sprites_locked();
 
     // Swap publication state under mux to avoid publish/depublish races.
-    PiyopiyoLGFX *to_delete = nullptr;
+    lgfx::LGFX_Device *to_delete = nullptr;
 
     portENTER_CRITICAL(&g_publication_mux);
     if (g_device_owner_token != owner_token) {
@@ -1219,7 +1042,7 @@ static esp_err_t lgfx_device_deinit_for_owner(const void *owner_token)
     if (to_delete) {
         // Force-unwind any open LovyanGFX write nesting before teardown.
         force_end_write_all(to_delete);
-        delete to_delete;
+        lgfx_dev::destroy_lcd_device(to_delete);
     }
 
 #if defined(INCLUDE_vSemaphoreDelete) && (INCLUDE_vSemaphoreDelete == 1)

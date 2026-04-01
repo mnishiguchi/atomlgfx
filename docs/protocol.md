@@ -8,7 +8,10 @@ SPDX-License-Identifier: Apache-2.0
 
 This document defines the tuple protocol between an AtomVM host application and the native `lgfx_port` driver.
 
-See [the architecture overview](architecture.md) for the repository map, [the `lgfx_port` README](../lgfx_port/README.md) for port-layer and ownership details, and [the protocol reference](protocol-reference.md) for generated operation, capability, and error tables.
+See [the architecture overview](architecture.md) for the repository map,
+[the `lgfx_port` README](../lgfx_port/README.md) for port-layer details,
+and [the protocol reference](protocol-reference.md) for generated operation,
+capability, and error tables.
 
 ## Scope
 
@@ -24,7 +27,8 @@ This document does not define:
 
 - open-time config passed through `open_port/2`
 - internal port-layer or device-layer implementation details
-- non-contract implementation structure
+- non-contract execution structure inside the native component
+- maintainer-only testing or sync checklists
 
 ## Source of truth
 
@@ -104,6 +108,22 @@ Conventions:
 - structured returns use tuples
 - `Reason` is an atom or detail tuple
 
+## Execution model at the protocol boundary
+
+The protocol exposes two operation styles:
+
+- ordinary operations
+  - execute immediately
+  - return real success or failure immediately
+
+- explicit batch submission
+  - batch construction is explicit
+  - successful submission reports acceptance of the batch request
+  - successful submission does not by itself mean every command in the batch has already completed
+
+This distinction is part of the external contract for `submitBatch`.
+Internal execution timing and runtime structure are implementation details.
+
 ## Validation model
 
 Common failure mapping:
@@ -130,6 +150,12 @@ Examples of device-facing semantic checks:
 - rotate and zoom semantic validity
 - deterministic sprite allocation rules
 
+Explicit batch submission adds one more validation layer:
+
+- `submitBatch` validates the outer request envelope
+- each inner command is validated against `ops.def` metadata before batch acceptance
+- unsupported batch shapes are rejected at submission time
+
 ## Binary payload lifetime
 
 Raw pointers into caller binaries are request-scoped.
@@ -138,13 +164,19 @@ Rule:
 
 - the driver must not retain pointers into caller binaries past the request boundary unless lifetime is explicitly managed
 
-Current model:
+Current ordinary-operation model:
 
 - handlers borrow request binary pointers and pass them directly to `lgfx_device_*` within the same request
 - text and image device calls are synchronous in the current design
 - device code must fully consume those bytes before returning and must not retain the pointer after the call
 
 That matters especially for `drawString`, `print`, `println`, `drawJpg`, and `pushImage`.
+
+For explicit batching:
+
+- payload-bearing batch commands require runtime-owned payload storage if they are ever accepted into the batch path
+- current inline batch submission is intentionally narrower than the full ordinary operation surface
+- callers should not assume that any payload-bearing ordinary op is automatically batchable
 
 ## Common data and encodings
 
@@ -273,7 +305,8 @@ Palette indices are explicit, flag-selected argument interpretations.
 
 ## Error reasons
 
-Canonical protocol error atoms and detail tags are listed in [the generated error reference](protocol-reference.md#generated-error-reasons).
+Canonical protocol error atoms and detail tags are listed in
+[the generated error reference](protocol-reference.md#generated-error-reasons).
 
 Optional detail forms:
 
@@ -322,7 +355,8 @@ This notation mirrors `ops.def`.
 
 ## Implemented operation matrix
 
-The generated implemented operation matrix lives in [the protocol reference](protocol-reference.md#implemented-operation-matrix).
+The generated implemented operation matrix lives in
+[the protocol reference](protocol-reference.md#implemented-operation-matrix).
 
 If an operation is not listed there, it is not implemented and must return `{error, bad_op}`.
 
@@ -363,7 +397,8 @@ Derivation rules:
 - apply real build and runtime gates
 - mask to known protocol bits before returning
 
-Generated capability vocabulary is listed in [the protocol reference](protocol-reference.md#generated-capability-vocabulary).
+Generated capability vocabulary is listed in
+[the protocol reference](protocol-reference.md#generated-capability-vocabulary).
 
 Meaning:
 
@@ -383,10 +418,63 @@ Meaning:
   - palette lifecycle operations are available
   - specifically `createPalette` and `setPaletteColor`
 
+- `CAP_BATCH`
+  - explicit batch submission is available
+  - specifically `submitBatch`
+
 Touch note:
 
 - `CAP_TOUCH` is advertised only when touch support is enabled in the build and touch is attached
 - compiling touch support with `LGFX_PORT_TOUCH_CS_GPIO = -1` keeps touch unattached and unadvertised
+
+## Explicit batching
+
+### `submitBatch()`
+
+Request:
+
+```erlang
+{lgfx, ProtoVer, submitBatch, 0, 0, Commands}
+```
+
+Rules:
+
+- `Target` must be `0`
+- `Flags` must be `0`
+- the operation requires initialized display state
+- `Commands` must be a non-empty proper list
+- each inner command is validated against the normal protocol metadata for the referenced operation
+
+Inner command shape:
+
+```erlang
+{Op, Target, Flags, Arg1, Arg2, ...}
+```
+
+Inner-command notes:
+
+- the outer batch request does not repeat `lgfx` or `ProtoVer`
+- `Target` and `Flags` still belong to each inner command
+- inner-command validation uses the same operation metadata vocabulary as ordinary requests
+
+Submission result:
+
+- successful acceptance returns `{ok, ok}`
+- submission failure returns `{error, Reason}`
+
+Important semantic note:
+
+- successful `submitBatch` means the batch request was accepted
+- successful `submitBatch` does not by itself guarantee that all commands have already completed successfully
+
+### Current explicit batch scope
+
+Explicit batch support is intentionally narrower than the full ordinary operation surface.
+
+Current batch submission is intended for grouped rendering work built from a limited inline command subset.
+Payload-bearing and other not-yet-supported batch shapes may be rejected at submission time even when the corresponding ordinary operation exists on the direct synchronous path.
+
+This keeps explicit batching opt-in and preserves the ordinary request/reply behavior for the broader API surface.
 
 ## Diagnostics
 
@@ -423,6 +511,11 @@ Behavior:
 
 - the driver snapshots the last-error state and returns it
 - on success, the last-error state is cleared after the response payload is encoded
+
+Batch note:
+
+- there is currently no dedicated protocol operation in the implemented surface for batch status lookup
+- callers should treat `submitBatch` acceptance and ordinary request/reply diagnostics as separate concerns
 
 ## Fonts
 
@@ -702,73 +795,6 @@ Rules:
 - `LGFX_F_TRANSPARENT_INDEX` interprets the transparent scalar as a palette index
 - indexed transparent mode requires palette backing on the source sprite
 - edge clipping is allowed
-
-## Recommended host smoke checks
-
-Useful checks:
-
-- target policy
-  - for example, `getCaps` with `Target != 0` should fail with `bad_target`
-
-- capability advertisement
-  - `pushImage` support should match `CAP_PUSHIMAGE`
-  - `getLastError` support should match `CAP_LAST_ERROR`
-  - palette support should match `CAP_PALETTE`
-  - touch support should disappear from `FeatureBits` when touch is compiled but unattached
-
-- sprite path
-  - deterministic `createSprite` at a chosen handle succeeds
-  - creating the same handle twice fails
-  - `setPivot` rejects LCD target
-  - valid `pushSprite` to LCD succeeds
-  - valid `pushRotateZoom` with LovyanGFX-like angle and zoom values succeeds
-  - missing destination sprite fails for sprite destination
-
-- palette path
-  - `createSprite(..., 4)` followed by `createPalette` succeeds
-  - `setPaletteColor(0, 16#112233)` succeeds on a palette-backed sprite
-  - out-of-range `setPaletteColor` index fails for the selected depth
-  - `createPalette` on a true-color sprite fails
-  - indexed primitive or text color mode on LCD fails
-  - indexed primitive or text color mode on a sprite without palette backing fails
-  - indexed transparent mode on a non-paletted source sprite fails
-
-- text path
-  - `setTextWrap(true)` should map to `wrap_x=true, wrap_y=false`
-  - `setTextWrap(true, true)` should set both axes true
-  - `setTextSize(1)` should mean `1.0x`
-  - zero scale should fail
-
-- color contract path
-  - primitive and text colors should accept RGB565 in non-index mode
-  - `pushSprite` and `pushRotateZoom` transparent values should use the same non-index display-color contract
-  - indexed primitive or text color mode should still require explicit index flags
-  - `setColorDepth(24)` should not change the non-index display-color wire format
-  - `setPaletteColor` should remain RGB888-only
-  - `pushImage` should remain RGB565-only
-
-- jpg path
-  - valid short-form and extended-form calls should succeed
-  - zero or negative scale should fail
-  - non-binary payload should fail
-  - corrupt JPEG data should fail without crashing the driver
-
-- binary limit path
-  - over-cap binary should fail
-
-## Maintenance checklist
-
-When changing the protocol surface or behavior, verify all of the following:
-
-- `ops.def` metadata still matches the implementation
-- generated protocol-reference tables still match source metadata
-- `getCaps()` advertisement still reflects the real dispatch surface
-- allowed flags and arity still match the handler decode paths
-- request and response shapes in this document still match the implementation
-- smoke checks still cover the main happy paths and contract edges
-- sample host code still uses the current scalar color contract
-- palette lifecycle examples still use packed RGB888
-- `pushImage` examples still use RGB565 payloads
 
 ## Compatibility rules
 

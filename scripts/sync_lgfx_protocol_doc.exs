@@ -133,13 +133,13 @@ defmodule Main do
   end
 
   defp self_test! do
-    # ATOM_STR(...) contains a comma, so top-level splitting must still produce 9 X(...) fields.
+    # ATOM_STR(...) contains a comma, so top-level splitting must still produce 13 X(...) fields.
     ping_args_blob =
-      ~s|ping, lgfx_handle_ping, ATOM_STR("\\x04", "ping"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, 0|
+      ~s|ping, lgfx_handle_ping, ATOM_STR("\\x04", "ping"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, 0, 0, 0, 1, 0|
 
     ping_args = split_top_level_arguments(ping_args_blob)
 
-    assert!(length(ping_args) == 9, "split_top_level_arguments/1 should return 9 fields")
+    assert!(length(ping_args) == 13, "split_top_level_arguments/1 should return 13 fields")
     assert!(Enum.at(ping_args, 0) == "ping", "field 1 (op) parse failed")
 
     assert!(
@@ -148,7 +148,7 @@ defmodule Main do
     )
 
     set_text_color_line =
-      ~s|X(setTextColor, lgfx_handle_setTextColor, ATOM_STR("\\x0C", "setTextColor"), 6, 7, LGFX_F_TEXT_HAS_BG, LGFX_OP_TARGET_UNSUPPORTED, LGFX_OP_STATE_REQUIRES_INIT, 0)|
+      ~s|X(setTextColor, lgfx_handle_setTextColor, ATOM_STR("\\x0C", "setTextColor"), 6, 7, LGFX_F_TEXT_HAS_BG, LGFX_OP_TARGET_UNSUPPORTED, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)|
 
     case parse_x_macro_line(set_text_color_line) do
       {:ok, op} ->
@@ -156,6 +156,10 @@ defmodule Main do
         assert!(op.min_arity == "6", "min_arity parse failed")
         assert!(op.max_arity == "7", "max_arity parse failed")
         assert!(op.allowed_flags_mask == "LGFX_F_TEXT_HAS_BG", "flags parse failed")
+        assert!(op.batchable == "1", "batchable parse failed")
+        assert!(op.needs_owned_payload == "0", "needs_owned_payload parse failed")
+        assert!(op.sync_only == "0", "sync_only parse failed")
+        assert!(op.batch_boundary_sensitive == "0", "batch_boundary_sensitive parse failed")
 
       :skip ->
         raise "self_test failed: parse_x_macro_line/1 unexpectedly skipped setTextColor"
@@ -233,7 +237,11 @@ defmodule Main do
                 allowed_flags_mask,
                 target_policy,
                 state_policy,
-                feature_cap_bit
+                feature_cap_bit,
+                batchable,
+                needs_owned_payload,
+                sync_only,
+                batch_boundary_sensitive
               ] ->
                 {:ok,
                  %{
@@ -243,7 +251,11 @@ defmodule Main do
                    allowed_flags_mask: String.trim(allowed_flags_mask),
                    target_policy: String.trim(target_policy),
                    state_policy: String.trim(state_policy),
-                   feature_cap_bit: String.trim(feature_cap_bit)
+                   feature_cap_bit: String.trim(feature_cap_bit),
+                   batchable: String.trim(batchable),
+                   needs_owned_payload: String.trim(needs_owned_payload),
+                   sync_only: String.trim(sync_only),
+                   batch_boundary_sensitive: String.trim(batch_boundary_sensitive)
                  }}
 
               _ ->
@@ -574,4 +586,3 @@ defmodule Main do
 end
 
 Main.main(System.argv())
-

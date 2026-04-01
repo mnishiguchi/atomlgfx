@@ -46,6 +46,7 @@ This table documents the implemented protocol surface.
 | `ping` | `T0/bad_target` | `F0` | `5` | `any` | - |
 | `getCaps` | `T0/bad_target` | `F0` | `5` | `any` | - |
 | `getLastError` | `T0/bad_target` | `F0` | `5` | `any` | `LGFX_CAP_LAST_ERROR` |
+| `submitBatch` | `T0/bad_target` | `F0` | `6` | `requires_init` | `LGFX_CAP_BATCH` |
 | `width` | `LGFX_OP_TARGET_ANY` | `F0` | `5` | `requires_init` | - |
 | `height` | `LGFX_OP_TARGET_ANY` | `F0` | `5` | `requires_init` | - |
 | `init` | `T0/bad_target` | `F0` | `5` | `any` | - |
@@ -115,4 +116,5 @@ This table documents the implemented protocol surface.
 | `LGFX_CAP_LAST_ERROR` | `CAP_LAST_ERROR` | `2` | `0x0004` | `ops.def` feature_cap_bit |
 | `LGFX_CAP_TOUCH` | `CAP_TOUCH` | `3` | `0x0008` | `ops.def` feature_cap_bit |
 | `LGFX_CAP_PALETTE` | `CAP_PALETTE` | `4` | `0x0010` | `ops.def` feature_cap_bit |
+| `LGFX_CAP_BATCH` | `CAP_BATCH` | `5` | `0x0020` | `ops.def` feature_cap_bit |
 <!-- END:generated_caps_table -->

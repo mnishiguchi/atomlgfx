@@ -261,6 +261,23 @@ esp_err_t lgfx_device_set_brightness(uint8_t brightness);
 esp_err_t lgfx_device_display(void);
 
 // ----------------------------------------------------------------------------
+// Optional strip-presentation helpers (LCD-only)
+// ----------------------------------------------------------------------------
+//
+// These are intended for driver-managed strip-buffer presentation.
+//
+// Behavior:
+// - strip buffers may be allocated lazily on first strip use
+// - return ESP_ERR_NOT_SUPPORTED when buffered strip presentation is unavailable
+// - begin_strip(y0) opens the active destination strip for logical LCD target 0
+// - while a strip is open, logical LCD drawing routes to that strip buffer
+// - present_strip() blits the active strip to the live LCD at its configured y
+// - display() remains the final LCD flush for the frame
+esp_err_t lgfx_device_presentation_get_strip_height(uint16_t *out_strip_height);
+esp_err_t lgfx_device_presentation_begin_strip(uint16_t y0);
+esp_err_t lgfx_device_presentation_present_strip(void);
+
+// ----------------------------------------------------------------------------
 // Common ops (LCD or sprite target)
 // ----------------------------------------------------------------------------
 esp_err_t lgfx_device_set_color_depth(uint8_t target, uint8_t depth);

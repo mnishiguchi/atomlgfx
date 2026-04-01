@@ -390,36 +390,46 @@ lgfx_port_apply_tracked_default(
 # -----------------------------------------------------------------------------
 idf_component_register(
   SRCS
-    # Port entrypoint / lifecycle
+    # Port entrypoint
     "lgfx_port/lgfx_port.c"
 
-    # Protocol / dispatch / metadata
+    # Port support
+    "lgfx_port/atoms.c"
+    "lgfx_port/open_config.c"
+    "lgfx_port/request_validation.c"
+    "lgfx_port/op_registry.c"
     "lgfx_port/proto_term.c"
+    "lgfx_port/batch_decode.c"
 
-    # Handlers
+    # Port handlers
     "lgfx_port/handlers/control.c"
     "lgfx_port/handlers/device.c"
-    "lgfx_port/handlers/text.c"
     "lgfx_port/handlers/primitives.c"
+    "lgfx_port/handlers/text.c"
     "lgfx_port/handlers/images.c"
-    "lgfx_port/handlers/sprites.c"
     "lgfx_port/handlers/clip.c"
+    "lgfx_port/handlers/sprites.c"
     "lgfx_port/handlers/touch.c"
+
+    # Batch runtime
+    "lgfx_runtime/lgfx_runtime.c"
+    "lgfx_runtime/lgfx_command_dispatch.cpp"
 
     # Device adapter
     "lgfx_device/state.cpp"
+    "lgfx_device/state_runtime.cpp"
     "lgfx_device/control.cpp"
-    "lgfx_device/text.cpp"
     "lgfx_device/primitives.cpp"
+    "lgfx_device/text.cpp"
     "lgfx_device/images.cpp"
-    "lgfx_device/sprites.cpp"
     "lgfx_device/clip.cpp"
+    "lgfx_device/sprites.cpp"
   INCLUDE_DIRS
     "include"
   PRIV_INCLUDE_DIRS
     "lgfx_port/include_internal"
-    "lgfx_device"
-    "lgfx_port"
+    "lgfx_runtime/include_internal"
+    "lgfx_device/include_internal"
     "${LGFX_SRC_ROOT}"
   REQUIRES
     efuse

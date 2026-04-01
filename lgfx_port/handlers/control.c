@@ -7,7 +7,7 @@
 // lgfx_port/handlers/control.c
 //
 // Control-plane handlers:
-// - ping / getCaps / getLastError
+// - ping / getCaps / getLastError / submitBatch
 // - init / close
 // - startWrite / endWrite
 #include <stdint.h>
@@ -17,6 +17,7 @@
 
 #include "esp_err.h"
 
+#include "lgfx_port/batch_decode.h"
 #include "lgfx_port/handler_decode.h"
 #include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
@@ -25,6 +26,42 @@
 term lgfx_handle_ping(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     return reply_ok(ctx, port, req, port->atoms.pong);
+}
+
+term lgfx_handle_submitBatch(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    term commands_t = term_invalid_term();
+
+    if (!lgfx_batch_decode_submit_request(req, &commands_t)) {
+        return reply_error(ctx, port, req, port->atoms.bad_args, 0);
+    }
+
+    lgfx_batch_build_t build = { 0 };
+    term build_error = term_invalid_term();
+
+    if (!lgfx_batch_build_inline_submit(
+            ctx,
+            port,
+            req,
+            commands_t,
+            &build,
+            &build_error)) {
+        lgfx_batch_build_clear(&build);
+        return build_error;
+    }
+
+    lgfx_batch_id_t batch_id = LGFX_BATCH_ID_NONE;
+    esp_err_t enqueue_err = lgfx_runtime_enqueue(&port->runtime, build.commands, build.command_count, &batch_id);
+
+    lgfx_batch_build_clear(&build);
+
+    if (enqueue_err != ESP_OK) {
+        return lgfx_reply_from_esp_err_req(ctx, port, req, enqueue_err);
+    }
+
+    (void) batch_id;
+
+    return reply_ok(ctx, port, req, port->atoms.ok);
 }
 
 term lgfx_handle_getCaps(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)

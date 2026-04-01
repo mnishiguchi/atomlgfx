@@ -4,8 +4,8 @@
 
 // lgfx_device/text.cpp
 
-#include "lgfx_device.h"
-#include "lgfx_device_internal.hpp"
+#include "lgfx_device/lgfx_device.h"
+#include "lgfx_device/lgfx_device_internal.hpp"
 
 #include <cmath>
 #include <new>
@@ -85,14 +85,208 @@ static esp_err_t set_jp_font_default(uint8_t target)
     (void) target;
     return ESP_ERR_NOT_SUPPORTED;
 #else
-    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) {
+    return lgfx_dev::with_render_target(target, [&](lgfx::LGFXBase *gfx) {
         gfx->setFont(&ui_font_ja_16_min);
         gfx->setTextSize(1.0f);
     });
 #endif
 }
 
+static esp_err_t set_jp_font_default_locked(uint8_t target)
+{
+#if !defined(LGFX_PORT_ENABLE_JP_FONTS) || (LGFX_PORT_ENABLE_JP_FONTS != 1)
+    (void) target;
+    return ESP_ERR_NOT_SUPPORTED;
+#else
+    return lgfx_dev::with_render_target_locked(target, [&](lgfx::LGFXBase *gfx) {
+        gfx->setFont(&ui_font_ja_16_min);
+        gfx->setTextSize(1.0f);
+    });
+#endif
+}
+
+template <typename SetFn>
+static esp_err_t lgfx_with_validated_text_colors(
+    uint8_t target,
+    bool fg_is_index,
+    uint32_t fg_value,
+    bool has_bg,
+    bool bg_is_index,
+    uint32_t bg_value,
+    SetFn &&set_fn)
+{
+    esp_err_t fg_validation_err = ESP_OK;
+    esp_err_t bg_validation_err = ESP_OK;
+
+    esp_err_t err = lgfx_dev::with_render_target(target, [&](lgfx::LGFXBase *gfx) {
+        fg_validation_err = lgfx_dev::validate_target_scalar_color(target, gfx, fg_is_index, fg_value);
+        if (fg_validation_err != ESP_OK) {
+            return;
+        }
+
+        const uint32_t resolved_fg = lgfx_resolve_text_scalar_color(fg_is_index, fg_value);
+
+        if (has_bg) {
+            bg_validation_err = lgfx_dev::validate_target_scalar_color(target, gfx, bg_is_index, bg_value);
+            if (bg_validation_err != ESP_OK) {
+                return;
+            }
+
+            const uint32_t resolved_bg = lgfx_resolve_text_scalar_color(bg_is_index, bg_value);
+            set_fn(gfx, resolved_fg, true, resolved_bg);
+        } else {
+            set_fn(gfx, resolved_fg, false, 0u);
+        }
+    });
+
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    if (fg_validation_err != ESP_OK) {
+        return fg_validation_err;
+    }
+
+    if (bg_validation_err != ESP_OK) {
+        return bg_validation_err;
+    }
+
+    return ESP_OK;
+}
+
+template <typename SetFn>
+static esp_err_t lgfx_with_validated_text_colors_locked(
+    uint8_t target,
+    bool fg_is_index,
+    uint32_t fg_value,
+    bool has_bg,
+    bool bg_is_index,
+    uint32_t bg_value,
+    SetFn &&set_fn)
+{
+    esp_err_t fg_validation_err = ESP_OK;
+    esp_err_t bg_validation_err = ESP_OK;
+
+    esp_err_t err = lgfx_dev::with_render_target_locked(target, [&](lgfx::LGFXBase *gfx) {
+        fg_validation_err = lgfx_dev::validate_target_scalar_color(target, gfx, fg_is_index, fg_value);
+        if (fg_validation_err != ESP_OK) {
+            return;
+        }
+
+        const uint32_t resolved_fg = lgfx_resolve_text_scalar_color(fg_is_index, fg_value);
+
+        if (has_bg) {
+            bg_validation_err = lgfx_dev::validate_target_scalar_color(target, gfx, bg_is_index, bg_value);
+            if (bg_validation_err != ESP_OK) {
+                return;
+            }
+
+            const uint32_t resolved_bg = lgfx_resolve_text_scalar_color(bg_is_index, bg_value);
+            set_fn(gfx, resolved_fg, true, resolved_bg);
+        } else {
+            set_fn(gfx, resolved_fg, false, 0u);
+        }
+    });
+
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    if (fg_validation_err != ESP_OK) {
+        return fg_validation_err;
+    }
+
+    if (bg_validation_err != ESP_OK) {
+        return bg_validation_err;
+    }
+
+    return ESP_OK;
+}
+
 } // namespace
+
+// -----------------------------------------------------------------------------
+// Internal locked hot-path helpers (batch path)
+// -----------------------------------------------------------------------------
+
+esp_err_t lgfx_dev::set_text_size_locked(uint8_t target, float scale_x, float scale_y)
+{
+    if (!lgfx_text_scale_is_valid(scale_x) || !lgfx_text_scale_is_valid(scale_y)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return lgfx_dev::with_render_target_locked(target, [&](lgfx::LGFXBase *gfx) {
+        gfx->setTextSize(scale_x, scale_y);
+    });
+}
+
+esp_err_t lgfx_dev::set_text_datum_locked(uint8_t target, uint8_t datum)
+{
+    return lgfx_dev::with_render_target_locked(target, [&](lgfx::LGFXBase *gfx) {
+        gfx->setTextDatum((textdatum_t) datum);
+    });
+}
+
+esp_err_t lgfx_dev::set_text_wrap_locked(uint8_t target, bool wrap_x, bool wrap_y)
+{
+    return lgfx_dev::with_render_target_locked(target, [&](lgfx::LGFXBase *gfx) {
+        gfx->setTextWrap(wrap_x, wrap_y);
+    });
+}
+
+esp_err_t lgfx_dev::set_text_font_preset_locked(uint8_t target, lgfx_font_preset_t preset)
+{
+    switch (preset) {
+        case LGFX_FONT_PRESET_ASCII:
+            return lgfx_dev::with_render_target_locked(target, [&](lgfx::LGFXBase *gfx) {
+                gfx->setTextFont(1);
+                gfx->setTextSize(1.0f);
+            });
+
+        case LGFX_FONT_PRESET_JP:
+            return set_jp_font_default_locked(target);
+
+        default:
+            return ESP_ERR_INVALID_ARG;
+    }
+}
+
+esp_err_t lgfx_dev::set_text_color_locked(
+    uint8_t target,
+    bool fg_is_index,
+    uint32_t fg_value,
+    bool has_bg,
+    bool bg_is_index,
+    uint32_t bg_value)
+{
+    return lgfx_with_validated_text_colors_locked(
+        target,
+        fg_is_index,
+        fg_value,
+        has_bg,
+        bg_is_index,
+        bg_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t resolved_fg, bool resolved_has_bg, uint32_t resolved_bg) {
+            if (resolved_has_bg) {
+                gfx->setTextColor(
+                    static_cast<uint32_t>(resolved_fg),
+                    static_cast<uint32_t>(resolved_bg));
+            } else {
+                gfx->setTextColor(static_cast<uint32_t>(resolved_fg));
+            }
+        });
+}
+
+esp_err_t lgfx_dev::set_cursor_locked(uint8_t target, int16_t x, int16_t y)
+{
+    return lgfx_dev::with_render_target_locked(target, [&](lgfx::LGFXBase *gfx) {
+        gfx->setCursor(x, y);
+    });
+}
+
+// -----------------------------------------------------------------------------
+// Public C ABI (ordinary sync path)
+// -----------------------------------------------------------------------------
 
 extern "C" esp_err_t lgfx_device_set_text_size(uint8_t target, float scale)
 {
@@ -100,7 +294,7 @@ extern "C" esp_err_t lgfx_device_set_text_size(uint8_t target, float scale)
         return ESP_ERR_INVALID_ARG;
     }
 
-    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextSize(scale); });
+    return lgfx_dev::with_render_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextSize(scale); });
 }
 
 extern "C" esp_err_t lgfx_device_set_text_size_xy(uint8_t target, float scale_x, float scale_y)
@@ -109,25 +303,25 @@ extern "C" esp_err_t lgfx_device_set_text_size_xy(uint8_t target, float scale_x,
         return ESP_ERR_INVALID_ARG;
     }
 
-    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextSize(scale_x, scale_y); });
+    return lgfx_dev::with_render_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextSize(scale_x, scale_y); });
 }
 
 extern "C" esp_err_t lgfx_device_set_text_datum(uint8_t target, uint8_t datum)
 {
     // Numeric passthrough. Protocol/domain validation is limited to u8.
-    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextDatum((textdatum_t) datum); });
+    return lgfx_dev::with_render_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextDatum((textdatum_t) datum); });
 }
 
 extern "C" esp_err_t lgfx_device_set_text_wrap(uint8_t target, bool wrap_x, bool wrap_y)
 {
-    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextWrap(wrap_x, wrap_y); });
+    return lgfx_dev::with_render_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setTextWrap(wrap_x, wrap_y); });
 }
 
 extern "C" esp_err_t lgfx_device_set_text_font_preset(uint8_t target, uint8_t preset)
 {
     switch (preset) {
         case LGFX_FONT_PRESET_ASCII:
-            return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) {
+            return lgfx_dev::with_render_target(target, [&](lgfx::LGFXBase *gfx) {
                 gfx->setTextFont(1);
                 gfx->setTextSize(1.0f);
             });
@@ -148,51 +342,27 @@ extern "C" esp_err_t lgfx_device_set_text_color(
     bool bg_is_index,
     uint32_t bg_value)
 {
-    esp_err_t fg_validation_err = ESP_OK;
-    esp_err_t bg_validation_err = ESP_OK;
-
-    esp_err_t err = lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) {
-        fg_validation_err = lgfx_dev::validate_target_scalar_color(target, gfx, fg_is_index, fg_value);
-        if (fg_validation_err != ESP_OK) {
-            return;
-        }
-
-        const uint32_t resolved_fg = lgfx_resolve_text_scalar_color(fg_is_index, fg_value);
-
-        if (has_bg) {
-            bg_validation_err = lgfx_dev::validate_target_scalar_color(target, gfx, bg_is_index, bg_value);
-            if (bg_validation_err != ESP_OK) {
-                return;
+    return lgfx_with_validated_text_colors(
+        target,
+        fg_is_index,
+        fg_value,
+        has_bg,
+        bg_is_index,
+        bg_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t resolved_fg, bool resolved_has_bg, uint32_t resolved_bg) {
+            if (resolved_has_bg) {
+                gfx->setTextColor(
+                    static_cast<uint32_t>(resolved_fg),
+                    static_cast<uint32_t>(resolved_bg));
+            } else {
+                gfx->setTextColor(static_cast<uint32_t>(resolved_fg));
             }
-
-            const uint32_t resolved_bg = lgfx_resolve_text_scalar_color(bg_is_index, bg_value);
-
-            gfx->setTextColor(
-                static_cast<uint32_t>(resolved_fg),
-                static_cast<uint32_t>(resolved_bg));
-        } else {
-            gfx->setTextColor(static_cast<uint32_t>(resolved_fg));
-        }
-    });
-
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    if (fg_validation_err != ESP_OK) {
-        return fg_validation_err;
-    }
-
-    if (bg_validation_err != ESP_OK) {
-        return bg_validation_err;
-    }
-
-    return ESP_OK;
+        });
 }
 
 extern "C" esp_err_t lgfx_device_set_cursor(uint8_t target, int16_t x, int16_t y)
 {
-    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setCursor(x, y); });
+    return lgfx_dev::with_render_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setCursor(x, y); });
 }
 
 extern "C" esp_err_t lgfx_device_get_cursor(uint8_t target, int32_t *out_x, int32_t *out_y)
@@ -204,7 +374,7 @@ extern "C" esp_err_t lgfx_device_get_cursor(uint8_t target, int32_t *out_x, int3
     int32_t x = 0;
     int32_t y = 0;
 
-    esp_err_t err = lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) {
+    esp_err_t err = lgfx_dev::with_render_target(target, [&](lgfx::LGFXBase *gfx) {
         x = static_cast<int32_t>(gfx->getCursorX());
         y = static_cast<int32_t>(gfx->getCursorY());
     });
@@ -230,7 +400,7 @@ extern "C" esp_err_t lgfx_device_draw_string(
         text_len,
         false,
         [&](const char *buf) {
-            return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->drawString(buf, x, y); });
+            return lgfx_dev::with_render_target(target, [&](lgfx::LGFXBase *gfx) { gfx->drawString(buf, x, y); });
         });
 }
 
@@ -244,7 +414,7 @@ extern "C" esp_err_t lgfx_device_print(
         text_len,
         true,
         [&](const char *buf) {
-            return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->print(buf); });
+            return lgfx_dev::with_render_target(target, [&](lgfx::LGFXBase *gfx) { gfx->print(buf); });
         });
 }
 
@@ -258,6 +428,6 @@ extern "C" esp_err_t lgfx_device_println(
         text_len,
         true,
         [&](const char *buf) {
-            return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->println(buf); });
+            return lgfx_dev::with_render_target(target, [&](lgfx::LGFXBase *gfx) { gfx->println(buf); });
         });
 }

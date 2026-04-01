@@ -60,7 +60,10 @@ defmodule SampleApp.PushImageStress do
           ok_count,
           err_count,
           pick_case(cases, max_i(0, rounds - 1)),
-          choose_stride_pixels(max_i(0, rounds - 1), elem(pick_case(cases, max_i(0, rounds - 1)), 0))
+          choose_stride_pixels(
+            max_i(0, rounds - 1),
+            elem(pick_case(cases, max_i(0, rounds - 1)), 0)
+          )
         )
 
         IO.puts("push_image_stress done rounds=#{rounds} ok=#{ok_count} err=#{err_count}")
@@ -137,7 +140,16 @@ defmodule SampleApp.PushImageStress do
     :ok
   end
 
-  defp draw_status(port, screen_w, rounds, i, ok_count, err_count, {case_w, case_h}, stride_pixels) do
+  defp draw_status(
+         port,
+         screen_w,
+         rounds,
+         i,
+         ok_count,
+         err_count,
+         {case_w, case_h},
+         stride_pixels
+       ) do
     hud_h = @hud_h
     bar_x = @hud_x
     bar_y = @hud_bar_y

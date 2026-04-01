@@ -7,6 +7,7 @@
 // lgfx_port/include_internal/lgfx_port/ops.h
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "context.h"
@@ -49,6 +50,11 @@ typedef struct
     uint8_t max_arity;
     uint8_t target_policy;
     uint8_t state_policy;
+
+    uint8_t batchable;
+    uint8_t needs_owned_payload;
+    uint8_t sync_only;
+    uint8_t batch_boundary_sensitive;
 } lgfx_op_meta_t;
 
 // -----------------------------------------------------------------------------
@@ -82,6 +88,7 @@ typedef term (*lgfx_handler_fn)(Context *ctx, lgfx_port_t *port, const lgfx_requ
 lgfx_handler_fn lgfx_dispatch_lookup(lgfx_port_t *port, term op);
 const lgfx_op_meta_t *lgfx_op_meta_lookup(const lgfx_port_t *port, term op_atom);
 const char *lgfx_op_name_from_atom(const lgfx_port_t *port, term op_atom);
+bool lgfx_op_try_from_atom(const lgfx_port_t *port, term op_atom, lgfx_op_t *out_op);
 
 #ifdef __cplusplus
 }

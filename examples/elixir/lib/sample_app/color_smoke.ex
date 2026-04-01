@@ -120,7 +120,18 @@ defmodule SampleApp.ColorSmoke do
     draw_swatches_loop(port, colors, 0, cols, x, y, cell_w, cell_h, swatch_h, target)
   end
 
-  defp draw_swatches_loop(_port, colors, index, _cols, _x, _y, _cell_w, _cell_h, _swatch_h, _target)
+  defp draw_swatches_loop(
+         _port,
+         colors,
+         index,
+         _cols,
+         _x,
+         _y,
+         _cell_w,
+         _cell_h,
+         _swatch_h,
+         _target
+       )
        when index >= length(colors),
        do: :ok
 
@@ -149,10 +160,50 @@ defmodule SampleApp.ColorSmoke do
     y0 = y
     y1 = y + cell_h + @raw_cell_gap
 
-    with :ok <- draw_raw_cell(port, "ordinary rgb565 / swap off", :ordinary, false, x0, y0, cell_w, cell_h),
-         :ok <- draw_raw_cell(port, "ordinary rgb565 / swap on", :ordinary, true, x1, y0, cell_w, cell_h),
-         :ok <- draw_raw_cell(port, "pre-swapped / swap off", :pre_swapped, false, x0, y1, cell_w, cell_h),
-         :ok <- draw_raw_cell(port, "pre-swapped / swap on", :pre_swapped, true, x1, y1, cell_w, cell_h) do
+    with :ok <-
+           draw_raw_cell(
+             port,
+             "ordinary rgb565 / swap off",
+             :ordinary,
+             false,
+             x0,
+             y0,
+             cell_w,
+             cell_h
+           ),
+         :ok <-
+           draw_raw_cell(
+             port,
+             "ordinary rgb565 / swap on",
+             :ordinary,
+             true,
+             x1,
+             y0,
+             cell_w,
+             cell_h
+           ),
+         :ok <-
+           draw_raw_cell(
+             port,
+             "pre-swapped / swap off",
+             :pre_swapped,
+             false,
+             x0,
+             y1,
+             cell_w,
+             cell_h
+           ),
+         :ok <-
+           draw_raw_cell(
+             port,
+             "pre-swapped / swap on",
+             :pre_swapped,
+             true,
+             x1,
+             y1,
+             cell_w,
+             cell_h
+           ) do
       :ok
     end
   end
@@ -167,7 +218,8 @@ defmodule SampleApp.ColorSmoke do
          :ok <- AtomLGFX.draw_string_bg(port, x + 2, y + 1, @fg, @bg, 1, label, 0),
          :ok <- AtomLGFX.set_swap_bytes(port, swap_bytes?, @raw_sprite_target),
          :ok <- AtomLGFX.fill_screen(port, @bg, @raw_sprite_target),
-         :ok <- AtomLGFX.push_image_rgb565(port, 0, 0, image_w, image_h, pixels, 0, @raw_sprite_target),
+         :ok <-
+           AtomLGFX.push_image_rgb565(port, 0, 0, image_w, image_h, pixels, 0, @raw_sprite_target),
          :ok <- AtomLGFX.push_sprite(port, @raw_sprite_target, x + 1, y + 12),
          :ok <- AtomLGFX.set_swap_bytes(port, false, @raw_sprite_target) do
       :ok

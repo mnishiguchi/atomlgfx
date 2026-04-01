@@ -4,8 +4,8 @@
 
 // lgfx_device/control.cpp
 
-#include "lgfx_device.h"
-#include "lgfx_device_internal.hpp"
+#include "lgfx_device/lgfx_device.h"
+#include "lgfx_device/lgfx_device_internal.hpp"
 
 #include <algorithm>
 #include <string.h>
@@ -127,7 +127,19 @@ extern "C" esp_err_t lgfx_device_set_rotation(uint8_t rotation)
         return ESP_ERR_INVALID_ARG;
     }
 
-    return lgfx_dev::with_lcd([&](lgfx::LGFX_Device *d) { d->setRotation(rotation); });
+    lgfx_dev::ScopedLcdLock lock;
+    esp_err_t err = lgfx_dev::lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    auto *lcd = lgfx_dev::lcd_device_locked();
+    if (!lcd) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    lcd->setRotation(rotation);
+    return lgfx_dev::presentation_rebuild_locked();
 }
 
 extern "C" esp_err_t lgfx_device_set_brightness(uint8_t brightness)
@@ -137,7 +149,24 @@ extern "C" esp_err_t lgfx_device_set_brightness(uint8_t brightness)
 
 extern "C" esp_err_t lgfx_device_display(void)
 {
-    return lgfx_dev::with_lcd([&](lgfx::LGFX_Device *d) { d->display(); });
+    lgfx_dev::ScopedLcdLock lock;
+    esp_err_t err = lgfx_dev::lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    auto *lcd = lgfx_dev::lcd_device_locked();
+    if (!lcd) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    err = lgfx_dev::presentation_present_locked();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    lcd->display();
+    return ESP_OK;
 }
 
 extern "C" esp_err_t lgfx_device_get_target_dims(uint8_t target, uint16_t *out_w, uint16_t *out_h)
@@ -171,11 +200,31 @@ extern "C" esp_err_t lgfx_device_get_target_dims(uint8_t target, uint16_t *out_w
 
 extern "C" esp_err_t lgfx_device_set_color_depth(uint8_t target, uint8_t depth)
 {
+    if (lgfx_device_is_lcd_target(target)) {
+        lgfx_dev::ScopedLcdLock lock;
+        esp_err_t err = lgfx_dev::lock_ready(lock);
+        if (err != ESP_OK) {
+            return err;
+        }
+
+        return lgfx_dev::presentation_set_color_depth_locked(depth);
+    }
+
     return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setColorDepth(depth); });
 }
 
 extern "C" esp_err_t lgfx_device_set_swap_bytes(uint8_t target, bool enabled)
 {
+    if (lgfx_device_is_lcd_target(target)) {
+        lgfx_dev::ScopedLcdLock lock;
+        esp_err_t err = lgfx_dev::lock_ready(lock);
+        if (err != ESP_OK) {
+            return err;
+        }
+
+        return lgfx_dev::presentation_set_swap_bytes_locked(enabled);
+    }
+
     return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setSwapBytes(enabled); });
 }
 

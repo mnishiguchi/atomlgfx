@@ -123,6 +123,11 @@ defmodule AtomLGFX.Protocol do
     end
   end
 
+  def submit_batch(port, command_terms, timeout \\ @t_long)
+      when is_list(command_terms) do
+    call(port, :submitBatch, 0, 0, [command_terms], timeout)
+  end
+
   defp decode_caps({:caps, proto_ver, max_binary_bytes, max_sprites, feature_bits})
        when is_integer(proto_ver) and
               is_integer(max_binary_bytes) and

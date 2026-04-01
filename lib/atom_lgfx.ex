@@ -78,6 +78,7 @@ defmodule AtomLGFX do
   - `set_swap_bytes/3` controls target-specific byte swapping for raw image upload.
   """
 
+  alias AtomLGFX.Batch
   alias AtomLGFX.Cache
   alias AtomLGFX.Clip
   alias AtomLGFX.Device
@@ -136,6 +137,18 @@ defmodule AtomLGFX do
              is_list(args) do
     Protocol.raw_call(port, op, target, flags, args, timeout)
   end
+
+  @doc """
+  Returns a new explicit batch container.
+  """
+  def batch, do: Batch.new()
+
+  @doc """
+  Enqueues an explicit batch of already-built commands.
+  """
+  def submit_batch(port, %Batch{} = batch), do: Batch.submit(port, batch)
+
+  def submit_batch(port, commands) when is_list(commands), do: Batch.submit(port, commands)
 
   @doc """
   Verifies basic protocol reachability.

@@ -5,6 +5,7 @@
 defmodule SampleApp do
   @moduledoc false
 
+  alias SampleApp.BatchSmoke
   alias SampleApp.ClipSmoke
   alias SampleApp.ColorSmoke
   alias SampleApp.DrawStringStress
@@ -19,11 +20,12 @@ defmodule SampleApp do
   alias SampleApp.TouchProbe
   alias SampleApp.WriteSessionSmoke
 
-  @default_mode :all
+  @default_mode :moving_icons
 
   @valid_modes [
     :protocol,
     :boot,
+    :batch,
     :clip,
     :jpg,
     :sprites,
@@ -43,13 +45,6 @@ defmodule SampleApp do
   @bg 0x0000
   @fg 0xFFFF
 
-  # Sample board wiring profile.
-  #
-  # These are open-time overrides passed explicitly to AtomLGFX.open/1 so the
-  # bring-up example does not depend entirely on build-time defaults.
-  #
-  # Duplicate keys are allowed by AtomLGFX.open/1; later keys win. Callers may
-  # pass extra open options to start/2 to override any of these.
   @sample_open_options [
     rgb_order: false,
     lcd_spi_host: :spi2_host,
@@ -66,41 +61,8 @@ defmodule SampleApp do
     touch_irq_gpio: -1
   ]
 
-  # Rotation preference for bring-up:
-  #
-  # - :auto_landscape
-  #     If the panel boots portrait-ish, try common landscape rotations first.
-  #
-  # - :landscape_cw
-  #     Force rotation 1.
-  #
-  # - :landscape_ccw
-  #     Force rotation 3.
-  #
-  # - integer 0..7
-  #     Force that exact rotation.
-  #
   @rotation_preference :auto_landscape
 
-  # -----------------------------------------------------------------------------
-  # Public entry
-  # -----------------------------------------------------------------------------
-
-  # AtomVM app entrypoint uses this.
-  #
-  # Modes:
-  # - :protocol      -> protocol-only checks (no display init)
-  # - :boot          -> init + display + rotation baseline
-  # - :clip          -> clipping smoke (requires boot)
-  # - :jpg           -> JPEG decode / draw smoke (requires boot)
-  # - :sprites       -> sprite protocol smoke (requires boot)
-  # - :shapes        -> round-rect + ellipse smoke (requires boot)
-  # - :text          -> text + font probe (requires boot)
-  # - :touch         -> touch probe (requires boot)
-  # - :calibrate     -> interactive touch calibration (requires boot)
-  # - :stress        -> push_image + draw_string stress (requires boot)
-  # - :moving_icons  -> moving icons demo loop (requires boot)
-  # - :all           -> jpg + stress + sprites + moving_icons (requires boot)
   def start do
     start(@default_mode)
   end
@@ -129,16 +91,18 @@ defmodule SampleApp do
     end
   end
 
-  # -----------------------------------------------------------------------------
-  # Mode dispatch
-  # -----------------------------------------------------------------------------
-
   defp run_mode(port, :protocol) do
     run_protocol_only(port)
   end
 
   defp run_mode(port, :boot) do
     boot_for_display(port)
+  end
+
+  defp run_mode(port, :batch) do
+    with_boot_dims(port, fn w, h ->
+      step("batch_smoke", BatchSmoke.run(port, w, h))
+    end)
   end
 
   defp run_mode(port, :clip) do
@@ -218,10 +182,6 @@ defmodule SampleApp do
     {:error, {:unknown_mode, mode}}
   end
 
-  # -----------------------------------------------------------------------------
-  # Mode helpers
-  # -----------------------------------------------------------------------------
-
   defp run_protocol_only(port) do
     with :ok <- step("ping", AtomLGFX.ping(port)),
          :ok <- step("protocol_smoke", ProtocolSmoke.run(port)) do
@@ -249,10 +209,6 @@ defmodule SampleApp do
       :ok
     end
   end
-
-  # -----------------------------------------------------------------------------
-  # Boot / rotation
-  # -----------------------------------------------------------------------------
 
   defp boot_for_display(port) do
     case boot_for_display_with_dims(port) do
@@ -389,10 +345,6 @@ defmodule SampleApp do
   defp orientation_name(true), do: "landscape"
   defp orientation_name(false), do: "portrait"
 
-  # -----------------------------------------------------------------------------
-  # Small port helpers
-  # -----------------------------------------------------------------------------
-
   defp get_wh(port) do
     with {:ok, w} <- AtomLGFX.width(port, 0),
          {:ok, h} <- AtomLGFX.height(port, 0) do
@@ -411,10 +363,6 @@ defmodule SampleApp do
         :ok
     end
   end
-
-  # -----------------------------------------------------------------------------
-  # Logging helpers
-  # -----------------------------------------------------------------------------
 
   defp step(label, :ok) do
     log_info("#{label} ok")

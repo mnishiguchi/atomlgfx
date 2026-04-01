@@ -4,11 +4,230 @@
 
 // lgfx_device/sprites.cpp
 
-#include "lgfx_device.h"
-#include "lgfx_device_internal.hpp"
+#include "lgfx_device/lgfx_device.h"
+#include "lgfx_device/lgfx_device_internal.hpp"
 
 #include <cmath>
 #include <new>
+
+namespace
+{
+
+static inline bool lgfx_rotate_zoom_args_are_valid(float angle, float zoom_x, float zoom_y)
+{
+    return std::isfinite(angle)
+        && std::isfinite(zoom_x)
+        && std::isfinite(zoom_y)
+        && zoom_x > 0.0f
+        && zoom_y > 0.0f;
+}
+
+static esp_err_t lgfx_push_sprite_locked_impl(
+    uint8_t src_handle,
+    uint8_t dst_target,
+    int16_t x,
+    int16_t y,
+    bool has_transparent,
+    bool transparent_is_index,
+    uint32_t transparent_value)
+{
+    if (!lgfx_device_is_sprite_target(src_handle)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!lgfx_dev::protocol_valid_target(dst_target)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    auto *src = lgfx_dev::resolve_sprite_locked(src_handle);
+    if (!src) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    esp_err_t err = lgfx_dev::validate_sprite_transparent_scalar(
+        src,
+        has_transparent,
+        transparent_is_index,
+        transparent_value);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    if (lgfx_device_is_lcd_target(dst_target)) {
+        auto *render_surface = lgfx_dev::resolve_render_surface_locked(dst_target);
+        if (!render_surface) {
+            return ESP_ERR_INVALID_STATE;
+        }
+
+        if (has_transparent) {
+            src->pushSprite(render_surface, x, y, static_cast<uint32_t>(transparent_value));
+        } else {
+            src->pushSprite(render_surface, x, y);
+        }
+
+        return ESP_OK;
+    }
+
+    auto *dst_spr = lgfx_dev::resolve_sprite_locked(dst_target);
+    if (!dst_spr) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (has_transparent) {
+        src->pushSprite(dst_spr, x, y, static_cast<uint32_t>(transparent_value));
+    } else {
+        src->pushSprite(dst_spr, x, y);
+    }
+
+    return ESP_OK;
+}
+
+static esp_err_t lgfx_push_rotate_zoom_locked_impl(
+    uint8_t src_handle,
+    uint8_t dst_target,
+    int16_t x,
+    int16_t y,
+    float angle,
+    float zoom_x,
+    float zoom_y,
+    bool has_transparent,
+    bool transparent_is_index,
+    uint32_t transparent_value)
+{
+    if (!lgfx_device_is_sprite_target(src_handle)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!lgfx_dev::protocol_valid_target(dst_target)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!lgfx_rotate_zoom_args_are_valid(angle, zoom_x, zoom_y)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    auto *src = lgfx_dev::resolve_sprite_locked(src_handle);
+    if (!src) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    esp_err_t err = lgfx_dev::validate_sprite_transparent_scalar(
+        src,
+        has_transparent,
+        transparent_is_index,
+        transparent_value);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    if (lgfx_device_is_lcd_target(dst_target)) {
+        auto *render_surface = lgfx_dev::resolve_render_surface_locked(dst_target);
+        if (!render_surface) {
+            return ESP_ERR_INVALID_STATE;
+        }
+
+        if (has_transparent) {
+            src->pushRotateZoom(
+                render_surface,
+                static_cast<float>(x),
+                static_cast<float>(y),
+                angle,
+                zoom_x,
+                zoom_y,
+                static_cast<uint32_t>(transparent_value));
+        } else {
+            src->pushRotateZoom(
+                render_surface,
+                static_cast<float>(x),
+                static_cast<float>(y),
+                angle,
+                zoom_x,
+                zoom_y);
+        }
+
+        return ESP_OK;
+    }
+
+    auto *dst_spr = lgfx_dev::resolve_sprite_locked(dst_target);
+    if (!dst_spr) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (has_transparent) {
+        src->pushRotateZoom(
+            dst_spr,
+            static_cast<float>(x),
+            static_cast<float>(y),
+            angle,
+            zoom_x,
+            zoom_y,
+            static_cast<uint32_t>(transparent_value));
+    } else {
+        src->pushRotateZoom(
+            dst_spr,
+            static_cast<float>(x),
+            static_cast<float>(y),
+            angle,
+            zoom_x,
+            zoom_y);
+    }
+
+    return ESP_OK;
+}
+
+} // namespace
+
+// -----------------------------------------------------------------------------
+// Internal locked hot-path helpers (batch path)
+// -----------------------------------------------------------------------------
+
+esp_err_t lgfx_dev::push_sprite_locked(
+    uint8_t src_handle,
+    uint8_t dst_target,
+    int16_t dst_x,
+    int16_t dst_y,
+    bool has_transparent,
+    bool transparent_is_index,
+    uint32_t transparent_value)
+{
+    return lgfx_push_sprite_locked_impl(
+        src_handle,
+        dst_target,
+        dst_x,
+        dst_y,
+        has_transparent,
+        transparent_is_index,
+        transparent_value);
+}
+
+esp_err_t lgfx_dev::push_rotate_zoom_locked(
+    uint8_t src_handle,
+    uint8_t dst_target,
+    int16_t dst_x,
+    int16_t dst_y,
+    float angle,
+    float zoom_x,
+    float zoom_y,
+    bool has_transparent,
+    bool transparent_is_index,
+    uint32_t transparent_value)
+{
+    return lgfx_push_rotate_zoom_locked_impl(
+        src_handle,
+        dst_target,
+        dst_x,
+        dst_y,
+        angle,
+        zoom_x,
+        zoom_y,
+        has_transparent,
+        transparent_is_index,
+        transparent_value);
+}
+
+// -----------------------------------------------------------------------------
+// Public C ABI (ordinary sync path)
+// -----------------------------------------------------------------------------
 
 extern "C" esp_err_t lgfx_device_sprite_create_at(uint8_t handle, uint16_t w, uint16_t h, uint8_t color_depth)
 {
@@ -146,7 +365,9 @@ extern "C" esp_err_t lgfx_device_sprite_set_palette_color(uint8_t handle, uint8_
 
 extern "C" esp_err_t lgfx_device_set_pivot(uint8_t target, int16_t px, int16_t py)
 {
-    return lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) { gfx->setPivot(px, py); });
+    return lgfx_dev::with_render_target(target, [&](lgfx::LGFXBase *gfx) {
+        gfx->setPivot(px, py);
+    });
 }
 
 extern "C" esp_err_t lgfx_device_sprite_push_sprite(
@@ -158,57 +379,20 @@ extern "C" esp_err_t lgfx_device_sprite_push_sprite(
     bool transparent_is_index,
     uint32_t transparent_value)
 {
-    if (!lgfx_device_is_sprite_target(src_handle)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    if (!lgfx_dev::protocol_valid_target(dst_target)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
     lgfx_dev::ScopedLcdLock lock;
     esp_err_t err = lgfx_dev::lock_ready(lock);
     if (err != ESP_OK) {
         return err;
     }
 
-    auto *src = lgfx_dev::resolve_sprite_locked(src_handle);
-    if (!src) {
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    err = lgfx_dev::validate_sprite_transparent_scalar(src, has_transparent, transparent_is_index, transparent_value);
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    if (lgfx_device_is_lcd_target(dst_target)) {
-        auto *lcd = lgfx_dev::lcd_device_locked();
-        if (!lcd) {
-            return ESP_ERR_INVALID_STATE;
-        }
-
-        if (has_transparent) {
-            src->pushSprite(lcd, x, y, static_cast<uint32_t>(transparent_value));
-        } else {
-            src->pushSprite(lcd, x, y);
-        }
-
-        return ESP_OK;
-    }
-
-    auto *dst_spr = lgfx_dev::resolve_sprite_locked(dst_target);
-    if (!dst_spr) {
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    if (has_transparent) {
-        src->pushSprite(dst_spr, x, y, static_cast<uint32_t>(transparent_value));
-    } else {
-        src->pushSprite(dst_spr, x, y);
-    }
-
-    return ESP_OK;
+    return lgfx_dev::push_sprite_locked(
+        src_handle,
+        dst_target,
+        x,
+        y,
+        has_transparent,
+        transparent_is_index,
+        transparent_value);
 }
 
 extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
@@ -223,89 +407,21 @@ extern "C" esp_err_t lgfx_device_sprite_push_rotate_zoom(
     bool transparent_is_index,
     uint32_t transparent_value)
 {
-    if (!lgfx_device_is_sprite_target(src_handle)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    if (!lgfx_dev::protocol_valid_target(dst_target)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    if (!std::isfinite(angle) || !std::isfinite(zoom_x) || !std::isfinite(zoom_y)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    if (zoom_x <= 0.0f || zoom_y <= 0.0f) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
     lgfx_dev::ScopedLcdLock lock;
     esp_err_t err = lgfx_dev::lock_ready(lock);
     if (err != ESP_OK) {
         return err;
     }
 
-    auto *src = lgfx_dev::resolve_sprite_locked(src_handle);
-    if (!src) {
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    err = lgfx_dev::validate_sprite_transparent_scalar(src, has_transparent, transparent_is_index, transparent_value);
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    if (lgfx_device_is_lcd_target(dst_target)) {
-        auto *lcd = lgfx_dev::lcd_device_locked();
-        if (!lcd) {
-            return ESP_ERR_INVALID_STATE;
-        }
-
-        if (has_transparent) {
-            src->pushRotateZoom(
-                lcd,
-                static_cast<float>(x),
-                static_cast<float>(y),
-                angle,
-                zoom_x,
-                zoom_y,
-                static_cast<uint32_t>(transparent_value));
-        } else {
-            src->pushRotateZoom(
-                lcd,
-                static_cast<float>(x),
-                static_cast<float>(y),
-                angle,
-                zoom_x,
-                zoom_y);
-        }
-
-        return ESP_OK;
-    }
-
-    auto *dst_spr = lgfx_dev::resolve_sprite_locked(dst_target);
-    if (!dst_spr) {
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    if (has_transparent) {
-        src->pushRotateZoom(
-            dst_spr,
-            static_cast<float>(x),
-            static_cast<float>(y),
-            angle,
-            zoom_x,
-            zoom_y,
-            static_cast<uint32_t>(transparent_value));
-    } else {
-        src->pushRotateZoom(
-            dst_spr,
-            static_cast<float>(x),
-            static_cast<float>(y),
-            angle,
-            zoom_x,
-            zoom_y);
-    }
-
-    return ESP_OK;
+    return lgfx_dev::push_rotate_zoom_locked(
+        src_handle,
+        dst_target,
+        x,
+        y,
+        angle,
+        zoom_x,
+        zoom_y,
+        has_transparent,
+        transparent_is_index,
+        transparent_value);
 }

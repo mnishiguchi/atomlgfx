@@ -10,11 +10,12 @@ This repository provides an Elixir package named `AtomLGFX` for AtomVM.
 
 It is a wrapper around the native `lgfx_port` driver in this repository. The
 package provides the Elixir-facing API, convenience helpers, and wrapper-side
-normalization on top of the shared tuple protocol.
+normalization on top of the shared native protocol.
 
 ## Requirements
 
-This package depends on AtomVM firmware that includes the native `lgfx_port` driver.
+This package depends on AtomVM firmware that includes the native `lgfx_port`
+driver.
 
 The native driver and this Elixir package are developed together in the same
 repository and should be kept in sync, especially while the project remains
@@ -59,44 +60,22 @@ mix deps.get
 
 Adjust options and function calls to match your board and target device.
 
-## API shape
-
-The package wraps the shared native protocol rather than redefining it.
-
-At a high level:
-
-- Elixir code calls `AtomLGFX`
-- the wrapper builds and sends protocol requests
-- the native driver executes the request
-- replies are returned as `{ok, result}` or `{error, reason}`
-
-The underlying request shape is:
-
-```erlang
-{lgfx, ProtoVer, Op, Target, Flags, ...}
-```
-
-For the full native contract, see [the protocol document](protocol.md).
-
-## Scope boundary
+## Scope
 
 This package owns:
 
 - Elixir-facing API shape
 - convenience helpers
 - wrapper-side validation and normalization
-- wrapper-local caching and ergonomics
+- wrapper-local ergonomics
 
-This package does not own:
-
-- native request dispatch
-- LovyanGFX device semantics
-- protocol contract definition
+It does not define the native protocol contract or LovyanGFX device semantics.
 
 For those, see:
 
 - [Architecture](architecture.md)
 - [Protocol](protocol.md)
+- [ESP-IDF component guide](esp-idf-component.md)
 - [Port layer](../lgfx_port/README.md)
 - [Device adapter layer](../lgfx_device/README.md)
 
@@ -104,4 +83,5 @@ For those, see:
 
 The project is usable but still pre-release.
 
-Until the first tagged release, update the Elixir package and the native driver together.
+Until the first tagged release, update the Elixir package and the native driver
+together.

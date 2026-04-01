@@ -4,8 +4,8 @@
 
 // lgfx_device/primitives.cpp
 
-#include "lgfx_device.h"
-#include "lgfx_device_internal.hpp"
+#include "lgfx_device/lgfx_device.h"
+#include "lgfx_device/lgfx_device_internal.hpp"
 
 #include <cmath>
 
@@ -50,7 +50,33 @@ static esp_err_t lgfx_with_validated_target_color(
 {
     esp_err_t validation_err = ESP_OK;
 
-    esp_err_t err = lgfx_dev::with_target(target, [&](lgfx::LGFXBase *gfx) {
+    esp_err_t err = lgfx_dev::with_render_target(target, [&](lgfx::LGFXBase *gfx) {
+        validation_err = lgfx_dev::validate_target_scalar_color(target, gfx, color_is_index, color_value);
+        if (validation_err != ESP_OK) {
+            return;
+        }
+
+        const uint32_t resolved_color = lgfx_resolve_draw_scalar_color(color_is_index, color_value);
+        draw_fn(gfx, resolved_color);
+    });
+
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    return validation_err;
+}
+
+template <typename DrawFn>
+static esp_err_t lgfx_with_validated_target_color_locked(
+    uint8_t target,
+    bool color_is_index,
+    uint32_t color_value,
+    DrawFn &&draw_fn)
+{
+    esp_err_t validation_err = ESP_OK;
+
+    esp_err_t err = lgfx_dev::with_render_target_locked(target, [&](lgfx::LGFXBase *gfx) {
         validation_err = lgfx_dev::validate_target_scalar_color(target, gfx, color_is_index, color_value);
         if (validation_err != ESP_OK) {
             return;
@@ -68,6 +94,55 @@ static esp_err_t lgfx_with_validated_target_color(
 }
 
 } // namespace
+
+// -----------------------------------------------------------------------------
+// Internal locked hot-path helpers (batch path)
+// -----------------------------------------------------------------------------
+
+esp_err_t lgfx_dev::fill_screen_locked(uint8_t target, bool color_is_index, uint32_t color_value)
+{
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->fillScreen(scalar_color); });
+}
+
+esp_err_t lgfx_dev::fill_rect_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->fillRect(x, y, w, h, scalar_color); });
+}
+
+esp_err_t lgfx_dev::draw_line_locked(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->drawLine(x0, y0, x1, y1, scalar_color); });
+}
+
+// -----------------------------------------------------------------------------
+// Public C ABI (ordinary sync path)
+// -----------------------------------------------------------------------------
 
 extern "C" esp_err_t lgfx_device_fill_screen(uint8_t target, bool color_is_index, uint32_t color_value)
 {
@@ -256,9 +331,7 @@ extern "C" esp_err_t lgfx_device_draw_ellipse(
         target,
         color_is_index,
         color_value,
-        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
-            gfx->drawEllipse(x, y, rx, ry, scalar_color);
-        });
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->drawEllipse(x, y, rx, ry, scalar_color); });
 }
 
 extern "C" esp_err_t lgfx_device_fill_ellipse(
@@ -274,9 +347,7 @@ extern "C" esp_err_t lgfx_device_fill_ellipse(
         target,
         color_is_index,
         color_value,
-        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
-            gfx->fillEllipse(x, y, rx, ry, scalar_color);
-        });
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->fillEllipse(x, y, rx, ry, scalar_color); });
 }
 
 extern "C" esp_err_t lgfx_device_draw_arc(
