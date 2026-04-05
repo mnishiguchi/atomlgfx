@@ -400,6 +400,7 @@ idf_component_register(
     "lgfx_port/op_registry.c"
     "lgfx_port/proto_term.c"
     "lgfx_port/batch_decode.c"
+    "lgfx_port/batch_decode_builders.c"
 
     # Port handlers
     "lgfx_port/handlers/control.c"

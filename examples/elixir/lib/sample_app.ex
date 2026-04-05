@@ -11,6 +11,7 @@ defmodule SampleApp do
   alias SampleApp.DrawStringStress
   alias SampleApp.JpgSmoke
   alias SampleApp.MovingIcons
+  alias SampleApp.MovingLines
   alias SampleApp.ProtocolSmoke
   alias SampleApp.PushImageStress
   alias SampleApp.ShapeSmoke
@@ -36,6 +37,7 @@ defmodule SampleApp do
     :stress,
     :colors,
     :moving_icons,
+    :moving_lines,
     :all
   ]
 
@@ -162,6 +164,12 @@ defmodule SampleApp do
   defp run_mode(port, :moving_icons) do
     with_boot_dims(port, fn w, h ->
       MovingIcons.run(port, w, h)
+    end)
+  end
+
+  defp run_mode(port, :moving_lines) do
+    with_boot_dims(port, fn w, h ->
+      MovingLines.run(port, w, h)
     end)
   end
 

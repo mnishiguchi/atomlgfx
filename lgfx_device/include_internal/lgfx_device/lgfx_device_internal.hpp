@@ -487,12 +487,171 @@ esp_err_t fill_screen_locked(
     bool color_is_index,
     uint32_t color_value);
 
+esp_err_t clear_locked(
+    uint8_t target,
+    bool color_is_index,
+    uint32_t color_value);
+
 esp_err_t fill_rect_locked(
     uint8_t target,
     int16_t x,
     int16_t y,
     uint16_t w,
     uint16_t h,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t draw_pixel_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t draw_rect_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t draw_round_rect_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t r,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t fill_round_rect_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t r,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t draw_circle_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t r,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t fill_circle_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t r,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t draw_ellipse_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t rx,
+    uint16_t ry,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t fill_ellipse_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t rx,
+    uint16_t ry,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t draw_arc_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t r0,
+    uint16_t r1,
+    float angle0,
+    float angle1,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t fill_arc_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t r0,
+    uint16_t r1,
+    float angle0,
+    float angle1,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t draw_bezier3_locked(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t draw_bezier4_locked(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    int16_t x3,
+    int16_t y3,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t draw_triangle_locked(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t fill_triangle_locked(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t draw_fast_vline_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t h,
+    bool color_is_index,
+    uint32_t color_value);
+
+esp_err_t draw_fast_hline_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
     bool color_is_index,
     uint32_t color_value);
 

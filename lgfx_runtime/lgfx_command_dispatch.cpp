@@ -67,6 +67,12 @@ static esp_err_t lgfx_command_dispatch_one_locked(const lgfx_batch_command_t *co
             return lgfx_dev::fill_screen_locked(target, color_is_index, color_value);
         }
 
+        case LGFX_OP_clear: {
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[0];
+            return lgfx_dev::clear_locked(target, color_is_index, color_value);
+        }
+
         case LGFX_OP_fillRect: {
             const int16_t x = (int16_t) (int32_t) command->inline_args.words[0];
             const int16_t y = (int16_t) (int32_t) command->inline_args.words[1];
@@ -76,6 +82,241 @@ static esp_err_t lgfx_command_dispatch_one_locked(const lgfx_batch_command_t *co
             const uint32_t color_value = command->inline_args.words[4];
 
             return lgfx_dev::fill_rect_locked(target, x, y, w, h, color_is_index, color_value);
+        }
+
+        case LGFX_OP_drawPixel: {
+            const int16_t x = (int16_t) (int32_t) command->inline_args.words[0];
+            const int16_t y = (int16_t) (int32_t) command->inline_args.words[1];
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[2];
+
+            return lgfx_dev::draw_pixel_locked(target, x, y, color_is_index, color_value);
+        }
+
+        case LGFX_OP_drawRect: {
+            const int16_t x = (int16_t) (int32_t) command->inline_args.words[0];
+            const int16_t y = (int16_t) (int32_t) command->inline_args.words[1];
+            const uint16_t w = (uint16_t) command->inline_args.words[2];
+            const uint16_t h = (uint16_t) command->inline_args.words[3];
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[4];
+
+            return lgfx_dev::draw_rect_locked(target, x, y, w, h, color_is_index, color_value);
+        }
+
+        case LGFX_OP_drawRoundRect: {
+            const int16_t x = (int16_t) (int32_t) command->inline_args.words[0];
+            const int16_t y = (int16_t) (int32_t) command->inline_args.words[1];
+            const uint16_t w = (uint16_t) command->inline_args.words[2];
+            const uint16_t h = (uint16_t) command->inline_args.words[3];
+            const uint16_t r = (uint16_t) command->inline_args.words[4];
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[5];
+
+            return lgfx_dev::draw_round_rect_locked(target, x, y, w, h, r, color_is_index, color_value);
+        }
+
+        case LGFX_OP_fillRoundRect: {
+            const int16_t x = (int16_t) (int32_t) command->inline_args.words[0];
+            const int16_t y = (int16_t) (int32_t) command->inline_args.words[1];
+            const uint16_t w = (uint16_t) command->inline_args.words[2];
+            const uint16_t h = (uint16_t) command->inline_args.words[3];
+            const uint16_t r = (uint16_t) command->inline_args.words[4];
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[5];
+
+            return lgfx_dev::fill_round_rect_locked(target, x, y, w, h, r, color_is_index, color_value);
+        }
+
+        case LGFX_OP_drawCircle: {
+            const int16_t x = (int16_t) (int32_t) command->inline_args.words[0];
+            const int16_t y = (int16_t) (int32_t) command->inline_args.words[1];
+            const uint16_t r = (uint16_t) command->inline_args.words[2];
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[3];
+
+            return lgfx_dev::draw_circle_locked(target, x, y, r, color_is_index, color_value);
+        }
+
+        case LGFX_OP_fillCircle: {
+            const int16_t x = (int16_t) (int32_t) command->inline_args.words[0];
+            const int16_t y = (int16_t) (int32_t) command->inline_args.words[1];
+            const uint16_t r = (uint16_t) command->inline_args.words[2];
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[3];
+
+            return lgfx_dev::fill_circle_locked(target, x, y, r, color_is_index, color_value);
+        }
+
+        case LGFX_OP_drawEllipse: {
+            const int16_t x = (int16_t) (int32_t) command->inline_args.words[0];
+            const int16_t y = (int16_t) (int32_t) command->inline_args.words[1];
+            const uint16_t rx = (uint16_t) command->inline_args.words[2];
+            const uint16_t ry = (uint16_t) command->inline_args.words[3];
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[4];
+
+            return lgfx_dev::draw_ellipse_locked(target, x, y, rx, ry, color_is_index, color_value);
+        }
+
+        case LGFX_OP_fillEllipse: {
+            const int16_t x = (int16_t) (int32_t) command->inline_args.words[0];
+            const int16_t y = (int16_t) (int32_t) command->inline_args.words[1];
+            const uint16_t rx = (uint16_t) command->inline_args.words[2];
+            const uint16_t ry = (uint16_t) command->inline_args.words[3];
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[4];
+
+            return lgfx_dev::fill_ellipse_locked(target, x, y, rx, ry, color_is_index, color_value);
+        }
+
+        case LGFX_OP_drawArc: {
+            const int16_t x = (int16_t) (int32_t) command->inline_args.words[0];
+            const int16_t y = (int16_t) (int32_t) command->inline_args.words[1];
+            const uint16_t r0 = (uint16_t) command->inline_args.words[2];
+            const uint16_t r1 = (uint16_t) command->inline_args.words[3];
+            const float angle0 = lgfx_command_unpack_f32(command->inline_args.words[4]);
+            const float angle1 = lgfx_command_unpack_f32(command->inline_args.words[5]);
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[6];
+
+            return lgfx_dev::draw_arc_locked(
+                target,
+                x,
+                y,
+                r0,
+                r1,
+                angle0,
+                angle1,
+                color_is_index,
+                color_value);
+        }
+
+        case LGFX_OP_fillArc: {
+            const int16_t x = (int16_t) (int32_t) command->inline_args.words[0];
+            const int16_t y = (int16_t) (int32_t) command->inline_args.words[1];
+            const uint16_t r0 = (uint16_t) command->inline_args.words[2];
+            const uint16_t r1 = (uint16_t) command->inline_args.words[3];
+            const float angle0 = lgfx_command_unpack_f32(command->inline_args.words[4]);
+            const float angle1 = lgfx_command_unpack_f32(command->inline_args.words[5]);
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[6];
+
+            return lgfx_dev::fill_arc_locked(
+                target,
+                x,
+                y,
+                r0,
+                r1,
+                angle0,
+                angle1,
+                color_is_index,
+                color_value);
+        }
+
+        case LGFX_OP_drawBezier: {
+            const int16_t x0 = (int16_t) (int32_t) command->inline_args.words[0];
+            const int16_t y0 = (int16_t) (int32_t) command->inline_args.words[1];
+            const int16_t x1 = (int16_t) (int32_t) command->inline_args.words[2];
+            const int16_t y1 = (int16_t) (int32_t) command->inline_args.words[3];
+            const int16_t x2 = (int16_t) (int32_t) command->inline_args.words[4];
+            const int16_t y2 = (int16_t) (int32_t) command->inline_args.words[5];
+            const bool is_cubic = command->inline_args.words[6] != 0u;
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[9];
+
+            if (!is_cubic) {
+                return lgfx_dev::draw_bezier3_locked(
+                    target,
+                    x0,
+                    y0,
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    color_is_index,
+                    color_value);
+            }
+
+            const int16_t x3 = (int16_t) (int32_t) command->inline_args.words[7];
+            const int16_t y3 = (int16_t) (int32_t) command->inline_args.words[8];
+
+            return lgfx_dev::draw_bezier4_locked(
+                target,
+                x0,
+                y0,
+                x1,
+                y1,
+                x2,
+                y2,
+                x3,
+                y3,
+                color_is_index,
+                color_value);
+        }
+
+        case LGFX_OP_drawTriangle: {
+            const int16_t x0 = (int16_t) (int32_t) command->inline_args.words[0];
+            const int16_t y0 = (int16_t) (int32_t) command->inline_args.words[1];
+            const int16_t x1 = (int16_t) (int32_t) command->inline_args.words[2];
+            const int16_t y1 = (int16_t) (int32_t) command->inline_args.words[3];
+            const int16_t x2 = (int16_t) (int32_t) command->inline_args.words[4];
+            const int16_t y2 = (int16_t) (int32_t) command->inline_args.words[5];
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[6];
+
+            return lgfx_dev::draw_triangle_locked(
+                target,
+                x0,
+                y0,
+                x1,
+                y1,
+                x2,
+                y2,
+                color_is_index,
+                color_value);
+        }
+
+        case LGFX_OP_fillTriangle: {
+            const int16_t x0 = (int16_t) (int32_t) command->inline_args.words[0];
+            const int16_t y0 = (int16_t) (int32_t) command->inline_args.words[1];
+            const int16_t x1 = (int16_t) (int32_t) command->inline_args.words[2];
+            const int16_t y1 = (int16_t) (int32_t) command->inline_args.words[3];
+            const int16_t x2 = (int16_t) (int32_t) command->inline_args.words[4];
+            const int16_t y2 = (int16_t) (int32_t) command->inline_args.words[5];
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[6];
+
+            return lgfx_dev::fill_triangle_locked(
+                target,
+                x0,
+                y0,
+                x1,
+                y1,
+                x2,
+                y2,
+                color_is_index,
+                color_value);
+        }
+
+        case LGFX_OP_drawFastVLine: {
+            const int16_t x = (int16_t) (int32_t) command->inline_args.words[0];
+            const int16_t y = (int16_t) (int32_t) command->inline_args.words[1];
+            const uint16_t h = (uint16_t) command->inline_args.words[2];
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[3];
+
+            return lgfx_dev::draw_fast_vline_locked(target, x, y, h, color_is_index, color_value);
+        }
+
+        case LGFX_OP_drawFastHLine: {
+            const int16_t x = (int16_t) (int32_t) command->inline_args.words[0];
+            const int16_t y = (int16_t) (int32_t) command->inline_args.words[1];
+            const uint16_t w = (uint16_t) command->inline_args.words[2];
+            const bool color_is_index = lgfx_command_color_is_index(command);
+            const uint32_t color_value = command->inline_args.words[3];
+
+            return lgfx_dev::draw_fast_hline_locked(target, x, y, w, color_is_index, color_value);
         }
 
         case LGFX_OP_drawLine: {
@@ -214,7 +455,23 @@ extern "C" bool lgfx_command_dispatch_is_supported(lgfx_op_t op)
 {
     switch (op) {
         case LGFX_OP_fillScreen:
+        case LGFX_OP_clear:
         case LGFX_OP_fillRect:
+        case LGFX_OP_drawPixel:
+        case LGFX_OP_drawRect:
+        case LGFX_OP_drawRoundRect:
+        case LGFX_OP_fillRoundRect:
+        case LGFX_OP_drawCircle:
+        case LGFX_OP_fillCircle:
+        case LGFX_OP_drawEllipse:
+        case LGFX_OP_fillEllipse:
+        case LGFX_OP_drawArc:
+        case LGFX_OP_fillArc:
+        case LGFX_OP_drawBezier:
+        case LGFX_OP_drawTriangle:
+        case LGFX_OP_fillTriangle:
+        case LGFX_OP_drawFastVLine:
+        case LGFX_OP_drawFastHLine:
         case LGFX_OP_drawLine:
         case LGFX_OP_setClipRect:
         case LGFX_OP_clearClipRect:

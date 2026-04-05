@@ -311,6 +311,27 @@ message = AtomLGFX.format_error({:bad_text_scale, -1})
 
 ## 明示的バッチ
 
+通常の API は、その場で同期的に実行されます。
+
+明示的バッチは、複数の描画命令をまとめて送るための仕組みです。重い描画をまとめたい場合だけ使います。
+
+基本的な流れは次のとおりです。
+
+1. `AtomLGFX.batch/0` で空のバッチを作る
+2. `AtomLGFX.Batch.add/2` で命令を追加する
+3. `AtomLGFX.submit_batch/2` で送る
+
+```elixir
+batch =
+  AtomLGFX.batch()
+  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.clear(0x0000))
+  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.draw_rect(8, 8, 120, 80, 0xFFFF))
+  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.line(8, 8, 127, 87, 0x07E0))
+  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.fill_circle(68, 48, 10, 0xF800))
+
+{:ok, _} = AtomLGFX.submit_batch(port, batch)
+```
+
 ### `batch/0`
 
 空のバッチ器を返します。
@@ -321,18 +342,77 @@ batch = AtomLGFX.batch()
 
 ### `submit_batch/2`
 
-構築済みの明示的バッチを送ります。
+構築済みのバッチを送ります。
+
+```elixir
+{:ok, _} = AtomLGFX.submit_batch(port, batch)
+```
+
+`submit_batch/2` の成功は、バッチ要求が受理されたことを意味します。
+
+### `AtomLGFX.Batch.Command`
+
+`AtomLGFX.Batch.Command` には、明示的バッチ向けの命令ビルダーがあります。まずはこれらを使うのが安全です。
+
+現在の主な図形ビルダーは次のとおりです。
+
+- `fill_screen/2`
+- `clear/2`
+- `fill_rect/6`
+- `draw_pixel/4`
+- `draw_rect/6`
+- `draw_round_rect/7`
+- `fill_round_rect/7`
+- `draw_circle/5`
+- `fill_circle/5`
+- `draw_ellipse/6`
+- `fill_ellipse/6`
+- `draw_arc/8`
+- `fill_arc/8`
+- `draw_bezier3/8`
+- `draw_bezier4/10`
+- `draw_triangle/8`
+- `fill_triangle/8`
+- `draw_fast_vline/5`
+- `draw_fast_hline/5`
+- `draw_line/6`
+- `line/6`
+
+### `line/6`
+
+`line/6` は補助用のビルダーです。
+
+- 縦線なら `draw_fast_vline/5`
+- 横線なら `draw_fast_hline/5`
+- それ以外なら `draw_line/6`
+
+という形に自動で振り分けます。
 
 ```elixir
 batch =
   AtomLGFX.batch()
-  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.new(:fillScreen, 0, 0, [0x0000]))
-  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.new(:drawLine, 0, 0, [0, 0, 100, 100, 0xFFFF]))
-
-{:ok, _} = AtomLGFX.submit_batch(port, batch)
+  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.line(0, 20, 100, 20, 0xFFFF))
+  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.line(40, 0, 40, 80, 0x07E0))
+  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.line(0, 0, 100, 80, 0xF800))
 ```
 
-バッチは任意機能です。通常の関数呼び出しはそのまま直接使えます。
+### 生のコマンドを組み立てる場合
+
+必要なら `AtomLGFX.Batch.Command.new/4` で生のコマンドを組み立てることもできます。
+
+```elixir
+{:ok, command} =
+  AtomLGFX.Batch.Command.new(:setClipRect, 0, 0, [10, 10, 100, 80])
+```
+
+ただし、通常は専用ビルダーを使うほうが安全です。
+
+### 使い分け
+
+- 単発の描画や簡単な処理なら通常の API を使う
+- 多数の図形描画をまとめたいときだけ明示的バッチを使う
+
+明示的バッチは任意機能です。通常の関数呼び出しはそのまま使えます。
 
 ## 表示制御
 

@@ -471,7 +471,34 @@ Important semantic note:
 
 Explicit batch support is intentionally narrower than the full ordinary operation surface.
 
-Current batch submission is intended for grouped rendering work built from a limited inline command subset.
+At the current inline scalar slice, explicit batching accepts grouped rendering work built from fixed-arity, no-payload commands.
+
+Current scalar drawing and fill commands accepted by explicit batching include:
+
+- `fillScreen`
+- `clear`
+- `fillRect`
+- `drawPixel`
+- `drawRect`
+- `drawRoundRect`
+- `fillRoundRect`
+- `drawCircle`
+- `fillCircle`
+- `drawEllipse`
+- `fillEllipse`
+- `drawArc`
+- `fillArc`
+- `drawBezier`
+- `drawTriangle`
+- `fillTriangle`
+- `drawFastVLine`
+- `drawFastHLine`
+- `drawLine`
+
+These batched scalar color arguments use the same protocol-visible RGB565 and indexed-color flag semantics as their ordinary request forms.
+
+The current inline batch slice also includes selected stateful inline commands used by the examples, such as clip-rect and text-state setup, plus selected sprite blit commands. Explicit batching still remains intentionally narrower than the full ordinary operation surface.
+
 Payload-bearing and other not-yet-supported batch shapes may be rejected at submission time even when the corresponding ordinary operation exists on the direct synchronous path.
 
 This keeps explicit batching opt-in and preserves the ordinary request/reply behavior for the broader API surface.

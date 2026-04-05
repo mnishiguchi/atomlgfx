@@ -108,6 +108,11 @@ esp_err_t lgfx_dev::fill_screen_locked(uint8_t target, bool color_is_index, uint
         [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->fillScreen(scalar_color); });
 }
 
+esp_err_t lgfx_dev::clear_locked(uint8_t target, bool color_is_index, uint32_t color_value)
+{
+    return fill_screen_locked(target, color_is_index, color_value);
+}
+
 esp_err_t lgfx_dev::fill_rect_locked(
     uint8_t target,
     int16_t x,
@@ -117,11 +122,333 @@ esp_err_t lgfx_dev::fill_rect_locked(
     bool color_is_index,
     uint32_t color_value)
 {
+    if (w == 0u || h == 0u) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     return lgfx_with_validated_target_color_locked(
         target,
         color_is_index,
         color_value,
         [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->fillRect(x, y, w, h, scalar_color); });
+}
+
+esp_err_t lgfx_dev::draw_pixel_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->drawPixel(x, y, scalar_color); });
+}
+
+esp_err_t lgfx_dev::draw_rect_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    if (w == 0u || h == 0u) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->drawRect(x, y, w, h, scalar_color); });
+}
+
+esp_err_t lgfx_dev::draw_round_rect_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t r,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    if (w == 0u || h == 0u) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->drawRoundRect(x, y, w, h, r, scalar_color);
+        });
+}
+
+esp_err_t lgfx_dev::fill_round_rect_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t r,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    if (w == 0u || h == 0u) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->fillRoundRect(x, y, w, h, r, scalar_color);
+        });
+}
+
+esp_err_t lgfx_dev::draw_circle_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t r,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->drawCircle(x, y, r, scalar_color); });
+}
+
+esp_err_t lgfx_dev::fill_circle_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t r,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->fillCircle(x, y, r, scalar_color); });
+}
+
+esp_err_t lgfx_dev::draw_ellipse_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t rx,
+    uint16_t ry,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    if (rx == 0u || ry == 0u) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->drawEllipse(x, y, rx, ry, scalar_color); });
+}
+
+esp_err_t lgfx_dev::fill_ellipse_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t rx,
+    uint16_t ry,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    if (rx == 0u || ry == 0u) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->fillEllipse(x, y, rx, ry, scalar_color); });
+}
+
+esp_err_t lgfx_dev::draw_arc_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t r0,
+    uint16_t r1,
+    float angle0,
+    float angle1,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    if (r0 == 0u || r1 == 0u) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!lgfx_arc_angle_is_valid(angle0) || !lgfx_arc_angle_is_valid(angle1)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->drawArc(x, y, r0, r1, angle0, angle1, scalar_color);
+        });
+}
+
+esp_err_t lgfx_dev::fill_arc_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t r0,
+    uint16_t r1,
+    float angle0,
+    float angle1,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    if (r0 == 0u || r1 == 0u) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!lgfx_arc_angle_is_valid(angle0) || !lgfx_arc_angle_is_valid(angle1)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->fillArc(x, y, r0, r1, angle0, angle1, scalar_color);
+        });
+}
+
+esp_err_t lgfx_dev::draw_bezier3_locked(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->drawBezier(x0, y0, x1, y1, x2, y2, scalar_color);
+        });
+}
+
+esp_err_t lgfx_dev::draw_bezier4_locked(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    int16_t x3,
+    int16_t y3,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->drawBezier(x0, y0, x1, y1, x2, y2, x3, y3, scalar_color);
+        });
+}
+
+esp_err_t lgfx_dev::draw_triangle_locked(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->drawTriangle(x0, y0, x1, y1, x2, y2, scalar_color);
+        });
+}
+
+esp_err_t lgfx_dev::fill_triangle_locked(
+    uint8_t target,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1,
+    int16_t x2,
+    int16_t y2,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) {
+            gfx->fillTriangle(x0, y0, x1, y1, x2, y2, scalar_color);
+        });
+}
+
+esp_err_t lgfx_dev::draw_fast_vline_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t h,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->drawFastVLine(x, y, h, scalar_color); });
+}
+
+esp_err_t lgfx_dev::draw_fast_hline_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    bool color_is_index,
+    uint32_t color_value)
+{
+    return lgfx_with_validated_target_color_locked(
+        target,
+        color_is_index,
+        color_value,
+        [&](lgfx::LGFXBase *gfx, uint32_t scalar_color) { gfx->drawFastHLine(x, y, w, scalar_color); });
 }
 
 esp_err_t lgfx_dev::draw_line_locked(

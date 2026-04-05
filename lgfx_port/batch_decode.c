@@ -6,99 +6,13 @@
 
 // lgfx_port/batch_decode.c
 
-#include "lgfx_port/batch_decode.h"
-
-#include <limits.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "esp_err.h"
 
-#include "lgfx_port/handler_decode.h"
+#include "lgfx_port/batch_decode.h"
+#include "lgfx_port/batch_decode_internal.h"
 #include "lgfx_port/proto_term.h"
-
-typedef struct
-{
-    term tuple;
-    term op_atom;
-    uint32_t target;
-    uint32_t flags;
-    int arity;
-} lgfx_batch_wire_command_t;
-
-static bool lgfx_batch_term_to_int32(term value, int32_t *out_value)
-{
-    if (out_value == NULL || !term_is_integer(value)) {
-        return false;
-    }
-
-    avm_int_t parsed = term_to_int(value);
-    if (parsed < (avm_int_t) INT32_MIN || parsed > (avm_int_t) INT32_MAX) {
-        return false;
-    }
-
-    *out_value = (int32_t) parsed;
-    return true;
-}
-
-static bool lgfx_batch_term_to_i16(term value, int16_t *out_value)
-{
-    int32_t parsed = 0;
-    if (!lgfx_batch_term_to_int32(value, &parsed)) {
-        return false;
-    }
-
-    if (parsed < INT16_MIN || parsed > INT16_MAX) {
-        return false;
-    }
-
-    *out_value = (int16_t) parsed;
-    return true;
-}
-
-static bool lgfx_batch_term_to_u8(term value, uint8_t *out_value)
-{
-    uint32_t parsed = 0;
-    if (out_value == NULL || !lgfx_term_to_u32(value, &parsed) || parsed > UINT8_MAX) {
-        return false;
-    }
-
-    *out_value = (uint8_t) parsed;
-    return true;
-}
-
-static bool lgfx_batch_term_to_u16(term value, uint16_t *out_value)
-{
-    uint32_t parsed = 0;
-    if (out_value == NULL || !lgfx_term_to_u32(value, &parsed) || parsed > UINT16_MAX) {
-        return false;
-    }
-
-    *out_value = (uint16_t) parsed;
-    return true;
-}
-
-static bool lgfx_batch_term_to_f32_checked(term value, float *out_value)
-{
-    return out_value != NULL && lgfx_term_to_f32(value, out_value);
-}
-
-static uint32_t lgfx_batch_pack_f32(float value)
-{
-    uint32_t bits = 0u;
-    memcpy(&bits, &value, sizeof(bits));
-    return bits;
-}
-
-static term lgfx_batch_tuple_elem(const lgfx_batch_wire_command_t *wire, int index)
-{
-    return term_get_tuple_element(wire->tuple, index);
-}
-
-static bool lgfx_batch_flag_is_set(const lgfx_batch_wire_command_t *wire, uint32_t flag)
-{
-    return wire != NULL && ((wire->flags & flag) != 0u);
-}
 
 static bool lgfx_batch_count_proper_list(term list, size_t *out_count)
 {
@@ -198,7 +112,23 @@ static bool lgfx_batch_op_supported_in_first_inline_slice(lgfx_op_t op)
 {
     switch (op) {
         case LGFX_OP_fillScreen:
+        case LGFX_OP_clear:
         case LGFX_OP_fillRect:
+        case LGFX_OP_drawPixel:
+        case LGFX_OP_drawRect:
+        case LGFX_OP_drawRoundRect:
+        case LGFX_OP_fillRoundRect:
+        case LGFX_OP_drawCircle:
+        case LGFX_OP_fillCircle:
+        case LGFX_OP_drawEllipse:
+        case LGFX_OP_fillEllipse:
+        case LGFX_OP_drawArc:
+        case LGFX_OP_fillArc:
+        case LGFX_OP_drawBezier:
+        case LGFX_OP_drawTriangle:
+        case LGFX_OP_fillTriangle:
+        case LGFX_OP_drawFastVLine:
+        case LGFX_OP_drawFastHLine:
         case LGFX_OP_drawLine:
         case LGFX_OP_setClipRect:
         case LGFX_OP_clearClipRect:
@@ -246,15 +176,6 @@ static term lgfx_batch_validate_common_command(
         return reply_error(ctx, port, submit_req, port->atoms.unsupported, 0);
     }
 
-    /*
-     * Outer ordinary request shape:
-     *   {lgfx, ProtoVer, Op, Target, Flags, ...}
-     *
-     * Inner batch command shape:
-     *   {Op, Target, Flags, ...}
-     *
-     * So the inner tuple arity is the ordinary protocol arity minus 2.
-     */
     int inner_min_arity = (int) meta->min_arity - 2;
     int inner_max_arity = (int) meta->max_arity - 2;
     if (wire->arity < inner_min_arity || wire->arity > inner_max_arity) {
@@ -281,517 +202,6 @@ static term lgfx_batch_validate_common_command(
     return term_invalid_term();
 }
 
-static term lgfx_batch_build_fill_screen(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    const lgfx_batch_wire_command_t *wire,
-    lgfx_batch_command_t *out_command)
-{
-    uint16_t color = 0;
-    if (!lgfx_batch_term_to_u16(lgfx_batch_tuple_elem(wire, 3), &color)) {
-        return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-    }
-
-    lgfx_batch_command_clear(out_command);
-    out_command->op = LGFX_OP_fillScreen;
-    out_command->target = (uint8_t) wire->target;
-    out_command->flags = wire->flags;
-    out_command->inline_args.words[0] = (uint32_t) color;
-
-    return term_invalid_term();
-}
-
-static term lgfx_batch_build_fill_rect(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    const lgfx_batch_wire_command_t *wire,
-    lgfx_batch_command_t *out_command)
-{
-    int16_t x = 0;
-    int16_t y = 0;
-    uint16_t w = 0;
-    uint16_t h = 0;
-    uint16_t color = 0;
-
-    if (!lgfx_batch_term_to_i16(lgfx_batch_tuple_elem(wire, 3), &x)
-        || !lgfx_batch_term_to_i16(lgfx_batch_tuple_elem(wire, 4), &y)
-        || !lgfx_batch_term_to_u16(lgfx_batch_tuple_elem(wire, 5), &w) || w == 0u
-        || !lgfx_batch_term_to_u16(lgfx_batch_tuple_elem(wire, 6), &h) || h == 0u
-        || !lgfx_batch_term_to_u16(lgfx_batch_tuple_elem(wire, 7), &color)) {
-        return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-    }
-
-    lgfx_batch_command_clear(out_command);
-    out_command->op = LGFX_OP_fillRect;
-    out_command->target = (uint8_t) wire->target;
-    out_command->flags = wire->flags;
-    out_command->inline_args.words[0] = (uint32_t) (int32_t) x;
-    out_command->inline_args.words[1] = (uint32_t) (int32_t) y;
-    out_command->inline_args.words[2] = (uint32_t) w;
-    out_command->inline_args.words[3] = (uint32_t) h;
-    out_command->inline_args.words[4] = (uint32_t) color;
-
-    return term_invalid_term();
-}
-
-static term lgfx_batch_build_draw_line(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    const lgfx_batch_wire_command_t *wire,
-    lgfx_batch_command_t *out_command)
-{
-    int16_t x0 = 0;
-    int16_t y0 = 0;
-    int16_t x1 = 0;
-    int16_t y1 = 0;
-    uint16_t color = 0;
-
-    if (!lgfx_batch_term_to_i16(lgfx_batch_tuple_elem(wire, 3), &x0)
-        || !lgfx_batch_term_to_i16(lgfx_batch_tuple_elem(wire, 4), &y0)
-        || !lgfx_batch_term_to_i16(lgfx_batch_tuple_elem(wire, 5), &x1)
-        || !lgfx_batch_term_to_i16(lgfx_batch_tuple_elem(wire, 6), &y1)
-        || !lgfx_batch_term_to_u16(lgfx_batch_tuple_elem(wire, 7), &color)) {
-        return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-    }
-
-    lgfx_batch_command_clear(out_command);
-    out_command->op = LGFX_OP_drawLine;
-    out_command->target = (uint8_t) wire->target;
-    out_command->flags = wire->flags;
-    out_command->inline_args.words[0] = (uint32_t) (int32_t) x0;
-    out_command->inline_args.words[1] = (uint32_t) (int32_t) y0;
-    out_command->inline_args.words[2] = (uint32_t) (int32_t) x1;
-    out_command->inline_args.words[3] = (uint32_t) (int32_t) y1;
-    out_command->inline_args.words[4] = (uint32_t) color;
-
-    return term_invalid_term();
-}
-
-static term lgfx_batch_build_set_clip_rect(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    const lgfx_batch_wire_command_t *wire,
-    lgfx_batch_command_t *out_command)
-{
-    int16_t x = 0;
-    int16_t y = 0;
-    uint16_t w = 0;
-    uint16_t h = 0;
-
-    if (!lgfx_batch_term_to_i16(lgfx_batch_tuple_elem(wire, 3), &x)
-        || !lgfx_batch_term_to_i16(lgfx_batch_tuple_elem(wire, 4), &y)
-        || !lgfx_batch_term_to_u16(lgfx_batch_tuple_elem(wire, 5), &w) || w == 0u
-        || !lgfx_batch_term_to_u16(lgfx_batch_tuple_elem(wire, 6), &h) || h == 0u) {
-        return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-    }
-
-    lgfx_batch_command_clear(out_command);
-    out_command->op = LGFX_OP_setClipRect;
-    out_command->target = (uint8_t) wire->target;
-    out_command->flags = wire->flags;
-    out_command->inline_args.words[0] = (uint32_t) (int32_t) x;
-    out_command->inline_args.words[1] = (uint32_t) (int32_t) y;
-    out_command->inline_args.words[2] = (uint32_t) w;
-    out_command->inline_args.words[3] = (uint32_t) h;
-
-    return term_invalid_term();
-}
-
-static term lgfx_batch_build_clear_clip_rect(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    const lgfx_batch_wire_command_t *wire,
-    lgfx_batch_command_t *out_command)
-{
-    (void) ctx;
-    (void) port;
-    (void) submit_req;
-    (void) wire;
-
-    lgfx_batch_command_clear(out_command);
-    out_command->op = LGFX_OP_clearClipRect;
-    out_command->target = (uint8_t) wire->target;
-    out_command->flags = wire->flags;
-
-    return term_invalid_term();
-}
-
-static term lgfx_batch_build_set_text_size(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    const lgfx_batch_wire_command_t *wire,
-    lgfx_batch_command_t *out_command)
-{
-    float scale_x = 0.0f;
-    float scale_y = 0.0f;
-    bool use_xy = false;
-
-    if (!lgfx_batch_term_to_f32_checked(lgfx_batch_tuple_elem(wire, 3), &scale_x)) {
-        return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-    }
-
-    if (wire->arity == 5) {
-        if (!lgfx_batch_term_to_f32_checked(lgfx_batch_tuple_elem(wire, 4), &scale_y)) {
-            return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-        }
-        use_xy = true;
-    }
-
-    lgfx_batch_command_clear(out_command);
-    out_command->op = LGFX_OP_setTextSize;
-    out_command->target = (uint8_t) wire->target;
-    out_command->flags = wire->flags;
-    out_command->inline_args.words[0] = use_xy ? 1u : 0u;
-    out_command->inline_args.words[1] = lgfx_batch_pack_f32(scale_x);
-    out_command->inline_args.words[2] = lgfx_batch_pack_f32(scale_y);
-
-    return term_invalid_term();
-}
-
-static term lgfx_batch_build_set_text_datum(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    const lgfx_batch_wire_command_t *wire,
-    lgfx_batch_command_t *out_command)
-{
-    uint8_t datum = 0u;
-    if (!lgfx_batch_term_to_u8(lgfx_batch_tuple_elem(wire, 3), &datum)) {
-        return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-    }
-
-    lgfx_batch_command_clear(out_command);
-    out_command->op = LGFX_OP_setTextDatum;
-    out_command->target = (uint8_t) wire->target;
-    out_command->flags = wire->flags;
-    out_command->inline_args.words[0] = (uint32_t) datum;
-
-    return term_invalid_term();
-}
-
-static term lgfx_batch_build_set_text_wrap(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    const lgfx_batch_wire_command_t *wire,
-    lgfx_batch_command_t *out_command)
-{
-    bool wrap_x = false;
-    bool wrap_y = false;
-
-    if (!lgfx_decode_bool_term(port, lgfx_batch_tuple_elem(wire, 3), &wrap_x)) {
-        return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-    }
-
-    if (wire->arity == 5) {
-        if (!lgfx_decode_bool_term(port, lgfx_batch_tuple_elem(wire, 4), &wrap_y)) {
-            return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-        }
-    }
-
-    lgfx_batch_command_clear(out_command);
-    out_command->op = LGFX_OP_setTextWrap;
-    out_command->target = (uint8_t) wire->target;
-    out_command->flags = wire->flags;
-    out_command->inline_args.words[0] = wrap_x ? 1u : 0u;
-    out_command->inline_args.words[1] = wrap_y ? 1u : 0u;
-
-    return term_invalid_term();
-}
-
-static term lgfx_batch_build_set_text_font_preset(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    const lgfx_batch_wire_command_t *wire,
-    lgfx_batch_command_t *out_command)
-{
-    uint8_t preset = 0u;
-    if (!lgfx_batch_term_to_u8(lgfx_batch_tuple_elem(wire, 3), &preset)
-        || preset > (uint8_t) LGFX_FONT_PRESET_JP) {
-        return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-    }
-
-    lgfx_batch_command_clear(out_command);
-    out_command->op = LGFX_OP_setTextFontPreset;
-    out_command->target = (uint8_t) wire->target;
-    out_command->flags = wire->flags;
-    out_command->inline_args.words[0] = (uint32_t) preset;
-
-    return term_invalid_term();
-}
-
-static term lgfx_batch_decode_text_color_value(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    term value_t,
-    bool is_index,
-    uint32_t *out_value)
-{
-    if (is_index) {
-        uint8_t palette_index = 0u;
-        if (!lgfx_batch_term_to_u8(value_t, &palette_index)) {
-            return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-        }
-
-        *out_value = (uint32_t) palette_index;
-        return term_invalid_term();
-    }
-
-    uint16_t color565 = 0u;
-    if (!lgfx_batch_term_to_u16(value_t, &color565)) {
-        return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-    }
-
-    *out_value = (uint32_t) color565;
-    return term_invalid_term();
-}
-
-static term lgfx_batch_build_set_text_color(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    const lgfx_batch_wire_command_t *wire,
-    lgfx_batch_command_t *out_command)
-{
-    const bool has_bg = lgfx_batch_flag_is_set(wire, LGFX_F_TEXT_HAS_BG);
-    const bool fg_is_index = lgfx_batch_flag_is_set(wire, LGFX_F_TEXT_FG_INDEX);
-    const bool bg_is_index = lgfx_batch_flag_is_set(wire, LGFX_F_TEXT_BG_INDEX);
-
-    if (bg_is_index && !has_bg) {
-        return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-    }
-
-    uint32_t fg_value = 0u;
-    term fg_error = lgfx_batch_decode_text_color_value(
-        ctx,
-        port,
-        submit_req,
-        lgfx_batch_tuple_elem(wire, 3),
-        fg_is_index,
-        &fg_value);
-    if (!term_is_invalid_term(fg_error)) {
-        return fg_error;
-    }
-
-    uint32_t bg_value = 0u;
-    if (has_bg) {
-        term bg_error = lgfx_batch_decode_text_color_value(
-            ctx,
-            port,
-            submit_req,
-            lgfx_batch_tuple_elem(wire, 4),
-            bg_is_index,
-            &bg_value);
-        if (!term_is_invalid_term(bg_error)) {
-            return bg_error;
-        }
-    }
-
-    lgfx_batch_command_clear(out_command);
-    out_command->op = LGFX_OP_setTextColor;
-    out_command->target = (uint8_t) wire->target;
-    out_command->flags = wire->flags;
-    out_command->inline_args.words[0] = fg_value;
-    out_command->inline_args.words[1] = bg_value;
-
-    return term_invalid_term();
-}
-
-static term lgfx_batch_build_set_cursor(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    const lgfx_batch_wire_command_t *wire,
-    lgfx_batch_command_t *out_command)
-{
-    int16_t x = 0;
-    int16_t y = 0;
-
-    if (!lgfx_batch_term_to_i16(lgfx_batch_tuple_elem(wire, 3), &x)
-        || !lgfx_batch_term_to_i16(lgfx_batch_tuple_elem(wire, 4), &y)) {
-        return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-    }
-
-    lgfx_batch_command_clear(out_command);
-    out_command->op = LGFX_OP_setCursor;
-    out_command->target = (uint8_t) wire->target;
-    out_command->flags = wire->flags;
-    out_command->inline_args.words[0] = (uint32_t) (int32_t) x;
-    out_command->inline_args.words[1] = (uint32_t) (int32_t) y;
-
-    return term_invalid_term();
-}
-
-static term lgfx_batch_decode_dst_target_any(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    term value,
-    uint8_t *out_dst_target)
-{
-    uint8_t dst_target = 0u;
-    if (!lgfx_batch_term_to_u8(value, &dst_target) || dst_target > 254u) {
-        return reply_error(ctx, port, submit_req, port->atoms.bad_target, 0);
-    }
-
-    *out_dst_target = dst_target;
-    return term_invalid_term();
-}
-
-static term lgfx_batch_decode_optional_transparent(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    const lgfx_batch_wire_command_t *wire,
-    int index,
-    bool *out_has_transparent,
-    uint32_t *out_transparent_value)
-{
-    const bool transparent_is_index = (wire->flags & (uint32_t) LGFX_F_TRANSPARENT_INDEX) != 0u;
-
-    *out_has_transparent = false;
-    *out_transparent_value = 0u;
-
-    if (wire->arity <= index) {
-        return term_invalid_term();
-    }
-
-    if (transparent_is_index) {
-        uint8_t palette_index = 0u;
-        if (!lgfx_batch_term_to_u8(lgfx_batch_tuple_elem(wire, index), &palette_index)) {
-            return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-        }
-
-        *out_has_transparent = true;
-        *out_transparent_value = (uint32_t) palette_index;
-        return term_invalid_term();
-    }
-
-    uint16_t color565 = 0u;
-    if (!lgfx_batch_term_to_u16(lgfx_batch_tuple_elem(wire, index), &color565)) {
-        return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-    }
-
-    *out_has_transparent = true;
-    *out_transparent_value = (uint32_t) color565;
-    return term_invalid_term();
-}
-
-static term lgfx_batch_build_push_sprite(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    const lgfx_batch_wire_command_t *wire,
-    lgfx_batch_command_t *out_command)
-{
-    uint8_t dst_target = 0u;
-    int16_t x = 0;
-    int16_t y = 0;
-    bool has_transparent = false;
-    uint32_t transparent_value = 0u;
-
-    term dst_target_error = lgfx_batch_decode_dst_target_any(ctx, port, submit_req, lgfx_batch_tuple_elem(wire, 3), &dst_target);
-    if (!term_is_invalid_term(dst_target_error)) {
-        return dst_target_error;
-    }
-
-    if (!lgfx_batch_term_to_i16(lgfx_batch_tuple_elem(wire, 4), &x)
-        || !lgfx_batch_term_to_i16(lgfx_batch_tuple_elem(wire, 5), &y)) {
-        return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-    }
-
-    term transparent_error = lgfx_batch_decode_optional_transparent(
-        ctx,
-        port,
-        submit_req,
-        wire,
-        6,
-        &has_transparent,
-        &transparent_value);
-    if (!term_is_invalid_term(transparent_error)) {
-        return transparent_error;
-    }
-
-    lgfx_batch_command_clear(out_command);
-    out_command->op = LGFX_OP_pushSprite;
-    out_command->target = (uint8_t) wire->target;
-    out_command->flags = wire->flags;
-    out_command->inline_args.words[0] = (uint32_t) dst_target;
-    out_command->inline_args.words[1] = (uint32_t) (int32_t) x;
-    out_command->inline_args.words[2] = (uint32_t) (int32_t) y;
-    out_command->inline_args.words[3] = has_transparent ? 1u : 0u;
-    out_command->inline_args.words[4] = transparent_value;
-
-    return term_invalid_term();
-}
-
-static term lgfx_batch_build_push_rotate_zoom(
-    Context *ctx,
-    lgfx_port_t *port,
-    const lgfx_request_t *submit_req,
-    const lgfx_batch_wire_command_t *wire,
-    lgfx_batch_command_t *out_command)
-{
-    uint8_t dst_target = 0u;
-    int16_t x = 0;
-    int16_t y = 0;
-    float angle = 0.0f;
-    float zoom_x = 0.0f;
-    float zoom_y = 0.0f;
-    bool has_transparent = false;
-    uint32_t transparent_value = 0u;
-
-    term dst_target_error = lgfx_batch_decode_dst_target_any(ctx, port, submit_req, lgfx_batch_tuple_elem(wire, 3), &dst_target);
-    if (!term_is_invalid_term(dst_target_error)) {
-        return dst_target_error;
-    }
-
-    if (!lgfx_batch_term_to_i16(lgfx_batch_tuple_elem(wire, 4), &x)
-        || !lgfx_batch_term_to_i16(lgfx_batch_tuple_elem(wire, 5), &y)
-        || !lgfx_batch_term_to_f32_checked(lgfx_batch_tuple_elem(wire, 6), &angle)
-        || !lgfx_batch_term_to_f32_checked(lgfx_batch_tuple_elem(wire, 7), &zoom_x)
-        || !lgfx_batch_term_to_f32_checked(lgfx_batch_tuple_elem(wire, 8), &zoom_y)
-        || !lgfx_validate_positive_f32(zoom_x)
-        || !lgfx_validate_positive_f32(zoom_y)) {
-        return reply_error(ctx, port, submit_req, port->atoms.bad_args, 0);
-    }
-
-    term transparent_error = lgfx_batch_decode_optional_transparent(
-        ctx,
-        port,
-        submit_req,
-        wire,
-        9,
-        &has_transparent,
-        &transparent_value);
-    if (!term_is_invalid_term(transparent_error)) {
-        return transparent_error;
-    }
-
-    lgfx_batch_command_clear(out_command);
-    out_command->op = LGFX_OP_pushRotateZoom;
-    out_command->target = (uint8_t) wire->target;
-    out_command->flags = wire->flags;
-    out_command->inline_args.words[0] = (uint32_t) dst_target;
-    out_command->inline_args.words[1] = (uint32_t) (int32_t) x;
-    out_command->inline_args.words[2] = (uint32_t) (int32_t) y;
-    out_command->inline_args.words[3] = lgfx_batch_pack_f32(angle);
-    out_command->inline_args.words[4] = lgfx_batch_pack_f32(zoom_x);
-    out_command->inline_args.words[5] = lgfx_batch_pack_f32(zoom_y);
-    out_command->inline_args.words[6] = has_transparent ? 1u : 0u;
-    out_command->inline_args.words[7] = transparent_value;
-
-    return term_invalid_term();
-}
-
 static term lgfx_batch_build_one_inline_command(
     Context *ctx,
     lgfx_port_t *port,
@@ -804,8 +214,56 @@ static term lgfx_batch_build_one_inline_command(
         case LGFX_OP_fillScreen:
             return lgfx_batch_build_fill_screen(ctx, port, submit_req, wire, out_command);
 
+        case LGFX_OP_clear:
+            return lgfx_batch_build_clear_command(ctx, port, submit_req, wire, out_command);
+
         case LGFX_OP_fillRect:
             return lgfx_batch_build_fill_rect(ctx, port, submit_req, wire, out_command);
+
+        case LGFX_OP_drawPixel:
+            return lgfx_batch_build_draw_pixel(ctx, port, submit_req, wire, out_command);
+
+        case LGFX_OP_drawRect:
+            return lgfx_batch_build_draw_rect(ctx, port, submit_req, wire, out_command);
+
+        case LGFX_OP_drawRoundRect:
+            return lgfx_batch_build_draw_round_rect(ctx, port, submit_req, wire, out_command);
+
+        case LGFX_OP_fillRoundRect:
+            return lgfx_batch_build_fill_round_rect(ctx, port, submit_req, wire, out_command);
+
+        case LGFX_OP_drawCircle:
+            return lgfx_batch_build_draw_circle(ctx, port, submit_req, wire, out_command);
+
+        case LGFX_OP_fillCircle:
+            return lgfx_batch_build_fill_circle(ctx, port, submit_req, wire, out_command);
+
+        case LGFX_OP_drawEllipse:
+            return lgfx_batch_build_draw_ellipse(ctx, port, submit_req, wire, out_command);
+
+        case LGFX_OP_fillEllipse:
+            return lgfx_batch_build_fill_ellipse(ctx, port, submit_req, wire, out_command);
+
+        case LGFX_OP_drawArc:
+            return lgfx_batch_build_draw_arc(ctx, port, submit_req, wire, out_command);
+
+        case LGFX_OP_fillArc:
+            return lgfx_batch_build_fill_arc(ctx, port, submit_req, wire, out_command);
+
+        case LGFX_OP_drawBezier:
+            return lgfx_batch_build_draw_bezier(ctx, port, submit_req, wire, out_command);
+
+        case LGFX_OP_drawTriangle:
+            return lgfx_batch_build_draw_triangle(ctx, port, submit_req, wire, out_command);
+
+        case LGFX_OP_fillTriangle:
+            return lgfx_batch_build_fill_triangle(ctx, port, submit_req, wire, out_command);
+
+        case LGFX_OP_drawFastVLine:
+            return lgfx_batch_build_draw_fast_vline(ctx, port, submit_req, wire, out_command);
+
+        case LGFX_OP_drawFastHLine:
+            return lgfx_batch_build_draw_fast_hline(ctx, port, submit_req, wire, out_command);
 
         case LGFX_OP_drawLine:
             return lgfx_batch_build_draw_line(ctx, port, submit_req, wire, out_command);
@@ -871,7 +329,7 @@ bool lgfx_batch_decode_submit_request(
         return false;
     }
 
-    *out_commands_term = lgfx_req_elem(req, 5);
+    *out_commands_term = term_get_tuple_element(req->request_tuple, 5);
     return !term_is_invalid_term(*out_commands_term);
 }
 
