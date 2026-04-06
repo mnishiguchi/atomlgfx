@@ -10,6 +10,7 @@ defmodule SampleApp do
   alias SampleApp.ColorSmoke
   alias SampleApp.DrawStringStress
   alias SampleApp.JpgSmoke
+  alias SampleApp.Meter
   alias SampleApp.MovingIcons
   alias SampleApp.MovingLines
   alias SampleApp.ProtocolSmoke
@@ -21,7 +22,7 @@ defmodule SampleApp do
   alias SampleApp.TouchProbe
   alias SampleApp.WriteSessionSmoke
 
-  @default_mode :moving_icons
+  @default_mode :meter
 
   @valid_modes [
     :protocol,
@@ -38,6 +39,7 @@ defmodule SampleApp do
     :colors,
     :moving_icons,
     :moving_lines,
+    :meter,
     :all
   ]
 
@@ -170,6 +172,12 @@ defmodule SampleApp do
   defp run_mode(port, :moving_lines) do
     with_boot_dims(port, fn w, h ->
       MovingLines.run(port, w, h)
+    end)
+  end
+
+  defp run_mode(port, :meter) do
+    with_boot_dims(port, fn w, h ->
+      Meter.run(port, w, h)
     end)
   end
 
