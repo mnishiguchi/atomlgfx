@@ -13,7 +13,7 @@ set(LGFX_SRC_ROOT "${LGFX_ROOT}/src")
 set(LGFX_PORT_CONFIG_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/lgfx_port/cmake/lgfx_port_config.h.in")
 
 set(LGFX_PORT_ENABLE_JP_FONTS ON CACHE BOOL "Enable Japanese font data for the Japanese-capable text preset")
-set(LGFX_PORT_ENABLE_TOUCH ON CACHE BOOL "Enable XPT2046 touch driver (Touch_XPT2046)")
+set(LGFX_PORT_ENABLE_TOUCH ON CACHE BOOL "Enable touch driver support")
 
 # -----------------------------------------------------------------------------
 # LovyanGFX config knobs
@@ -49,12 +49,13 @@ set(LGFX_PORT_SUPPORTED_PANEL_DRIVERS
   ILI9341
   ILI9341_2
   ST7789
+  ILI9342C
 )
 
 set(LGFX_PORT_PANEL_DRIVER
   "ILI9488"
   CACHE STRING
-  "Build-default LCD panel driver preset (ILI9488, ILI9341, ILI9341_2, or ST7789)"
+  "Build-default LCD panel driver preset (ILI9488, ILI9341, ILI9341_2, ST7789, or ILI9342C)"
 )
 
 set_property(
@@ -88,6 +89,10 @@ set(LGFX_PORT_PANEL_BASELINE_ILI9341_2
 
 set(LGFX_PORT_PANEL_BASELINE_ST7789
   "240;240;0;0;16;1;OFF;OFF;OFF;OFF"
+)
+
+set(LGFX_PORT_PANEL_BASELINE_ILI9342C
+  "320;240;0;0;8;1;OFF;OFF;OFF;OFF"
 )
 
 # -----------------------------------------------------------------------------
@@ -349,12 +354,14 @@ set(LGFX_PORT_TOUCH_BUS_SHARED ON CACHE BOOL "Touch bus_shared")
 # Wiring defaults
 # -----------------------------------------------------------------------------
 #
-# Keep these aligned with lgfx_device/lgfx_device_state.cpp:
+# Keep these aligned with lgfx_device/state_runtime.cpp:
 # - SPI:   SCLK=7 MOSI=9 MISO=8
 # - LCD:   CS=43 DC=3 RST=2
 # - Touch: CS=44 IRQ=-1
 #
-# If TOUCH CS is -1, touch may still compile but will not be advertised.
+# Touch build-default wiring currently seeds the XPT2046 path.
+# Additional controller families such as FT6336U are currently supported
+# primarily through open-time overrides in the staged rollout.
 #
 set(LGFX_PORT_SPI_SCLK_GPIO "7" CACHE STRING "SPI SCLK GPIO")
 set(LGFX_PORT_SPI_MOSI_GPIO "9" CACHE STRING "SPI MOSI GPIO")
@@ -514,22 +521,16 @@ lgfx_port_bool_to_int_many(
 lgfx_port_set_panel_driver_ints("${LGFX_PORT_PANEL_DRIVER}")
 
 # -----------------------------------------------------------------------------
-# Derive touch advertisement gate
+# Derive touch compile gate
 # -----------------------------------------------------------------------------
 #
-# Keep only the gate that actually varies. Sprite / pushImage / lastError are
-# always part of the current compiled protocol surface, so they no longer need
-# generated 0/1 macros.
+# Runtime capability advertisement is controller-aware and may still withhold
+# touch when the selected driver is effectively unattached.
+# This generated macro therefore means only that touch support is compiled in.
 #
 set(LGFX_PORT_SUPPORTS_TOUCH_INT 0)
 if(LGFX_PORT_ENABLE_TOUCH)
-  if(NOT "${LGFX_PORT_TOUCH_CS_GPIO}" STREQUAL "-1")
-    set(LGFX_PORT_SUPPORTS_TOUCH_INT 1)
-  endif()
-endif()
-
-if(LGFX_PORT_ENABLE_TOUCH AND "${LGFX_PORT_TOUCH_CS_GPIO}" STREQUAL "-1")
-  message(STATUS "LGFX touch: enabled but unattached (LGFX_PORT_TOUCH_CS_GPIO=-1) -> touch will NOT be advertised")
+  set(LGFX_PORT_SUPPORTS_TOUCH_INT 1)
 endif()
 
 # -----------------------------------------------------------------------------
@@ -595,9 +596,10 @@ list(APPEND LGFX_SRCS
 # Reduce LovyanGFX build surface area
 # -----------------------------------------------------------------------------
 #
-# Keep SPI and optionally XPT2046.
-# Panel driver selection is handled in lgfx_device/lgfx_device_state.cpp.
-# Exclude EPD, I2C, and other touch drivers.
+# Keep the LCD SPI path and the minimum I2C support required by FT5x06-family
+# touch controllers. Panel driver selection is handled in
+# lgfx_device/state_runtime.cpp. Exclude EPD and the broader touch-driver set
+# we are not using.
 #
 lgfx_port_filter_out(
   LGFX_SRCS
@@ -605,17 +607,16 @@ lgfx_port_filter_out(
   ".*/Panel_EPD\\.(c|cpp)$"
   ".*/panel/Panel_EPD.*\\.(c|cpp)$"
   ".*/panel/Panel_GDEW.*\\.(c|cpp)$"
-  ".*/Bus_I2C\\.(c|cpp)$"
   ".*/touch/.*\\.(c|cpp)$"
   ".*/Touch_.*\\.(c|cpp)$"
-  ".*/[Ii]2[Cc].*\\.(c|cpp)$"
 )
 
 # -----------------------------------------------------------------------------
-# Touch: re-add only XPT2046
+# Touch: re-add only the selected drivers
 # -----------------------------------------------------------------------------
 if(LGFX_PORT_ENABLE_TOUCH)
   list(APPEND LGFX_SRCS
+    "${LGFX_SRC_ROOT}/lgfx/v1/touch/Touch_FT5x06.cpp"
     "${LGFX_SRC_ROOT}/lgfx/v1/touch/Touch_XPT2046.cpp"
   )
 endif()

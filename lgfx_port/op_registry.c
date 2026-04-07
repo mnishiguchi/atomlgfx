@@ -152,13 +152,45 @@ static bool lgfx_port_touch_attached(const lgfx_port_t *port)
     (void) port;
     return false;
 #else
+    lgfx_touch_driver_id_t touch_driver = LGFX_TOUCH_DRIVER_ID_XPT2046;
     int32_t touch_cs_gpio = (int32_t) LGFX_PORT_TOUCH_CS_GPIO;
 
-    if (port != NULL && port->open_config_overrides.has_touch_cs_gpio) {
-        touch_cs_gpio = port->open_config_overrides.touch_cs_gpio;
+    if (port != NULL) {
+        if (port->open_config_overrides.has_touch_driver) {
+            touch_driver = port->open_config_overrides.touch_driver;
+        } else if (port->open_config_overrides.has_touch_i2c_port
+            || port->open_config_overrides.has_touch_sda_gpio
+            || port->open_config_overrides.has_touch_scl_gpio
+            || port->open_config_overrides.has_touch_i2c_addr
+            || port->open_config_overrides.has_touch_rst_gpio) {
+            touch_driver = LGFX_TOUCH_DRIVER_ID_FT6336U;
+        }
+
+        if (port->open_config_overrides.has_touch_cs_gpio) {
+            touch_cs_gpio = port->open_config_overrides.touch_cs_gpio;
+        }
     }
 
-    return touch_cs_gpio >= 0;
+    switch (touch_driver) {
+        case LGFX_TOUCH_DRIVER_ID_XPT2046:
+            return touch_cs_gpio >= 0;
+        case LGFX_TOUCH_DRIVER_ID_FT6336U: {
+            int32_t touch_sda_gpio = -1;
+            int32_t touch_scl_gpio = -1;
+
+            if (port != NULL && port->open_config_overrides.has_touch_sda_gpio) {
+                touch_sda_gpio = port->open_config_overrides.touch_sda_gpio;
+            }
+
+            if (port != NULL && port->open_config_overrides.has_touch_scl_gpio) {
+                touch_scl_gpio = port->open_config_overrides.touch_scl_gpio;
+            }
+
+            return touch_sda_gpio >= 0 && touch_scl_gpio >= 0;
+        }
+        default:
+            return false;
+    }
 #endif
 }
 

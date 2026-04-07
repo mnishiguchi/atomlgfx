@@ -102,7 +102,14 @@ typedef enum lgfx_panel_driver_id_t
     LGFX_PANEL_DRIVER_ID_ILI9341 = 2,
     LGFX_PANEL_DRIVER_ID_ILI9341_2 = 3,
     LGFX_PANEL_DRIVER_ID_ST7789 = 4,
+    LGFX_PANEL_DRIVER_ID_ILI9342C = 5,
 } lgfx_panel_driver_id_t;
+
+typedef enum lgfx_touch_driver_id_t
+{
+    LGFX_TOUCH_DRIVER_ID_XPT2046 = 1,
+    LGFX_TOUCH_DRIVER_ID_FT6336U = 2,
+} lgfx_touch_driver_id_t;
 
 // ----------------------------------------------------------------------------
 // Open-time runtime overrides
@@ -197,6 +204,9 @@ typedef struct lgfx_open_config_overrides_t
     uint8_t has_lcd_pin_busy;
     int32_t lcd_pin_busy;
 
+    uint8_t has_touch_driver;
+    lgfx_touch_driver_id_t touch_driver;
+
     uint8_t has_touch_cs_gpio;
     int32_t touch_cs_gpio;
 
@@ -208,6 +218,21 @@ typedef struct lgfx_open_config_overrides_t
 
     uint8_t has_touch_spi_freq_hz;
     uint32_t touch_spi_freq_hz;
+
+    uint8_t has_touch_i2c_port;
+    int32_t touch_i2c_port;
+
+    uint8_t has_touch_sda_gpio;
+    int32_t touch_sda_gpio;
+
+    uint8_t has_touch_scl_gpio;
+    int32_t touch_scl_gpio;
+
+    uint8_t has_touch_i2c_addr;
+    uint32_t touch_i2c_addr;
+
+    uint8_t has_touch_rst_gpio;
+    int32_t touch_rst_gpio;
 
     uint8_t has_touch_offset_rotation;
     uint8_t touch_offset_rotation;

@@ -80,6 +80,29 @@ static bool lgfx_parse_panel_driver_value(
         return true;
     }
 
+    if (value == LGFX_ATOM(global, "\x08", "ili9342c")) {
+        *out_value = LGFX_PANEL_DRIVER_ID_ILI9342C;
+        return true;
+    }
+
+    return false;
+}
+
+static bool lgfx_parse_touch_driver_value(
+    GlobalContext *global,
+    term value,
+    lgfx_touch_driver_id_t *out_value)
+{
+    if (value == LGFX_ATOM(global, "\x07", "xpt2046")) {
+        *out_value = LGFX_TOUCH_DRIVER_ID_XPT2046;
+        return true;
+    }
+
+    if (value == LGFX_ATOM(global, "\x07", "ft6336u")) {
+        *out_value = LGFX_TOUCH_DRIVER_ID_FT6336U;
+        return true;
+    }
+
     return false;
 }
 
@@ -221,6 +244,36 @@ static bool lgfx_parse_dma_channel_value(GlobalContext *global, term value, int3
     return true;
 }
 
+static bool lgfx_parse_i2c_port_value(term value, int32_t *out_value)
+{
+    int32_t parsed = 0;
+    if (!lgfx_term_to_int32_checked(value, &parsed)) {
+        return false;
+    }
+
+    if (parsed < 0 || parsed > 1) {
+        return false;
+    }
+
+    *out_value = parsed;
+    return true;
+}
+
+static bool lgfx_parse_i2c_addr_value(term value, uint32_t *out_value)
+{
+    int32_t parsed = 0;
+    if (!lgfx_term_to_int32_checked(value, &parsed)) {
+        return false;
+    }
+
+    if (parsed < 0 || parsed > 127) {
+        return false;
+    }
+
+    *out_value = (uint32_t) parsed;
+    return true;
+}
+
 static bool lgfx_parse_open_option_tuple(
     GlobalContext *global,
     term entry,
@@ -242,10 +295,19 @@ static bool lgfx_parse_open_option_tuple(
 
     if (key == LGFX_ATOM(global, "\x0C", "panel_driver")) {
         if (!lgfx_parse_panel_driver_value(global, value, &overrides->panel_driver)) {
-            *error_detail = "bad value for panel_driver (expected ili9488, ili9341, ili9341_2, or st7789)";
+            *error_detail = "bad value for panel_driver (expected ili9488, ili9341, ili9341_2, st7789, or ili9342c)";
             return false;
         }
         overrides->has_panel_driver = 1u;
+        return true;
+    }
+
+    if (key == LGFX_ATOM(global, "\x0C", "touch_driver")) {
+        if (!lgfx_parse_touch_driver_value(global, value, &overrides->touch_driver)) {
+            *error_detail = "bad value for touch_driver (expected xpt2046 or ft6336u)";
+            return false;
+        }
+        overrides->has_touch_driver = 1u;
         return true;
     }
 
@@ -498,6 +560,51 @@ static bool lgfx_parse_open_option_tuple(
             return false;
         }
         overrides->has_touch_spi_freq_hz = 1u;
+        return true;
+    }
+
+    if (key == LGFX_ATOM(global, "\x0E", "touch_i2c_port")) {
+        if (!lgfx_parse_i2c_port_value(value, &overrides->touch_i2c_port)) {
+            *error_detail = "bad value for touch_i2c_port (expected integer 0 or 1)";
+            return false;
+        }
+        overrides->has_touch_i2c_port = 1u;
+        return true;
+    }
+
+    if (key == LGFX_ATOM(global, "\x0E", "touch_sda_gpio")) {
+        if (!lgfx_parse_gpio_value(value, &overrides->touch_sda_gpio)) {
+            *error_detail = "bad value for touch_sda_gpio (expected GPIO integer in 0..255)";
+            return false;
+        }
+        overrides->has_touch_sda_gpio = 1u;
+        return true;
+    }
+
+    if (key == LGFX_ATOM(global, "\x0E", "touch_scl_gpio")) {
+        if (!lgfx_parse_gpio_value(value, &overrides->touch_scl_gpio)) {
+            *error_detail = "bad value for touch_scl_gpio (expected GPIO integer in 0..255)";
+            return false;
+        }
+        overrides->has_touch_scl_gpio = 1u;
+        return true;
+    }
+
+    if (key == LGFX_ATOM(global, "\x0E", "touch_i2c_addr")) {
+        if (!lgfx_parse_i2c_addr_value(value, &overrides->touch_i2c_addr)) {
+            *error_detail = "bad value for touch_i2c_addr (expected integer in 0..127)";
+            return false;
+        }
+        overrides->has_touch_i2c_addr = 1u;
+        return true;
+    }
+
+    if (key == LGFX_ATOM(global, "\x0E", "touch_rst_gpio")) {
+        if (!lgfx_parse_gpio_or_disabled_value(value, &overrides->touch_rst_gpio)) {
+            *error_detail = "bad value for touch_rst_gpio (expected GPIO integer in -1..255; -1 disables)";
+            return false;
+        }
+        overrides->has_touch_rst_gpio = 1u;
         return true;
     }
 

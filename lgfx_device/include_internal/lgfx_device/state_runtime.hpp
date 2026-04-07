@@ -61,12 +61,28 @@ struct LgfxRuntimeConfig
     {
         bool compiled;
         bool attached;
-        int pin_cs;
-        int pin_irq;
-        int spi_host;
-        uint32_t spi_freq_hz;
+        lgfx_touch_driver_id_t driver_id;
+        const char *driver_name;
         uint8_t offset_rotation;
         bool bus_shared;
+
+        struct
+        {
+            int pin_cs;
+            int pin_irq;
+            int spi_host;
+            uint32_t spi_freq_hz;
+        } xpt2046;
+
+        struct
+        {
+            int i2c_port;
+            int pin_sda;
+            int pin_scl;
+            uint8_t i2c_addr;
+            int pin_irq;
+            int pin_rst;
+        } ft6336u;
     };
 
     SpiBusConfig lcd_bus;

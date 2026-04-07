@@ -9,7 +9,8 @@ defmodule AtomLGFX.OpenConfig do
 
   @max_open_config_i32 0x7FFF_FFFF
 
-  @panel_driver_atoms [:ili9488, :ili9341, :ili9341_2, :st7789]
+  @panel_driver_atoms [:ili9488, :ili9341, :ili9341_2, :st7789, :ili9342c]
+  @touch_driver_atoms [:xpt2046, :ft6336u]
   @spi_host_atoms [:spi2_host, :spi3_host]
 
   @open_option_rules [
@@ -38,10 +39,16 @@ defmodule AtomLGFX.OpenConfig do
     lcd_dc_gpio: :gpio,
     lcd_rst_gpio: :gpio_or_disabled,
     lcd_pin_busy: :gpio_or_disabled,
+    touch_driver: :touch_driver,
     touch_cs_gpio: :gpio_or_disabled,
     touch_irq_gpio: :gpio_or_disabled,
     touch_spi_host: :spi_host,
     touch_spi_freq_hz: :positive_i32,
+    touch_i2c_port: :i2c_port,
+    touch_sda_gpio: :gpio,
+    touch_scl_gpio: :gpio,
+    touch_i2c_addr: :i2c_addr,
+    touch_rst_gpio: :gpio_or_disabled,
     touch_offset_rotation: :rotation,
     touch_bus_shared: :boolean
   ]
@@ -124,7 +131,16 @@ defmodule AtomLGFX.OpenConfig do
        do: {:ok, value}
 
   defp normalize_open_option_by_rule(:panel_driver, key, value) do
-    {:error, {:bad_open_option_value, key, value, ":ili9488, :ili9341, :ili9341_2, or :st7789"}}
+    {:error,
+     {:bad_open_option_value, key, value, ":ili9488, :ili9341, :ili9341_2, :st7789, or :ili9342c"}}
+  end
+
+  defp normalize_open_option_by_rule(:touch_driver, _key, value)
+       when value in @touch_driver_atoms,
+       do: {:ok, value}
+
+  defp normalize_open_option_by_rule(:touch_driver, key, value) do
+    {:error, {:bad_open_option_value, key, value, ":xpt2046 or :ft6336u"}}
   end
 
   defp normalize_open_option_by_rule(:positive_u16, _key, value)
@@ -205,6 +221,22 @@ defmodule AtomLGFX.OpenConfig do
 
   defp normalize_open_option_by_rule(:dma_channel, key, value) do
     {:error, {:bad_open_option_value, key, value, ":spi_dma_ch_auto, 1, or 2"}}
+  end
+
+  defp normalize_open_option_by_rule(:i2c_port, _key, value)
+       when is_integer(value) and value in 0..1,
+       do: {:ok, value}
+
+  defp normalize_open_option_by_rule(:i2c_port, key, value) do
+    {:error, {:bad_open_option_value, key, value, "an integer 0 or 1"}}
+  end
+
+  defp normalize_open_option_by_rule(:i2c_addr, _key, value)
+       when is_integer(value) and value in 0..127,
+       do: {:ok, value}
+
+  defp normalize_open_option_by_rule(:i2c_addr, key, value) do
+    {:error, {:bad_open_option_value, key, value, "an integer in 0..127"}}
   end
 
   defp open_config_map_to_keyword(normalized_map) when is_map(normalized_map) do
