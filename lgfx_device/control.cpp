@@ -144,6 +144,11 @@ extern "C" esp_err_t lgfx_device_set_rotation(uint8_t rotation)
 
 extern "C" esp_err_t lgfx_device_set_brightness(uint8_t brightness)
 {
+    esp_err_t err = lgfx_dev::board_preset_set_brightness_if_needed(brightness);
+    if (err != ESP_OK) {
+        return err;
+    }
+
     return lgfx_dev::with_lcd([&](lgfx::LGFX_Device *d) { d->setBrightness(brightness); });
 }
 

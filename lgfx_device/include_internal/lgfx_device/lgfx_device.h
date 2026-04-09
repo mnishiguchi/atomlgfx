@@ -105,6 +105,12 @@ typedef enum lgfx_panel_driver_id_t
     LGFX_PANEL_DRIVER_ID_ILI9342C = 5,
 } lgfx_panel_driver_id_t;
 
+typedef enum lgfx_board_preset_id_t
+{
+    LGFX_BOARD_PRESET_ID_NONE = 0,
+    LGFX_BOARD_PRESET_ID_M5STACK_CORE2 = 1,
+} lgfx_board_preset_id_t;
+
 typedef enum lgfx_touch_driver_id_t
 {
     LGFX_TOUCH_DRIVER_ID_XPT2046 = 1,
@@ -129,6 +135,9 @@ typedef enum lgfx_touch_driver_id_t
 // Omitted keys keep build defaults. Duplicate keys are allowed; last value wins.
 typedef struct lgfx_open_config_overrides_t
 {
+    uint8_t has_board_preset;
+    lgfx_board_preset_id_t board_preset;
+
     uint8_t has_panel_driver;
     lgfx_panel_driver_id_t panel_driver;
 

@@ -21,6 +21,13 @@ namespace lgfx_dev
 
 struct LgfxRuntimeConfig
 {
+    struct BoardPresetConfig
+    {
+        bool selected;
+        lgfx_board_preset_id_t preset_id;
+        const char *preset_name;
+    };
+
     struct SpiBusConfig
     {
         int host;
@@ -85,6 +92,7 @@ struct LgfxRuntimeConfig
         } ft6336u;
     };
 
+    BoardPresetConfig board_preset;
     SpiBusConfig lcd_bus;
     PanelConfig lcd_panel;
     TouchConfig touch;

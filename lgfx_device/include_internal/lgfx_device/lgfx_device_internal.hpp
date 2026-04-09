@@ -22,6 +22,8 @@
 namespace lgfx_dev
 {
 
+struct LgfxRuntimeConfig;
+
 // -----------------------------------------------------------------------------
 // Shared constants / metadata (owned by lgfx_device_state.cpp)
 // -----------------------------------------------------------------------------
@@ -80,6 +82,13 @@ esp_err_t end_write();
 // Caller must already hold the LCD lock and have passed ready-state checks.
 esp_err_t start_write_locked();
 esp_err_t end_write_locked();
+
+// Board-preset runtime hooks.
+// These are no-ops when no active board preset needs extra hardware handling.
+esp_err_t board_preset_prepare_for_begin(const LgfxRuntimeConfig &config);
+esp_err_t board_preset_apply_default_brightness_for_begin(const LgfxRuntimeConfig &config);
+esp_err_t board_preset_set_brightness_if_needed(uint8_t brightness);
+void board_preset_reset_runtime_state();
 
 // -----------------------------------------------------------------------------
 // Shared state accessors (must be called while LCD lock is held unless noted)

@@ -131,6 +131,28 @@ static inline bool is_known_panel_driver_id(lgfx_panel_driver_id_t driver_id)
     }
 }
 
+static inline const char *board_preset_name(lgfx_board_preset_id_t preset_id)
+{
+    switch (preset_id) {
+        case LGFX_BOARD_PRESET_ID_NONE:
+            return "none";
+        case LGFX_BOARD_PRESET_ID_M5STACK_CORE2:
+            return "m5stack_core2";
+        default:
+            return "unknown";
+    }
+}
+
+static inline bool is_known_board_preset_id(lgfx_board_preset_id_t preset_id)
+{
+    switch (preset_id) {
+        case LGFX_BOARD_PRESET_ID_NONE:
+        case LGFX_BOARD_PRESET_ID_M5STACK_CORE2:
+            return true;
+        default:
+            return false;
+    }
+}
 
 static inline const char *touch_driver_name(lgfx_touch_driver_id_t driver_id)
 {
@@ -253,6 +275,10 @@ static lgfx_dev::LgfxRuntimeConfig runtime_config_from_build_defaults()
 {
     lgfx_dev::LgfxRuntimeConfig config = {};
 
+    config.board_preset.selected = false;
+    config.board_preset.preset_id = LGFX_BOARD_PRESET_ID_NONE;
+    config.board_preset.preset_name = board_preset_name(config.board_preset.preset_id);
+
     config.lcd_bus.host = (int) (LGFX_PORT_LCD_SPI_HOST);
     config.lcd_bus.mode = (uint8_t) (LGFX_PORT_LCD_SPI_MODE);
     config.lcd_bus.freq_write_hz = (uint32_t) (LGFX_PORT_LCD_FREQ_WRITE_HZ);
@@ -310,6 +336,12 @@ static void apply_open_config_overrides(
     lgfx_dev::LgfxRuntimeConfig &config,
     const lgfx_open_config_overrides_t &overrides)
 {
+    if (overrides.has_board_preset) {
+        config.board_preset.selected = true;
+        config.board_preset.preset_id = overrides.board_preset;
+        config.board_preset.preset_name = board_preset_name(config.board_preset.preset_id);
+    }
+
     if (overrides.has_panel_driver) {
         apply_panel_driver_baseline(config, overrides.panel_driver);
     }
@@ -753,7 +785,9 @@ bool validate_runtime_config(const LgfxRuntimeConfig &config, const char **reaso
 {
     const char *local_reason = nullptr;
 
-    if (!is_known_panel_driver_id(config.lcd_panel.driver_id)) {
+    if (!is_known_board_preset_id(config.board_preset.preset_id)) {
+        local_reason = "board_preset must be m5stack_core2";
+    } else if (!is_known_panel_driver_id(config.lcd_panel.driver_id)) {
         local_reason = "panel_driver must be ili9488, ili9341, ili9341_2, st7789, or ili9342c";
     } else if (!is_known_touch_driver_id(config.touch.driver_id)) {
         local_reason = "touch_driver must be xpt2046 or ft6336u";
@@ -795,6 +829,12 @@ LgfxRuntimeConfig runtime_config_with_overrides(const lgfx_open_config_overrides
 
 void log_runtime_config(const LgfxRuntimeConfig &config)
 {
+    ESP_LOGI(
+        TAG,
+        "effective board preset selected=%u preset=%s",
+        (unsigned) config.board_preset.selected,
+        config.board_preset.preset_name);
+
     ESP_LOGI(
         TAG,
         "effective config panel=%s size=%ux%u offset=(%d,%d) rot=%u readable=%u invert=%u rgb_order=%u dlen_16bit=%u bus_shared=%u",

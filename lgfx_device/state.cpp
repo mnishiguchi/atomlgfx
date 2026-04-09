@@ -14,6 +14,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
+
+#include "driver/i2c.h"
 
 #include "lgfx_device/lgfx_device.h"
 #include "lgfx_device/lgfx_device_internal.hpp"
@@ -39,6 +42,272 @@ static const void *g_device_owner_token = nullptr;
 
 // True only after begin() succeeds for the currently published singleton.
 static bool g_device_ready = false;
+
+
+static lgfx_board_preset_id_t g_active_board_preset = LGFX_BOARD_PRESET_ID_NONE;
+
+static constexpr i2c_port_t CORE2_AXP192_I2C_PORT = I2C_NUM_0;
+static constexpr gpio_num_t CORE2_AXP192_SDA_GPIO = GPIO_NUM_21;
+static constexpr gpio_num_t CORE2_AXP192_SCL_GPIO = GPIO_NUM_22;
+static constexpr uint8_t CORE2_AXP192_I2C_ADDR = 0x34;
+static constexpr TickType_t CORE2_AXP192_TIMEOUT_TICKS = pdMS_TO_TICKS(100);
+
+static bool config_uses_core2_board_preset(const lgfx_dev::LgfxRuntimeConfig &config)
+{
+    return config.board_preset.selected
+        && config.board_preset.preset_id == LGFX_BOARD_PRESET_ID_M5STACK_CORE2;
+}
+
+static esp_err_t core2_axp192_open_bus(bool *out_installed_here)
+{
+    if (out_installed_here == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *out_installed_here = false;
+
+    i2c_config_t conf = {};
+    conf.mode = I2C_MODE_MASTER;
+    conf.sda_io_num = CORE2_AXP192_SDA_GPIO;
+    conf.scl_io_num = CORE2_AXP192_SCL_GPIO;
+    conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
+    conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
+    conf.master.clk_speed = 400000;
+
+    esp_err_t err = i2c_param_config(CORE2_AXP192_I2C_PORT, &conf);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = i2c_driver_install(CORE2_AXP192_I2C_PORT, I2C_MODE_MASTER, 0, 0, 0);
+    if (err == ESP_OK) {
+        *out_installed_here = true;
+        return ESP_OK;
+    }
+
+    if (err == ESP_ERR_INVALID_STATE) {
+        return ESP_OK;
+    }
+
+    return err;
+}
+
+static void core2_axp192_close_bus(bool installed_here)
+{
+    if (installed_here) {
+        (void) i2c_driver_delete(CORE2_AXP192_I2C_PORT);
+    }
+}
+
+static esp_err_t core2_axp192_read_reg(uint8_t reg, uint8_t *out_value)
+{
+    if (out_value == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    bool installed_here = false;
+    esp_err_t err = core2_axp192_open_bus(&installed_here);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    if (cmd == nullptr) {
+        core2_axp192_close_bus(installed_here);
+        return ESP_ERR_NO_MEM;
+    }
+
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, static_cast<uint8_t>((CORE2_AXP192_I2C_ADDR << 1) | I2C_MASTER_WRITE), true);
+    i2c_master_write_byte(cmd, reg, true);
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, static_cast<uint8_t>((CORE2_AXP192_I2C_ADDR << 1) | I2C_MASTER_READ), true);
+    i2c_master_read_byte(cmd, out_value, I2C_MASTER_NACK);
+    i2c_master_stop(cmd);
+
+    err = i2c_master_cmd_begin(CORE2_AXP192_I2C_PORT, cmd, CORE2_AXP192_TIMEOUT_TICKS);
+    i2c_cmd_link_delete(cmd);
+    core2_axp192_close_bus(installed_here);
+    return err;
+}
+
+static esp_err_t core2_axp192_write_reg(uint8_t reg, uint8_t value)
+{
+    bool installed_here = false;
+    esp_err_t err = core2_axp192_open_bus(&installed_here);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    if (cmd == nullptr) {
+        core2_axp192_close_bus(installed_here);
+        return ESP_ERR_NO_MEM;
+    }
+
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, static_cast<uint8_t>((CORE2_AXP192_I2C_ADDR << 1) | I2C_MASTER_WRITE), true);
+    i2c_master_write_byte(cmd, reg, true);
+    i2c_master_write_byte(cmd, value, true);
+    i2c_master_stop(cmd);
+
+    err = i2c_master_cmd_begin(CORE2_AXP192_I2C_PORT, cmd, CORE2_AXP192_TIMEOUT_TICKS);
+    i2c_cmd_link_delete(cmd);
+    core2_axp192_close_bus(installed_here);
+    return err;
+}
+
+static esp_err_t core2_axp192_write_masked(uint8_t reg, uint8_t value, uint8_t mask)
+{
+    uint8_t current = 0;
+    esp_err_t err = core2_axp192_read_reg(reg, &current);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    const uint8_t next = static_cast<uint8_t>((current & mask) | value);
+    if (next == current) {
+        return ESP_OK;
+    }
+
+    return core2_axp192_write_reg(reg, next);
+}
+
+static esp_err_t core2_axp192_read_reg_on_open_bus(uint8_t reg, uint8_t *out_value)
+{
+    if (out_value == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    if (cmd == nullptr) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, static_cast<uint8_t>((CORE2_AXP192_I2C_ADDR << 1) | I2C_MASTER_WRITE), true);
+    i2c_master_write_byte(cmd, reg, true);
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, static_cast<uint8_t>((CORE2_AXP192_I2C_ADDR << 1) | I2C_MASTER_READ), true);
+    i2c_master_read_byte(cmd, out_value, I2C_MASTER_NACK);
+    i2c_master_stop(cmd);
+
+    esp_err_t err = i2c_master_cmd_begin(CORE2_AXP192_I2C_PORT, cmd, CORE2_AXP192_TIMEOUT_TICKS);
+    i2c_cmd_link_delete(cmd);
+    return err;
+}
+
+static esp_err_t core2_axp192_write_reg_on_open_bus(uint8_t reg, uint8_t value)
+{
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    if (cmd == nullptr) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, static_cast<uint8_t>((CORE2_AXP192_I2C_ADDR << 1) | I2C_MASTER_WRITE), true);
+    i2c_master_write_byte(cmd, reg, true);
+    i2c_master_write_byte(cmd, value, true);
+    i2c_master_stop(cmd);
+
+    esp_err_t err = i2c_master_cmd_begin(CORE2_AXP192_I2C_PORT, cmd, CORE2_AXP192_TIMEOUT_TICKS);
+    i2c_cmd_link_delete(cmd);
+    return err;
+}
+
+static esp_err_t core2_axp192_write_masked_on_open_bus(uint8_t reg, uint8_t value, uint8_t mask)
+{
+    uint8_t current = 0;
+    esp_err_t err = core2_axp192_read_reg_on_open_bus(reg, &current);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    const uint8_t next = static_cast<uint8_t>((current & mask) | value);
+    if (next == current) {
+        return ESP_OK;
+    }
+
+    return core2_axp192_write_reg_on_open_bus(reg, next);
+}
+
+static esp_err_t core2_axp192_set_backlight_on_open_bus(uint8_t brightness)
+{
+    if (brightness == 0) {
+        esp_err_t err = core2_axp192_write_masked_on_open_bus(0x12, 0x00, 0xFD);
+        if (err != ESP_OK) {
+            return err;
+        }
+        return core2_axp192_write_masked_on_open_bus(0x27, 0x00, 0x80);
+    }
+
+    const uint8_t level = static_cast<uint8_t>((brightness >> 3) + 72);
+
+    esp_err_t err = core2_axp192_write_masked_on_open_bus(0x12, 0x02, 0xFF);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    return core2_axp192_write_masked_on_open_bus(0x27, level, 0x80);
+}
+
+static esp_err_t core2_axp192_set_backlight(uint8_t brightness)
+{
+    bool installed_here = false;
+    esp_err_t err = core2_axp192_open_bus(&installed_here);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = core2_axp192_set_backlight_on_open_bus(brightness);
+    core2_axp192_close_bus(installed_here);
+    return err;
+}
+
+static esp_err_t core2_axp192_prepare_panel_power_and_reset(void)
+{
+    bool installed_here = false;
+    esp_err_t err = core2_axp192_open_bus(&installed_here);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = core2_axp192_write_masked_on_open_bus(0x95, 0x84, 0x72);
+    if (err != ESP_OK) {
+        core2_axp192_close_bus(installed_here);
+        return err;
+    }
+
+    err = core2_axp192_write_masked_on_open_bus(0x28, 0xF0, 0xFF);
+    if (err != ESP_OK) {
+        core2_axp192_close_bus(installed_here);
+        return err;
+    }
+
+    err = core2_axp192_write_masked_on_open_bus(0x12, 0x04, 0xFF);
+    if (err != ESP_OK) {
+        core2_axp192_close_bus(installed_here);
+        return err;
+    }
+
+    err = core2_axp192_write_masked_on_open_bus(0x96, 0x00, 0xFD);
+    if (err != ESP_OK) {
+        core2_axp192_close_bus(installed_here);
+        return err;
+    }
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    err = core2_axp192_write_masked_on_open_bus(0x96, 0x02, 0xFF);
+    if (err != ESP_OK) {
+        core2_axp192_close_bus(installed_here);
+        return err;
+    }
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    err = core2_axp192_set_backlight_on_open_bus(255);
+    core2_axp192_close_bus(installed_here);
+    return err;
+}
 
 // ----------------------------------------------------------------------------
 // Shared compile-time constants
@@ -404,6 +673,43 @@ static esp_err_t ensure_published_device_for_owner(
 
 namespace lgfx_dev
 {
+
+
+esp_err_t board_preset_prepare_for_begin(const LgfxRuntimeConfig &config)
+{
+    if (!config_uses_core2_board_preset(config)) {
+        g_active_board_preset = LGFX_BOARD_PRESET_ID_NONE;
+        return ESP_OK;
+    }
+
+    esp_err_t err = core2_axp192_prepare_panel_power_and_reset();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    g_active_board_preset = LGFX_BOARD_PRESET_ID_M5STACK_CORE2;
+    return ESP_OK;
+}
+
+esp_err_t board_preset_apply_default_brightness_for_begin(const LgfxRuntimeConfig &config)
+{
+    (void) config;
+    return ESP_OK;
+}
+
+esp_err_t board_preset_set_brightness_if_needed(uint8_t brightness)
+{
+    if (g_active_board_preset != LGFX_BOARD_PRESET_ID_M5STACK_CORE2) {
+        return ESP_OK;
+    }
+
+    return core2_axp192_set_backlight(brightness);
+}
+
+void board_preset_reset_runtime_state()
+{
+    g_active_board_preset = LGFX_BOARD_PRESET_ID_NONE;
+}
 
 uint16_t max_sprites_const()
 {
@@ -893,6 +1199,8 @@ extern "C" esp_err_t lgfx_device_init_with_open_config(
     const lgfx_open_config_overrides_t *overrides,
     const void *owner_token)
 {
+    const lgfx_dev::LgfxRuntimeConfig config = lgfx_dev::runtime_config_with_overrides(overrides);
+
     esp_err_t err = ensure_published_device_for_owner(overrides, owner_token);
     if (err != ESP_OK) {
         return err;
@@ -911,9 +1219,21 @@ extern "C" esp_err_t lgfx_device_init_with_open_config(
     }
 
     if (!g_device_ready) {
+        err = lgfx_dev::board_preset_prepare_for_begin(config);
+        if (err != ESP_OK) {
+            release_lcd_mutex();
+            return err;
+        }
+
         ESP_LOGI(TAG, "init/begin");
         snapshot.lcd->begin();
         g_device_ready = true;
+
+        err = lgfx_dev::board_preset_apply_default_brightness_for_begin(config);
+        if (err != ESP_OK) {
+            release_lcd_mutex();
+            return err;
+        }
 
         // Default text state after begin().
         snapshot.lcd->setTextSize(1);
@@ -1040,6 +1360,9 @@ static esp_err_t lgfx_device_deinit_for_owner(const void *owner_token)
     portEXIT_CRITICAL(&g_publication_mux);
 
     if (to_delete) {
+        (void) lgfx_dev::board_preset_set_brightness_if_needed(0);
+        lgfx_dev::board_preset_reset_runtime_state();
+
         // Force-unwind any open LovyanGFX write nesting before teardown.
         force_end_write_all(to_delete);
         lgfx_dev::destroy_lcd_device(to_delete);

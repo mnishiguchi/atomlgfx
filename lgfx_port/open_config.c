@@ -88,6 +88,19 @@ static bool lgfx_parse_panel_driver_value(
     return false;
 }
 
+static bool lgfx_parse_board_preset_value(
+    GlobalContext *global,
+    term value,
+    lgfx_board_preset_id_t *out_value)
+{
+    if (value == LGFX_ATOM(global, "\x0D", "m5stack_core2")) {
+        *out_value = LGFX_BOARD_PRESET_ID_M5STACK_CORE2;
+        return true;
+    }
+
+    return false;
+}
+
 static bool lgfx_parse_touch_driver_value(
     GlobalContext *global,
     term value,
@@ -291,6 +304,15 @@ static bool lgfx_parse_open_option_tuple(
     if (!term_is_atom(key)) {
         *error_detail = "open_port option key must be an atom";
         return false;
+    }
+
+    if (key == LGFX_ATOM(global, "\x0C", "board_preset")) {
+        if (!lgfx_parse_board_preset_value(global, value, &overrides->board_preset)) {
+            *error_detail = "bad value for board_preset (expected m5stack_core2)";
+            return false;
+        }
+        overrides->has_board_preset = 1u;
+        return true;
     }
 
     if (key == LGFX_ATOM(global, "\x0C", "panel_driver")) {
