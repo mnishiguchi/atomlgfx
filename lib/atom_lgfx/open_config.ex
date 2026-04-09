@@ -9,7 +9,7 @@ defmodule AtomLGFX.OpenConfig do
 
   @max_open_config_i32 0x7FFF_FFFF
 
-  @board_preset_atoms [:m5stack_core2]
+  @board_preset_atoms [:m5stack_core2, :m5stack_cores3]
   @panel_driver_atoms [:ili9488, :ili9341, :ili9341_2, :st7789, :ili9342c]
   @touch_driver_atoms [:xpt2046, :ft6336u]
   @spi_host_atoms [:spi2_host, :spi3_host]
@@ -133,7 +133,7 @@ defmodule AtomLGFX.OpenConfig do
        do: {:ok, value}
 
   defp normalize_open_option_by_rule(:board_preset, key, value) do
-    {:error, {:bad_open_option_value, key, value, ":m5stack_core2"}}
+    {:error, {:bad_open_option_value, key, value, ":m5stack_core2 or :m5stack_cores3"}}
   end
 
   defp normalize_open_option_by_rule(:panel_driver, _key, value)

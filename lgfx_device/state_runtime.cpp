@@ -138,6 +138,8 @@ static inline const char *board_preset_name(lgfx_board_preset_id_t preset_id)
             return "none";
         case LGFX_BOARD_PRESET_ID_M5STACK_CORE2:
             return "m5stack_core2";
+        case LGFX_BOARD_PRESET_ID_M5STACK_CORES3:
+            return "m5stack_cores3";
         default:
             return "unknown";
     }
@@ -148,6 +150,7 @@ static inline bool is_known_board_preset_id(lgfx_board_preset_id_t preset_id)
     switch (preset_id) {
         case LGFX_BOARD_PRESET_ID_NONE:
         case LGFX_BOARD_PRESET_ID_M5STACK_CORE2:
+        case LGFX_BOARD_PRESET_ID_M5STACK_CORES3:
             return true;
         default:
             return false;
@@ -786,7 +789,7 @@ bool validate_runtime_config(const LgfxRuntimeConfig &config, const char **reaso
     const char *local_reason = nullptr;
 
     if (!is_known_board_preset_id(config.board_preset.preset_id)) {
-        local_reason = "board_preset must be m5stack_core2";
+        local_reason = "board_preset must be m5stack_core2 or m5stack_cores3";
     } else if (!is_known_panel_driver_id(config.lcd_panel.driver_id)) {
         local_reason = "panel_driver must be ili9488, ili9341, ili9341_2, st7789, or ili9342c";
     } else if (!is_known_touch_driver_id(config.touch.driver_id)) {

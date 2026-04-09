@@ -109,6 +109,7 @@ typedef enum lgfx_board_preset_id_t
 {
     LGFX_BOARD_PRESET_ID_NONE = 0,
     LGFX_BOARD_PRESET_ID_M5STACK_CORE2 = 1,
+    LGFX_BOARD_PRESET_ID_M5STACK_CORES3 = 2,
 } lgfx_board_preset_id_t;
 
 typedef enum lgfx_touch_driver_id_t

@@ -98,6 +98,11 @@ static bool lgfx_parse_board_preset_value(
         return true;
     }
 
+    if (value == LGFX_ATOM(global, "\x0E", "m5stack_cores3")) {
+        *out_value = LGFX_BOARD_PRESET_ID_M5STACK_CORES3;
+        return true;
+    }
+
     return false;
 }
 
@@ -308,7 +313,7 @@ static bool lgfx_parse_open_option_tuple(
 
     if (key == LGFX_ATOM(global, "\x0C", "board_preset")) {
         if (!lgfx_parse_board_preset_value(global, value, &overrides->board_preset)) {
-            *error_detail = "bad value for board_preset (expected m5stack_core2)";
+            *error_detail = "bad value for board_preset (expected m5stack_core2 or m5stack_cores3)";
             return false;
         }
         overrides->has_board_preset = 1u;
