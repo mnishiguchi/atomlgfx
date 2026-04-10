@@ -9,3 +9,4 @@
 /mix.lock
 /tmp/
 .atomvm*
+eim_config.toml

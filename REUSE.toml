@@ -23,6 +23,7 @@ path = [
   "CMakeLists.txt",
   "README.md",
   "docs/**",
+  "eim_config.toml",
   "include/**",
   "lgfx_device/README.md",
   "lgfx_device/*.cpp",
