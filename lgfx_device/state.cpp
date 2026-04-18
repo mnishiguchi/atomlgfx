@@ -43,7 +43,6 @@ static const void *g_device_owner_token = nullptr;
 // True only after begin() succeeds for the currently published singleton.
 static bool g_device_ready = false;
 
-
 static lgfx_board_preset_id_t g_active_board_preset = LGFX_BOARD_PRESET_ID_NONE;
 
 static constexpr i2c_port_t CORE2_AXP192_I2C_PORT = I2C_NUM_0;
@@ -51,6 +50,7 @@ static constexpr int CORE2_AXP192_SDA_GPIO = 21;
 static constexpr int CORE2_AXP192_SCL_GPIO = 22;
 static constexpr uint8_t CORE2_AXP192_I2C_ADDR = 0x34;
 static constexpr TickType_t CORE2_AXP192_TIMEOUT_TICKS = pdMS_TO_TICKS(100);
+static constexpr uint8_t CORE2_DEFAULT_BRIGHTNESS = 64;
 
 static constexpr i2c_port_t CORES3_I2C_PORT = I2C_NUM_1;
 static constexpr int CORES3_SDA_GPIO = 12;
@@ -169,7 +169,6 @@ static esp_err_t core2_axp192_write_reg(uint8_t reg, uint8_t value)
     core2_axp192_close_bus(installed_here);
     return err;
 }
-
 
 static esp_err_t core2_axp192_read_reg_on_open_bus(uint8_t reg, uint8_t *out_value)
 {
@@ -302,7 +301,7 @@ static esp_err_t core2_axp192_prepare_panel_power_and_reset(void)
     }
     vTaskDelay(pdMS_TO_TICKS(10));
 
-    err = core2_axp192_set_backlight_on_open_bus(255);
+    err = core2_axp192_set_backlight_on_open_bus(CORE2_DEFAULT_BRIGHTNESS);
     core2_axp192_close_bus(installed_here);
     return err;
 }
@@ -847,7 +846,6 @@ static esp_err_t ensure_published_device_for_owner(
 namespace lgfx_dev
 {
 
-
 esp_err_t board_preset_prepare_for_begin(const LgfxRuntimeConfig &config)
 {
     if (config_uses_core2_board_preset(config)) {
@@ -883,14 +881,19 @@ esp_err_t board_preset_apply_default_brightness_for_begin(const LgfxRuntimeConfi
 esp_err_t board_preset_set_brightness_if_needed(uint8_t brightness)
 {
     if (g_active_board_preset == LGFX_BOARD_PRESET_ID_M5STACK_CORE2) {
-        return core2_axp192_set_backlight(brightness);
+        (void) brightness;
+        ESP_LOGW(
+            TAG,
+            "runtime set_brightness is not supported for m5stack_core2; "
+            "using startup default brightness");
+        return ESP_OK;
     }
 
     if (g_active_board_preset == LGFX_BOARD_PRESET_ID_M5STACK_CORES3) {
         return cores3_set_backlight(brightness);
     }
 
-    return ESP_OK;
+    return ESP_ERR_NOT_SUPPORTED;
 }
 
 void board_preset_reset_runtime_state()
