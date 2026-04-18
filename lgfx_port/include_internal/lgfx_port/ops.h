@@ -10,8 +10,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "context.h"
-#include "term.h"
+#include "term_typedef.h"
+
+#ifndef TYPEDEF_CONTEXT
+#define TYPEDEF_CONTEXT
+typedef struct Context Context;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
