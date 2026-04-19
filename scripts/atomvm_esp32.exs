@@ -9,7 +9,7 @@ defmodule Main do
   @script_name Path.basename(@script_file)
 
   @default_target "esp32s3"
-  @default_idf_rel_path "esp/esp-idf"
+  @recommended_idf_version "v5.5"
   @default_atomvm_rel_path "atomvm/AtomVM"
 
   @atomvm_esp32_rel_path "src/platforms/esp32"
@@ -18,7 +18,6 @@ defmodule Main do
   @sdkconfig_defaults_filename "sdkconfig.defaults"
   @sdkconfig_defaults_template_filename "sdkconfig.defaults.in"
   @project_sdkconfig_defaults_filename ".atomvm_esp32.sdkconfig.defaults"
-  @idf_export_sh_filename "export.sh"
 
   @boot_avm_rel_path "build/libs/esp32boot/elixir_esp32boot.avm"
   @default_host_build_dirname "build"
@@ -53,7 +52,6 @@ defmodule Main do
               atomvm_repo: :string,
               atomvm_ref: :string,
               allow_dirty: :boolean,
-              idf_dir: :string,
               target: :string,
               port: :string,
               help: :boolean
@@ -83,7 +81,6 @@ defmodule Main do
     repo_root = repo_root()
     atomvm_root = resolve_atomvm_root(repo_root, Keyword.get(options, :atomvm_repo, ""))
     esp32_dir = Path.join(atomvm_root, @atomvm_esp32_rel_path)
-    idf_dir = resolve_idf_dir(Keyword.get(options, :idf_dir, ""))
     target = Keyword.get(options, :target, @default_target)
     port = Keyword.get(options, :port, "")
     port_display = if port == "", do: "(not set)", else: port
@@ -95,7 +92,6 @@ defmodule Main do
       repo_root: repo_root,
       atomvm_root: atomvm_root,
       esp32_dir: esp32_dir,
-      idf_dir: idf_dir,
       target: target,
       port: port,
       port_display: port_display,
@@ -106,24 +102,33 @@ defmodule Main do
     }
 
     case command do
-      "info" ->
-        info_cmd(shared)
-
-      "install" ->
-        install_cmd(shared)
-
-      "monitor" ->
-        monitor_cmd(shared)
-
-      "mkimage" ->
-        mkimage_cmd(shared, extra_args)
-
       "clean" ->
         clean_cmd(shared)
 
       _ ->
-        usage()
-        die("Unknown command: #{command}")
+        eim_info = resolve_eim_env_info!()
+        shared = Map.merge(shared, eim_info)
+
+        case command do
+          "info" ->
+            info_cmd(shared)
+
+          "install" ->
+            ensure_supported_idf_version!(shared)
+            install_cmd(shared)
+
+          "monitor" ->
+            ensure_supported_idf_version!(shared)
+            monitor_cmd(shared)
+
+          "mkimage" ->
+            ensure_supported_idf_version!(shared)
+            mkimage_cmd(shared, extra_args)
+
+          _ ->
+            usage()
+            die("Unknown command: #{command}")
+        end
     end
   end
 
@@ -136,7 +141,7 @@ defmodule Main do
     Commands:
       info      Print resolved paths and basic checks (no changes)
       install   Ensure AtomVM exists, pin version, link component, write project config, build + flash firmware
-      monitor   Attach serial monitor (idf.py monitor)
+      monitor   Attach serial monitor (idf.py monitor via EIM)
       mkimage   Build a custom AtomVM release image for this project
       clean     Remove AtomVM ESP32 platform build directory
 
@@ -147,10 +152,18 @@ defmodule Main do
                               env: ATOMVM_REF
       --allow-dirty            Allow pinning even if AtomVM repo has tracked local changes
                               env: ATOMVM_ALLOW_DIRTY=1
-      --idf-dir PATH           ESP-IDF root (contains export.sh). Optional.
       --target TARGET          esp32 / esp32s3 / etc (default: #{@default_target})
       --port PORT              Serial device (required for install/monitor)
       -h, --help               Show help
+
+    Workflow:
+      - This script assumes ESP-IDF is managed by EIM.
+      - It is currently tuned for AtomVM ESP32 builds with #{@recommended_idf_version}.
+      - Install/select the recommended version first:
+          eim install -i #{@recommended_idf_version}
+          eim select #{@recommended_idf_version}
+      - The script runs idf.py through EIM automatically.
+      - No activation script sourcing is required.
 
     mkimage notes:
       - Host build dir is inferred as: <atomvm_repo>/#{@default_host_build_dirname}
@@ -165,6 +178,8 @@ defmodule Main do
       - Does not remove the host build directory.
 
     Examples:
+      eim install -i #{@recommended_idf_version}
+      eim select #{@recommended_idf_version}
       #{@script_name} info
       #{@script_name} install --target esp32s3 --port /dev/ttyACM0
       #{@script_name} install --allow-dirty --target esp32s3 --port /dev/ttyACM0
@@ -176,9 +191,6 @@ defmodule Main do
       #{@script_name} mkimage -- --main build/my_app.avm
       #{@script_name} mkimage -- --main build/my_app.avm --data build/assets.avm
       #{@script_name} clean
-
-    ESP-IDF discovery (if --idf-dir not provided):
-      Uses ESP_IDF_DIR, then IDF_PATH, else defaults to: $HOME/#{@default_idf_rel_path}
 
     AtomVM pinning:
       - Branch ref (e.g. main): always fetches origin/<branch> with depth=1 before resolving
@@ -213,13 +225,13 @@ defmodule Main do
     say("- atomvm_ref:  #{shared.atomvm_ref}")
     say("- ref_source:  #{shared.atomvm_ref_source}")
     say("- allow_dirty: #{shared.allow_dirty}")
+    say("- eim_version: #{shared.eim_version}")
+    say("- idf_ok:      #{if supported_idf_version?(shared.eim_version), do: "yes", else: "no (expected #{@recommended_idf_version}.x)"}")
 
     say("")
     say("Checks")
-
-    say(
-      "- ESP-IDF:     #{if File.regular?(Path.join(shared.idf_dir, @idf_export_sh_filename)), do: "export.sh found", else: "missing export.sh"}"
-    )
+    say("- EIM:         ok")
+    say("- ESP-IDF dir: #{if File.dir?(shared.idf_dir), do: "ok", else: "missing"}")
 
     if File.dir?(Path.join(shared.atomvm_root, ".git")) do
       say("- AtomVM:      ok")
@@ -292,37 +304,25 @@ defmodule Main do
 
     say("Building AtomVM firmware")
 
-    with_idf_env!(
-      shared.idf_dir,
+    sdkconfig_defaults = "sdkconfig.defaults;#{sdkconfig_overrides}"
+
+    run_idf!(shared.esp32_dir, ["fullclean"], %{"SDKCONFIG_DEFAULTS" => sdkconfig_defaults})
+
+    run_idf!(
       shared.esp32_dir,
-      """
-      export SDKCONFIG_DEFAULTS=#{sh_escape("sdkconfig.defaults;#{sdkconfig_overrides}")}
-
-      echo "+ idf.py fullclean"
-      idf.py fullclean
-
-      echo "+ idf.py -DATOMVM_ELIXIR_SUPPORT=on set-target #{shared.target}"
-      idf.py -DATOMVM_ELIXIR_SUPPORT=on set-target #{sh_escape(shared.target)}
-
-      echo "+ idf.py build"
-      idf.py build
-      """
+      ["-DATOMVM_ELIXIR_SUPPORT=on", "set-target", shared.target],
+      %{"SDKCONFIG_DEFAULTS" => sdkconfig_defaults}
     )
+
+    run_idf!(shared.esp32_dir, ["build"], %{"SDKCONFIG_DEFAULTS" => sdkconfig_defaults})
 
     ensure_serial_port_ready!(shared.port)
     say("Flashing AtomVM firmware")
 
-    with_idf_env!(
-      shared.idf_dir,
+    run_idf!(
       shared.esp32_dir,
-      """
-      export SDKCONFIG_DEFAULTS=#{sh_escape("sdkconfig.defaults;#{sdkconfig_overrides}")}
-
-      PORT=#{sh_escape(shared.port)}
-
-      echo "+ idf.py -p $PORT flash"
-      idf.py -p "$PORT" flash
-      """
+      ["-p", shared.port, "flash"],
+      %{"SDKCONFIG_DEFAULTS" => sdkconfig_defaults}
     )
 
     say("✔ install complete")
@@ -333,14 +333,7 @@ defmodule Main do
     if shared.port == "", do: die("--port is required for monitor (e.g. --port /dev/ttyACM0)")
     ensure_serial_port_ready!(shared.port)
     say("Starting serial monitor")
-
-    with_idf_env!(
-      shared.idf_dir,
-      shared.esp32_dir,
-      """
-      idf.py -p #{sh_escape(shared.port)} monitor
-      """
-    )
+    run_idf!(shared.esp32_dir, ["-p", shared.port, "monitor"])
   end
 
   defp mkimage_cmd(shared, mkimage_extra_args) do
@@ -353,7 +346,6 @@ defmodule Main do
     ensure_atomvm_layout!(shared.atomvm_root, shared.esp32_dir)
     ensure_component_link!(shared.repo_root, shared.esp32_dir)
     sdkconfig_overrides = ensure_project_sdkconfig_defaults!(shared.repo_root)
-    ensure_regular_file!(Path.join(shared.idf_dir, @idf_export_sh_filename), "ESP-IDF export.sh")
 
     say("Building AtomVM host tree")
     build_host_tree!(shared.atomvm_root, host_build_dir)
@@ -361,7 +353,6 @@ defmodule Main do
     say("Building AtomVM ESP32 platform")
 
     build_platform_tree!(
-      shared.idf_dir,
       shared.esp32_dir,
       shared.target,
       platform_build_dir,
@@ -560,17 +551,102 @@ defmodule Main do
     end
   end
 
-  defp resolve_idf_dir(""), do: resolve_idf_dir(nil)
+  defp resolve_eim_env_info! do
+    require_cmd!("eim")
 
-  defp resolve_idf_dir(nil) do
-    cond do
-      present?(System.get_env("ESP_IDF_DIR")) -> Path.expand(System.get_env("ESP_IDF_DIR"))
-      present?(System.get_env("IDF_PATH")) -> Path.expand(System.get_env("IDF_PATH"))
-      true -> Path.join(System.user_home!(), @default_idf_rel_path)
+    case System.cmd(
+           "eim",
+           ["run", ~s|printf '%s\n%s\n' "$ESP_IDF_VERSION" "$IDF_PATH"|],
+           stderr_to_stdout: true
+         ) do
+      {output, 0} ->
+        lines = output |> String.split("\n", trim: true) |> Enum.map(&String.trim/1)
+
+        eim_version =
+          lines
+          |> Enum.reverse()
+          |> Enum.find(&String.match?(&1, ~r/^v?\d+(?:\.\d+)+$/))
+          |> case do
+            nil ->
+              case Regex.run(~r/ESP_IDF_VERSION\s*=\s*([^\s]+)/, output, capture: :all_but_first) do
+                [version] -> version
+                _ -> "(unknown)"
+              end
+
+            version ->
+              version
+          end
+
+        idf_dir =
+          lines
+          |> Enum.reverse()
+          |> Enum.find(&String.starts_with?(&1, "/"))
+          |> case do
+            nil ->
+              case Regex.run(~r/IDF_PATH\s*=\s*([^\s]+)/, output, capture: :all_but_first) do
+                [path] -> path
+                _ -> nil
+              end
+
+            path ->
+              path
+          end
+
+        if not present?(idf_dir) do
+          die("""
+          Could not resolve IDF_PATH from EIM output.
+
+          Output:
+          #{String.trim(output)}
+          """)
+        end
+
+        %{eim_version: eim_version, idf_dir: Path.expand(idf_dir)}
+
+      {output, _status} ->
+        die("""
+        EIM is not ready.
+
+        Make sure EIM is installed and an ESP-IDF version is selected first, for example:
+          eim install -i #{@recommended_idf_version}
+          eim select #{@recommended_idf_version}
+
+        Output:
+        #{String.trim(output)}
+        """)
     end
   end
 
-  defp resolve_idf_dir(path), do: Path.expand(path)
+
+  defp ensure_supported_idf_version!(shared) do
+    if supported_idf_version?(shared.eim_version) do
+      :ok
+    else
+      die("""
+      Unsupported ESP-IDF version selected in EIM: #{shared.eim_version}
+
+      This script is currently tuned for AtomVM ESP32 builds with #{@recommended_idf_version}.x.
+
+      Please switch EIM to #{@recommended_idf_version} and retry:
+        eim install -i #{@recommended_idf_version}
+        eim select #{@recommended_idf_version}
+
+      Current IDF_PATH:
+        #{shared.idf_dir}
+      """)
+    end
+  end
+
+  defp supported_idf_version?(version) when is_binary(version) do
+    normalized =
+      version
+      |> String.trim()
+      |> String.trim_leading("v")
+
+    String.starts_with?(normalized, "5.5")
+  end
+
+  defp supported_idf_version?(_version), do: false
 
   defp resolve_atomvm_root(_repo_root, override) when is_binary(override) and override != "" do
     override = Path.expand(override)
@@ -673,34 +749,57 @@ defmodule Main do
     run!("cmake", ["--build", host_build_dir])
   end
 
-  defp build_platform_tree!(
-         idf_dir,
-         esp32_dir,
-         target,
-         platform_build_dir,
-         sdkconfig_overrides,
-         opts
-       ) do
+  defp build_platform_tree!(esp32_dir, target, platform_build_dir, sdkconfig_overrides, opts) do
     cmake_args =
       ["-DATOMVM_ELIXIR_SUPPORT=on"] ++
         if Keyword.get(opts, :release, false), do: ["-DATOMVM_RELEASE=on"], else: []
 
-    cmake_args_shell = Enum.map_join(cmake_args, " ", &sh_escape/1)
-    cmake_args_display = Enum.join(cmake_args, " ")
+    sdkconfig_defaults = "sdkconfig.defaults;#{sdkconfig_overrides}"
 
-    with_idf_env!(
-      idf_dir,
+    run_idf!(
       esp32_dir,
-      """
-      export SDKCONFIG_DEFAULTS=#{sh_escape("sdkconfig.defaults;#{sdkconfig_overrides}")}
-
-      echo "+ idf.py -B #{sh_escape(platform_build_dir)} #{cmake_args_display} set-target #{target}"
-      idf.py -B #{sh_escape(platform_build_dir)} #{cmake_args_shell} set-target #{sh_escape(target)}
-
-      echo "+ idf.py -B #{sh_escape(platform_build_dir)} build"
-      idf.py -B #{sh_escape(platform_build_dir)} build
-      """
+      ["-B", platform_build_dir] ++ cmake_args ++ ["set-target", target],
+      %{"SDKCONFIG_DEFAULTS" => sdkconfig_defaults}
     )
+
+    run_idf!(
+      esp32_dir,
+      ["-B", platform_build_dir, "build"],
+      %{"SDKCONFIG_DEFAULTS" => sdkconfig_defaults}
+    )
+  end
+
+  defp run_idf!(workdir, idf_args, env \\ %{}) do
+    command =
+      ["idf.py", "-C", shell_display(workdir) | Enum.map(idf_args, &shell_display/1)]
+      |> Enum.join(" ")
+
+    display = "eim run #{command}"
+    IO.puts(colorize(:cyan, "+ #{display}", bold: true))
+
+    case System.cmd("eim", ["run", command],
+           stderr_to_stdout: true,
+           into: IO.stream(:stdio, :line),
+           env: Enum.into(env, %{})
+         ) do
+      {_result, 0} ->
+        :ok
+
+      {_result, status} ->
+        die("""
+        ESP-IDF command failed (exit #{status}):
+          #{display}
+
+        Tips:
+          - This script currently expects #{@recommended_idf_version}.x for AtomVM ESP32 builds.
+          - Check the selected EIM version with: eim list
+          - Switch if needed:
+              eim install -i #{@recommended_idf_version}
+              eim select #{@recommended_idf_version}
+          - Retry after cleaning if the build dir is stale:
+              #{@script_name} clean
+        """)
+    end
   end
 
   defp run_mkimage!(esp32_dir, mkimage_script, mkimage_extra_args) do
@@ -730,30 +829,6 @@ defmodule Main do
         |> Enum.max_by(fn {_path, mtime} -> mtime end)
         |> elem(0)
     end
-  end
-
-  defp with_idf_env!(idf_dir, workdir, shell_body) do
-    export_sh = Path.join(idf_dir, @idf_export_sh_filename)
-    ensure_regular_file!(export_sh, "ESP-IDF export.sh")
-    if not File.dir?(workdir), do: die("Workdir not found: #{workdir}")
-
-    script = """
-    source #{sh_escape(export_sh)} >/dev/null 2>&1
-
-    if ! command -v idf.py >/dev/null 2>&1; then
-      echo "idf.py not found in PATH after sourcing ESP-IDF" >&2
-      exit 1
-    fi
-
-    cd #{sh_escape(workdir)}
-    #{shell_body}
-    """
-
-    run!(
-      "bash",
-      ["-Eeuo", "pipefail", "-c", script],
-      display: "bash (ESP-IDF env) in #{workdir}"
-    )
   end
 
   defp ensure_serial_port_ready!(port) do
