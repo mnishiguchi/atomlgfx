@@ -40,6 +40,7 @@ path = [
   "lib/**",
   "mix.exs",
   "scripts/*.exs",
+  "scripts/*.sh",
   "examples/elixir/.formatter.exs",
   "examples/elixir/config/**",
   "examples/elixir/lib/**",
