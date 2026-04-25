@@ -310,7 +310,7 @@ defmodule Main do
 
     run_idf!(
       shared.esp32_dir,
-      ["-DATOMVM_ELIXIR_SUPPORT=on", "set-target", shared.target],
+      platform_cmake_args(shared.target) ++ ["set-target", shared.target],
       %{"SDKCONFIG_DEFAULTS" => sdkconfig_defaults}
     )
 
@@ -736,8 +736,8 @@ defmodule Main do
       say("Generating boot AVM (Generic UNIX build)")
       build_dir = Path.join(atomvm_root, "build")
       File.mkdir_p!(build_dir)
-      run!("cmake", ["-S", atomvm_root, "-B", build_dir])
-      run!("cmake", ["--build", build_dir])
+      run!("cmake", ["-S", atomvm_root, "-B", build_dir], env: host_tool_env())
+      run!("cmake", ["--build", build_dir], env: host_tool_env())
       ensure_regular_file!(boot_avm, "boot AVM")
     end
   end
@@ -745,13 +745,13 @@ defmodule Main do
   defp build_host_tree!(atomvm_root, host_build_dir) do
     require_cmd!("cmake")
     File.mkdir_p!(host_build_dir)
-    run!("cmake", ["-S", atomvm_root, "-B", host_build_dir])
-    run!("cmake", ["--build", host_build_dir])
+    run!("cmake", ["-S", atomvm_root, "-B", host_build_dir], env: host_tool_env())
+    run!("cmake", ["--build", host_build_dir], env: host_tool_env())
   end
 
   defp build_platform_tree!(esp32_dir, target, platform_build_dir, sdkconfig_overrides, opts) do
     cmake_args =
-      ["-DATOMVM_ELIXIR_SUPPORT=on"] ++
+      platform_cmake_args(target) ++
         if Keyword.get(opts, :release, false), do: ["-DATOMVM_RELEASE=on"], else: []
 
     sdkconfig_defaults = "sdkconfig.defaults;#{sdkconfig_overrides}"
@@ -791,6 +791,7 @@ defmodule Main do
           #{display}
 
         Tips:
+          - Look above for the first "FAILED:" or "Error:" line; EIM's final error can be generic.
           - This script currently expects #{@recommended_idf_version}.x for AtomVM ESP32 builds.
           - Check the selected EIM version with: eim list
           - Switch if needed:
@@ -799,6 +800,21 @@ defmodule Main do
           - Retry after cleaning if the build dir is stale:
               #{@script_name} clean
         """)
+    end
+  end
+
+  defp platform_cmake_args(target) do
+    args = ["-DATOMVM_ELIXIR_SUPPORT=on"]
+
+    if target == "esp32c3" do
+      args ++
+        [
+          "-DAVM_MINIMAL_OPCODES=ON",
+          "-DLGFX_PORT_ENABLE_JP_FONTS=OFF",
+          "-DLGFX_PORT_ENABLE_TOUCH=OFF"
+        ]
+    else
+      args
     end
   end
 
@@ -1023,6 +1039,18 @@ defmodule Main do
 
   defp require_cmd!(cmd) do
     if System.find_executable(cmd), do: :ok, else: die("Missing dependency: #{cmd}")
+  end
+
+  defp host_tool_env do
+    %{"PATH" => host_tool_path()}
+  end
+
+  defp host_tool_path do
+    current_path = System.get_env("PATH", "")
+
+    ["/usr/local/bin", "/usr/bin", "/bin", current_path]
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.join(":")
   end
 
   defp ensure_regular_file!(path, label) do
