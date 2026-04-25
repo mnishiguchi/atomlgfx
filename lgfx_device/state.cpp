@@ -17,6 +17,7 @@
 #include "freertos/task.h"
 
 #include "driver/i2c.h"
+#include "soc/soc_caps.h"
 
 #include "lgfx_device/lgfx_device.h"
 #include "lgfx_device/lgfx_device_internal.hpp"
@@ -52,12 +53,14 @@ static constexpr uint8_t CORE2_AXP192_I2C_ADDR = 0x34;
 static constexpr TickType_t CORE2_AXP192_TIMEOUT_TICKS = pdMS_TO_TICKS(100);
 static constexpr uint8_t CORE2_DEFAULT_BRIGHTNESS = 64;
 
+#if SOC_I2C_NUM > 1
 static constexpr i2c_port_t CORES3_I2C_PORT = I2C_NUM_1;
 static constexpr int CORES3_SDA_GPIO = 12;
 static constexpr int CORES3_SCL_GPIO = 11;
 static constexpr uint8_t CORES3_AW9523_I2C_ADDR = 0x58;
 static constexpr uint8_t CORES3_AXP2101_I2C_ADDR = 0x34;
 static constexpr TickType_t CORES3_I2C_TIMEOUT_TICKS = pdMS_TO_TICKS(100);
+#endif
 
 static bool config_uses_cores3_board_preset(const lgfx_dev::LgfxRuntimeConfig &config)
 {
@@ -306,6 +309,7 @@ static esp_err_t core2_axp192_prepare_panel_power_and_reset(void)
     return err;
 }
 
+#if SOC_I2C_NUM > 1
 static esp_err_t cores3_open_bus(bool *out_installed_here)
 {
     if (out_installed_here == nullptr) {
@@ -480,6 +484,7 @@ static esp_err_t cores3_prepare_panel_power_and_reset(void)
     cores3_close_bus(installed_here);
     return err;
 }
+#endif
 
 // ----------------------------------------------------------------------------
 // Shared compile-time constants
@@ -859,6 +864,7 @@ esp_err_t board_preset_prepare_for_begin(const LgfxRuntimeConfig &config)
     }
 
     if (config_uses_cores3_board_preset(config)) {
+#if SOC_I2C_NUM > 1
         esp_err_t err = cores3_prepare_panel_power_and_reset();
         if (err != ESP_OK) {
             return err;
@@ -866,6 +872,10 @@ esp_err_t board_preset_prepare_for_begin(const LgfxRuntimeConfig &config)
 
         g_active_board_preset = LGFX_BOARD_PRESET_ID_M5STACK_CORES3;
         return ESP_OK;
+#else
+        ESP_LOGE(TAG, "m5stack_cores3 board preset requires a target with I2C_NUM_1");
+        return ESP_ERR_NOT_SUPPORTED;
+#endif
     }
 
     g_active_board_preset = LGFX_BOARD_PRESET_ID_NONE;
@@ -890,7 +900,11 @@ esp_err_t board_preset_set_brightness_if_needed(uint8_t brightness)
     }
 
     if (g_active_board_preset == LGFX_BOARD_PRESET_ID_M5STACK_CORES3) {
+#if SOC_I2C_NUM > 1
         return cores3_set_backlight(brightness);
+#else
+        return ESP_ERR_NOT_SUPPORTED;
+#endif
     }
 
     return ESP_ERR_NOT_SUPPORTED;

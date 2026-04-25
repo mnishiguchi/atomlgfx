@@ -15,6 +15,7 @@
 #include "term.h"
 
 #include "driver/spi_common.h"
+#include "soc/soc_caps.h"
 
 #include "lgfx_port/lgfx_port_internal.h"
 
@@ -233,10 +234,12 @@ static bool lgfx_parse_spi_host_value(GlobalContext *global, term value, int32_t
         return true;
     }
 
+#if SOC_SPI_PERIPH_NUM > 2
     if (value == LGFX_ATOM(global, "\x09", "spi3_host")) {
         *out_value = (int32_t) SPI3_HOST;
         return true;
     }
+#endif
 
     return false;
 }
