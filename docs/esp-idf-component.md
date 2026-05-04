@@ -19,7 +19,7 @@ this repository.
 - request decode and dispatch for the tuple protocol
 - LovyanGFX-backed display operations
 - sprite, palette, image, text, and touch support
-- explicit batch submission for grouped rendering work
+- explicit binary batch submission for grouped rendering work
 - protocol-level capabilities and diagnostics
 
 ## What this component does not provide
@@ -41,13 +41,8 @@ For Elixir-side usage, see [the Elixir package guide](elixir-package.md).
 - `lgfx_port/`
   - AtomVM-facing protocol boundary
   - ordinary request handling
-  - explicit batch submission decode and validation
-
-- `lgfx_runtime/`
-  - batch-only runtime support
-  - accepted batch ownership
-  - ordered batch execution
-  - batch status and failure recording
+  - explicit binary batch submission decode and validation
+  - frame-script dispatch
 
 - `lgfx_device/`
   - LovyanGFX-facing device adapter
@@ -102,7 +97,6 @@ see [the protocol reference](protocol-reference.md).
 These documents are mainly for maintainers of the native layer:
 
 - [Port layer](../lgfx_port/README.md)
-- [Runtime layer](../lgfx_runtime/README.md)
 - [Device adapter layer](../lgfx_device/README.md)
 - [Architecture](architecture.md)
 - [Protocol](protocol.md)
@@ -113,7 +107,7 @@ These documents are mainly for maintainers of the native layer:
 When changing protocol-visible behavior:
 
 - update `lgfx_port/include_internal/lgfx_port/ops.def` as needed
-- update handlers, batch decode, runtime, or device code as needed
+- update handlers, packed batch dispatch, or device code as needed
 - update `docs/protocol.md` if the external contract changed
 - resync generated protocol tables
 

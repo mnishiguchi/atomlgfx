@@ -13,10 +13,15 @@ This repository contains two closely related deliverables:
 - an ESP-IDF component that provides the native `lgfx_port` AtomVM port driver
 - an Elixir package that provides the `AtomLGFX` wrapper module for that driver
 
-Both layers share the same tuple-based protocol and are intended to evolve together.
+Both layers share the same current protocol and are intended to evolve together.
+Ordinary operations use a synchronous tuple call shape. The current batch fast
+path is a binary batch frame script submitted with
+`AtomLGFX.submit_binary_batch/2`.
 
 ## What to read
 
+- [Changelog](CHANGELOG.md)
+- [Migration guide](docs/migration-v1-to-v2.md)
 - [ESP-IDF component guide](docs/esp-idf-component.md)
 - [Elixir package guide](docs/elixir-package.md)
 - [Architecture](docs/architecture.md)
@@ -43,4 +48,5 @@ Both layers share the same tuple-based protocol and are intended to evolve toget
 
 This project is under active development.
 
-Until the first tagged release, the native driver and the Elixir wrapper should be updated together.
+Until the first tagged release, the native driver and the Elixir wrapper should
+be updated together.

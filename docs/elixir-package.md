@@ -12,6 +12,14 @@ It is a wrapper around the native `lgfx_port` driver in this repository. The
 package provides the Elixir-facing API, convenience helpers, and wrapper-side
 normalization on top of the shared native protocol.
 
+The current native protocol is v3:
+
+- ordinary drawing and control calls are synchronous tuple requests
+- binary batches are explicit binary frame scripts built with
+  `AtomLGFX.BinaryBatch` and submitted with `AtomLGFX.submit_binary_batch/2`
+- text, JPEG, image payloads, sprite lifecycle, and touch operations stay on the
+  ordinary call path
+
 ## Requirements
 
 This package depends on AtomVM firmware that includes the native `lgfx_port`
@@ -23,12 +31,13 @@ pre-release.
 
 ## Installation
 
-Add `atomlgfx` to your dependencies in `mix.exs`.
+This project is still under development. If you depend on it directly from Git,
+choose the branch or revision you intend to track.
 
 ```elixir
 defp deps do
   [
-    {:atomlgfx, git: "https://github.com/mnishiguchi/atomlgfx.git", branch: "main"}
+    {:atomlgfx, git: "https://github.com/mnishiguchi/atomlgfx.git", branch: "v2"}
   ]
 end
 ```
@@ -59,6 +68,27 @@ mix deps.get
 ```
 
 Adjust options and function calls to match your board and target device.
+
+## Render batches
+
+Use `AtomLGFX.BinaryBatch` when a frame should cross the AtomVM/native boundary
+as one render script.
+
+```elixir
+frame = [
+  AtomLGFX.BinaryBatch.target(0),
+  AtomLGFX.BinaryBatch.fill_screen(0x0000),
+  AtomLGFX.BinaryBatch.draw_line(0, 0, 319, 239, 0xFFFF),
+  AtomLGFX.BinaryBatch.fill_rect(20, 20, 80, 40, 0x07E0),
+  AtomLGFX.BinaryBatch.display()
+]
+
+:ok = AtomLGFX.BinaryBatch.render(port, frame)
+```
+
+Successful submission means the script was decoded and executed synchronously.
+Malformed bytes fail as protocol errors; unsupported render commands are
+rejected.
 
 ## Scope
 

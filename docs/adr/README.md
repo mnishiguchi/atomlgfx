@@ -8,6 +8,21 @@ SPDX-License-Identifier: Apache-2.0
 
 We keep architecture decisions as Markdown ADRs in the repository.
 
+## Current decision map
+
+Current v2 readers should normally start with these active ADRs:
+
+- [ADR 2026-04-28: Call-based LovyanGFX port protocol](2026-04-28-call-based-lovyangfx-port-protocol.md)
+  - scalar call protocol and generated numeric opcode model
+- [ADR 2026-05-03: Treat BinaryBatch as the standard render transaction API](2026-05-03-binary-batch-as-render-transaction-api.md)
+  - active render-batch and animation hot-path rule
+- [ADR 2026-04-29: Flatten native v2 implementation](2026-04-29-flatten-native-v2-implementation.md)
+  - native implementation shape for the v2 protocol
+- [ADR 2026-04-07: Controller-first panel and touch support](2026-04-07-controller-first-panel-and-touch-support.md)
+  - hardware configuration direction
+
+Earlier binary-batch ADRs are preserved as history and should not be read as the active protocol contract.
+
 ### Basic rules
 
 - Write an ADR when a decision changes long-term architecture, layering, execution model, ownership model, buffering model, or public API behavior.
@@ -35,6 +50,18 @@ Use ADRs for decisions such as:
 - compatibility and versioning policy
 
 Do not use ADRs for routine implementation details, temporary checklists, or ordinary task tracking.
+
+### Benchmark and work-log guidance
+
+Use ADRs for durable decisions. Keep benchmark logs, temporary measurements, and task checklists in normal `docs/` work-log files, then link them from the relevant ADR.
+
+Recommended naming for work logs:
+
+```text
+docs/YYYY-MM-DD-short-topic-work-log.md
+```
+
+This keeps ADRs readable while preserving the evidence that motivated the decision.
 
 ### Contributor rule
 

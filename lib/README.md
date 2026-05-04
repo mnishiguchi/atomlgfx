@@ -278,6 +278,7 @@ options = [
 - `supports_last_error?/1`
 - `supports_touch?/1`
 - `supports_palette?/1`
+- `supports_batch?/1`
 
 ```elixir
 {:ok, true} = AtomLGFX.supports_sprite?(port)
@@ -301,7 +302,7 @@ message = AtomLGFX.format_error({:bad_text_scale, -1})
 
 ### `raw_call/6`
 
-素の手続き要求タプルを送ります。疎通確認や低水準の実験向けです。
+既知の操作名を数値 opcode に変換して、v2 の低水準 call 要求を送ります。疎通確認や低水準の実験向けです。
 
 ```elixir
 {:ok, reply} = AtomLGFX.raw_call(port, :ping, 0, 0, [])
@@ -309,108 +310,208 @@ message = AtomLGFX.format_error({:bad_text_scale, -1})
 
 通常利用では、まず公開 API を使うのが安全です。
 
+より明示的な escape hatch として `AtomLGFX.Raw.call/4` も使えます。
+
 ## 明示的バッチ
 
 通常の API は、その場で同期的に実行されます。
 
-明示的バッチは、複数の描画命令をまとめて送るための仕組みです。重い描画をまとめたい場合だけ使います。
+明示的バッチは、1 フレーム分の描画を 1 つの render script として送るための仕組みです。重い描画をまとめたい場合だけ使います。
 
-基本的な流れは次のとおりです。
+### `AtomLGFX.BinaryBatch`
 
-1. `AtomLGFX.batch/0` で空のバッチを作る
-2. `AtomLGFX.Batch.add/2` で命令を追加する
-3. `AtomLGFX.submit_batch/2` で送る
+`AtomLGFX.BinaryBatch` には、render script 向けの命令ビルダーがあります。
 
-```elixir
-batch =
-  AtomLGFX.batch()
-  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.clear(0x0000))
-  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.draw_rect(8, 8, 120, 80, 0xFFFF))
-  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.line(8, 8, 127, 87, 0x07E0))
-  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.fill_circle(68, 48, 10, 0xF800))
+現在のビルダーは次のとおりです。
 
-{:ok, _} = AtomLGFX.submit_batch(port, batch)
-```
+- `fill_screen/1`
+- `draw_pixel/3`
+- `draw_fast_vline/4`
+- `draw_fast_hline/4`
+- `draw_line/5`
+- `draw_rect/5`
+- `fill_rect/5`
+- `draw_pixel_list/1`
+- `draw_rect_list/1`
+- `fill_rect_list/1`
+- `draw_circle_list/1`
+- `fill_circle_list/1`
+- `draw_ellipse_list/1`
+- `fill_ellipse_list/1`
+- `draw_line_list/1`
+- `draw_triangle_list/1`
+- `fill_triangle_list/1`
+- `draw_circle/4`
+- `fill_circle/4`
+- `draw_ellipse/5`
+- `fill_ellipse/5`
+- `draw_triangle/7`
+- `fill_triangle/7`
 
-### `batch/0`
-
-空のバッチ器を返します。
-
-```elixir
-batch = AtomLGFX.batch()
-```
-
-### `submit_batch/2`
-
-構築済みのバッチを送ります。
-
-```elixir
-{:ok, _} = AtomLGFX.submit_batch(port, batch)
-```
-
-`submit_batch/2` の成功は、バッチ要求が受理されたことを意味します。
-
-### `AtomLGFX.Batch.Command`
-
-`AtomLGFX.Batch.Command` には、明示的バッチ向けの命令ビルダーがあります。まずはこれらを使うのが安全です。
-
-現在の主な図形ビルダーは次のとおりです。
-
-- `fill_screen/2`
-- `clear/2`
-- `fill_rect/6`
-- `draw_pixel/4`
-- `draw_rect/6`
-- `draw_round_rect/7`
-- `fill_round_rect/7`
-- `draw_circle/5`
-- `fill_circle/5`
-- `draw_ellipse/6`
-- `fill_ellipse/6`
-- `draw_arc/8`
-- `fill_arc/8`
-- `draw_bezier3/8`
-- `draw_bezier4/10`
-- `draw_triangle/8`
-- `fill_triangle/8`
-- `draw_fast_vline/5`
-- `draw_fast_hline/5`
-- `draw_line/6`
-- `line/6`
-
-### `line/6`
-
-`line/6` は補助用のビルダーです。
-
-- 縦線なら `draw_fast_vline/5`
-- 横線なら `draw_fast_hline/5`
-- それ以外なら `draw_line/6`
-
-という形に自動で振り分けます。
+各ビルダーは 1 命令分の binary を返します。複数命令を送る場合は iodata として組み立て、`batch/1` または `render/2` に渡します。
 
 ```elixir
-batch =
-  AtomLGFX.batch()
-  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.line(0, 20, 100, 20, 0xFFFF))
-  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.line(40, 0, 40, 80, 0x07E0))
-  |> AtomLGFX.Batch.add(AtomLGFX.Batch.Command.line(0, 0, 100, 80, 0xF800))
+frame = [
+  AtomLGFX.BinaryBatch.target(0),
+  AtomLGFX.BinaryBatch.fill_screen(0x0000),
+  AtomLGFX.BinaryBatch.draw_fast_hline(0, 20, 100, 0xFFFF),
+  AtomLGFX.BinaryBatch.draw_fast_vline(40, 0, 80, 0x07E0),
+  AtomLGFX.BinaryBatch.draw_line(0, 0, 100, 80, 0xF800),
+  AtomLGFX.BinaryBatch.display()
+]
 ```
 
-### 生のコマンドを組み立てる場合
+### `submitBinaryBatch`
 
-必要なら `AtomLGFX.Batch.Command.new/4` で生のコマンドを組み立てることもできます。
+`submitBinaryBatch` は、アニメーション向けの複数対象 render script 経路です。
+
+次のような命令を 1 つの frame batch として組み立て、1 回の native 呼び出しで実行します。
+
+- `target/1`
+- `color_mode/1`
+- `clear/1`
+- `fill_screen/1`
+- 基本図形命令（例: `draw_pixel/3`, `draw_pixel_list/1`, `draw_rect/5`, `draw_rect_list/1`, `fill_rect/5`, `fill_rect_list/1`, `draw_line/5`, `draw_line_list/1`, `draw_circle/4`, `draw_circle_list/1`, `fill_circle/4`, `fill_circle_list/1`, `draw_ellipse/5`, `draw_ellipse_list/1`, `fill_ellipse/5`, `fill_ellipse_list/1`, `draw_triangle/7`, `draw_triangle_list/1`, `fill_triangle/7`, `fill_triangle_list/1`）
+- 最小限の文字命令（`set_text_font_preset/1`, `set_text_size/1`, `set_text_color/2`, `draw_string/3`）
+- `set_palette_color/2`, `set_palette_color/4`
+- `set_pivot/2`
+- `push_sprite/3`
+- `push_sprite/4`
+- `push_sprite_list/2`
+- `push_sprite_region_list/2`
+- `draw_jpg/3`, `draw_jpg/9`
+- `push_image_rgb565/5`, `push_image_rgb565/6`
+- `push_rotate_zoom_list/2`
+- `display/0`
 
 ```elixir
-{:ok, command} =
-  AtomLGFX.Batch.Command.new(:setClipRect, 0, 0, [10, 10, 100, 80])
+frame = [
+  AtomLGFX.BinaryBatch.target(1),
+  AtomLGFX.BinaryBatch.clear(0x0000),
+  AtomLGFX.BinaryBatch.set_clip_rect(0, 0, 160, 120),
+  AtomLGFX.BinaryBatch.push_rotate_zoom_list(instances,
+    transparent: 0x0000,
+    y_offset: 0,
+    approx_cull: true
+  ),
+  AtomLGFX.BinaryBatch.push_sprite(1, 0, 0, 0x0000),
+  AtomLGFX.BinaryBatch.target(0),
+  AtomLGFX.BinaryBatch.set_text_font_preset(:ascii),
+  AtomLGFX.BinaryBatch.set_text_size(1),
+  AtomLGFX.BinaryBatch.set_text_color(0xFFFF, 0x0000),
+  AtomLGFX.BinaryBatch.draw_string(0, 0, "fps:60"),
+  AtomLGFX.BinaryBatch.display()
+]
+
+:ok = AtomLGFX.BinaryBatch.render(port, frame)
 ```
 
-ただし、通常は専用ビルダーを使うほうが安全です。
+`AtomLGFX.BinaryBatch.render/2` は iodata を受け取ります。呼び出し側は、背景、スプライト、表示反映などの断片を安く連結できます。
+
+`AtomLGFX.BinaryBatch.summary/1` は、ネイティブ側を呼ばずに描画指示列を読み取り、合計バイト数、内部描画命令数、可変長データ量、圧縮一覧命令数、圧縮一覧要素数などを返します。重い描画の確認、生成したフレームの検査、性能比較用の記録に使えます。`AtomLGFX.BinaryBatch.compare/2` は、基準のフレームと候補のフレームを同じ集計値で比べます。
+
+`draw_pixel_list/1` は、同じ対象へ複数の点を描く場合の compact な命令です。粒子、きらめき、簡易ノイズ、小さなアイコン効果などでは、`draw_pixel/3` を多数並べるより command 数を減らせます。
+
+`draw_rect_list/1` は、同じ対象へ複数の矩形枠を描く場合の compact な命令です。枠線、簡易的な表示部品、確認用の重ね描きなどでは、`draw_rect/5` を多数並べるより command 数を減らせます。
+
+`fill_rect_list/1` は、同じ対象へ複数の塗りつぶし矩形を描く場合の compact な命令です。小さな矩形を多数使う効果や簡易的な UI 部品では、`fill_rect/5` を多数並べるより command 数を減らせます。
+
+`draw_circle_list/1` は、同じ対象へ複数の円の輪郭を描く場合の compact な命令です。リング、接触位置の表示、簡易的なレーダー表示、確認用の目印などでは、`draw_circle/4` を多数並べるより command 数を減らせます。
+
+`fill_circle_list/1` は、同じ対象へ複数の塗りつぶし円を描く場合の compact な命令です。粒子、丸いハイライト、簡易的な影などでは、`fill_circle/4` を多数並べるより command 数を減らせます。
+
+`draw_ellipse_list/1` と `fill_ellipse_list/1` は、同じ対象へ複数の楕円を描く場合の compact な命令です。影、光、楕円形の目印などで `draw_ellipse/5` または `fill_ellipse/5` を多数並べるより command 数を減らせます。
+
+`draw_line_list/1` は、同じ対象へ複数の線分を描く場合の compact な命令です。単純な軌跡、枠線、効果線などで `draw_line/5` を多数並べるより command 数を減らせます。
+
+`draw_triangle_list/1` は、同じ対象へ複数の三角形の輪郭を描く場合の compact な命令です。簡易マーカー、方向表示、確認用の形状表示などで `draw_triangle/7` を多数並べるより command 数を減らせます。
+
+`fill_triangle_list/1` は、同じ対象へ複数の塗りつぶし三角形を描く場合の compact な命令です。矢印、小さな粒子、簡易マーカーなどで `fill_triangle/7` を多数並べるより command 数を減らせます。
+
+`set_palette_color/2`、`set_palette_color/4` は、現在のスプライト対象のパレット色を更新します。`create_palette/2` は生成処理なので通常の API を使います。
+
+`set_pivot/2` は、現在の対象の回転・拡大縮小の基準点を更新します。`push_rotate_zoom/5`、`push_rotate_zoom/6`、`push_rotate_zoom/7` は、現在の描画先へ 1 個のスプライトを回転・拡大縮小して転送します。多数のスプライトを扱う場合は `push_rotate_zoom_list/2` を使います。
+
+`push_image_rgb565/5` と `push_image_rgb565/6` は、RGB565 の画素バイナリーを明示的な長さ付きの命令として送ります。大きな画像は `submitBinaryBatch` 全体のバイナリー上限にかかるため、必要に応じて従来の `AtomLGFX.push_image_rgb565/8` による分割転送を使います。
+
+`push_rotate_zoom_list/2` の `approx_cull: true` は、ストリップ描画のように対象外の変換描画が多い場合に、ネイティブ側で保守的に省略するための指定です。
+
+`set_clip_rect/4` と `clear_clip_rect/0` は、現在の対象に対して切り取り矩形を設定または解除します。後続の命令にも対象側の切り取り状態が残るため、必要な範囲だけを明示的に囲むのが安全です。
+
+render-private opcode は `0xF0..0xFF` の範囲に固定しています。Elixir 側では一覧を 1 か所に集約し、テストで `protocol.h` の `LGFX_RENDER_OP_*` 定義と照合します。`ops.def` の batch metadata は生成された `AtomLGFX.Generated` と `AtomLGFX.OpSchema` から確認できます。`ProtocolFreezeTest` は、metadata から導いた batchable operation 一覧と、固定長 command / record の byte size も固定します。新しい render-private 命令を増やす場合は、既存の多重化命令を使うか、wire format の拡張を先に決めます。
+
+生成した render script を確認したい場合は、`AtomLGFX.BinaryBatch.decode/1` を使えます。ネイティブ側の `{:batch_failed, index, opcode, reason}` と照合しやすいように、各命令は `index` と `opcode` を含む map として返ります。
+
+```elixir
+{:ok, decoded_commands} = AtomLGFX.BinaryBatch.decode(frame)
+```
+
+ログや比較用に命令数やバイト効率を見たい場合は、`AtomLGFX.BinaryBatch.summary/1` が使えます。`batch_bytes`、命令数、図形命令数、可変長データ量、固定部分のバイト数、圧縮一覧命令の record バイト数、`draw_pixel_list`、`draw_rect_list`、`fill_rect_list`、`draw_circle_list`、`fill_circle_list`、`draw_ellipse_list`、`fill_ellipse_list`、`draw_line_list`、`draw_triangle_list`、`fill_triangle_list` の instance 数、文字命令数、スプライト状態命令数、スプライト転送数、`push_sprite_list`、`push_sprite_region_list`、`push_rotate_zoom`、`push_rotate_zoom_list` の instance 数などを map で返します。割合は小数ではなく x1000 の整数値として返すため、記録や比較に使いやすくしています。
+
+```elixir
+{:ok, summary} = AtomLGFX.BinaryBatch.summary(frame)
+
+IO.inspect(summary.batch_bytes, label: "batch_bytes")
+IO.inspect(summary.bytes_per_logical_scalar_x1000, label: "bytes_per_logical_scalar_x1000")
+IO.inspect(summary.push_rotate_zoom_instance_count, label: "transform_instances")
+```
+
+繰り返しの通常命令と圧縮一覧命令を比べたい場合は、`AtomLGFX.BinaryBatch.compare/2` が使えます。第 1 引数を基準、第 2 引数を候補として `summary/1` の値を比較し、差分を `delta` として返します。多くの差分値は「候補 - 基準」ですが、`batch_bytes_savings` は「基準 - 候補」なので、バイト数をどれだけ減らせたかをそのまま確認できます。
+
+```elixir
+{:ok, comparison} = AtomLGFX.BinaryBatch.compare(baseline_frame, candidate_frame)
+
+IO.inspect(comparison.delta.batch_bytes_savings, label: "batch_bytes_savings")
+IO.inspect(comparison.delta.command_count, label: "command_count_delta")
+IO.inspect(comparison.delta.batch_bytes_savings_ratio_x1000, label: "savings_ratio_x1000")
+```
+
+生成した描画指示列に上限を設けたい場合は、`AtomLGFX.BinaryBatch.check_budget/2` が使えます。`summary/1` と同じ集計値に対して、バイト数、命令数、可変長データ量、圧縮一覧命令の利用数などを確認できます。継続的な検査や生成処理の退行検出に向いています。
+
+```elixir
+{:ok, report} =
+  AtomLGFX.BinaryBatch.check_budget(frame,
+    max_batch_bytes: 4096,
+    max_command_count: 64,
+    min_packed_list_count: 1
+  )
+
+IO.inspect(report.summary.batch_bytes, label: "batch_bytes")
+```
+
+不正な render script の場所を調べたい場合は、`AtomLGFX.BinaryBatch.diagnose/1` が使えます。成功時は `summary/1` と同じ集計値に `valid?: true` を加えて返し、失敗時は失敗した命令番号、opcode、推定される命令名、直前まで正常に読み取れた命令、部分的な集計値を返します。生成した frame script の検査や失敗時の記録に向いています。
+
+```elixir
+case AtomLGFX.BinaryBatch.diagnose(frame) do
+  {:ok, diagnosis} ->
+    IO.inspect(diagnosis.batch_bytes, label: "batch_bytes")
+
+  {:error, diagnosis} ->
+    IO.inspect(diagnosis.message, label: "binary_batch_error")
+    IO.inspect(diagnosis.last_decoded_command, label: "last_decoded_command")
+end
+```
+
+### v2 MVP 完了条件
+
+v2 MVP は、次の条件を満たした時点で完了とみなせます。
+
+- `mix test` が通る
+- `elixir scripts/sync_lgfx_protocol_doc.exs --check` が通る
+- 実機で MovingIcons が期待どおり動く
+- 1 frame の描画は `BinaryBatch.render/2` で 1 つの binary として送れる
+- `ops.def` の batch metadata、生成された Elixir metadata、native の render-private opcode、protocol freeze test が一致している
+- `0xF0..0xFF` の render-private opcode 範囲を不用意に広げない
+- スプライト生成、削除、照会、タッチ操作、補正、低頻度の制御は通常の API に残す
+
+ここまで満たせていれば、v2 MVP としては十分です。以後は wire format を増やすよりも、Stack-chan などの実例で測定し、`summary/1`、`compare/2`、`check_budget/2` を使って frame script を調整するのが安全です。
 
 ### 使い分け
 
-- 単発の描画や簡単な処理なら通常の API を使う
-- 多数の図形描画をまとめたいときだけ明示的バッチを使う
+- 設定、初期化、単発の描画なら通常の API を使う
+- アニメーションの 1 frame をまとめる場合は `submitBinaryBatch` を使う
+- 大きな JPEG、巨大な `push_image`、スプライト作成、タッチ操作は通常の API を使う
+- アニメーション中の軽い文字重ね描きは `submitBinaryBatch` の文字命令を使える
 
 明示的バッチは任意機能です。通常の関数呼び出しはそのまま使えます。
 
@@ -493,15 +594,13 @@ LCD とスプライトは、それぞれ独立した切り取り状態を持ち�
 :ok = AtomLGFX.clear(port, 0x0000)
 ```
 
-### 点と線
+### 線
 
-- `draw_pixel/5`
 - `draw_fast_vline/6`
 - `draw_fast_hline/6`
 - `draw_line/7`
 
 ```elixir
-:ok = AtomLGFX.draw_pixel(port, 20, 20, 0xFFFF)
 :ok = AtomLGFX.draw_line(port, 0, 0, 100, 100, 0x07E0)
 ```
 

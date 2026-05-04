@@ -8,7 +8,14 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Status
 
-Accepted
+Superseded
+
+Superseded by [ADR 2026-04-29: Flatten native v2 implementation](2026-04-29-flatten-native-v2-implementation.md)
+and [ADR 2026-04-29: Packed binary scalar batch path](2026-04-29-packed-binary-scalar-batch.md).
+
+Current v2 does not expose the tuple/list batch runtime described below. The
+implemented batch fast path is the packed binary scalar `submitBinaryBatch`
+operation.
 
 ## Context
 
@@ -29,9 +36,11 @@ For MovingIcons-like workloads, the main performance objective is to reduce Elix
 - fewer lock/unlock cycles
 - wider native write windows across grouped rendering commands
 
-The current batch path provides:
+Tuple batching helps with control-plane overhead, but it is not the final representation for repeated homogeneous animation data. Fixed-layout binary operations remain a better long-term fit for data-plane workloads.
 
-- explicit batch submission via `submitBatch`
+At the time this ADR was accepted, the batch path provided:
+
+- explicit batch submission via `submitBinaryBatch`
 - inline, no-payload batch commands for the first render-heavy slice
 - runtime tracking for batch id, state, and failure
 - a single pending batch slot per port
@@ -77,6 +86,18 @@ A design question remained open:
    - Ordinary operations remain direct.
    - `lgfx_device` remains the device-facing execution core.
 
+7. Tuple batch is a control-plane feature, not the final animation data plane.
+   - It is suitable for grouped coarse operations, diagnostics, and mixed command sets.
+   - It is not intended to become a second interpreted graphics VM.
+
+8. Public batch policy belongs to Elixir.
+   - Elixir decides whether an operation is public-batchable, raw-only, payload-bearing, or otherwise unsafe for the public batch API.
+   - Native batch code still rejects malformed payloads, invalid opcodes, unsupported live capabilities, payload-ownership violations, and runtime-state errors.
+
+9. Repeated homogeneous hot-path rendering should prefer binary operations or native presentation helpers.
+   - Tuple batch should not grow indefinitely to describe every frame-oriented workload.
+   - The batch runtime stays smaller when high-frequency animation traffic uses a dedicated binary data plane.
+
 ## Rationale
 
 This decision keeps the architecture aligned with the narrower direction:
@@ -85,6 +106,7 @@ This decision keeps the architecture aligned with the narrower direction:
 - the direct synchronous path remains the default path
 - explicit batching is the only place where deferred-style execution semantics appear
 - runtime concerns remain separate from device semantics
+- tuple batch remains a grouped control-plane tool rather than the long-term animation data plane
 
 This approach is simpler to implement, easier to explain, and sufficient for the main performance goal:
 
@@ -115,6 +137,7 @@ That complexity is not justified unless measurement shows that the simpler model
 - A single pending batch slot limits concurrency across multiple outstanding batches
 - Future `flush` or wait semantics may need refinement if richer scheduling is introduced later
 - Documentation must be careful not to overstate async behavior
+- Tuple batch is not the ideal representation for repeated homogeneous animation records
 
 ## Rejected alternatives
 
@@ -141,4 +164,6 @@ The primary concern is to prove the main win first: fewer Elixir/native crossing
 - Benchmark MovingIcons and similar grouped render workloads against v1-style per-op execution.
 - Keep the single pending batch slot explicit in code comments and documentation.
 - Avoid introducing broader runtime semantics until benchmark data shows they are needed.
+- Keep tuple batch focused on grouped control-plane operations.
+- Prefer fixed-layout binary operations or native presentation helpers for repeated homogeneous rendering workloads.
 - Revisit richer queueing, flush semantics, and payload batching only if measured benefits justify the added complexity.
