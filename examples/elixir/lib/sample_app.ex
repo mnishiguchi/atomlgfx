@@ -5,46 +5,28 @@
 defmodule SampleApp do
   @moduledoc false
 
-  alias SampleApp.BatchSmoke
-  alias SampleApp.ClipSmoke
-  alias SampleApp.ColorSmoke
-  alias SampleApp.DrawStringStress
-  alias SampleApp.JpgSmoke
-  alias SampleApp.Meter
+  alias SampleApp.Face
+  alias SampleApp.JapaneseText
   alias SampleApp.MovingIcons
-  alias SampleApp.MovingLines
+  alias SampleApp.PerfSmoke
   alias SampleApp.ProtocolSmoke
-  alias SampleApp.PushImageStress
-  alias SampleApp.ShapeSmoke
+  alias SampleApp.Smoke
   alias SampleApp.SpriteProtocolSmoke
-  alias SampleApp.TextProbe
-  alias SampleApp.TouchCalibrate
-  alias SampleApp.TouchProbe
-  alias SampleApp.WriteSessionSmoke
 
-  @default_mode :meter
+  @default_mode :moving_icons
 
   @valid_modes [
+    :smoke,
     :protocol,
     :boot,
-    :batch,
-    :clip,
-    :jpg,
-    :sprites,
-    :shapes,
-    :text,
-    :touch,
-    :calibrate,
-    :stress,
-    :colors,
+    :perf,
+    :face,
+    :japanese_text,
     :moving_icons,
-    :moving_lines,
-    :meter,
+    :sprites,
+    :touch_calibrate,
     :all
   ]
-
-  @push_rounds 300
-  @text_rounds 500
 
   @bg 0x0000
   @fg 0xFFFF
@@ -103,21 +85,27 @@ defmodule SampleApp do
     boot_for_display(port)
   end
 
-  defp run_mode(port, :batch) do
+  defp run_mode(port, :smoke) do
     with_boot_dims(port, fn w, h ->
-      step("batch_smoke", BatchSmoke.run(port, w, h))
+      step("smoke", Smoke.run(port, w, h))
     end)
   end
 
-  defp run_mode(port, :clip) do
+  defp run_mode(port, :perf) do
     with_boot_dims(port, fn w, h ->
-      step("clip_smoke", ClipSmoke.run(port, w, h))
+      step("perf_smoke", PerfSmoke.run(port, w, h))
     end)
   end
 
-  defp run_mode(port, :jpg) do
+  defp run_mode(port, :face) do
     with_boot_dims(port, fn w, h ->
-      step("jpg_smoke", JpgSmoke.run(port, w, h))
+      step("face", Face.run(port, w, h))
+    end)
+  end
+
+  defp run_mode(port, :moving_icons) do
+    with_boot_dims(port, fn w, h ->
+      step("moving_icons", MovingIcons.run(port, w, h))
     end)
   end
 
@@ -127,66 +115,22 @@ defmodule SampleApp do
     end)
   end
 
-  defp run_mode(port, :shapes) do
+  defp run_mode(port, :touch_calibrate) do
     with_boot_dims(port, fn w, h ->
-      step("shape_smoke", ShapeSmoke.run(port, w, h))
+      step("touch_calibrate", Smoke.calibrate_touch(port, w, h))
     end)
   end
 
-  defp run_mode(port, :text) do
+  defp run_mode(port, :japanese_text) do
     with_boot_dims(port, fn w, h ->
-      step("text_probe", TextProbe.run(port, w, h))
-    end)
-  end
-
-  defp run_mode(port, :touch) do
-    with_boot_dims(port, fn w, h ->
-      step("touch_probe", TouchProbe.run(port, w, h))
-    end)
-  end
-
-  defp run_mode(port, :calibrate) do
-    with_boot_dims(port, fn w, h ->
-      step("touch_calibrate", TouchCalibrate.run(port, w, h))
-    end)
-  end
-
-  defp run_mode(port, :stress) do
-    with_boot(port, fn ->
-      run_stress_suite(port)
-    end)
-  end
-
-  defp run_mode(port, :colors) do
-    with_boot_dims(port, fn w, h ->
-      step("color_smoke", ColorSmoke.run(port, w, h))
-    end)
-  end
-
-  defp run_mode(port, :moving_icons) do
-    with_boot_dims(port, fn w, h ->
-      MovingIcons.run(port, w, h)
-    end)
-  end
-
-  defp run_mode(port, :moving_lines) do
-    with_boot_dims(port, fn w, h ->
-      MovingLines.run(port, w, h)
-    end)
-  end
-
-  defp run_mode(port, :meter) do
-    with_boot_dims(port, fn w, h ->
-      Meter.run(port, w, h)
+      step("japanese_text", JapaneseText.run(port, w, h))
     end)
   end
 
   defp run_mode(port, :all) do
     with_boot_dims(port, fn w, h ->
-      with :ok <- step("jpg_smoke", JpgSmoke.run(port, w, h)),
-           :ok <- run_stress_suite(port),
-           :ok <- step("sprite_protocol_smoke", SpriteProtocolSmoke.run(port)),
-           :ok <- MovingIcons.run(port, w, h) do
+      with :ok <- step("smoke", Smoke.run(port, w, h)),
+           :ok <- step("sprite_protocol_smoke", SpriteProtocolSmoke.run(port)) do
         :ok
       end
     end)
@@ -200,15 +144,21 @@ defmodule SampleApp do
 
   defp run_protocol_only(port) do
     with :ok <- step("ping", AtomLGFX.ping(port)),
-         :ok <- step("protocol_smoke", ProtocolSmoke.run(port)) do
+         :ok <- step("protocol_smoke", ProtocolSmoke.run(port)),
+         {:ok, w, h} <- init_display_after_protocol_with_dims(port),
+         :ok <- ProtocolSmoke.draw_summary(port, w, h) do
       :ok
     end
   end
 
-  defp run_stress_suite(port) do
-    with :ok <- step("push_image_stress", PushImageStress.run(port, @push_rounds)),
-         :ok <- step("draw_string_stress", DrawStringStress.run(port, @text_rounds)) do
-      :ok
+  defp init_display_after_protocol_with_dims(port) do
+    with :ok <- step("init", AtomLGFX.init(port)),
+         :ok <- step("display(init)", AtomLGFX.display(port)),
+         {:ok, w0, h0} <- get_wh(port),
+         :ok <- log_before_rotation(w0, h0),
+         {:ok, rotation, w, h} <- configure_display_rotation(port, w0, h0) do
+      finalize_boot_state(port, rotation, w, h)
+      {:ok, w, h}
     end
   end
 
@@ -247,7 +197,7 @@ defmodule SampleApp do
     with :ok <- step("ping", AtomLGFX.ping(port)),
          :ok <- step("protocol_smoke", ProtocolSmoke.run(port)),
          :ok <- step("init", AtomLGFX.init(port)),
-         :ok <- step("write_session_smoke", WriteSessionSmoke.run(port)),
+         :ok <- step("write_session_smoke", Smoke.write_session(port)),
          :ok <- step("display(init)", AtomLGFX.display(port)) do
       :ok
     end
@@ -329,7 +279,7 @@ defmodule SampleApp do
   defp remember_fallback(fallback, _result), do: fallback
 
   defp rotation_candidates(w, h) do
-    case @rotation_preference do
+    case rotation_preference() do
       :auto_landscape ->
         if prefer_landscape?(w, h) do
           [1, 3, 0, 2]
@@ -345,6 +295,14 @@ defmodule SampleApp do
 
       rotation when is_integer(rotation) and rotation in 0..7 ->
         [rotation]
+    end
+  end
+
+  defp rotation_preference do
+    case :erlang.get(:sample_app_rotation_preference) do
+      value when value in [:auto_landscape, :landscape_cw, :landscape_ccw] -> value
+      value when is_integer(value) and value in 0..7 -> value
+      _other -> @rotation_preference
     end
   end
 

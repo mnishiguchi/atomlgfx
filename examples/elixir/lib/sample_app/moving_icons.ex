@@ -8,28 +8,35 @@ defmodule SampleApp.MovingIcons do
   import Bitwise
   import SampleApp.AtomVMCompat, only: [yield: 0]
 
-  alias AtomLGFX.Batch
-  alias AtomLGFX.Batch.Command
+  alias AtomLGFX.BinaryBatch
   alias SampleApp.Assets
 
   # -----------------------------------------------------------------------------
   # Demo config
   # -----------------------------------------------------------------------------
 
-  # Upstream-like target count for the benchmark/demo.
+  # Upstream LovyanGFX MovingIcons uses 50 objects.
   @obj_count 50
 
-  # Current native runtime accepts one pending batch at a time.
-  # To keep this sample simple and reliable, the default v2 path uses one
-  # explicit batch per frame in direct-LCD mode.
+  # Local demo keeps four icons by default:
+  #
+  # - info
+  # - alert
+  # - close
+  # - piyopiyo
+  #
+  # Set this to 3 when comparing more strictly with upstream LovyanGFX MovingIcons.
+  @obj_icon_count 3
+
+  # Frame render mode:
   #
   # - :direct_lcd
   #     Render one whole frame directly to LCD.
-  #     In :batch submit mode, this becomes one batch submission per frame.
   #
   # - :strip_buffers
-  #     Render the frame in strip sprites, then blit strips to the LCD.
-  #     In :batch submit mode, this becomes one batch submission per strip.
+  #     Render the frame in vertical strips. In binary-batch mode, use native
+  #     presentation strips. In sync/batch modes, use public sprite buffers.
+  #     This mirrors the upstream MovingIcons structure more closely.
   #
   # - :auto
   #     Try strip buffers first, then fall back to direct LCD.
@@ -37,14 +44,47 @@ defmodule SampleApp.MovingIcons do
 
   # Frame submit mode:
   #
+  # - :binary_batch
+  #     Use one multi-target binary-batch submission per frame.
+  #
   # - :batch
-  #     Use the explicit v2 batch path for the render-heavy frame path.
+  #     Use the compact v2 pushRotateZoomList path while keeping per-strip port calls.
   #
   # - :sync
-  #     Keep the old per-op synchronous path.
-  @frame_submit_mode :batch
+  #     Use one ordinary synchronous pushRotateZoom call per object.
+  @frame_submit_mode :binary_batch
+
+  # Binary-batch draw mode:
+  #
+  # - :push_rotate_zoom_list
+  #     Faithful MovingIcons path: dynamic rotate/zoom per visible object.
+  #
+  # - :push_sprite_list
+  #     Benchmark ceiling path: no dynamic rotate/zoom, whole-sprite list blits.
+  #
+  # - :push_sprite_region_list
+  #     Atlas-oriented benchmark path: no dynamic rotate/zoom, source-region list blits.
+  @moving_icons_draw_mode :push_rotate_zoom_list
+
+  # Enable conservative native bounds culling for the transform-list batch path.
+  #
+  # This keeps the native path safe when a generated record cannot affect the
+  # current destination bounds.
+  @use_approx_cull true
+
+  # Pre-cull strip-frame instance lists before encoding render batches.
+  #
+  # Native culling skips expensive LovyanGFX calls, but the command binary still
+  # carries every record. Strip pre-culling reduces both batch size and native
+  # loop work while keeping a conservative bounding box.
+  @use_elixir_strip_cull true
 
   @initial_split_factor 2
+
+  # Native presentation strip height requested by native init.
+  # The actual value may be reduced during native allocation and must be queried
+  # before strip-buffer animation starts.
+  @requested_native_presentation_strip_h 160
 
   # Icon sprites are authored with a solid background color. Use a transparent-color key so
   # that background pixels do not overwrite what is already in the destination.
@@ -67,14 +107,12 @@ defmodule SampleApp.MovingIcons do
   @sprite_piyopiyo 4
 
   # Destination sprite handles (double-buffered strip renderer).
+  # These are used by sync/batch strip modes. Binary-batch strip mode uses
+  # native presentation strips instead.
   @sprite_buf0 10
   @sprite_buf1 11
 
-  # Conservative vertical culling margin for a 32x32 icon at up to 2.0x zoom.
-  @max_icon_half_extent 32
-
   # Internal animation zoom units (x1024 fixed-point).
-  # Converted to direct zoom values only at the AtomLGFX call boundary.
   #
   # - 512  = 0.5x
   # - 2048 = 2.0x
@@ -100,21 +138,29 @@ defmodule SampleApp.MovingIcons do
     log_render_config()
 
     with {:ok, caps} <- AtomLGFX.get_caps(port),
-         :ok <- ensure_sprite_support(caps, 6),
+         :ok <- ensure_sprite_support(caps, required_sprite_count()),
          :ok <- AtomLGFX.fill_screen(port, @bg),
-         {:ok, icon_handles} <- prepare_icon_sprites(port, icons, icon_w, icon_h),
-         {:ok, render_target} <- prepare_render_target(port, w, h) do
-      try do
-        {_seed, objects} = init_objects(1, @obj_count, w, h)
+         {:ok, icon_handles} <- prepare_icon_sprites(port, icons, icon_w, icon_h) do
+      case prepare_render_target(port, w, h) do
+        {:ok, render_target} ->
+          try do
+            {_seed, objects} = init_objects(1, @obj_count, w, h)
 
-        # State tuple:
-        # {w, h, render_target, flip, objects, icon_handles}
-        state = {w, h, render_target, 0, objects, icon_handles}
+            # State tuple:
+            # {w, h, render_target, flip, objects, icon_handles, fps, frame_count, psec}
+            state = {w, h, render_target, 0, objects, icon_handles, 0, 0, 0}
 
-        loop(port, state)
-      after
-        cleanup_frame_sprites(port)
-        cleanup_icon_sprites(port)
+            loop(port, state)
+          after
+            cleanup_frame_sprites(port)
+            cleanup_icon_sprites(port)
+          end
+
+        {:error, reason} ->
+          cleanup_frame_sprites(port)
+          cleanup_icon_sprites(port)
+          IO.puts("moving_icons setup failed: #{AtomLGFX.format_error(reason)}")
+          {:error, reason}
       end
     else
       {:error, reason} ->
@@ -126,6 +172,16 @@ defmodule SampleApp.MovingIcons do
   # -----------------------------------------------------------------------------
   # Setup / capabilities
   # -----------------------------------------------------------------------------
+
+  defp required_sprite_count do
+    case {@frame_render_mode, @frame_submit_mode} do
+      {:direct_lcd, _submit_mode} -> 4
+      {:strip_buffers, :binary_batch} -> 4
+      {:auto, :binary_batch} -> 4
+      {:strip_buffers, _submit_mode} -> 6
+      {:auto, _submit_mode} -> 6
+    end
+  end
 
   defp ensure_sprite_support(%{feature_bits: feature_bits, max_sprites: max_sprites}, needed) do
     cond do
@@ -184,16 +240,12 @@ defmodule SampleApp.MovingIcons do
         {:ok, :direct_lcd}
 
       :strip_buffers ->
-        with {:ok, strip_h} <- prepare_frame_sprites(port, w, h) do
-          IO.puts("moving_icons render mode=strip_buffers strip_h=#{strip_h}")
-          {:ok, {:strip_buffers, strip_h, @sprite_buf0, @sprite_buf1}}
-        end
+        prepare_strip_render_target(port, w, h)
 
       :auto ->
-        case prepare_frame_sprites(port, w, h) do
-          {:ok, strip_h} ->
-            IO.puts("moving_icons render mode=strip_buffers strip_h=#{strip_h}")
-            {:ok, {:strip_buffers, strip_h, @sprite_buf0, @sprite_buf1}}
+        case prepare_auto_render_target(port, w, h) do
+          {:ok, render_target} ->
+            {:ok, render_target}
 
           {:error, reason} ->
             IO.puts(
@@ -203,6 +255,53 @@ defmodule SampleApp.MovingIcons do
             {:ok, :direct_lcd}
         end
     end
+  end
+
+  defp prepare_strip_render_target(port, w, h) do
+    if native_strip_binary_batch?() do
+      with {:ok, native_strip_h} <- AtomLGFX.get_presentation_strip_height(port),
+           :ok <- validate_native_presentation_strip_height(native_strip_h) do
+        strip_h = min(h, native_strip_h)
+
+        IO.puts(
+          "moving_icons render mode=native_strips " <>
+            "requested_native_strip_h=#{@requested_native_presentation_strip_h} " <>
+            "native_strip_h=#{native_strip_h} " <>
+            "frame_strip_h=#{strip_h}"
+        )
+
+        {:ok, {:native_strips, strip_h}}
+      end
+    else
+      with {:ok, strip_h} <- prepare_frame_sprites(port, w, h) do
+        IO.puts("moving_icons render mode=strip_buffers strip_h=#{strip_h}")
+        {:ok, {:strip_buffers, strip_h, @sprite_buf0, @sprite_buf1}}
+      end
+    end
+  end
+
+  defp prepare_auto_render_target(port, w, h) do
+    if native_strip_binary_batch?() do
+      prepare_strip_render_target(port, w, h)
+    else
+      with {:ok, strip_h} <- prepare_frame_sprites(port, w, h) do
+        IO.puts("moving_icons render mode=strip_buffers strip_h=#{strip_h}")
+        {:ok, {:strip_buffers, strip_h, @sprite_buf0, @sprite_buf1}}
+      end
+    end
+  end
+
+  defp validate_native_presentation_strip_height(strip_h)
+       when is_integer(strip_h) and strip_h > 0 do
+    :ok
+  end
+
+  defp validate_native_presentation_strip_height(strip_h) do
+    {:error, {:invalid_native_presentation_strip_height, strip_h}}
+  end
+
+  defp native_strip_binary_batch? do
+    @frame_submit_mode == :binary_batch
   end
 
   defp prepare_frame_sprites(port, w, h) do
@@ -285,7 +384,7 @@ defmodule SampleApp.MovingIcons do
     {seed, r4} = rand_u32(seed)
     {seed, r5} = rand_u32(seed)
 
-    img = rem(i, 4)
+    img = rem(i, @obj_icon_count)
 
     x = rem(r1, w)
     y = rem(r2, h)
@@ -297,19 +396,23 @@ defmodule SampleApp.MovingIcons do
     dr_cdeg = dr_deg * 100
 
     # Internal zoom state:
+    #
     # - z_x1024: 1.0..1.9 (step 0.1)
     # - dz_x1024: 0.01..0.10 (step 0.01)
-    z10 = rem(r3, 10) + 10
+    #
+    # Use higher bits for small random ranges. Low bits of simple LCGs are highly
+    # patterned and can make same-type icons move or rotate in lockstep.
+    z10 = rem(r3 >>> 8, 10) + 10
     z_x1024 = div(z10 * 1024, 10)
 
-    dz100 = rem(r4, 10) + 1
+    dz100 = rem(r4 >>> 8, 10) + 1
     dz_x1024 = div(dz100 * 1024, 100)
 
     obj = {x, y, dx0, dy0, img, 0, z_x1024, dr_cdeg, dz_x1024}
     init_objects_i(seed, i + 1, count - 1, w, h, [obj | acc])
   end
 
-  defp band3(u32), do: u32 &&& 3
+  defp band3(u32), do: u32 >>> 16 &&& 3
 
   defp sign(0), do: -1
   defp sign(_), do: 1
@@ -367,14 +470,30 @@ defmodule SampleApp.MovingIcons do
 
   defp loop(
          port,
-         {w, h, render_target, flip0, objects0, icon_handles}
+         {w, h, render_target, flip0, objects0, icon_handles, fps0, frame_count0, psec0}
        ) do
     objects = move_objects(objects0, w, h)
+    put_last_batch_bytes(0)
+    frame_start_ms = monotonic_ms()
 
-    case render_frame(port, h, render_target, flip0, objects, icon_handles) do
+    case render_frame(port, h, render_target, flip0, objects, icon_handles, fps0) do
       {:ok, flip1} ->
+        frame_ms = monotonic_ms() - frame_start_ms
+
+        {fps1, frame_count1, psec1} =
+          update_fps(
+            fps0,
+            frame_count0 + 1,
+            psec0,
+            render_target,
+            h,
+            frame_ms,
+            last_batch_bytes()
+          )
+
         yield()
-        loop(port, {w, h, render_target, flip1, objects, icon_handles})
+
+        loop(port, {w, h, render_target, flip1, objects, icon_handles, fps1, frame_count1, psec1})
 
       {:error, reason} ->
         IO.puts("moving_icons render failed: #{AtomLGFX.format_error(reason)}")
@@ -382,14 +501,29 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp render_frame(port, _h, :direct_lcd, _flip0, objects, icon_handles) do
+  defp render_frame(port, _h, :direct_lcd, _flip0, objects, icon_handles, fps) do
     case @frame_submit_mode do
+      :binary_batch ->
+        render_frame_direct_lcd_binary_batch(port, objects, icon_handles, fps)
+
       :batch ->
-        render_frame_direct_lcd_batch(port, objects, icon_handles)
+        render_frame_direct_lcd_batch(port, objects, icon_handles, fps)
 
       :sync ->
-        render_frame_direct_lcd_sync(port, objects, icon_handles)
+        render_frame_direct_lcd_sync(port, objects, icon_handles, fps)
     end
+  end
+
+  defp render_frame(
+         port,
+         h,
+         {:native_strips, strip_h},
+         flip0,
+         objects,
+         icon_handles,
+         fps
+       ) do
+    render_native_strips_binary_batch(port, h, strip_h, flip0, objects, icon_handles, fps)
   end
 
   defp render_frame(
@@ -398,20 +532,25 @@ defmodule SampleApp.MovingIcons do
          {:strip_buffers, strip_h, buf0, buf1},
          flip0,
          objects,
-         icon_handles
+         icon_handles,
+         fps
        ) do
     case @frame_submit_mode do
       :batch ->
-        render_strips_batch(port, h, strip_h, buf0, buf1, flip0, objects, icon_handles)
+        render_strips_batch(port, h, strip_h, buf0, buf1, flip0, objects, icon_handles, fps)
 
       :sync ->
-        render_strips_sync(port, h, strip_h, buf0, buf1, flip0, objects, icon_handles)
+        render_strips_sync(port, h, strip_h, buf0, buf1, flip0, objects, icon_handles, fps)
+
+      :binary_batch ->
+        {:error, :invalid_strip_buffer_binary_batch_target}
     end
   end
 
-  defp render_frame_direct_lcd_sync(port, objects, icon_handles) do
+  defp render_frame_direct_lcd_sync(port, objects, icon_handles, fps) do
     with :ok <- AtomLGFX.fill_screen(port, @bg),
          :ok <- draw_all_objects_to_target(port, objects, icon_handles, 0, 0),
+         :ok <- draw_fps_overlay(port, 0, fps),
          :ok <- AtomLGFX.display(port) do
       {:ok, 0}
     else
@@ -420,9 +559,11 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp render_frame_direct_lcd_batch(port, objects, icon_handles) do
-    with {:ok, batch} <- build_direct_lcd_frame_batch(objects, icon_handles),
-         :ok <- submit_batch_ok(port, batch),
+  defp render_frame_direct_lcd_batch(port, objects, icon_handles, fps) do
+    with :ok <- AtomLGFX.fill_screen(port, @bg),
+         {:ok, instances} <- build_direct_lcd_frame_batch(objects, icon_handles),
+         :ok <- submit_transform_list_ok(port, 0, instances, 0),
+         :ok <- draw_fps_overlay(port, 0, fps),
          :ok <- AtomLGFX.display(port) do
       {:ok, 0}
     else
@@ -431,8 +572,26 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp render_strips_sync(port, h, strip_h, buf0, buf1, flip0, objects, icon_handles) do
-    case render_strips_sync_i(port, h, strip_h, 0, buf0, buf1, flip0, objects, icon_handles) do
+  defp render_frame_direct_lcd_binary_batch(port, objects, icon_handles, fps) do
+    with {:ok, draw_commands} <-
+           build_direct_lcd_binary_batch_draw_commands(objects, icon_handles),
+         :ok <-
+           binary_batch_ok(port, [
+             BinaryBatch.target(0),
+             BinaryBatch.clear(@bg),
+             draw_commands,
+             fps_overlay_commands(fps),
+             BinaryBatch.display()
+           ]) do
+      {:ok, 0}
+    else
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp render_strips_sync(port, h, strip_h, buf0, buf1, flip0, objects, icon_handles, fps) do
+    case render_strips_sync_i(port, h, strip_h, 0, buf0, buf1, flip0, objects, icon_handles, fps) do
       {:ok, flip1} ->
         case AtomLGFX.display(port) do
           :ok -> {:ok, flip1}
@@ -444,14 +603,21 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp render_strips_sync_i(_port, h, _strip_h, y, _buf0, _buf1, flip, _objects, _icons)
+  defp render_strips_sync_i(_port, h, _strip_h, y, _buf0, _buf1, flip, _objects, _icons, _fps)
        when y >= h do
     {:ok, flip}
   end
 
   # Render the frame in vertical strips into a sprite buffer, then blit each strip to the LCD.
-  # This avoids per-object "erase then redraw" artifacts when objects overlap.
-  defp render_strips_sync_i(port, h, strip_h, y0, buf0, buf1, flip0, objects, icon_handles) do
+  #
+  # This mirrors upstream LovyanGFX MovingIcons:
+  #
+  # - flip between two strip sprites
+  # - clear the current strip
+  # - draw every object into the current strip
+  # - draw the FPS overlay only in the first strip
+  # - push the strip to the LCD
+  defp render_strips_sync_i(port, h, strip_h, y0, buf0, buf1, flip0, objects, icon_handles, fps) do
     {flip1, buf} =
       if flip0 == 0 do
         {1, buf0}
@@ -461,6 +627,7 @@ defmodule SampleApp.MovingIcons do
 
     with :ok <- AtomLGFX.clear(port, @bg, buf),
          :ok <- draw_all_objects_to_target(port, objects, icon_handles, buf, y0),
+         :ok <- maybe_draw_fps_overlay(port, buf, y0, fps),
          :ok <- AtomLGFX.push_sprite(port, buf, 0, y0) do
       render_strips_sync_i(
         port,
@@ -471,7 +638,8 @@ defmodule SampleApp.MovingIcons do
         buf1,
         flip1,
         objects,
-        icon_handles
+        icon_handles,
+        fps
       )
     else
       {:error, reason} ->
@@ -479,8 +647,8 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp render_strips_batch(port, h, strip_h, buf0, buf1, flip0, objects, icon_handles) do
-    case render_strips_batch_i(port, h, strip_h, 0, buf0, buf1, flip0, objects, icon_handles) do
+  defp render_strips_batch(port, h, strip_h, buf0, buf1, flip0, objects, icon_handles, fps) do
+    case render_strips_batch_i(port, h, strip_h, 0, buf0, buf1, flip0, objects, icon_handles, fps) do
       {:ok, flip1} ->
         case AtomLGFX.display(port) do
           :ok -> {:ok, flip1}
@@ -492,12 +660,23 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp render_strips_batch_i(_port, h, _strip_h, y0, _buf0, _buf1, flip, _objects, _icon_handles)
+  defp render_strips_batch_i(
+         _port,
+         h,
+         _strip_h,
+         y0,
+         _buf0,
+         _buf1,
+         flip,
+         _objects,
+         _icon_handles,
+         _fps
+       )
        when y0 >= h do
     {:ok, flip}
   end
 
-  defp render_strips_batch_i(port, h, strip_h, y0, buf0, buf1, flip0, objects, icon_handles) do
+  defp render_strips_batch_i(port, h, strip_h, y0, buf0, buf1, flip0, objects, icon_handles, fps) do
     {flip1, buf} =
       if flip0 == 0 do
         {1, buf0}
@@ -505,8 +684,10 @@ defmodule SampleApp.MovingIcons do
         {0, buf1}
       end
 
-    with {:ok, batch} <- build_strip_frame_batch(objects, icon_handles, buf, y0, strip_h),
-         :ok <- submit_batch_ok(port, batch),
+    with :ok <- AtomLGFX.clear(port, @bg, buf),
+         {:ok, instances} <- build_strip_frame_batch(objects, icon_handles, y0, strip_h),
+         :ok <- submit_transform_list_ok(port, buf, instances, y0),
+         :ok <- maybe_draw_fps_overlay(port, buf, y0, fps),
          :ok <- AtomLGFX.push_sprite(port, buf, 0, y0) do
       render_strips_batch_i(
         port,
@@ -517,11 +698,70 @@ defmodule SampleApp.MovingIcons do
         buf1,
         flip1,
         objects,
-        icon_handles
+        icon_handles,
+        fps
       )
     else
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp render_native_strips_binary_batch(port, h, strip_h, flip0, objects, icon_handles, fps) do
+    case build_native_strips_binary_batch_commands(h, strip_h, 0, objects, icon_handles, fps, []) do
+      {:ok, commands} ->
+        case binary_batch_ok(port, [commands, BinaryBatch.display()]) do
+          :ok -> {:ok, flip0}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  defp build_native_strips_binary_batch_commands(
+         h,
+         _strip_h,
+         y0,
+         _objects,
+         _icon_handles,
+         _fps,
+         acc
+       )
+       when y0 >= h do
+    {:ok, :lists.reverse(acc)}
+  end
+
+  defp build_native_strips_binary_batch_commands(
+         h,
+         strip_h,
+         y0,
+         objects,
+         icon_handles,
+         fps,
+         acc
+       ) do
+    with {:ok, draw_commands} <-
+           build_strip_binary_batch_draw_commands(objects, icon_handles, y0, strip_h) do
+      strip_commands = [
+        BinaryBatch.begin_strip(y0),
+        BinaryBatch.target(0),
+        BinaryBatch.clear(@bg),
+        draw_commands,
+        maybe_fps_overlay_commands(y0, fps),
+        BinaryBatch.present_strip()
+      ]
+
+      build_native_strips_binary_batch_commands(
+        h,
+        strip_h,
+        y0 + strip_h,
+        objects,
+        icon_handles,
+        fps,
+        [strip_commands | acc]
+      )
     end
   end
 
@@ -580,135 +820,208 @@ defmodule SampleApp.MovingIcons do
   end
 
   # -----------------------------------------------------------------------------
-  # Strip culling
+  # Binary-batch draw-mode frame building
   # -----------------------------------------------------------------------------
 
-  defp object_touches_strip?(
-         {_x, y, _dx, _dy, _img, _angle_cdeg, _zoom_x1024, _dangle_cdeg, _dzoom_x1024},
-         y0,
-         strip_h
-       ) do
-    y1 = y0 + strip_h - 1
-    not (y < y0 - @max_icon_half_extent or y > y1 + @max_icon_half_extent)
-  end
+  defp build_direct_lcd_binary_batch_draw_commands(objects, icon_handles) do
+    case @moving_icons_draw_mode do
+      :push_rotate_zoom_list ->
+        with {:ok, instances} <- build_direct_lcd_frame_batch(objects, icon_handles) do
+          {:ok, transform_list_commands(instances, 0)}
+        end
 
-  defp filter_objects_for_strip(objects, y0, strip_h) do
-    filter_objects_for_strip_i(objects, y0, strip_h, [])
-  end
+      :push_sprite_list ->
+        with {:ok, instances} <- build_direct_lcd_sprite_push_list(objects, icon_handles) do
+          {:ok, sprite_push_list_commands(instances)}
+        end
 
-  defp filter_objects_for_strip_i([], _y0, _strip_h, acc), do: :lists.reverse(acc)
-
-  defp filter_objects_for_strip_i([object | rest], y0, strip_h, acc) do
-    if object_touches_strip?(object, y0, strip_h) do
-      filter_objects_for_strip_i(rest, y0, strip_h, [object | acc])
-    else
-      filter_objects_for_strip_i(rest, y0, strip_h, acc)
+      :push_sprite_region_list ->
+        with {:ok, instances} <- build_direct_lcd_sprite_region_list(objects, icon_handles) do
+          {:ok, sprite_region_list_commands(instances)}
+        end
     end
   end
 
+  defp build_strip_binary_batch_draw_commands(objects, icon_handles, y0, strip_h) do
+    case @moving_icons_draw_mode do
+      :push_rotate_zoom_list ->
+        with {:ok, instances} <- build_strip_frame_batch(objects, icon_handles, y0, strip_h) do
+          {:ok, transform_list_commands(instances, y0)}
+        end
+
+      :push_sprite_list ->
+        with {:ok, instances} <- build_strip_sprite_push_list(objects, icon_handles, y0, strip_h) do
+          {:ok, sprite_push_list_commands(instances)}
+        end
+
+      :push_sprite_region_list ->
+        with {:ok, instances} <-
+               build_strip_sprite_region_list(objects, icon_handles, y0, strip_h) do
+          {:ok, sprite_region_list_commands(instances)}
+        end
+    end
+  end
+
+  defp build_direct_lcd_sprite_push_list(objects, icon_handles) do
+    add_objects_to_sprite_push_list(objects, icon_handles, 0, :all, [])
+  end
+
+  defp build_strip_sprite_push_list(objects, icon_handles, y0, strip_h) do
+    add_objects_to_sprite_push_list(objects, icon_handles, y0, y0 + strip_h, [])
+  end
+
+  defp add_objects_to_sprite_push_list([], _icon_handles, _y0, _y1, acc) do
+    {:ok, :lists.reverse(acc)}
+  end
+
+  defp add_objects_to_sprite_push_list(
+         [{x, y, _dx, _dy, img, _angle_cdeg, _zoom_x1024, _dangle, _dzoom} = object | rest],
+         icon_handles,
+         y0,
+         y1,
+         acc
+       ) do
+    next_acc =
+      if object_may_touch_strip?(object, y0, y1) do
+        src = src_handle_for_index(img, icon_handles)
+        dst_x = x - div(Assets.icon_w(), 2)
+        dst_y = y - y0 - div(Assets.icon_h(), 2)
+
+        [{src, dst_x, dst_y} | acc]
+      else
+        acc
+      end
+
+    add_objects_to_sprite_push_list(rest, icon_handles, y0, y1, next_acc)
+  end
+
+  defp build_direct_lcd_sprite_region_list(objects, icon_handles) do
+    add_objects_to_sprite_region_list(objects, icon_handles, 0, :all, [])
+  end
+
+  defp build_strip_sprite_region_list(objects, icon_handles, y0, strip_h) do
+    add_objects_to_sprite_region_list(objects, icon_handles, y0, y0 + strip_h, [])
+  end
+
+  defp add_objects_to_sprite_region_list([], _icon_handles, _y0, _y1, acc) do
+    {:ok, :lists.reverse(acc)}
+  end
+
+  defp add_objects_to_sprite_region_list(
+         [{x, y, _dx, _dy, img, _angle_cdeg, _zoom_x1024, _dangle, _dzoom} = object | rest],
+         icon_handles,
+         y0,
+         y1,
+         acc
+       ) do
+    next_acc =
+      if object_may_touch_strip?(object, y0, y1) do
+        src = src_handle_for_index(img, icon_handles)
+        src_x = 0
+        src_y = 0
+        src_w = Assets.icon_w()
+        src_h = Assets.icon_h()
+        dst_x = x - div(src_w, 2)
+        dst_y = y - y0 - div(src_h, 2)
+
+        [{src, src_x, src_y, src_w, src_h, dst_x, dst_y} | acc]
+      else
+        acc
+      end
+
+    add_objects_to_sprite_region_list(rest, icon_handles, y0, y1, next_acc)
+  end
+
   # -----------------------------------------------------------------------------
-  # Batch frame building
+  # v2 transform-list frame building
   # -----------------------------------------------------------------------------
 
   defp build_direct_lcd_frame_batch(objects, icon_handles) do
-    batch0 = Batch.new()
-
-    with {:ok, batch1} <- add_batch_command(batch0, :fillScreen, 0, 0, [@bg]),
-         {:ok, batch2} <- add_objects_to_batch(batch1, objects, icon_handles, 0, 0) do
-      {:ok, batch2}
-    end
+    add_objects_to_batch(objects, icon_handles, 0, :all, [])
   end
 
-  defp build_strip_frame_batch(objects, icon_handles, buf, y0, strip_h) do
-    visible_objects = filter_objects_for_strip(objects, y0, strip_h)
-    batch0 = Batch.new()
-
-    with {:ok, batch1} <- add_batch_command(batch0, :fillScreen, buf, 0, [@bg]),
-         {:ok, batch2} <- add_objects_to_batch(batch1, visible_objects, icon_handles, buf, y0) do
-      {:ok, batch2}
-    end
+  # Keep global object coordinates and pass `y_offset` at submit time.
+  # Native code applies the target-local offset.
+  #
+  # For strip-buffer mode, pre-cull objects that conservatively cannot affect the
+  # current vertical strip. This reduces binary-batch size and native transform
+  # loop work before native approximate culling runs.
+  defp build_strip_frame_batch(objects, icon_handles, y0, strip_h) do
+    add_objects_to_batch(objects, icon_handles, y0, y0 + strip_h, [])
   end
 
-  defp add_objects_to_batch(batch, [], _icon_handles, _dst_target, _y0) do
-    {:ok, batch}
+  defp add_objects_to_batch([], _icon_handles, _y0, _y1, acc) do
+    {:ok, :lists.reverse(acc)}
   end
 
   defp add_objects_to_batch(
-         %Batch{} = batch,
-         [{x, y, _dx, _dy, img, angle_cdeg, zoom_x1024, _dangle, _dzoom} | rest],
+         [{x, y, _dx, _dy, img, angle_cdeg, zoom_x1024, _dangle, _dzoom} = object | rest],
          icon_handles,
-         dst_target,
-         y0
+         y0,
+         y1,
+         acc
        ) do
-    src = src_handle_for_index(img, icon_handles)
+    next_acc =
+      if object_may_touch_strip?(object, y0, y1) do
+        src = src_handle_for_index(img, icon_handles)
 
-    dst_x = x
-    dst_y = y - y0
-    angle_deg = deg_from_cdeg(angle_cdeg)
-    zoom = zoom_from_x1024(zoom_x1024)
+        # Keep global coordinates and submit `y_offset` separately.
+        # This matches the native fixed-point hot path.
+        dst_x = x
+        dst_y = y
 
-    with {:ok, next_batch} <-
-           add_push_rotate_zoom_command(
-             batch,
-             src,
-             dst_target,
-             dst_x,
-             dst_y,
-             angle_deg,
-             zoom,
-             zoom
-           ) do
-      add_objects_to_batch(next_batch, rest, icon_handles, dst_target, y0)
-    end
+        [{src, dst_x, dst_y, angle_cdeg, zoom_x1024, zoom_x1024} | acc]
+      else
+        acc
+      end
+
+    add_objects_to_batch(rest, icon_handles, y0, y1, next_acc)
   end
 
-  defp add_push_rotate_zoom_command(
-         %Batch{} = batch,
-         src,
-         dst_target,
-         x,
-         y,
-         angle_deg,
-         zoom_x,
-         zoom_y
+  defp object_may_touch_strip?(_object, _y0, :all), do: true
+
+  defp object_may_touch_strip?(_object, _y0, _y1) when not @use_elixir_strip_cull, do: true
+
+  defp object_may_touch_strip?(
+         {_x, y, _dx, _dy, _img, _angle_cdeg, zoom_x1024, _dangle, _dzoom},
+         y0,
+         y1
        ) do
-    if @use_transparent_key do
-      add_batch_command(
-        batch,
-        :pushRotateZoom,
-        src,
-        0,
-        [dst_target, x, y, angle_deg, zoom_x, zoom_y, @transparent_key_color565]
-      )
-    else
-      add_batch_command(
-        batch,
-        :pushRotateZoom,
-        src,
-        0,
-        [dst_target, x, y, angle_deg, zoom_x, zoom_y]
-      )
-    end
+    radius = approx_icon_transform_radius_px(zoom_x1024)
+
+    y + radius >= y0 and y - radius < y1
   end
 
-  defp add_batch_command(%Batch{} = batch, op, target, flags, args) do
-    case Command.new(op, target, flags, args) do
-      {:ok, command} ->
-        case Batch.add(batch, command) do
-          %Batch{} = next_batch -> {:ok, next_batch}
-          {:error, _reason} = error -> error
-        end
+  defp approx_icon_transform_radius_px(zoom_x1024) do
+    # Conservative center-pivot approximation. This mirrors the native culling
+    # shape while staying integer-only for AtomVM.
+    base = Assets.icon_w() + Assets.icon_h()
 
-      {:error, _reason} = error ->
-        error
-    end
+    div(base * zoom_x1024 + 2047, 2048) + 1
   end
 
-  defp submit_batch_ok(port, %Batch{} = batch) do
-    case AtomLGFX.submit_batch(port, batch) do
-      {:ok, _payload} ->
-        :ok
+  defp transform_list_commands([], _y0), do: []
 
+  defp transform_list_commands(instances, y0) do
+    [BinaryBatch.push_rotate_zoom_list(instances, transform_list_opts(y0))]
+  end
+
+  defp sprite_push_list_commands([]), do: []
+
+  defp sprite_push_list_commands(instances) do
+    [BinaryBatch.push_sprite_list(instances, sprite_list_opts())]
+  end
+
+  defp sprite_region_list_commands([]), do: []
+
+  defp sprite_region_list_commands(instances) do
+    [BinaryBatch.push_sprite_region_list(instances, sprite_region_list_opts())]
+  end
+
+  defp submit_transform_list_ok(_port, _dst_target, [], _y0), do: :ok
+
+  defp submit_transform_list_ok(port, dst_target, instances, y0) do
+    case AtomLGFX.push_rotate_zoom_list_to(port, dst_target, instances, transform_list_opts(y0)) do
       :ok ->
         :ok
 
@@ -717,10 +1030,137 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
+  defp transform_list_opts(y0) do
+    if @use_transparent_key do
+      [transparent: @transparent_key_color565, y_offset: y0, approx_cull: @use_approx_cull]
+    else
+      [y_offset: y0, approx_cull: @use_approx_cull]
+    end
+  end
+
+  defp sprite_list_opts do
+    if @use_transparent_key do
+      [transparent: @transparent_key_color565]
+    else
+      []
+    end
+  end
+
+  defp sprite_region_list_opts do
+    if @use_transparent_key do
+      [transparent: @transparent_key_color565]
+    else
+      []
+    end
+  end
+
+  defp binary_batch_ok(port, commands) do
+    command_binary = IO.iodata_to_binary(commands)
+    put_last_batch_bytes(byte_size(command_binary))
+
+    case BinaryBatch.render(port, command_binary) do
+      :ok -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp src_handle_for_index(0, icon_handles), do: elem(icon_handles, 0)
   defp src_handle_for_index(1, icon_handles), do: elem(icon_handles, 1)
   defp src_handle_for_index(2, icon_handles), do: elem(icon_handles, 2)
   defp src_handle_for_index(3, icon_handles), do: elem(icon_handles, 3)
+
+  # -----------------------------------------------------------------------------
+  # FPS overlay
+  # -----------------------------------------------------------------------------
+
+  defp maybe_draw_fps_overlay(_port, _target, y0, _fps) when y0 != 0, do: :ok
+
+  defp maybe_draw_fps_overlay(port, target, 0, fps) do
+    draw_fps_overlay(port, target, fps)
+  end
+
+  defp draw_fps_overlay(port, target, fps) do
+    with :ok <- AtomLGFX.set_text_font_preset(port, :ascii, target),
+         :ok <- AtomLGFX.set_text_size(port, 2, target),
+         :ok <- AtomLGFX.set_text_color(port, 0xFFFF, nil, target) do
+      AtomLGFX.draw_string(port, 0, 0, fps_overlay_text(fps), target)
+    end
+  end
+
+  defp maybe_fps_overlay_commands(y0, _fps) when y0 != 0, do: []
+
+  defp maybe_fps_overlay_commands(0, fps) do
+    fps_overlay_commands(fps)
+  end
+
+  defp fps_overlay_commands(fps) do
+    [
+      BinaryBatch.set_text_font_preset(:ascii),
+      BinaryBatch.set_text_size(2),
+      BinaryBatch.set_text_color(0xFFFF),
+      BinaryBatch.draw_string(0, 0, fps_overlay_text(fps))
+    ]
+  end
+
+  defp fps_overlay_text(fps) do
+    "obj:#{@obj_count}  fps:#{fps}"
+  end
+
+  defp update_fps(fps, frame_count, psec, render_target, h, frame_ms, batch_bytes) do
+    sec = div(monotonic_ms(), 1000)
+
+    if psec != sec do
+      log_frame_stats(frame_count, render_target, h, frame_ms, batch_bytes)
+      {frame_count, 0, sec}
+    else
+      {fps, frame_count, psec}
+    end
+  end
+
+  defp monotonic_ms do
+    :erlang.monotonic_time(:millisecond)
+  end
+
+  defp put_last_batch_bytes(batch_bytes)
+       when is_integer(batch_bytes) and batch_bytes >= 0 do
+    :erlang.put(:moving_icons_last_batch_bytes, batch_bytes)
+    :ok
+  end
+
+  defp last_batch_bytes do
+    case :erlang.get(:moving_icons_last_batch_bytes) do
+      value when is_integer(value) and value >= 0 -> value
+      _ -> 0
+    end
+  end
+
+  defp log_frame_stats(fps, render_target, h, frame_ms, batch_bytes) do
+    IO.puts(
+      "moving_icons stats " <>
+        "obj_count=#{@obj_count} " <>
+        "render_mode=#{render_mode_name(render_target)} " <>
+        "submit_mode=#{@frame_submit_mode} " <>
+        "draw_mode=#{@moving_icons_draw_mode} " <>
+        "fps=#{fps} " <>
+        "frame_ms=#{frame_ms} " <>
+        "batch_bytes=#{batch_bytes} " <>
+        "strip_count=#{strip_count(render_target, h)}"
+    )
+  end
+
+  defp render_mode_name(:direct_lcd), do: :direct_lcd
+  defp render_mode_name({:native_strips, _strip_h}), do: :native_strips
+  defp render_mode_name({:strip_buffers, _strip_h, _buf0, _buf1}), do: :strip_buffers
+
+  defp strip_count(:direct_lcd, _h), do: 1
+
+  defp strip_count({:native_strips, strip_h}, h) do
+    div_ceil(h, strip_h)
+  end
+
+  defp strip_count({:strip_buffers, strip_h, _buf0, _buf1}, h) do
+    div_ceil(h, strip_h)
+  end
 
   # -----------------------------------------------------------------------------
   # Misc
@@ -738,7 +1178,7 @@ defmodule SampleApp.MovingIcons do
 
   defp log_render_config do
     IO.puts(
-      "moving_icons config obj_count=#{@obj_count} render_mode=#{inspect(@frame_render_mode)} submit_mode=#{inspect(@frame_submit_mode)}"
+      "moving_icons config obj_count=#{@obj_count} icon_count=#{@obj_icon_count} render_mode=#{inspect(@frame_render_mode)} submit_mode=#{inspect(@frame_submit_mode)} draw_mode=#{inspect(@moving_icons_draw_mode)}"
     )
   end
 

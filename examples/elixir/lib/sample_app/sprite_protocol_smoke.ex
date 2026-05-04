@@ -9,12 +9,17 @@ defmodule SampleApp.SpriteProtocolSmoke do
 
   @t_short 5_000
 
-  @proto_ver 1
+  @proto_ver 2
   @cap_sprite 1 <<< 0
   @cap_palette 1 <<< 4
 
   @f_color_index 1 <<< 1
   @f_transparent_index 1 <<< 4
+
+  @bg 0x0000
+  @fg 0xFFFF
+  @muted 0x8410
+  @ok 0x07E0
 
   @sprite_target 1
   @sprite_w 8
@@ -23,11 +28,11 @@ defmodule SampleApp.SpriteProtocolSmoke do
 
   @zoom_1x 1.0
 
-  # pushSprite wire format (destination-aware):
+  # push_sprite wire format (destination-aware):
   # - Non-transparent: [dst_target, x, y]
   # - Transparent:     [dst_target, x, y, transparent_value]
   #
-  # pushRotateZoom wire format (destination-aware):
+  # push_rotate_zoom wire format (destination-aware):
   # - Non-transparent: [dst_target, x, y, angle_deg, zoom_x, zoom_y]
   # - Transparent:     [dst_target, x, y, angle_deg, zoom_x, zoom_y, transparent_value]
   #
@@ -40,7 +45,13 @@ defmodule SampleApp.SpriteProtocolSmoke do
   #   or a palette index when the transparent-index flag is set
   #
   # This smoke test assumes the port is already initialized.
-  def run(port), do: run(port, &AtomLGFX.raw_call/6)
+  def run(port) do
+    with :ok <- draw_start(port),
+         :ok <- run(port, &AtomLGFX.raw_call/6),
+         :ok <- draw_done(port) do
+      :ok
+    end
+  end
 
   def run(port, raw_call) when is_function(raw_call, 6) do
     reset_note_once_flags()
@@ -58,11 +69,41 @@ defmodule SampleApp.SpriteProtocolSmoke do
     end
   end
 
+  defp draw_start(port) do
+    with {:ok, w} <- AtomLGFX.width(port, 0),
+         {:ok, h} <- AtomLGFX.height(port, 0),
+         :ok <- AtomLGFX.fill_screen(port, @bg),
+         :ok <-
+           AtomLGFX.draw_rect(
+             port,
+             6,
+             8,
+             max(40, w - 12),
+             max(36, min(72, h - 16)),
+             @muted,
+             0
+           ),
+         :ok <- AtomLGFX.draw_string_bg(port, 14, 18, @fg, @bg, 2, "SPRITES", 0),
+         :ok <- AtomLGFX.draw_string_bg(port, 16, 44, @muted, @bg, 1, "raw protocol checks", 0) do
+      :ok
+    end
+  end
+
+  defp draw_done(port) do
+    with {:ok, w} <- AtomLGFX.width(port, 0),
+         {:ok, h} <- AtomLGFX.height(port, 0),
+         :ok <- AtomLGFX.fill_rect(port, 0, max(0, h - 28), w, 28, @bg, 0),
+         :ok <-
+           AtomLGFX.draw_string_bg(port, 8, max(0, h - 22), @ok, @bg, 1, "sprite protocol ok", 0) do
+      :ok
+    end
+  end
+
   # -----------------------------------------------------------------------------
   # 0) Basic capability sanity
   # -----------------------------------------------------------------------------
   defp check_get_caps_sprite_capacity(port, raw_call) do
-    case raw_call.(port, :getCaps, 0, 0, [], @t_short) do
+    case raw_call.(port, :get_caps, 0, 0, [], @t_short) do
       {:ok, {:caps, proto_ver, _max_binary_bytes, max_sprites, feature_bits}}
       when is_integer(proto_ver) and is_integer(max_sprites) and is_integer(feature_bits) ->
         cond do
@@ -104,38 +145,38 @@ defmodule SampleApp.SpriteProtocolSmoke do
   end
 
   defp check_create_sprite_target_zero_bad_target(port, raw_call) do
-    case raw_call.(port, :createSprite, 0, 0, [@sprite_w, @sprite_h], @t_short) do
+    case raw_call.(port, :create_sprite, 0, 0, [@sprite_w, @sprite_h], @t_short) do
       {:error, :bad_target} -> :ok
-      {:error, reason} -> {:error, {:createSprite_target0_expected_bad_target, reason}}
-      {:ok, result} -> {:error, {:createSprite_target0_unexpected_ok, result}}
+      {:error, reason} -> {:error, {:create_sprite_target0_expected_bad_target, reason}}
+      {:ok, result} -> {:error, {:create_sprite_target0_unexpected_ok, result}}
     end
   end
 
   defp check_push_sprite_target_zero_bad_target(port, raw_call) do
-    # pushSprite is sprite-only: header target must be a sprite handle (1..254).
+    # push_sprite is sprite-only: header target must be a sprite handle (1..254).
     # args: [dst_target, x, y]
     args = [0, 0, 0]
 
-    case raw_call.(port, :pushSprite, 0, 0, args, @t_short) do
+    case raw_call.(port, :push_sprite, 0, 0, args, @t_short) do
       {:error, :bad_target} -> :ok
-      {:error, reason} -> {:error, {:pushSprite_target0_expected_bad_target, reason}}
-      {:ok, result} -> {:error, {:pushSprite_target0_unexpected_ok, result}}
+      {:error, reason} -> {:error, {:push_sprite_target0_expected_bad_target, reason}}
+      {:ok, result} -> {:error, {:push_sprite_target0_unexpected_ok, result}}
     end
   end
 
   defp check_push_rotate_zoom_target_zero_bad_target(port, raw_call) do
-    # pushRotateZoom is sprite-only: header target must be a sprite handle (1..254).
+    # push_rotate_zoom is sprite-only: header target must be a sprite handle (1..254).
     # args: [dst_target, x, y, angle_deg, zoom_x, zoom_y]
     args = [0, 0, 0, 0.0, @zoom_1x, @zoom_1x]
 
-    case raw_call.(port, :pushRotateZoom, 0, 0, args, @t_short) do
+    case raw_call.(port, :push_rotate_zoom, 0, 0, args, @t_short) do
       {:error, :bad_target} ->
         :ok
 
       {:error, :bad_op} ->
         note_once(
           :push_rotate_zoom_unavailable,
-          "sprite protocol smoke note: pushRotateZoom not available; skipping pushRotateZoom checks"
+          "sprite protocol smoke note: push_rotate_zoom not available; skipping push_rotate_zoom checks"
         )
 
         :ok
@@ -143,16 +184,16 @@ defmodule SampleApp.SpriteProtocolSmoke do
       {:error, :unsupported} ->
         note_once(
           :push_rotate_zoom_unavailable,
-          "sprite protocol smoke note: pushRotateZoom unsupported; skipping pushRotateZoom checks"
+          "sprite protocol smoke note: push_rotate_zoom unsupported; skipping push_rotate_zoom checks"
         )
 
         :ok
 
       {:error, reason} ->
-        {:error, {:pushRotateZoom_target0_expected_bad_target, reason}}
+        {:error, {:push_rotate_zoom_target0_expected_bad_target, reason}}
 
       {:ok, result} ->
-        {:error, {:pushRotateZoom_target0_unexpected_ok, result}}
+        {:error, {:push_rotate_zoom_target0_unexpected_ok, result}}
     end
   end
 
@@ -176,16 +217,16 @@ defmodule SampleApp.SpriteProtocolSmoke do
   end
 
   defp check_create_sprite(port, raw_call, sprite_target) do
-    case raw_call.(port, :createSprite, sprite_target, 0, [@sprite_w, @sprite_h], @t_short) do
+    case raw_call.(port, :create_sprite, sprite_target, 0, [@sprite_w, @sprite_h], @t_short) do
       {:ok, _result} -> :ok
-      {:error, reason} -> {:error, {:createSprite_failed, reason}}
+      {:error, reason} -> {:error, {:create_sprite_failed, reason}}
     end
   end
 
   defp check_create_sprite_with_depth(port, raw_call, sprite_target, color_depth) do
     case raw_call.(
            port,
-           :createSprite,
+           :create_sprite,
            sprite_target,
            0,
            [@sprite_w, @sprite_h, color_depth],
@@ -195,7 +236,7 @@ defmodule SampleApp.SpriteProtocolSmoke do
         :ok
 
       {:error, reason} ->
-        {:error, {:createSprite_with_depth_failed, sprite_target, color_depth, reason}}
+        {:error, {:create_sprite_with_depth_failed, sprite_target, color_depth, reason}}
     end
   end
 
@@ -235,7 +276,7 @@ defmodule SampleApp.SpriteProtocolSmoke do
          {:ok, _} <-
            raw_call.(
              port,
-             :fillRect,
+             :fill_rect,
              sprite_target,
              0,
              [0, 0, @sprite_w, @sprite_h, 0x0108],
@@ -244,13 +285,13 @@ defmodule SampleApp.SpriteProtocolSmoke do
          {:ok, _} <-
            raw_call.(
              port,
-             :drawRect,
+             :draw_rect,
              sprite_target,
              0,
              [0, 0, @sprite_w, @sprite_h, 0xFFFF],
              @t_short
            ),
-         {:ok, _} <- raw_call.(port, :drawPixel, sprite_target, 0, [1, 1, 0xF800], @t_short) do
+         {:ok, _} <- raw_call.(port, :draw_pixel, sprite_target, 0, [1, 1, 0xF800], @t_short) do
       :ok
     else
       {:error, reason} ->
@@ -264,14 +305,14 @@ defmodule SampleApp.SpriteProtocolSmoke do
   defp check_set_pivot(port, raw_call, sprite_target) do
     case raw_call.(
            port,
-           :setPivot,
+           :set_pivot,
            sprite_target,
            0,
            [div(@sprite_w, 2), div(@sprite_h, 2)],
            @t_short
          ) do
       {:ok, _result} -> :ok
-      {:error, reason} -> {:error, {:setPivot_failed, reason}}
+      {:error, reason} -> {:error, {:set_pivot_failed, reason}}
     end
   end
 
@@ -279,9 +320,9 @@ defmodule SampleApp.SpriteProtocolSmoke do
     # Sprite -> LCD blit:
     # header Target = src sprite handle
     # args = [dst_target, x, y] where dst_target=0 => LCD
-    case raw_call.(port, :pushSprite, sprite_target, 0, [0, 4, 4], @t_short) do
+    case raw_call.(port, :push_sprite, sprite_target, 0, [0, 4, 4], @t_short) do
       {:ok, _result} -> :ok
-      {:error, reason} -> {:error, {:pushSprite_failed, reason}}
+      {:error, reason} -> {:error, {:push_sprite_failed, reason}}
     end
   end
 
@@ -289,11 +330,11 @@ defmodule SampleApp.SpriteProtocolSmoke do
     # args = [dst_target, x, y, angle_deg, zoom_x, zoom_y] with dst_target=0 => LCD
     args = [0, 28, 4, 0.0, @zoom_1x, @zoom_1x]
 
-    case raw_call.(port, :pushRotateZoom, sprite_target, 0, args, @t_short) do
+    case raw_call.(port, :push_rotate_zoom, sprite_target, 0, args, @t_short) do
       {:error, :bad_op} ->
         note_once(
           :push_rotate_zoom_unavailable,
-          "sprite protocol smoke note: pushRotateZoom not available; skipping pushRotateZoom checks"
+          "sprite protocol smoke note: push_rotate_zoom not available; skipping push_rotate_zoom checks"
         )
 
         :ok
@@ -301,7 +342,7 @@ defmodule SampleApp.SpriteProtocolSmoke do
       {:error, :unsupported} ->
         note_once(
           :push_rotate_zoom_unavailable,
-          "sprite protocol smoke note: pushRotateZoom unsupported; skipping pushRotateZoom checks"
+          "sprite protocol smoke note: push_rotate_zoom unsupported; skipping push_rotate_zoom checks"
         )
 
         :ok
@@ -310,14 +351,14 @@ defmodule SampleApp.SpriteProtocolSmoke do
         :ok
 
       {:error, reason} ->
-        {:error, {:pushRotateZoom_failed, reason}}
+        {:error, {:push_rotate_zoom_failed, reason}}
     end
   end
 
   defp check_delete_sprite(port, raw_call, sprite_target) do
-    case raw_call.(port, :deleteSprite, sprite_target, 0, [], @t_short) do
+    case raw_call.(port, :delete_sprite, sprite_target, 0, [], @t_short) do
       {:ok, _result} -> :ok
-      {:error, reason} -> {:error, {:deleteSprite_failed, reason}}
+      {:error, reason} -> {:error, {:delete_sprite_failed, reason}}
     end
   end
 
@@ -357,23 +398,23 @@ defmodule SampleApp.SpriteProtocolSmoke do
   end
 
   defp check_create_palette(port, raw_call, sprite_target) do
-    case raw_call.(port, :createPalette, sprite_target, 0, [], @t_short) do
+    case raw_call.(port, :create_palette, sprite_target, 0, [], @t_short) do
       {:ok, _result} -> :ok
-      {:error, reason} -> {:error, {:createPalette_failed, reason}}
+      {:error, reason} -> {:error, {:create_palette_failed, reason}}
     end
   end
 
   defp check_set_palette_color(port, raw_call, sprite_target, palette_index, rgb888) do
     case raw_call.(
            port,
-           :setPaletteColor,
+           :set_palette_color,
            sprite_target,
            0,
            [palette_index, rgb888],
            @t_short
          ) do
       {:ok, _result} -> :ok
-      {:error, reason} -> {:error, {:setPaletteColor_failed, palette_index, rgb888, reason}}
+      {:error, reason} -> {:error, {:set_palette_color_failed, palette_index, rgb888, reason}}
     end
   end
 
@@ -382,14 +423,14 @@ defmodule SampleApp.SpriteProtocolSmoke do
          {:ok, _} <-
            raw_call.(
              port,
-             :fillRect,
+             :fill_rect,
              sprite_target,
              @f_color_index,
              [2, 2, 4, 4, 1],
              @t_short
            ),
          {:ok, _} <-
-           raw_call.(port, :drawPixel, sprite_target, @f_color_index, [1, 1, 1], @t_short) do
+           raw_call.(port, :draw_pixel, sprite_target, @f_color_index, [1, 1, 1], @t_short) do
       :ok
     else
       {:error, reason} ->
@@ -404,25 +445,25 @@ defmodule SampleApp.SpriteProtocolSmoke do
     # Transparent value is palette index 0 because the transparent-index flag is set.
     case raw_call.(
            port,
-           :pushSprite,
+           :push_sprite,
            sprite_target,
            @f_transparent_index,
            [0, 4, 20, 0],
            @t_short
          ) do
       {:ok, _result} -> :ok
-      {:error, reason} -> {:error, {:pushSprite_indexed_transparent_failed, reason}}
+      {:error, reason} -> {:error, {:push_sprite_indexed_transparent_failed, reason}}
     end
   end
 
   defp check_indexed_push_rotate_zoom_to_lcd(port, raw_call, sprite_target) do
     args = [0, 28, 20, 0.0, @zoom_1x, @zoom_1x, 0]
 
-    case raw_call.(port, :pushRotateZoom, sprite_target, @f_transparent_index, args, @t_short) do
+    case raw_call.(port, :push_rotate_zoom, sprite_target, @f_transparent_index, args, @t_short) do
       {:error, :bad_op} ->
         note_once(
           :push_rotate_zoom_unavailable,
-          "sprite protocol smoke note: pushRotateZoom not available; skipping pushRotateZoom checks"
+          "sprite protocol smoke note: push_rotate_zoom not available; skipping push_rotate_zoom checks"
         )
 
         :ok
@@ -430,7 +471,7 @@ defmodule SampleApp.SpriteProtocolSmoke do
       {:error, :unsupported} ->
         note_once(
           :push_rotate_zoom_unavailable,
-          "sprite protocol smoke note: pushRotateZoom unsupported; skipping pushRotateZoom checks"
+          "sprite protocol smoke note: push_rotate_zoom unsupported; skipping push_rotate_zoom checks"
         )
 
         :ok
@@ -439,12 +480,12 @@ defmodule SampleApp.SpriteProtocolSmoke do
         :ok
 
       {:error, reason} ->
-        {:error, {:pushRotateZoom_indexed_transparent_failed, reason}}
+        {:error, {:push_rotate_zoom_indexed_transparent_failed, reason}}
     end
   end
 
   defp maybe_cleanup_sprite(port, raw_call, sprite_target) do
-    case raw_call.(port, :deleteSprite, sprite_target, 0, [], @t_short) do
+    case raw_call.(port, :delete_sprite, sprite_target, 0, [], @t_short) do
       {:ok, _} -> :ok
       {:error, _} -> :ok
     end
