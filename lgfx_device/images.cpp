@@ -1,6 +1,8 @@
-// SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-//
-// SPDX-License-Identifier: Apache-2.0
+/*
+ * SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 // lgfx_device/images.cpp
 
@@ -39,9 +41,7 @@ static inline bool lgfx_scale_is_valid(float scale)
 static constexpr size_t MAX_LINE_PIXELS = 480;
 static uint16_t linebuf[MAX_LINE_PIXELS];
 
-} // namespace
-
-extern "C" esp_err_t lgfx_device_draw_jpg(
+static esp_err_t draw_jpg_locked_impl(
     uint8_t target,
     int16_t x,
     int16_t y,
@@ -66,12 +66,6 @@ extern "C" esp_err_t lgfx_device_draw_jpg(
         return ESP_ERR_INVALID_SIZE;
     }
 
-    lgfx_dev::ScopedLcdLock lock;
-    esp_err_t err = lgfx_dev::lock_ready(lock);
-    if (err != ESP_OK) {
-        return err;
-    }
-
     lgfx::LGFXBase *gfx = lgfx_dev::resolve_render_target_locked(target);
     if (!gfx) {
         return ESP_ERR_NOT_FOUND;
@@ -94,7 +88,7 @@ extern "C" esp_err_t lgfx_device_draw_jpg(
     return ok ? ESP_OK : ESP_FAIL;
 }
 
-extern "C" esp_err_t lgfx_device_push_image_rgb565_strided(
+static esp_err_t push_image_rgb565_strided_locked_impl(
     uint8_t target,
     int16_t x,
     int16_t y,
@@ -127,12 +121,6 @@ extern "C" esp_err_t lgfx_device_push_image_rgb565_strided(
 
     if (pixels_len < needed) {
         return ESP_ERR_INVALID_SIZE;
-    }
-
-    lgfx_dev::ScopedLcdLock lock;
-    esp_err_t err = lgfx_dev::lock_ready(lock);
-    if (err != ESP_OK) {
-        return err;
     }
 
     lgfx::LGFXBase *gfx = lgfx_dev::resolve_render_target_locked(target);
@@ -171,4 +159,114 @@ extern "C" esp_err_t lgfx_device_push_image_rgb565_strided(
     }
 
     return ESP_OK;
+}
+
+} // namespace
+
+extern "C" esp_err_t lgfx_device_draw_jpg(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t max_w,
+    uint16_t max_h,
+    int16_t off_x,
+    int16_t off_y,
+    float scale_x,
+    float scale_y,
+    const uint8_t *jpeg_bytes,
+    size_t jpeg_len)
+{
+    lgfx_dev::ScopedLcdLock lock;
+    esp_err_t err = lgfx_dev::lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    return draw_jpg_locked_impl(
+        target,
+        x,
+        y,
+        max_w,
+        max_h,
+        off_x,
+        off_y,
+        scale_x,
+        scale_y,
+        jpeg_bytes,
+        jpeg_len);
+}
+
+esp_err_t lgfx_dev::draw_jpg_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t max_w,
+    uint16_t max_h,
+    int16_t off_x,
+    int16_t off_y,
+    float scale_x,
+    float scale_y,
+    const uint8_t *jpeg_bytes,
+    size_t jpeg_len)
+{
+    return draw_jpg_locked_impl(
+        target,
+        x,
+        y,
+        max_w,
+        max_h,
+        off_x,
+        off_y,
+        scale_x,
+        scale_y,
+        jpeg_bytes,
+        jpeg_len);
+}
+
+esp_err_t lgfx_dev::push_image_rgb565_strided_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t stride_pixels,
+    const uint8_t *pixels_le,
+    size_t pixels_len)
+{
+    return push_image_rgb565_strided_locked_impl(
+        target,
+        x,
+        y,
+        w,
+        h,
+        stride_pixels,
+        pixels_le,
+        pixels_len);
+}
+
+extern "C" esp_err_t lgfx_device_push_image_rgb565_strided(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t stride_pixels,
+    const uint8_t *pixels_le,
+    size_t pixels_len)
+{
+    lgfx_dev::ScopedLcdLock lock;
+    esp_err_t err = lgfx_dev::lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    return push_image_rgb565_strided_locked_impl(
+        target,
+        x,
+        y,
+        w,
+        h,
+        stride_pixels,
+        pixels_le,
+        pixels_len);
 }

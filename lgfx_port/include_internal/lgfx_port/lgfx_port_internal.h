@@ -18,7 +18,6 @@
 #include "lgfx_device/lgfx_device.h"
 #include "lgfx_port/ops.h"
 #include "lgfx_port/protocol.h"
-#include "lgfx_runtime/lgfx_runtime.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,6 +29,7 @@ typedef struct
     term error;
 
     term lgfx;
+    term call;
 
     term pong;
     term true_;
@@ -40,6 +40,7 @@ typedef struct
     term bad_flags;
     term bad_args;
     term bad_target;
+    term batch_failed;
     term not_writing;
     term no_memory;
     term internal;
@@ -50,38 +51,37 @@ typedef struct
     term last_error;
     term none;
 
-    term batch;
-    term batch_status;
-    term batch_failure;
-
-    term idle;
-    term queued;
-    term running;
-    term completed;
-    term failed;
-
-#define X(op, handler, atom_str, ...) term op;
-#include "lgfx_port/ops.def"
-#undef X
 } lgfx_atoms_t;
 
 typedef struct
 {
-    term last_op; // atom or 'none'
+    term last_op; // numeric opcode or 'none'
     term reason; // atom or 'none'
     uint32_t flags;
     uint32_t target;
     int32_t esp_err; // 0 if n/a
 } lgfx_last_error_t;
 
+#ifndef LGFX_REQ_MAX_INLINE_ARGS
+#define LGFX_REQ_MAX_INLINE_ARGS 16
+#endif
+
+#if LGFX_REQ_MAX_INLINE_ARGS < 1
+#error "LGFX_REQ_MAX_INLINE_ARGS must be >= 1"
+#endif
+
 typedef struct lgfx_request_t
 {
     uint32_t proto_ver;
-    term op;
+    uint32_t opcode;
+    lgfx_op_t op;
     uint32_t target;
     uint32_t flags;
     term request_tuple;
+    term args_list;
     int arity;
+    int arg_count;
+    term args[LGFX_REQ_MAX_INLINE_ARGS];
 } lgfx_request_t;
 
 typedef struct lgfx_port_t
@@ -99,9 +99,6 @@ typedef struct lgfx_port_t
     // This survives close/init cycles for the same port handle.
     lgfx_open_config_overrides_t open_config_overrides;
 
-    // Explicit batch runtime state is per-port.
-    lgfx_runtime_t runtime;
-
     bool initialized;
 } lgfx_port_t;
 
@@ -112,12 +109,11 @@ uint32_t lgfx_port_feature_bits(const lgfx_port_t *port);
 uint8_t lgfx_port_max_sprites(const lgfx_port_t *port);
 
 // Op registry / dispatch helpers.
-bool lgfx_op_try_from_atom(const lgfx_port_t *port, term op_atom, lgfx_op_t *out_op);
-term lgfx_op_atom_from_op(const lgfx_port_t *port, lgfx_op_t op);
-const lgfx_op_meta_t *lgfx_op_meta_lookup(const lgfx_port_t *port, term op_atom);
-const char *lgfx_op_name_from_atom(const lgfx_port_t *port, term op_atom);
-lgfx_handler_fn lgfx_dispatch_lookup(lgfx_port_t *port, term op_atom);
-bool lgfx_port_op_is_enabled(const lgfx_port_t *port, term op_atom);
+bool lgfx_op_try_from_opcode(uint32_t opcode, lgfx_op_t *out_op);
+const lgfx_op_meta_t *lgfx_op_meta_lookup_by_op(lgfx_op_t op);
+const char *lgfx_op_name_from_op(lgfx_op_t op);
+lgfx_handler_fn lgfx_dispatch_lookup_by_op(lgfx_port_t *port, lgfx_op_t op);
+bool lgfx_port_op_is_enabled_by_op(const lgfx_port_t *port, lgfx_op_t op);
 
 // Request-envelope validation helpers.
 term lgfx_require_proto_ver(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req);

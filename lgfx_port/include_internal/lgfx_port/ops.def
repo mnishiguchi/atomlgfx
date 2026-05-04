@@ -1,8 +1,25 @@
 // lgfx_port/include_internal/lgfx_port/ops.def
 //
-// Canonical op list + protocol metadata.
+// Canonical operation list + protocol metadata.
+//
+// This file is the source of truth for:
+//
+// - numeric opcode order
+// - native operation enum values
+// - native handler declarations
+// - native dispatch metadata
+// - Elixir generated operation schema
+// - generated protocol reference tables
+//
 // Included multiple times with different X(...) definitions.
 // No include guards.
+//
+// Maintainer rule:
+//
+// - Add, remove, or reorder protocol operations here first.
+// - Do not hand-maintain duplicate opcode, arity, flag, target, state,
+//   capability, or batch metadata elsewhere.
+// - After changing this file, regenerate/check derived files.
 //
 // First 9 fields are protocol-facing and must remain stable in meaning.
 // Final 4 fields are internal execution metadata for the v2 batch path.
@@ -17,7 +34,6 @@
 X(ping, lgfx_handle_ping, ATOM_STR("\x04", "ping"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, 0, 0, 0, 1, 0)
 X(getCaps, lgfx_handle_getCaps, ATOM_STR("\x07", "getCaps"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, 0, 0, 0, 1, 0)
 X(getLastError, lgfx_handle_getLastError, ATOM_STR("\x0C", "getLastError"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, LGFX_CAP_LAST_ERROR, 0, 0, 1, 0)
-X(submitBatch, lgfx_handle_submitBatch, ATOM_STR("\x0B", "submitBatch"), 6, 6, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_BATCH, 0, 0, 1, 0)
 X(width, lgfx_handle_width, ATOM_STR("\x05", "width"), 5, 5, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 0, 0, 1, 0)
 X(height, lgfx_handle_height, ATOM_STR("\x06", "height"), 5, 5, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 0, 0, 1, 0)
 
@@ -89,8 +105,8 @@ X(clearClipRect, lgfx_handle_clearClipRect, ATOM_STR("\x0D", "clearClipRect"), 5
 X(createSprite, lgfx_handle_createSprite, ATOM_STR("\x0C", "createSprite"), 7, 8, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE, 0, 0, 1, 0)
 X(deleteSprite, lgfx_handle_deleteSprite, ATOM_STR("\x0C", "deleteSprite"), 5, 5, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE, 0, 0, 1, 0)
 X(createPalette, lgfx_handle_createPalette, ATOM_STR("\x0D", "createPalette"), 5, 5, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_PALETTE, 0, 0, 1, 0)
-X(setPaletteColor, lgfx_handle_setPaletteColor, ATOM_STR("\x0F", "setPaletteColor"), 7, 7, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_PALETTE, 0, 0, 1, 0)
-X(setPivot, lgfx_handle_setPivot, ATOM_STR("\x08", "setPivot"), 7, 7, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE, 0, 0, 1, 0)
+X(setPaletteColor, lgfx_handle_setPaletteColor, ATOM_STR("\x0F", "setPaletteColor"), 7, 7, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_PALETTE, 1, 0, 0, 0)
+X(setPivot, lgfx_handle_setPivot, ATOM_STR("\x08", "setPivot"), 7, 7, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE, 1, 0, 0, 0)
 
 // Header target is the source sprite; payload begins with destination target.
 X(pushSprite, lgfx_handle_pushSprite, ATOM_STR("\x0A", "pushSprite"), 8, 9, LGFX_F_TRANSPARENT_INDEX, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE, 1, 0, 0, 0)
@@ -106,3 +122,11 @@ X(getTouch, lgfx_handle_getTouch, ATOM_STR("\x08", "getTouch"), 5, 5, 0, LGFX_OP
 X(getTouchRaw, lgfx_handle_getTouchRaw, ATOM_STR("\x0B", "getTouchRaw"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_TOUCH, 0, 0, 1, 0)
 X(setTouchCalibrate, lgfx_handle_setTouchCalibrate, ATOM_STR("\x11", "setTouchCalibrate"), 13, 13, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_TOUCH, 0, 0, 1, 0)
 X(calibrateTouch, lgfx_handle_calibrateTouch, ATOM_STR("\x0E", "calibrateTouch"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_TOUCH, 0, 0, 1, 0)
+
+//
+// Binary hot-path ops
+//
+// Header target is the destination target; payload contains source sprite instances.
+X(pushRotateZoomList, lgfx_handle_pushRotateZoomList, ATOM_STR("\x12", "pushRotateZoomList"), 6, 6, LGFX_F_TRANSPARENT_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE, 1, 0, 0, 0)
+X(submitBinaryBatch, lgfx_handle_submitBinaryBatch, ATOM_STR("\x11", "submitBinaryBatch"), 6, 6, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_BATCH, 0, 0, 1, 0)
+X(getPresentationStripHeight, lgfx_handle_getPresentationStripHeight, ATOM_STR("\x1A", "getPresentationStripHeight"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_BATCH, 0, 0, 1, 0)

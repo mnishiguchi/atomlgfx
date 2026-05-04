@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// lgfx_port/request_validation.c
+// lgfx_port/request_validation.inc
 
 #include "context.h"
 #include "term.h"

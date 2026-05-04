@@ -20,6 +20,7 @@ void lgfx_atoms_init(GlobalContext *global, lgfx_atoms_t *atoms)
     atoms->error = globalcontext_make_atom(global, ATOM_STR("\x05", "error"));
 
     atoms->lgfx = globalcontext_make_atom(global, ATOM_STR("\x04", "lgfx"));
+    atoms->call = globalcontext_make_atom(global, ATOM_STR("\x04", "call"));
 
     atoms->pong = globalcontext_make_atom(global, ATOM_STR("\x04", "pong"));
     atoms->true_ = globalcontext_make_atom(global, ATOM_STR("\x04", "true"));
@@ -30,6 +31,7 @@ void lgfx_atoms_init(GlobalContext *global, lgfx_atoms_t *atoms)
     atoms->bad_flags = globalcontext_make_atom(global, ATOM_STR("\x09", "bad_flags"));
     atoms->bad_args = globalcontext_make_atom(global, ATOM_STR("\x08", "bad_args"));
     atoms->bad_target = globalcontext_make_atom(global, ATOM_STR("\x0A", "bad_target"));
+    atoms->batch_failed = globalcontext_make_atom(global, ATOM_STR("\x0C", "batch_failed"));
     atoms->not_writing = globalcontext_make_atom(global, ATOM_STR("\x0B", "not_writing"));
     atoms->no_memory = globalcontext_make_atom(global, ATOM_STR("\x09", "no_memory"));
     atoms->internal = globalcontext_make_atom(global, ATOM_STR("\x08", "internal"));
@@ -39,19 +41,4 @@ void lgfx_atoms_init(GlobalContext *global, lgfx_atoms_t *atoms)
     atoms->caps = globalcontext_make_atom(global, ATOM_STR("\x04", "caps"));
     atoms->last_error = globalcontext_make_atom(global, ATOM_STR("\x0A", "last_error"));
     atoms->none = globalcontext_make_atom(global, ATOM_STR("\x04", "none"));
-
-    atoms->batch = globalcontext_make_atom(global, ATOM_STR("\x05", "batch"));
-    atoms->batch_status = globalcontext_make_atom(global, ATOM_STR("\x0C", "batch_status"));
-    atoms->batch_failure = globalcontext_make_atom(global, ATOM_STR("\x0D", "batch_failure"));
-
-    atoms->idle = globalcontext_make_atom(global, ATOM_STR("\x04", "idle"));
-    atoms->queued = globalcontext_make_atom(global, ATOM_STR("\x06", "queued"));
-    atoms->running = globalcontext_make_atom(global, ATOM_STR("\x07", "running"));
-    atoms->completed = globalcontext_make_atom(global, ATOM_STR("\x09", "completed"));
-    atoms->failed = globalcontext_make_atom(global, ATOM_STR("\x06", "failed"));
-
-    // Generated from lgfx_port/include_internal/lgfx_port/ops.def.
-#define X(op, handler, atom_str, ...) atoms->op = globalcontext_make_atom(global, (atom_str));
-#include "lgfx_port/ops.def"
-#undef X
 }

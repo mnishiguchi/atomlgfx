@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// lgfx_port/handlers/images.c
+// lgfx_port/include_internal/lgfx_port/handlers/images.inc
 #include <stddef.h>
 #include <stdint.h>
 

@@ -43,7 +43,7 @@ extern "C" {
 // Request decode surface
 // -----------------------------------------------------------------------------
 
-// Decode {lgfx, ProtoVer, Op, Target, Flags, ...}.
+// Decode {lgfx, ProtoVer, call, OpCode, Target, Flags, Args}.
 // Structural decode only; policy validation happens in lgfx_port.c.
 bool lgfx_term_decode_request(
     Context *ctx,

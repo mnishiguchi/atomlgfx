@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// lgfx_port/handlers/touch.c
+// lgfx_port/include_internal/lgfx_port/handlers/touch.inc
 #include <stdbool.h>
 #include <stdint.h>
 

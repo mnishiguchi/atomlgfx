@@ -44,7 +44,7 @@ defmodule AtomLGFX.MixProject do
         "lib",
         "mix.exs",
         "README.md",
-        "LICENSE",
+        "LICENSES",
         "docs"
       ],
       links: %{

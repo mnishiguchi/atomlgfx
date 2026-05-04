@@ -598,6 +598,32 @@ esp_err_t lgfx_device_sprite_delete(uint8_t handle);
 esp_err_t lgfx_device_sprite_create_palette(uint8_t handle);
 esp_err_t lgfx_device_sprite_set_palette_color(uint8_t handle, uint8_t palette_index, uint32_t rgb888);
 
+#define LGFX_DEVICE_SPRITE_PUSH_RECORD_SIZE ((size_t) 6u)
+
+/*
+ * Compact sprite push record:
+ *   src_target:u8, reserved:u8=0, x:i16, y:i16
+ */
+
+#define LGFX_DEVICE_SPRITE_REGION_RECORD_SIZE ((size_t) 14u)
+
+/*
+ * Compact sprite-region push record:
+ *   src_target:u8, reserved:u8=0,
+ *   src_x:u16, src_y:u16, src_w:u16, src_h:u16,
+ *   dst_x:i16, dst_y:i16
+ *
+ * Initial region-list support is intended for 16-bit RGB565 source sprites.
+ */
+
+#define LGFX_DEVICE_SPRITE_TRANSFORM_RECORD_SIZE ((size_t) 12u)
+
+/*
+ * Compact sprite transform record:
+ *   src_target:u8, reserved:u8=0, x:i16, y:i16,
+ *   angle_cdeg:u16, zoom_x1024:u16, zoom_y1024:u16
+ */
+
 /*
  * Whole-sprite push to LCD or another sprite.
  *
@@ -644,6 +670,31 @@ esp_err_t lgfx_device_sprite_push_rotate_zoom(
     bool has_transparent,
     bool transparent_is_index,
     uint32_t transparent_value);
+
+/*
+ * Bulk rotate/zoom sprite push to LCD or another sprite.
+ *
+ * This is the compact data-plane variant of lgfx_device_sprite_push_rotate_zoom().
+ * It keeps fixed-point instance data until the final LovyanGFX call boundary and
+ * executes the whole list under one LCD lock.
+ *
+ * y_offset is subtracted from each instance y coordinate. This lets strip
+ * renderers pass world coordinates in the binary payload while drawing into a
+ * target-local strip sprite.
+ *
+ * approx_cull skips transform calls whose conservative transformed bounding box
+ * cannot touch the destination target. It is intended for strip-buffer animation
+ * paths where off-strip transform calls are pure overhead.
+ */
+esp_err_t lgfx_device_sprite_push_rotate_zoom_list(
+    uint8_t dst_target,
+    const uint8_t *instance_records,
+    size_t instance_count,
+    int16_t y_offset,
+    bool has_transparent,
+    bool transparent_is_index,
+    uint32_t transparent_value,
+    bool approx_cull);
 
 #ifdef __cplusplus
 }

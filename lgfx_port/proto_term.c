@@ -6,6 +6,7 @@
 
 // lgfx_port/proto_term.c
 
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -32,6 +33,33 @@ static inline bool return_decode_error(term *out_error_reply, term reply)
 
     *out_error_reply = reply;
     return false;
+}
+
+static bool lgfx_decode_request_args(term list, int *out_count, term *out_args)
+{
+    if (out_count == NULL || out_args == NULL) {
+        return false;
+    }
+
+    int count = 0;
+    term cursor = list;
+
+    while (!term_is_nil(cursor)) {
+        if (!term_is_list(cursor)) {
+            return false;
+        }
+
+        if (count >= LGFX_REQ_MAX_INLINE_ARGS || count >= INT_MAX - 5) {
+            return false;
+        }
+
+        out_args[count] = term_get_list_head(cursor);
+        count++;
+        cursor = term_get_list_tail(cursor);
+    }
+
+    *out_count = count;
+    return true;
 }
 
 bool lgfx_term_decode_request(
@@ -64,19 +92,20 @@ bool lgfx_term_decode_request(
     }
 
     int arity = term_get_tuple_arity(request);
-    if (arity < 5) {
+    if (arity != 7) {
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
     }
 
-    // Tuple shape: {lgfx, ProtoVer, Op, Target, Flags, ...}
+    // Tuple shape: {lgfx, ProtoVer, call, OpCode, Target, Flags, Args}
     term tag = term_get_tuple_element(request, 0);
     if (tag != port->atoms.lgfx) {
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
     }
 
     // NOTE:
-    // Envelope validation (proto_ver match, arity bounds, allowed flags, target
-    // policy, init-state) is centralized in lgfx_port.c using ops.def metadata.
+    // Envelope validation (proto_ver match, arg-count bounds, allowed flags,
+    // target policy, init-state) is centralized in lgfx_port.c using ops.def
+    // metadata.
     //
     // Here we only perform minimal structural decode for the fixed request
     // header. Op-specific payload decode, including float-aligned numeric
@@ -88,29 +117,49 @@ bool lgfx_term_decode_request(
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
     }
 
-    term op = term_get_tuple_element(request, 2);
-    if (!term_is_atom(op)) {
+    term kind = term_get_tuple_element(request, 2);
+    if (kind != port->atoms.call) {
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
     }
 
-    term target_t = term_get_tuple_element(request, 3);
+    term opcode_t = term_get_tuple_element(request, 3);
+    uint32_t opcode = 0;
+    if (!lgfx_term_to_u32(opcode_t, &opcode)) {
+        return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_op));
+    }
+
+    lgfx_op_t op = LGFX_OP_COUNT;
+    if (!lgfx_op_try_from_opcode(opcode, &op)) {
+        return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_op));
+    }
+
+    term target_t = term_get_tuple_element(request, 4);
     uint32_t target = 0;
     if (!lgfx_term_to_u32(target_t, &target)) {
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_target));
     }
 
-    term flags_t = term_get_tuple_element(request, 4);
+    term flags_t = term_get_tuple_element(request, 5);
     uint32_t flags = 0;
     if (!lgfx_term_to_u32(flags_t, &flags)) {
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_flags));
     }
 
+    term args_list = term_get_tuple_element(request, 6);
+    int arg_count = 0;
+    if (!lgfx_decode_request_args(args_list, &arg_count, out->args)) {
+        return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_args));
+    }
+
     out->proto_ver = proto_ver;
+    out->opcode = opcode;
     out->op = op;
     out->target = target;
     out->flags = flags;
     out->request_tuple = request;
-    out->arity = arity;
+    out->args_list = args_list;
+    out->arity = 5 + arg_count;
+    out->arg_count = arg_count;
 
     return true;
 }
@@ -219,7 +268,7 @@ static inline void encode_oom_last_error(lgfx_port_t *port, const lgfx_request_t
 {
     lgfx_last_error_set(
         port,
-        req->op,
+        term_from_int32((int32_t) req->opcode),
         port->atoms.no_memory,
         req->flags,
         req->target,
@@ -242,9 +291,21 @@ term lgfx_reply_from_esp_err_req(Context *ctx, lgfx_port_t *port, const lgfx_req
 
     term reason = term_invalid_term();
     if (lgfx_is_error_reply(ctx, port, reply, &reason)) {
-        lgfx_last_error_set(port, req->op, reason, req->flags, req->target, (int32_t) err);
+        lgfx_last_error_set(
+            port,
+            term_from_int32((int32_t) req->opcode),
+            reason,
+            req->flags,
+            req->target,
+            (int32_t) err);
     } else {
-        lgfx_last_error_set(port, req->op, port->atoms.internal, req->flags, req->target, (int32_t) err);
+        lgfx_last_error_set(
+            port,
+            term_from_int32((int32_t) req->opcode),
+            port->atoms.internal,
+            req->flags,
+            req->target,
+            (int32_t) err);
     }
 
     return reply;
@@ -264,7 +325,13 @@ term lgfx_reply_ok_req(Context *ctx, lgfx_port_t *port, const lgfx_request_t *re
 
 term lgfx_reply_error_req(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req, term reason, int32_t esp_err)
 {
-    lgfx_last_error_set(port, req->op, reason, req->flags, req->target, esp_err);
+    lgfx_last_error_set(
+        port,
+        term_from_int32((int32_t) req->opcode),
+        reason,
+        req->flags,
+        req->target,
+        esp_err);
 
     term reply = lgfx_reply_error(ctx, port, reason);
 
@@ -284,7 +351,13 @@ term lgfx_reply_error_detail_req(
     term detail,
     int32_t esp_err)
 {
-    lgfx_last_error_set(port, req->op, reason, req->flags, req->target, esp_err);
+    lgfx_last_error_set(
+        port,
+        term_from_int32((int32_t) req->opcode),
+        reason,
+        req->flags,
+        req->target,
+        esp_err);
 
     term reply = lgfx_reply_error_detail(ctx, port, reason, detail);
 
@@ -295,3 +368,5 @@ term lgfx_reply_error_detail_req(
 
     return reply;
 }
+
+#include "lgfx_port/request_validation.inc"

@@ -1,6 +1,8 @@
-// SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-//
-// SPDX-License-Identifier: Apache-2.0
+/*
+ * SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 // lgfx_device/state_runtime.cpp
 
@@ -19,6 +21,7 @@
 #endif
 
 #include "esp_log.h"
+#include "sdkconfig.h"
 
 #include "lgfx_device/state_runtime.hpp"
 
@@ -840,7 +843,7 @@ void log_runtime_config(const LgfxRuntimeConfig &config)
 
     ESP_LOGI(
         TAG,
-        "effective config panel=%s size=%ux%u offset=(%d,%d) rot=%u readable=%u invert=%u rgb_order=%u dlen_16bit=%u bus_shared=%u",
+        "effective config panel=%s size=%ux%u offset=(%d,%d) rot=%u readable=%u invert=%u rgb_order=%u dlen_16bit=%u bus_shared=%u psram_sprites=%u",
         config.lcd_panel.driver_name,
         (unsigned) config.lcd_panel.width,
         (unsigned) config.lcd_panel.height,
@@ -851,7 +854,13 @@ void log_runtime_config(const LgfxRuntimeConfig &config)
         (unsigned) config.lcd_panel.invert,
         (unsigned) config.lcd_panel.rgb_order,
         (unsigned) config.lcd_panel.dlen_16bit,
-        (unsigned) config.lcd_panel.bus_shared);
+        (unsigned) config.lcd_panel.bus_shared,
+#if (LGFX_PORT_ENABLE_PSRAM_SPRITES == 1) && defined(CONFIG_SPIRAM)
+        1u
+#else
+        0u
+#endif
+    );
 
     ESP_LOGI(
         TAG,

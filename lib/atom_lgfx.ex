@@ -40,8 +40,6 @@ defmodule AtomLGFX do
   - Only one port can own the live native device at a time.
   - `close/1` performs full device teardown and clears this module's runtime caches.
   - `close/1` does not close the port handle and does not forget that port's remembered open-time config.
-  - `start_write/1` and `end_write/1` map directly to LovyanGFX `startWrite()` / `endWrite()`.
-  - Write sessions are nestable and should be paired by the caller.
   - `close/1` force-unwinds any still-open native write nesting for the owning port during teardown.
 
   Data / reply notes:
@@ -73,16 +71,18 @@ defmodule AtomLGFX do
     - Use `set_text_font_preset/3` to choose the glyph source.
     - Use `set_text_size/3` or `set_text_size_xy/4` to control rendered size.
   - `push_rotate_zoom_to/7`, `/8`, and `/9` use direct degree and zoom values.
+  - `push_rotate_zoom_list_to/4` is the compact fixed-point hot path for many transformed sprite instances.
+  - `get_presentation_strip_height/1` returns the negotiated native strip-buffer height for render batches.
   - `push_image_rgb565/8` expects ordinary RGB565 pixel data encoded as
     little-endian 16-bit words.
   - `set_swap_bytes/3` controls target-specific byte swapping for raw image upload.
   """
 
-  alias AtomLGFX.Batch
   alias AtomLGFX.Cache
   alias AtomLGFX.Clip
   alias AtomLGFX.Device
   alias AtomLGFX.Errors
+  alias AtomLGFX.OpSchema
   alias AtomLGFX.Images
   alias AtomLGFX.OpenConfig
   alias AtomLGFX.Primitives
@@ -126,29 +126,47 @@ defmodule AtomLGFX do
   def normalize_open_config(options), do: OpenConfig.normalize_open_config(options)
 
   @doc """
-  Sends a raw protocol request tuple to the driver.
+  Sends a low-level v2 call request to the driver.
 
   This is mainly useful for smoke tests and protocol-level experiments.
   """
   def raw_call(port, op, target, flags, args, timeout \\ Protocol.short_timeout())
-      when is_atom(op) and
-             is_integer(target) and
+      when is_integer(target) and
              is_integer(flags) and flags >= 0 and
              is_list(args) do
     Protocol.raw_call(port, op, target, flags, args, timeout)
   end
 
   @doc """
-  Returns a new explicit batch container.
+  Calls a curated LovyanGFX operation through the v2 numeric opcode protocol.
+
+  Operation names are `snake_case` atoms such as `:fill_rect` or `:set_rotation`.
+  Unsafe raw operations such as `:draw_pixel` are intentionally rejected here.
   """
-  def batch, do: Batch.new()
+  def call(port, op_name, args \\ [], opts \\ [])
+
+  def call(port, op_name, args, opts) when is_atom(op_name) and is_list(args) and is_list(opts) do
+    with {:ok, canonical_name} <- OpSchema.elixir_name(op_name),
+         :ok <- require_public_op(canonical_name) do
+      target = Keyword.get(opts, :target, 0)
+      flags = Keyword.get(opts, :flags, 0)
+      timeout = Keyword.get(opts, :timeout, Protocol.long_timeout())
+
+      Protocol.call(port, canonical_name, target, flags, args, timeout)
+    else
+      {:error, _reason} = error -> error
+    end
+  end
 
   @doc """
-  Enqueues an explicit batch of already-built commands.
-  """
-  def submit_batch(port, %Batch{} = batch), do: Batch.submit(port, batch)
+  Submits a multi-target binary batch frame script.
 
-  def submit_batch(port, commands) when is_list(commands), do: Batch.submit(port, commands)
+  The binary should be built with `AtomLGFX.BinaryBatch.render/2` helpers or
+  `AtomLGFX.BinaryBatch.batch/1`.
+  """
+  def submit_binary_batch(port, command_binary) when is_binary(command_binary) do
+    Protocol.submit_binary_batch(port, command_binary, Protocol.long_timeout())
+  end
 
   @doc """
   Verifies basic protocol reachability.
@@ -159,6 +177,14 @@ defmodule AtomLGFX do
   Returns the driver's advertised protocol capabilities.
   """
   def get_caps(port), do: Protocol.get_caps(port)
+
+  @doc """
+  Returns the negotiated native presentation strip height.
+
+  The native driver may reduce the requested strip height during allocation.
+  Animation examples should use this value instead of assuming the seed height.
+  """
+  def get_presentation_strip_height(port), do: Device.get_presentation_strip_height(port)
 
   @doc """
   Returns the remembered open-time configuration for this port.
@@ -210,6 +236,11 @@ defmodule AtomLGFX do
   def supports_palette?(port), do: Protocol.supports_palette?(port)
 
   @doc """
+  Returns whether multi-target binary-batch frame scripts are advertised by the driver.
+  """
+  def supports_batch?(port), do: Protocol.supports_batch?(port)
+
+  @doc """
   Returns the maximum accepted binary payload size for this driver instance.
   """
   def max_binary_bytes(port), do: Protocol.max_binary_bytes(port)
@@ -218,22 +249,6 @@ defmodule AtomLGFX do
   Initializes the native device using this port's remembered open-time configuration.
   """
   def init(port), do: Device.init(port)
-
-  @doc """
-  Starts a LovyanGFX write session on the LCD device.
-
-  This maps directly to native `startWrite()` and participates in LovyanGFX's
-  nested write counter. Calls should normally be paired with `end_write/1`.
-  """
-  def start_write(port), do: Device.start_write(port)
-
-  @doc """
-  Ends a LovyanGFX write session on the LCD device.
-
-  This maps directly to native `endWrite()` and decrements LovyanGFX's nested
-  write counter.
-  """
-  def end_write(port), do: Device.end_write(port)
 
   @doc """
   Flushes or presents the LCD display according to the native driver behavior.
@@ -308,12 +323,6 @@ defmodule AtomLGFX do
   Indexed color mode is valid only on palette-backed sprite targets.
   """
   def clear(port, color, target \\ 0), do: Primitives.clear(port, color, target)
-
-  @doc """
-  Draws a single pixel using the given scalar color.
-  """
-  def draw_pixel(port, x, y, color, target \\ 0),
-    do: Primitives.draw_pixel(port, x, y, color, target)
 
   @doc """
   Draws a fast vertical line using the given scalar color.
@@ -534,6 +543,25 @@ defmodule AtomLGFX do
       zoom_y,
       transparent
     )
+  end
+
+  @doc """
+  Pushes many transformed source sprites to one destination target.
+
+  `instances` is a list of fixed-point tuples:
+
+      {src_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024}
+
+  `angle_cdeg` is centidegrees in `0..35999`. `zoom_x1024` and `zoom_y1024`
+  are positive `x1024` fixed-point scales, where `1024` means `1.0x`.
+
+  Options:
+
+  - `:transparent` accepts an RGB565 integer or `{:index, n}`
+  - `:y_offset` is subtracted from each instance y coordinate natively
+  """
+  def push_rotate_zoom_list_to(port, dst_target, instances, opts \\ []) do
+    Sprites.push_rotate_zoom_list_to(port, dst_target, instances, opts)
   end
 
   @doc """
@@ -787,4 +815,12 @@ defmodule AtomLGFX do
   Formats a wrapper or protocol error into a readable string.
   """
   def format_error(reason), do: Errors.format_error(reason)
+
+  defp require_public_op(op_name) do
+    if OpSchema.public?(op_name) do
+      :ok
+    else
+      {:error, {:unsafe_lgfx_op, op_name}}
+    end
+  end
 end

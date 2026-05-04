@@ -16,7 +16,7 @@ defmodule AtomLGFX.Clip do
              target_any(target) do
     Protocol.call_ok(
       port,
-      :setClipRect,
+      :set_clip_rect,
       target,
       0,
       [x, y, width, height],
@@ -26,6 +26,6 @@ defmodule AtomLGFX.Clip do
 
   def clear_clip_rect(port, target \\ 0)
       when target_any(target) do
-    Protocol.call_ok(port, :clearClipRect, target, 0, [], Protocol.long_timeout())
+    Protocol.call_ok(port, :clear_clip_rect, target, 0, [], Protocol.long_timeout())
   end
 end

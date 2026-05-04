@@ -8,26 +8,26 @@ defmodule AtomLGFX.Touch do
   alias AtomLGFX.Protocol
 
   def get_touch(port) do
-    with {:ok, payload} <- Protocol.call(port, :getTouch, 0, 0, [], Protocol.short_timeout()) do
-      decode_touch_payload(:getTouch, payload)
+    with {:ok, payload} <- Protocol.call(port, :get_touch, 0, 0, [], Protocol.short_timeout()) do
+      decode_touch_payload(:get_touch, payload)
     end
   end
 
   def get_touch_raw(port) do
-    with {:ok, payload} <- Protocol.call(port, :getTouchRaw, 0, 0, [], Protocol.short_timeout()) do
-      decode_touch_payload(:getTouchRaw, payload)
+    with {:ok, payload} <- Protocol.call(port, :get_touch_raw, 0, 0, [], Protocol.short_timeout()) do
+      decode_touch_payload(:get_touch_raw, payload)
     end
   end
 
   def set_touch_calibrate(port, params8) do
     with {:ok, params_list} <- normalize_u16_8(params8) do
-      Protocol.call_ok(port, :setTouchCalibrate, 0, 0, params_list, Protocol.long_timeout())
+      Protocol.call_ok(port, :set_touch_calibrate, 0, 0, params_list, Protocol.long_timeout())
     end
   end
 
   def calibrate_touch(port) do
     with {:ok, payload} <-
-           Protocol.call(port, :calibrateTouch, 0, 0, [], Protocol.touch_calibrate_timeout()) do
+           Protocol.call(port, :calibrate_touch, 0, 0, [], Protocol.touch_calibrate_timeout()) do
       decode_calibrate_payload(payload)
     end
   end

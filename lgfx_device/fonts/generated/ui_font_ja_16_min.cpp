@@ -1,6 +1,10 @@
-// SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-//
-// SPDX-License-Identifier: Apache-2.0
+/*
+ * SPDX-FileCopyrightText: 2020 lovyan03 (https://github.com/lovyan03)
+ * SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+ * SPDX-FileCopyrightText: lgfxFontSubsetGenerator contributors (https://github.com/yamamaya/lgfxFontSubsetGenerator)
+ *
+ * SPDX-License-Identifier: IPA
+ */
 
 // このファイルは「日本語フォントサブセットジェネレーター for LovyanGFX」によって生成されました。
 // https://github.com/yamamaya/lgfxFontSubsetGenerator

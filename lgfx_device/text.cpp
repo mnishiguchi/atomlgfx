@@ -1,6 +1,8 @@
-// SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-//
-// SPDX-License-Identifier: Apache-2.0
+/*
+ * SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 // lgfx_device/text.cpp
 
@@ -282,6 +284,50 @@ esp_err_t lgfx_dev::set_cursor_locked(uint8_t target, int16_t x, int16_t y)
     return lgfx_dev::with_render_target_locked(target, [&](lgfx::LGFXBase *gfx) {
         gfx->setCursor(x, y);
     });
+}
+
+esp_err_t lgfx_dev::draw_string_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    const uint8_t *text,
+    size_t text_len)
+{
+    return with_nul_terminated_text(
+        text,
+        text_len,
+        false,
+        [&](const char *buf) {
+            return lgfx_dev::with_render_target_locked(target, [&](lgfx::LGFXBase *gfx) { gfx->drawString(buf, x, y); });
+        });
+}
+
+esp_err_t lgfx_dev::print_locked(
+    uint8_t target,
+    const uint8_t *text,
+    size_t text_len)
+{
+    return with_nul_terminated_text(
+        text,
+        text_len,
+        true,
+        [&](const char *buf) {
+            return lgfx_dev::with_render_target_locked(target, [&](lgfx::LGFXBase *gfx) { gfx->print(buf); });
+        });
+}
+
+esp_err_t lgfx_dev::println_locked(
+    uint8_t target,
+    const uint8_t *text,
+    size_t text_len)
+{
+    return with_nul_terminated_text(
+        text,
+        text_len,
+        true,
+        [&](const char *buf) {
+            return lgfx_dev::with_render_target_locked(target, [&](lgfx::LGFXBase *gfx) { gfx->println(buf); });
+        });
 }
 
 // -----------------------------------------------------------------------------

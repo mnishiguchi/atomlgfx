@@ -7,13 +7,44 @@
 # -----------------------------------------------------------------------------
 # Paths
 # -----------------------------------------------------------------------------
-set(LGFX_ROOT     "${CMAKE_CURRENT_LIST_DIR}/third_party/LovyanGFX")
+set(LGFX_ROOT
+    "${CMAKE_CURRENT_LIST_DIR}/third_party/LovyanGFX"
+    CACHE PATH
+    "LovyanGFX source root"
+)
+
 set(LGFX_SRC_ROOT "${LGFX_ROOT}/src")
 
-set(LGFX_PORT_CONFIG_TEMPLATE "${CMAKE_CURRENT_LIST_DIR}/lgfx_port/cmake/lgfx_port_config.h.in")
+set(LGFX_PORT_CONFIG_TEMPLATE
+    "${CMAKE_CURRENT_LIST_DIR}/lgfx_port/cmake/lgfx_port_config.h.in"
+)
 
-set(LGFX_PORT_ENABLE_JP_FONTS ON CACHE BOOL "Enable Japanese font data for the Japanese-capable text preset")
+set(LGFX_PORT_ENABLE_JP_FONTS
+    ON
+    CACHE BOOL
+    "Enable Japanese font data for the Japanese-capable text preset"
+)
 set(LGFX_PORT_ENABLE_TOUCH ON CACHE BOOL "Enable touch driver support")
+set(LGFX_PORT_ENABLE_PSRAM_SPRITES
+    ON
+    CACHE BOOL
+    "Prefer PSRAM for LovyanGFX sprite buffers when ESP-IDF PSRAM is enabled"
+)
+set(LGFX_PORT_ENABLE_RENDER_BATCH_TRACE
+    OFF
+    CACHE BOOL
+    "Log render-batch execution counters for animation performance debugging"
+)
+set(LGFX_PORT_RENDER_BATCH_PREVALIDATE
+    OFF
+    CACHE BOOL
+    "Prevalidate render batches before starting the native write session"
+)
+set(LGFX_PORT_FORCE_LEGACY_I2C
+    ON
+    CACHE BOOL
+    "Force LovyanGFX to use the legacy ESP-IDF I2C driver for AtomVM compatibility"
+)
 
 # -----------------------------------------------------------------------------
 # LovyanGFX config knobs
@@ -45,35 +76,31 @@ set(LGFX_PORT_ENABLE_TOUCH ON CACHE BOOL "Enable touch driver support")
 #     Common starting point for 240x240 SPI boards.
 #
 set(LGFX_PORT_SUPPORTED_PANEL_DRIVERS
-  ILI9488
-  ILI9341
-  ILI9341_2
-  ST7789
-  ILI9342C
+    ILI9488
+    ILI9341
+    ILI9341_2
+    ST7789
+    ILI9342C
 )
 
 set(LGFX_PORT_PANEL_DRIVER
-  "ILI9488"
-  CACHE STRING
-  "Build-default LCD panel driver preset (ILI9488, ILI9341, ILI9341_2, ST7789, or ILI9342C)"
+    "ILI9488"
+    CACHE STRING
+    "Build-default LCD panel driver preset (ILI9488, ILI9341, ILI9341_2, ST7789, or ILI9342C)"
 )
 
 set_property(
-  CACHE LGFX_PORT_PANEL_DRIVER
-  PROPERTY STRINGS ${LGFX_PORT_SUPPORTED_PANEL_DRIVERS}
+    CACHE LGFX_PORT_PANEL_DRIVER
+    PROPERTY STRINGS ${LGFX_PORT_SUPPORTED_PANEL_DRIVERS}
 )
 
 # Baseline panel profiles:
 #   width ; height ; lcd_offset_rotation ; touch_offset_rotation ;
 #   lcd_dummy_read_pixel ; lcd_dummy_read_bits ;
 #   lcd_readable ; lcd_invert ; lcd_rgb_order ; lcd_dlen_16bit
-set(LGFX_PORT_PANEL_BASELINE_ILI9488
-  "320;480;0;0;8;1;OFF;OFF;OFF;OFF"
-)
+set(LGFX_PORT_PANEL_BASELINE_ILI9488 "320;480;0;0;8;1;OFF;OFF;OFF;OFF")
 
-set(LGFX_PORT_PANEL_BASELINE_ILI9341
-  "240;320;0;0;8;1;OFF;OFF;OFF;OFF"
-)
+set(LGFX_PORT_PANEL_BASELINE_ILI9341 "240;320;0;0;8;1;OFF;OFF;OFF;OFF")
 
 # Baseline for the mirrored 240x320 ILI9341_2-family boards we are testing.
 #
@@ -83,17 +110,11 @@ set(LGFX_PORT_PANEL_BASELINE_ILI9341
 # - colors are inverted unless invert=true
 # - native channel order appears correct with rgb_order=false
 # - keep readable off unless readback is known-good on this wiring
-set(LGFX_PORT_PANEL_BASELINE_ILI9341_2
-  "240;320;4;4;8;1;OFF;ON;OFF;OFF"
-)
+set(LGFX_PORT_PANEL_BASELINE_ILI9341_2 "240;320;4;4;8;1;OFF;ON;OFF;OFF")
 
-set(LGFX_PORT_PANEL_BASELINE_ST7789
-  "240;240;0;0;16;1;OFF;OFF;OFF;OFF"
-)
+set(LGFX_PORT_PANEL_BASELINE_ST7789 "240;240;0;0;16;1;OFF;OFF;OFF;OFF")
 
-set(LGFX_PORT_PANEL_BASELINE_ILI9342C
-  "320;240;0;0;8;1;OFF;OFF;OFF;OFF"
-)
+set(LGFX_PORT_PANEL_BASELINE_ILI9342C "320;240;0;0;8;1;OFF;OFF;OFF;OFF")
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -110,217 +131,244 @@ set(LGFX_PORT_PANEL_BASELINE_ILI9342C
 # - explicit user overrides:
 #     preserved
 #
-function(lgfx_port_apply_tracked_default cache_name cache_type docstring default_value)
-  set(_auto_key "_LGFX_PORT_AUTO_${cache_name}")
+function(
+    lgfx_port_apply_tracked_default
+    cache_name
+    cache_type
+    docstring
+    default_value
+)
+    set(_auto_key "_LGFX_PORT_AUTO_${cache_name}")
 
-  if(NOT DEFINED ${cache_name})
-    set(${cache_name} "${default_value}" CACHE ${cache_type} "${docstring}")
-    set(${_auto_key} "${default_value}" CACHE INTERNAL "Last auto-applied default for ${cache_name}" FORCE)
-    return()
-  endif()
+    if(NOT DEFINED ${cache_name})
+        set(${cache_name} "${default_value}" CACHE ${cache_type} "${docstring}")
+        set(${_auto_key}
+            "${default_value}"
+            CACHE INTERNAL
+            "Last auto-applied default for ${cache_name}"
+            FORCE
+        )
+        return()
+    endif()
 
-  if(DEFINED ${_auto_key} AND "${${cache_name}}" STREQUAL "${${_auto_key}}")
-    set(${cache_name} "${default_value}" CACHE ${cache_type} "${docstring}" FORCE)
-  endif()
+    if(DEFINED ${_auto_key} AND "${${cache_name}}" STREQUAL "${${_auto_key}}")
+        set(${cache_name}
+            "${default_value}"
+            CACHE ${cache_type}
+            "${docstring}"
+            FORCE
+        )
+    endif()
 
-  set(${_auto_key} "${default_value}" CACHE INTERNAL "Last auto-applied default for ${cache_name}" FORCE)
+    set(${_auto_key}
+        "${default_value}"
+        CACHE INTERNAL
+        "Last auto-applied default for ${cache_name}"
+        FORCE
+    )
 endfunction()
 
 # Apply the full build-default panel baseline set in one place.
 function(
-  lgfx_port_apply_panel_baseline
-  panel_width
-  panel_height
-  lcd_offset_rotation
-  touch_offset_rotation
-  lcd_dummy_read_pixel
-  lcd_dummy_read_bits
-  lcd_readable
-  lcd_invert
-  lcd_rgb_order
-  lcd_dlen_16bit
+    lgfx_port_apply_panel_baseline
+    panel_width
+    panel_height
+    lcd_offset_rotation
+    touch_offset_rotation
+    lcd_dummy_read_pixel
+    lcd_dummy_read_bits
+    lcd_readable
+    lcd_invert
+    lcd_rgb_order
+    lcd_dlen_16bit
 )
-  lgfx_port_apply_tracked_default(
-    LGFX_PORT_PANEL_WIDTH
-    STRING
-    "Panel width (pixels)"
-    "${panel_width}"
-  )
+    lgfx_port_apply_tracked_default(
+        LGFX_PORT_PANEL_WIDTH
+        STRING
+        "Panel width (pixels)"
+        "${panel_width}"
+    )
 
-  lgfx_port_apply_tracked_default(
-    LGFX_PORT_PANEL_HEIGHT
-    STRING
-    "Panel height (pixels)"
-    "${panel_height}"
-  )
+    lgfx_port_apply_tracked_default(
+        LGFX_PORT_PANEL_HEIGHT
+        STRING
+        "Panel height (pixels)"
+        "${panel_height}"
+    )
 
-  lgfx_port_apply_tracked_default(
-    LGFX_PORT_LCD_OFFSET_ROTATION
-    STRING
-    "LCD panel offset_rotation (0..7)"
-    "${lcd_offset_rotation}"
-  )
+    lgfx_port_apply_tracked_default(
+        LGFX_PORT_LCD_OFFSET_ROTATION
+        STRING
+        "LCD panel offset_rotation (0..7)"
+        "${lcd_offset_rotation}"
+    )
 
-  lgfx_port_apply_tracked_default(
-    LGFX_PORT_TOUCH_OFFSET_ROTATION
-    STRING
-    "Touch offset_rotation (0..7); panel-preset baseline, overridable independently"
-    "${touch_offset_rotation}"
-  )
+    lgfx_port_apply_tracked_default(
+        LGFX_PORT_TOUCH_OFFSET_ROTATION
+        STRING
+        "Touch offset_rotation (0..7); panel-preset baseline, overridable independently"
+        "${touch_offset_rotation}"
+    )
 
-  lgfx_port_apply_tracked_default(
-    LGFX_PORT_LCD_DUMMY_READ_PIXEL
-    STRING
-    "LCD dummy_read_pixel"
-    "${lcd_dummy_read_pixel}"
-  )
+    lgfx_port_apply_tracked_default(
+        LGFX_PORT_LCD_DUMMY_READ_PIXEL
+        STRING
+        "LCD dummy_read_pixel"
+        "${lcd_dummy_read_pixel}"
+    )
 
-  lgfx_port_apply_tracked_default(
-    LGFX_PORT_LCD_DUMMY_READ_BITS
-    STRING
-    "LCD dummy_read_bits"
-    "${lcd_dummy_read_bits}"
-  )
+    lgfx_port_apply_tracked_default(
+        LGFX_PORT_LCD_DUMMY_READ_BITS
+        STRING
+        "LCD dummy_read_bits"
+        "${lcd_dummy_read_bits}"
+    )
 
-  lgfx_port_apply_tracked_default(
-    LGFX_PORT_LCD_READABLE
-    BOOL
-    "LCD readable"
-    "${lcd_readable}"
-  )
+    lgfx_port_apply_tracked_default(
+        LGFX_PORT_LCD_READABLE
+        BOOL
+        "LCD readable"
+        "${lcd_readable}"
+    )
 
-  lgfx_port_apply_tracked_default(
-    LGFX_PORT_LCD_INVERT
-    BOOL
-    "LCD invert colors"
-    "${lcd_invert}"
-  )
+    lgfx_port_apply_tracked_default(
+        LGFX_PORT_LCD_INVERT
+        BOOL
+        "LCD invert colors"
+        "${lcd_invert}"
+    )
 
-  lgfx_port_apply_tracked_default(
-    LGFX_PORT_LCD_RGB_ORDER
-    BOOL
-    "LCD rgb_order swap"
-    "${lcd_rgb_order}"
-  )
+    lgfx_port_apply_tracked_default(
+        LGFX_PORT_LCD_RGB_ORDER
+        BOOL
+        "LCD rgb_order swap"
+        "${lcd_rgb_order}"
+    )
 
-  lgfx_port_apply_tracked_default(
-    LGFX_PORT_LCD_DLEN_16BIT
-    BOOL
-    "LCD dlen_16bit"
-    "${lcd_dlen_16bit}"
-  )
+    lgfx_port_apply_tracked_default(
+        LGFX_PORT_LCD_DLEN_16BIT
+        BOOL
+        "LCD dlen_16bit"
+        "${lcd_dlen_16bit}"
+    )
 endfunction()
 
 # Require a variable value to be one of the provided allowed strings.
 function(lgfx_port_require_one_of var_name)
-  list(FIND ARGN "${${var_name}}" _index)
-  if(_index EQUAL -1)
-    string(JOIN ", " _allowed ${ARGN})
-    message(FATAL_ERROR
-      "${var_name} must be one of: ${_allowed} (got: \"${${var_name}}\")"
-    )
-  endif()
+    list(FIND ARGN "${${var_name}}" _index)
+    if(_index EQUAL -1)
+        string(JOIN ", " _allowed ${ARGN})
+        message(
+            FATAL_ERROR
+            "${var_name} must be one of: ${_allowed} (got: \"${${var_name}}\")"
+        )
+    endif()
 endfunction()
 
 # Apply the selected panel-driver baseline from the panel baseline table above.
 function(lgfx_port_apply_selected_panel_baseline selected_driver)
-  set(_baseline_key "LGFX_PORT_PANEL_BASELINE_${selected_driver}")
+    set(_baseline_key "LGFX_PORT_PANEL_BASELINE_${selected_driver}")
 
-  if(NOT DEFINED ${_baseline_key})
-    string(JOIN ", " _drivers ${LGFX_PORT_SUPPORTED_PANEL_DRIVERS})
-    message(FATAL_ERROR
-      "LGFX_PORT_PANEL_DRIVER must be one of: ${_drivers} (got: \"${selected_driver}\")"
-    )
-  endif()
+    if(NOT DEFINED ${_baseline_key})
+        string(JOIN ", " _drivers ${LGFX_PORT_SUPPORTED_PANEL_DRIVERS})
+        message(
+            FATAL_ERROR
+            "LGFX_PORT_PANEL_DRIVER must be one of: ${_drivers} (got: \"${selected_driver}\")"
+        )
+    endif()
 
-  lgfx_port_apply_panel_baseline(${${_baseline_key}})
+    lgfx_port_apply_panel_baseline(${${_baseline_key}})
 endfunction()
 
 # Convert one or more BOOL cache variables into paired *_INT values (0/1).
 function(lgfx_port_bool_to_int_many)
-  foreach(_name ${ARGN})
-    if(${_name})
-      set(${_name}_INT 1 PARENT_SCOPE)
-    else()
-      set(${_name}_INT 0 PARENT_SCOPE)
-    endif()
-  endforeach()
+    foreach(_name ${ARGN})
+        if(${_name})
+            set(${_name}_INT 1 PARENT_SCOPE)
+        else()
+            set(${_name}_INT 0 PARENT_SCOPE)
+        endif()
+    endforeach()
 endfunction()
 
 # Derive one-hot build-default panel driver selection ints for header substitution.
 function(lgfx_port_set_panel_driver_ints selected_driver)
-  foreach(_driver ${LGFX_PORT_SUPPORTED_PANEL_DRIVERS})
-    set(LGFX_PORT_PANEL_DRIVER_${_driver}_INT 0 PARENT_SCOPE)
-  endforeach()
+    foreach(_driver ${LGFX_PORT_SUPPORTED_PANEL_DRIVERS})
+        set(LGFX_PORT_PANEL_DRIVER_${_driver}_INT 0 PARENT_SCOPE)
+    endforeach()
 
-  set(LGFX_PORT_PANEL_DRIVER_${selected_driver}_INT 1 PARENT_SCOPE)
+    set(LGFX_PORT_PANEL_DRIVER_${selected_driver}_INT 1 PARENT_SCOPE)
 endfunction()
 
 # Validate numeric literal like 8u, 42, etc. and enforce <= 254.
 function(lgfx_port_validate_u8_literal var_name)
-  string(STRIP "${${var_name}}" _v)
+    string(STRIP "${${var_name}}" _v)
 
-  if(NOT _v MATCHES "^[0-9]+u?$")
-    message(FATAL_ERROR
-      "${var_name} must be a numeric literal like 8u (got: \"${${var_name}}\")\n"
-      "Hint: pass -D${var_name}=8u (or another value in 0..254)"
-    )
-  endif()
+    if(NOT _v MATCHES "^[0-9]+u?$")
+        message(
+            FATAL_ERROR
+            "${var_name} must be a numeric literal like 8u (got: \"${${var_name}}\")\n"
+            "Hint: pass -D${var_name}=8u (or another value in 0..254)"
+        )
+    endif()
 
-  string(REGEX REPLACE "u$" "" _num "${_v}")
-  if(_num GREATER 254)
-    message(FATAL_ERROR
-      "${var_name} must be <= 254 (got: \"${${var_name}}\")\n"
-      "Hint: pass -D${var_name}=254u (or smaller)"
-    )
-  endif()
+    string(REGEX REPLACE "u$" "" _num "${_v}")
+    if(_num GREATER 254)
+        message(
+            FATAL_ERROR
+            "${var_name} must be <= 254 (got: \"${${var_name}}\")\n"
+            "Hint: pass -D${var_name}=254u (or smaller)"
+        )
+    endif()
 endfunction()
 
 # Validate that a variable is a signed integer literal.
 function(lgfx_port_validate_int_literal var_name)
-  string(STRIP "${${var_name}}" _value)
+    string(STRIP "${${var_name}}" _value)
 
-  if(NOT _value MATCHES "^-?[0-9]+$")
-    message(FATAL_ERROR
-      "${var_name} must be an integer literal (got: \"${${var_name}}\")"
-    )
-  endif()
+    if(NOT _value MATCHES "^-?[0-9]+$")
+        message(
+            FATAL_ERROR
+            "${var_name} must be an integer literal (got: \"${${var_name}}\")"
+        )
+    endif()
 endfunction()
 
 # Validate that a variable is a signed integer literal within an inclusive range.
 function(lgfx_port_validate_int_range var_name min_value max_value)
-  lgfx_port_validate_int_literal(${var_name})
+    lgfx_port_validate_int_literal(${var_name})
 
-  string(STRIP "${${var_name}}" _value)
-  if(_value LESS ${min_value} OR _value GREATER ${max_value})
-    message(FATAL_ERROR
-      "${var_name} must be in ${min_value}..${max_value} (got: ${_value})"
-    )
-  endif()
+    string(STRIP "${${var_name}}" _value)
+    if(_value LESS ${min_value} OR _value GREATER ${max_value})
+        message(
+            FATAL_ERROR
+            "${var_name} must be in ${min_value}..${max_value} (got: ${_value})"
+        )
+    endif()
 endfunction()
 
 # Collect sources from multiple glob patterns into a single output list.
 function(lgfx_port_collect_globbed out_var)
-  set(_collected)
+    set(_collected)
 
-  foreach(_pattern ${ARGN})
-    file(GLOB_RECURSE _matches CONFIGURE_DEPENDS "${_pattern}")
-    list(APPEND _collected ${_matches})
-  endforeach()
+    foreach(_pattern ${ARGN})
+        file(GLOB_RECURSE _matches CONFIGURE_DEPENDS "${_pattern}")
+        list(APPEND _collected ${_matches})
+    endforeach()
 
-  list(REMOVE_DUPLICATES _collected)
-  list(SORT _collected)
+    list(REMOVE_DUPLICATES _collected)
+    list(SORT _collected)
 
-  set(${out_var} "${_collected}" PARENT_SCOPE)
+    set(${out_var} "${_collected}" PARENT_SCOPE)
 endfunction()
 
 # Filter a source list by excluding one or more regexes.
 function(lgfx_port_filter_out var_name)
-  set(_filtered "${${var_name}}")
-  foreach(_regex ${ARGN})
-    list(FILTER _filtered EXCLUDE REGEX "${_regex}")
-  endforeach()
-  set(${var_name} "${_filtered}" PARENT_SCOPE)
+    set(_filtered "${${var_name}}")
+    foreach(_regex ${ARGN})
+        list(FILTER _filtered EXCLUDE REGEX "${_regex}")
+    endforeach()
+    set(${var_name} "${_filtered}" PARENT_SCOPE)
 endfunction()
 
 # -----------------------------------------------------------------------------
@@ -334,20 +382,32 @@ lgfx_port_require_one_of(LGFX_PORT_PANEL_DRIVER ${LGFX_PORT_SUPPORTED_PANEL_DRIV
 lgfx_port_apply_selected_panel_baseline("${LGFX_PORT_PANEL_DRIVER}")
 
 # Bus_SPI knobs
-set(LGFX_PORT_LCD_SPI_MODE       "0"               CACHE STRING "LCD SPI mode (0..3)")
-set(LGFX_PORT_LCD_FREQ_WRITE_HZ  "20*1000*1000"    CACHE STRING "LCD SPI write freq (Hz, token/expression OK)")
-set(LGFX_PORT_LCD_FREQ_READ_HZ   "10*1000*1000"    CACHE STRING "LCD SPI read freq (Hz, token/expression OK)")
-set(LGFX_PORT_LCD_DMA_CHANNEL    "SPI_DMA_CH_AUTO" CACHE STRING "LCD DMA channel token (e.g. SPI_DMA_CH_AUTO, 1, 2)")
+set(LGFX_PORT_LCD_SPI_MODE "0" CACHE STRING "LCD SPI mode (0..3)")
+set(LGFX_PORT_LCD_FREQ_WRITE_HZ
+    "20*1000*1000"
+    CACHE STRING
+    "LCD SPI write freq (Hz, token/expression OK)"
+)
+set(LGFX_PORT_LCD_FREQ_READ_HZ
+    "10*1000*1000"
+    CACHE STRING
+    "LCD SPI read freq (Hz, token/expression OK)"
+)
+set(LGFX_PORT_LCD_DMA_CHANNEL
+    "SPI_DMA_CH_AUTO"
+    CACHE STRING
+    "LCD DMA channel token (e.g. SPI_DMA_CH_AUTO, 1, 2)"
+)
 
 set(LGFX_PORT_LCD_SPI_3WIRE OFF CACHE BOOL "LCD SPI 3-wire mode")
-set(LGFX_PORT_LCD_USE_LOCK  ON  CACHE BOOL "LCD SPI use_lock")
+set(LGFX_PORT_LCD_USE_LOCK ON CACHE BOOL "LCD SPI use_lock")
 
 # Panel knobs
 set(LGFX_PORT_LCD_PIN_BUSY "-1" CACHE STRING "LCD busy pin GPIO (-1 disables)")
-set(LGFX_PORT_LCD_OFFSET_X "0"  CACHE STRING "LCD panel offset_x")
-set(LGFX_PORT_LCD_OFFSET_Y "0"  CACHE STRING "LCD panel offset_y")
+set(LGFX_PORT_LCD_OFFSET_X "0" CACHE STRING "LCD panel offset_x")
+set(LGFX_PORT_LCD_OFFSET_Y "0" CACHE STRING "LCD panel offset_y")
 
-set(LGFX_PORT_LCD_BUS_SHARED   ON CACHE BOOL "LCD bus_shared")
+set(LGFX_PORT_LCD_BUS_SHARED ON CACHE BOOL "LCD bus_shared")
 set(LGFX_PORT_TOUCH_BUS_SHARED ON CACHE BOOL "Touch bus_shared")
 
 # -----------------------------------------------------------------------------
@@ -368,105 +428,107 @@ set(LGFX_PORT_SPI_MOSI_GPIO "9" CACHE STRING "SPI MOSI GPIO")
 set(LGFX_PORT_SPI_MISO_GPIO "8" CACHE STRING "SPI MISO GPIO")
 
 set(LGFX_PORT_LCD_SPI_HOST "SPI2_HOST" CACHE STRING "SPI host token for LCD")
-set(LGFX_PORT_LCD_CS_GPIO  "43"        CACHE STRING "LCD CS GPIO")
-set(LGFX_PORT_LCD_DC_GPIO  "3"         CACHE STRING "LCD DC GPIO")
-set(LGFX_PORT_LCD_RST_GPIO "2"         CACHE STRING "LCD RST GPIO")
+set(LGFX_PORT_LCD_CS_GPIO "43" CACHE STRING "LCD CS GPIO")
+set(LGFX_PORT_LCD_DC_GPIO "3" CACHE STRING "LCD DC GPIO")
+set(LGFX_PORT_LCD_RST_GPIO "2" CACHE STRING "LCD RST GPIO")
 
-set(LGFX_PORT_TOUCH_CS_GPIO  "44" CACHE STRING "XPT2046 CS GPIO; -1 disables attach")
-set(LGFX_PORT_TOUCH_IRQ_GPIO "-1" CACHE STRING "XPT2046 IRQ GPIO; -1 disables IRQ")
-
-lgfx_port_apply_tracked_default(
-  LGFX_PORT_TOUCH_SPI_HOST
-  STRING
-  "SPI host token for touch (defaults to LCD host)"
-  "${LGFX_PORT_LCD_SPI_HOST}"
+set(LGFX_PORT_TOUCH_CS_GPIO
+    "44"
+    CACHE STRING
+    "XPT2046 CS GPIO; -1 disables attach"
+)
+set(LGFX_PORT_TOUCH_IRQ_GPIO
+    "-1"
+    CACHE STRING
+    "XPT2046 IRQ GPIO; -1 disables IRQ"
 )
 
-set(LGFX_PORT_TOUCH_SPI_FREQ_HZ "1000000u" CACHE STRING "Touch SPI frequency (Hz, token)")
+lgfx_port_apply_tracked_default(
+    LGFX_PORT_TOUCH_SPI_HOST
+    STRING
+    "SPI host token for touch (defaults to LCD host)"
+    "${LGFX_PORT_LCD_SPI_HOST}"
+)
+
+set(LGFX_PORT_TOUCH_SPI_FREQ_HZ
+    "1000000u"
+    CACHE STRING
+    "Touch SPI frequency (Hz, token)"
+)
 
 # Custom minimal Japanese font subset used by the Japanese-capable text preset
 lgfx_port_apply_tracked_default(
-  LGFX_PORT_JP_FONT_CPP
-  STRING
-  "Path to custom Japanese font subset .cpp (compiled when LGFX_PORT_ENABLE_JP_FONTS=ON)"
-  "${CMAKE_CURRENT_LIST_DIR}/lgfx_device/fonts/generated/ui_font_ja_16_min.cpp"
+    LGFX_PORT_JP_FONT_CPP
+    STRING
+    "Path to custom Japanese font subset .cpp (compiled when LGFX_PORT_ENABLE_JP_FONTS=ON)"
+    "${CMAKE_CURRENT_LIST_DIR}/lgfx_device/fonts/generated/ui_font_ja_16_min.cpp"
 )
 
 # -----------------------------------------------------------------------------
 # Register component
 # -----------------------------------------------------------------------------
 idf_component_register(
-  SRCS
-    # Port entrypoint
-    "lgfx_port/lgfx_port.c"
+    SRCS
+        # Port entrypoint
+        "lgfx_port/lgfx_port.c"
 
-    # Port support
-    "lgfx_port/atoms.c"
-    "lgfx_port/open_config.c"
-    "lgfx_port/request_validation.c"
-    "lgfx_port/op_registry.c"
-    "lgfx_port/proto_term.c"
-    "lgfx_port/batch_decode.c"
-    "lgfx_port/batch_decode_builders.c"
+        # Port support
+        "lgfx_port/atoms.c"
+        "lgfx_port/open_config.c"
+        "lgfx_port/op_registry.c"
+        "lgfx_port/proto_term.c"
+        "lgfx_port/render_batch_dispatch.cpp"
 
-    # Port handlers
-    "lgfx_port/handlers/control.c"
-    "lgfx_port/handlers/device.c"
-    "lgfx_port/handlers/primitives.c"
-    "lgfx_port/handlers/text.c"
-    "lgfx_port/handlers/images.c"
-    "lgfx_port/handlers/clip.c"
-    "lgfx_port/handlers/sprites.c"
-    "lgfx_port/handlers/touch.c"
+        # Port handlers
+        "lgfx_port/handlers.c"
 
-    # Batch runtime
-    "lgfx_runtime/lgfx_runtime.c"
-    "lgfx_runtime/lgfx_command_dispatch.cpp"
-
-    # Device adapter
-    "lgfx_device/state.cpp"
-    "lgfx_device/state_runtime.cpp"
-    "lgfx_device/control.cpp"
-    "lgfx_device/primitives.cpp"
-    "lgfx_device/text.cpp"
-    "lgfx_device/images.cpp"
-    "lgfx_device/clip.cpp"
-    "lgfx_device/sprites.cpp"
-  INCLUDE_DIRS
-    "include"
-  PRIV_INCLUDE_DIRS
-    "lgfx_port/include_internal"
-    "lgfx_runtime/include_internal"
-    "lgfx_device/include_internal"
-    "${LGFX_SRC_ROOT}"
-  REQUIRES
-    efuse
-  PRIV_REQUIRES
-    libatomvm
-    avm_sys
-    freertos
-    esp_timer
-    driver
-    fatfs
-    sdmmc
-  WHOLE_ARCHIVE
+        # Device adapter
+        "lgfx_device/state.cpp"
+        "lgfx_device/state_runtime.cpp"
+        "lgfx_device/control.cpp"
+        "lgfx_device/primitives.cpp"
+        "lgfx_device/text.cpp"
+        "lgfx_device/images.cpp"
+        "lgfx_device/clip.cpp"
+        "lgfx_device/sprites.cpp"
+    INCLUDE_DIRS
+        "include"
+    PRIV_INCLUDE_DIRS
+        "lgfx_port/include_internal"
+        "lgfx_device/include_internal"
+        "${LGFX_SRC_ROOT}"
+    REQUIRES
+        efuse
+    PRIV_REQUIRES
+        libatomvm
+        avm_sys
+        freertos
+        esp_timer
+        driver
+        fatfs
+        sdmmc
+    WHOLE_ARCHIVE
 )
 
 # -----------------------------------------------------------------------------
 # ESP-IDF requirements scan / script mode
 # -----------------------------------------------------------------------------
 if(DEFINED __COMPONENT_GET_REQUIREMENTS AND __COMPONENT_GET_REQUIREMENTS)
-  return()
+    return()
 endif()
 
 if(CMAKE_SCRIPT_MODE_FILE)
-  return()
+    return()
 endif()
 
 # -----------------------------------------------------------------------------
 # Protocol constants
 # -----------------------------------------------------------------------------
-set(LGFX_PORT_MAX_SPRITES "8u" CACHE STRING "Max sprites (numeric literal, e.g. 8u; must be 0..254)")
+set(LGFX_PORT_MAX_SPRITES
+    "8u"
+    CACHE STRING
+    "Max sprites (numeric literal, e.g. 8u; must be 0..254)"
+)
 
 # -----------------------------------------------------------------------------
 # Validate literal-only knobs
@@ -503,16 +565,19 @@ lgfx_port_validate_u8_literal(LGFX_PORT_MAX_SPRITES)
 # Derive config ints for header substitution (0/1)
 # -----------------------------------------------------------------------------
 lgfx_port_bool_to_int_many(
-  LGFX_PORT_ENABLE_JP_FONTS
-  LGFX_PORT_ENABLE_TOUCH
-  LGFX_PORT_LCD_SPI_3WIRE
-  LGFX_PORT_LCD_USE_LOCK
-  LGFX_PORT_LCD_READABLE
-  LGFX_PORT_LCD_INVERT
-  LGFX_PORT_LCD_RGB_ORDER
-  LGFX_PORT_LCD_DLEN_16BIT
-  LGFX_PORT_LCD_BUS_SHARED
-  LGFX_PORT_TOUCH_BUS_SHARED
+    LGFX_PORT_ENABLE_JP_FONTS
+    LGFX_PORT_ENABLE_TOUCH
+    LGFX_PORT_ENABLE_PSRAM_SPRITES
+    LGFX_PORT_ENABLE_RENDER_BATCH_TRACE
+    LGFX_PORT_RENDER_BATCH_PREVALIDATE
+    LGFX_PORT_LCD_SPI_3WIRE
+    LGFX_PORT_LCD_USE_LOCK
+    LGFX_PORT_LCD_READABLE
+    LGFX_PORT_LCD_INVERT
+    LGFX_PORT_LCD_RGB_ORDER
+    LGFX_PORT_LCD_DLEN_16BIT
+    LGFX_PORT_LCD_BUS_SHARED
+    LGFX_PORT_TOUCH_BUS_SHARED
 )
 
 # -----------------------------------------------------------------------------
@@ -530,7 +595,7 @@ lgfx_port_set_panel_driver_ints("${LGFX_PORT_PANEL_DRIVER}")
 #
 set(LGFX_PORT_SUPPORTS_TOUCH_INT 0)
 if(LGFX_PORT_ENABLE_TOUCH)
-  set(LGFX_PORT_SUPPORTS_TOUCH_INT 1)
+    set(LGFX_PORT_SUPPORTS_TOUCH_INT 1)
 endif()
 
 # -----------------------------------------------------------------------------
@@ -540,9 +605,9 @@ set(LGFX_PORT_GEN_INC_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${LGFX_PORT_GEN_INC_DIR}/lgfx_port")
 
 configure_file(
-  "${LGFX_PORT_CONFIG_TEMPLATE}"
-  "${LGFX_PORT_GEN_INC_DIR}/lgfx_port/lgfx_port_config.h"
-  @ONLY
+    "${LGFX_PORT_CONFIG_TEMPLATE}"
+    "${LGFX_PORT_GEN_INC_DIR}/lgfx_port/lgfx_port_config.h"
+    @ONLY
 )
 
 target_include_directories(${COMPONENT_LIB} PUBLIC "${LGFX_PORT_GEN_INC_DIR}")
@@ -551,46 +616,42 @@ target_include_directories(${COMPONENT_LIB} PUBLIC "${LGFX_PORT_GEN_INC_DIR}")
 # Validate LovyanGFX availability
 # -----------------------------------------------------------------------------
 if(NOT EXISTS "${LGFX_SRC_ROOT}/LovyanGFX.hpp")
-  message(FATAL_ERROR
-    "LovyanGFX not found at: ${LGFX_SRC_ROOT}\n"
-    "Run: git submodule update --init --recursive"
-  )
+    message(
+        FATAL_ERROR
+        "LovyanGFX source tree was not found at ${LGFX_SRC_ROOT}. "
+        "Initialize the submodule or pass -DLGFX_ROOT=/path/to/LovyanGFX."
+    )
 endif()
 
 # -----------------------------------------------------------------------------
 # Collect LovyanGFX sources
 # -----------------------------------------------------------------------------
 lgfx_port_collect_globbed(
-  LGFX_V1_COMMON_SRCS
-  "${LGFX_SRC_ROOT}/LovyanGFX*.cpp"
-  "${LGFX_SRC_ROOT}/lgfx/v1/*.c"
-  "${LGFX_SRC_ROOT}/lgfx/v1/*.cpp"
-  "${LGFX_SRC_ROOT}/lgfx/v1/**/*.c"
-  "${LGFX_SRC_ROOT}/lgfx/v1/**/*.cpp"
+    LGFX_V1_COMMON_SRCS
+    "${LGFX_SRC_ROOT}/LovyanGFX*.cpp"
+    "${LGFX_SRC_ROOT}/lgfx/v1/*.c"
+    "${LGFX_SRC_ROOT}/lgfx/v1/*.cpp"
+    "${LGFX_SRC_ROOT}/lgfx/v1/**/*.c"
+    "${LGFX_SRC_ROOT}/lgfx/v1/**/*.cpp"
 )
 
 lgfx_port_filter_out(
-  LGFX_V1_COMMON_SRCS
-  ".*/lgfx/v1/platforms/.*"
+    LGFX_V1_COMMON_SRCS
+    ".*/lgfx/v1/platforms/.*"
 )
 
 lgfx_port_collect_globbed(
-  LGFX_V1_ESP32_SRCS
-  "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32/*.c"
-  "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32/*.cpp"
-  "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32/**/*.c"
-  "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32/**/*.cpp"
+    LGFX_V1_ESP32_SRCS
+    "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32/*.c"
+    "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32/*.cpp"
+    "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32/**/*.c"
+    "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32/**/*.cpp"
 )
 
-set(LGFX_SRCS
-  ${LGFX_V1_COMMON_SRCS}
-  ${LGFX_V1_ESP32_SRCS}
-)
+set(LGFX_SRCS ${LGFX_V1_COMMON_SRCS} ${LGFX_V1_ESP32_SRCS})
 
 # JPEG decoder support
-list(APPEND LGFX_SRCS
-  "${LGFX_SRC_ROOT}/lgfx/utility/lgfx_tjpgd.c"
-)
+list(APPEND LGFX_SRCS "${LGFX_SRC_ROOT}/lgfx/utility/lgfx_tjpgd.c")
 
 # -----------------------------------------------------------------------------
 # Reduce LovyanGFX build surface area
@@ -602,23 +663,76 @@ list(APPEND LGFX_SRCS
 # we are not using.
 #
 lgfx_port_filter_out(
-  LGFX_SRCS
-  ".*/Bus_EPD\\.(c|cpp)$"
-  ".*/Panel_EPD\\.(c|cpp)$"
-  ".*/panel/Panel_EPD.*\\.(c|cpp)$"
-  ".*/panel/Panel_GDEW.*\\.(c|cpp)$"
-  ".*/touch/.*\\.(c|cpp)$"
-  ".*/Touch_.*\\.(c|cpp)$"
+    LGFX_SRCS
+    ".*/Bus_EPD\\.(c|cpp)$"
+    ".*/Panel_EPD\\.(c|cpp)$"
+    ".*/panel/Panel_EPD.*\\.(c|cpp)$"
+    ".*/panel/Panel_GDEW.*\\.(c|cpp)$"
+    ".*/touch/.*\\.(c|cpp)$"
+    ".*/Touch_.*\\.(c|cpp)$"
 )
 
 # -----------------------------------------------------------------------------
 # Touch: re-add only the selected drivers
 # -----------------------------------------------------------------------------
 if(LGFX_PORT_ENABLE_TOUCH)
-  list(APPEND LGFX_SRCS
-    "${LGFX_SRC_ROOT}/lgfx/v1/touch/Touch_FT5x06.cpp"
-    "${LGFX_SRC_ROOT}/lgfx/v1/touch/Touch_XPT2046.cpp"
-  )
+    list(
+        APPEND LGFX_SRCS
+        "${LGFX_SRC_ROOT}/lgfx/v1/touch/Touch_FT5x06.cpp"
+        "${LGFX_SRC_ROOT}/lgfx/v1/touch/Touch_XPT2046.cpp"
+    )
+endif()
+
+# AtomVM and board power-management code still use ESP-IDF's legacy I2C driver.
+# LovyanGFX auto-selects the newer driver on IDF 5.x, and IDF aborts when both
+# driver generations are initialized in one image.
+if(LGFX_PORT_FORCE_LEGACY_I2C)
+    set(LGFX_PORT_ORIGINAL_ESP32_COMMON_CPP
+        "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32/common.cpp"
+    )
+    set(LGFX_PORT_PATCHED_LOVYANGFX_DIR
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/lovyangfx"
+    )
+    set(LGFX_PORT_PATCHED_ESP32_COMMON_CPP
+        "${LGFX_PORT_PATCHED_LOVYANGFX_DIR}/esp32_common.cpp"
+    )
+
+    file(MAKE_DIRECTORY "${LGFX_PORT_PATCHED_LOVYANGFX_DIR}")
+    file(
+        READ "${LGFX_PORT_ORIGINAL_ESP32_COMMON_CPP}"
+        LGFX_PORT_ESP32_COMMON_CPP_CONTENTS
+    )
+    string(
+        REPLACE "__has_include(<driver/i2c_master.h>)"
+        "0"
+        LGFX_PORT_PATCHED_ESP32_COMMON_CPP_CONTENTS
+        "${LGFX_PORT_ESP32_COMMON_CPP_CONTENTS}"
+    )
+
+    if(
+        LGFX_PORT_PATCHED_ESP32_COMMON_CPP_CONTENTS
+            STREQUAL
+            LGFX_PORT_ESP32_COMMON_CPP_CONTENTS
+    )
+        message(
+            FATAL_ERROR
+            "LGFX_PORT_FORCE_LEGACY_I2C is ON, but the LovyanGFX I2C patch marker "
+            "was not found in ${LGFX_PORT_ORIGINAL_ESP32_COMMON_CPP}. "
+            "Check the upstream LovyanGFX implementation."
+        )
+    endif()
+
+    file(
+        WRITE "${LGFX_PORT_PATCHED_ESP32_COMMON_CPP}"
+        "${LGFX_PORT_PATCHED_ESP32_COMMON_CPP_CONTENTS}"
+    )
+
+    list(REMOVE_ITEM LGFX_SRCS "${LGFX_PORT_ORIGINAL_ESP32_COMMON_CPP}")
+    list(APPEND LGFX_SRCS "${LGFX_PORT_PATCHED_ESP32_COMMON_CPP}")
+    target_include_directories(
+        ${COMPONENT_LIB}
+        PRIVATE "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32"
+    )
 endif()
 
 list(REMOVE_DUPLICATES LGFX_SRCS)
@@ -631,21 +745,61 @@ target_sources(${COMPONENT_LIB} PRIVATE ${LGFX_SRCS})
 
 # Optional Japanese font data backing the Japanese-capable text preset
 if(LGFX_PORT_ENABLE_JP_FONTS)
-  if(NOT EXISTS "${LGFX_PORT_JP_FONT_CPP}")
-    message(FATAL_ERROR
-      "Custom Japanese font subset .cpp not found:\n  ${LGFX_PORT_JP_FONT_CPP}\n\n"
-      "Set LGFX_PORT_JP_FONT_CPP to the path of your generated subset, e.g.:\n"
-      "  -DLGFX_PORT_JP_FONT_CPP=${CMAKE_CURRENT_LIST_DIR}/lgfx_device/fonts/generated/ui_font_ja_16_min.cpp\n"
-    )
-  endif()
+    if(NOT EXISTS "${LGFX_PORT_JP_FONT_CPP}")
+        message(
+            FATAL_ERROR
+            "Custom Japanese font subset .cpp not found:\n  ${LGFX_PORT_JP_FONT_CPP}\n\n"
+            "Set LGFX_PORT_JP_FONT_CPP to the path of your generated subset, e.g.:\n"
+            "  -DLGFX_PORT_JP_FONT_CPP=${CMAKE_CURRENT_LIST_DIR}/lgfx_device/fonts/generated/ui_font_ja_16_min.cpp\n"
+        )
+    endif()
 
-  target_sources(${COMPONENT_LIB} PRIVATE "${LGFX_PORT_JP_FONT_CPP}")
+    target_sources(${COMPONENT_LIB} PRIVATE "${LGFX_PORT_JP_FONT_CPP}")
 endif()
 
 # Build-default panel-driver selection macros come from the generated config header
 # (lgfx_port/lgfx_port_config.h).
-target_compile_definitions(${COMPONENT_LIB} PRIVATE
-  LGFX_USE_V1=1
-)
+target_compile_definitions(${COMPONENT_LIB} PRIVATE LGFX_USE_V1=1)
 
 target_compile_features(${COMPONENT_LIB} PRIVATE cxx_std_17)
+
+# AtomVM's libAtomVM target exports `-Werror=incompatible-pointer-types`
+# publicly. That flag is useful for C, but GCC warns when the same `-Werror=`
+# form is applied to C++ translation units. Rewrite it as a C-only interface
+# option so this component's C++ sources build cleanly without relaxing the C
+# warning policy.
+function(lgfx_port_restrict_c_only_warning_flag target_name warning_flag)
+    if(NOT TARGET ${target_name})
+        return()
+    endif()
+
+    get_target_property(
+        _iface_compile_options
+        ${target_name}
+        INTERFACE_COMPILE_OPTIONS
+    )
+    if(NOT _iface_compile_options)
+        return()
+    endif()
+
+    set(_rewritten_iface_compile_options)
+    foreach(_opt IN LISTS _iface_compile_options)
+        if(_opt STREQUAL "${warning_flag}")
+            list(
+                APPEND _rewritten_iface_compile_options
+                "$<$<COMPILE_LANGUAGE:C>:${warning_flag}>"
+            )
+        else()
+            list(APPEND _rewritten_iface_compile_options "${_opt}")
+        endif()
+    endforeach()
+
+    set_target_properties(
+        ${target_name}
+        PROPERTIES
+            INTERFACE_COMPILE_OPTIONS "${_rewritten_iface_compile_options}"
+    )
+endfunction()
+
+lgfx_port_restrict_c_only_warning_flag(libAtomVM "-Werror=incompatible-pointer-types")
+lgfx_port_restrict_c_only_warning_flag(__idf_libatomvm "-Werror=incompatible-pointer-types")

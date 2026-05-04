@@ -1,6 +1,8 @@
-// SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-//
-// SPDX-License-Identifier: Apache-2.0
+/*
+ * SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 // lgfx_device/state.cpp
 
@@ -603,6 +605,8 @@ static lgfx::LGFX_Sprite *create_presentation_strip_sprite(
         return nullptr;
     }
 
+    spr->setPsram(lgfx_dev::should_use_psram_sprites());
+
     const uint8_t depth = static_cast<uint8_t>(lcd->getColorDepth());
     if (depth != 0) {
         spr->setColorDepth(depth);
@@ -1203,6 +1207,17 @@ esp_err_t presentation_present_strip_locked()
     return ESP_OK;
 }
 
+esp_err_t presentation_cancel_strip_locked()
+{
+    if (!g_presentation.enabled) {
+        return ESP_OK;
+    }
+
+    g_presentation.current = nullptr;
+    g_presentation.frame_active = false;
+    return ESP_OK;
+}
+
 esp_err_t presentation_rebuild_locked()
 {
     auto *lcd = lcd_device_locked();
@@ -1452,10 +1467,8 @@ extern "C" esp_err_t lgfx_device_init_with_open_config(
         static_cast<uint16_t>(snapshot.lcd->height()),
         160);
 
-    // Do not allocate native strip buffers during init yet.
-    // The current Elixir MovingIcons sample still owns its own strip sprites.
-    // Eager native strip allocation here causes two strip-buffer systems to
-    // coexist and increases memory pressure unnecessarily.
+    // Do not allocate native strip buffers during init. Keep presentation
+    // buffers lazy so smoke-only applications do not pay the memory cost.
 
     release_lcd_mutex();
     return ESP_OK;

@@ -11,15 +11,19 @@
 // Responsibilities in this file:
 // - Per-context port creation and teardown
 // - Mailbox message handling on the port thread
-// - Request decode -> metadata validation -> dispatch -> reply flow
+// - Request decode -> metadata validation -> direct synchronous dispatch -> reply flow
+//
+// The ordinary call path is intentionally one request / one handler / one reply.
+// Explicit binary batch handling is reached only through its dedicated protocol
+// operation and must not leak into the common dispatch path.
 //
 // Non-responsibilities:
 // - Atom initialization (handled by atoms.c)
 // - Op metadata registry + dispatch lookup (handled by op_registry.c)
-// - Request validation helpers (handled by request_validation.c)
 // - open_port/2 option parsing (handled by open_config.c)
 // - Device implementation details (handled by lgfx_device/*)
 // - AtomVM term decoding details (handled by proto_term.c)
+// - Request validation helpers (handled by proto_term.c)
 // - Reply encoding helpers (handled by proto_term.c)
 
 #include <stdbool.h>
@@ -98,11 +102,60 @@ static void lgfx_port_teardown(Context *ctx)
     port->height = 0;
     lgfx_last_error_clear(port);
 
-    lgfx_runtime_deinit(&port->runtime);
-
     port->ctx = NULL;
 
     free(port);
+}
+
+static term lgfx_dispatch_direct_call(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
+{
+    term precondition_reply = term_invalid_term();
+
+    precondition_reply = lgfx_require_proto_ver(ctx, port, req);
+    if (!term_is_invalid_term(precondition_reply)) {
+        return precondition_reply;
+    }
+
+    precondition_reply = lgfx_require_target_domain(ctx, port, req);
+    if (!term_is_invalid_term(precondition_reply)) {
+        return precondition_reply;
+    }
+
+    const lgfx_op_meta_t *meta = lgfx_op_meta_lookup_by_op(req->op);
+    if (meta == NULL) {
+        return reply_error(ctx, port, req, port->atoms.bad_op, 0);
+    }
+
+    if (!lgfx_port_op_is_enabled_by_op(port, req->op)) {
+        return reply_error(ctx, port, req, port->atoms.unsupported, 0);
+    }
+
+    precondition_reply = lgfx_require_arity_range(ctx, port, req, meta->min_arity, meta->max_arity);
+    if (!term_is_invalid_term(precondition_reply)) {
+        return precondition_reply;
+    }
+
+    precondition_reply = lgfx_require_flags_allowed_mask(ctx, port, req, meta->allowed_flags_mask);
+    if (!term_is_invalid_term(precondition_reply)) {
+        return precondition_reply;
+    }
+
+    precondition_reply = lgfx_require_target_policy(ctx, port, req, meta->target_policy);
+    if (!term_is_invalid_term(precondition_reply)) {
+        return precondition_reply;
+    }
+
+    precondition_reply = lgfx_require_state_policy(ctx, port, req, meta->state_policy);
+    if (!term_is_invalid_term(precondition_reply)) {
+        return precondition_reply;
+    }
+
+    lgfx_handler_fn handler = lgfx_dispatch_lookup_by_op(port, req->op);
+    if (handler == NULL) {
+        return reply_error(ctx, port, req, port->atoms.internal, 0);
+    }
+
+    return handler(ctx, port, req);
 }
 
 void lgfx_port_handle_mailbox_message(Context *ctx, lgfx_port_t *port, term msg)
@@ -142,72 +195,18 @@ void lgfx_port_handle_mailbox_message(Context *ctx, lgfx_port_t *port, term msg)
         return;
     }
 
-    term reply = term_invalid_term();
-    term pre = term_invalid_term();
+    term reply = lgfx_dispatch_direct_call(ctx, port, &req);
 
-    pre = lgfx_require_proto_ver(ctx, port, &req);
-    if (!term_is_invalid_term(pre)) {
-        reply = pre;
-        goto send_reply;
-    }
-
-    pre = lgfx_require_target_domain(ctx, port, &req);
-    if (!term_is_invalid_term(pre)) {
-        reply = pre;
-        goto send_reply;
-    }
-
-    const lgfx_op_meta_t *meta = lgfx_op_meta_lookup(port, req.op);
-    if (meta == NULL) {
-        reply = reply_error(ctx, port, &req, port->atoms.bad_op, 0);
-        goto send_reply;
-    }
-
-    if (!lgfx_port_op_is_enabled(port, req.op)) {
-        reply = reply_error(ctx, port, &req, port->atoms.unsupported, 0);
-        goto send_reply;
-    }
-
-    pre = lgfx_require_arity_range(ctx, port, &req, meta->min_arity, meta->max_arity);
-    if (!term_is_invalid_term(pre)) {
-        reply = pre;
-        goto send_reply;
-    }
-
-    pre = lgfx_require_flags_allowed_mask(ctx, port, &req, meta->allowed_flags_mask);
-    if (!term_is_invalid_term(pre)) {
-        reply = pre;
-        goto send_reply;
-    }
-
-    pre = lgfx_require_target_policy(ctx, port, &req, meta->target_policy);
-    if (!term_is_invalid_term(pre)) {
-        reply = pre;
-        goto send_reply;
-    }
-
-    pre = lgfx_require_state_policy(ctx, port, &req, meta->state_policy);
-    if (!term_is_invalid_term(pre)) {
-        reply = pre;
-        goto send_reply;
-    }
-
-    lgfx_handler_fn handler = lgfx_dispatch_lookup(port, req.op);
-    if (handler == NULL) {
-        reply = reply_error(ctx, port, &req, port->atoms.internal, 0);
-        goto send_reply;
-    }
-
-    reply = handler(ctx, port, &req);
-
-send_reply:
     if (term_is_invalid_term(reply)) {
         int32_t esp_err = 0;
-        if (port->last_error.last_op == req.op) {
+        term last_op = term_from_int32((int32_t) req.opcode);
+
+        if (port->last_error.last_op == last_op) {
             esp_err = port->last_error.esp_err;
         }
 
-        if (port->last_error.last_op != req.op || port->last_error.reason != port->atoms.no_memory) {
+        if (port->last_error.last_op != last_op
+            || port->last_error.reason != port->atoms.no_memory) {
             reply = reply_error(ctx, port, &req, port->atoms.no_memory, esp_err);
         }
 
@@ -241,10 +240,6 @@ static void lgfx_port_drain_mailbox(lgfx_port_t *port)
         }
 
         mailbox_message_dispose(removed, heap);
-
-        if (lgfx_runtime_has_pending(&port->runtime)) {
-            (void) lgfx_runtime_process_pending(&port->runtime);
-        }
 
         message = mailbox_first(mailbox);
     }
@@ -296,12 +291,6 @@ static Context *lgfx_port_create_port(GlobalContext *global, term opts)
     lgfx_atoms_init(global, &port->atoms);
     lgfx_last_error_clear(port);
 
-    if (lgfx_runtime_init(&port->runtime) != ESP_OK) {
-        free(port);
-        context_destroy(ctx);
-        return NULL;
-    }
-
     lgfx_open_config_overrides_t open_config_overrides = { 0 };
     const char *open_config_error = NULL;
 
@@ -310,7 +299,6 @@ static Context *lgfx_port_create_port(GlobalContext *global, term opts)
             TAG,
             "invalid open_port opts for lgfx_port: %s",
             open_config_error ? open_config_error : "unknown error");
-        lgfx_runtime_deinit(&port->runtime);
         free(port);
         context_destroy(ctx);
         return NULL;
@@ -336,3 +324,5 @@ static Context *lgfx_port_create_port(GlobalContext *global, term opts)
 }
 
 REGISTER_PORT_DRIVER(lgfx_port, lgfx_port_init, lgfx_port_destroy, lgfx_port_create_port);
+
+

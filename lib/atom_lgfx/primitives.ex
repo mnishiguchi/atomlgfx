@@ -13,7 +13,7 @@ defmodule AtomLGFX.Primitives do
 
   def fill_screen(port, color, target \\ 0)
       when target_any(target) do
-    scalar_call(port, :fillScreen, target, [color])
+    scalar_call(port, :fill_screen, target, [color])
   end
 
   def clear(port, color, target \\ 0)
@@ -23,27 +23,27 @@ defmodule AtomLGFX.Primitives do
 
   def draw_pixel(port, x, y, color, target \\ 0)
       when i16(x) and i16(y) and target_any(target) do
-    scalar_call(port, :drawPixel, target, [x, y, color])
+    scalar_call(port, :draw_pixel, target, [x, y, color])
   end
 
   def draw_fast_vline(port, x, y, height, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(height) and
              target_any(target) do
-    scalar_call(port, :drawFastVLine, target, [x, y, height, color])
+    scalar_call(port, :draw_fast_vline, target, [x, y, height, color])
   end
 
   def draw_fast_hline(port, x, y, width, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(width) and
              target_any(target) do
-    scalar_call(port, :drawFastHLine, target, [x, y, width, color])
+    scalar_call(port, :draw_fast_hline, target, [x, y, width, color])
   end
 
   def draw_line(port, x0, y0, x1, y1, color, target \\ 0)
       when i16(x0) and i16(y0) and i16(x1) and i16(y1) and
              target_any(target) do
-    scalar_call(port, :drawLine, target, [x0, y0, x1, y1, color])
+    scalar_call(port, :draw_line, target, [x0, y0, x1, y1, color])
   end
 
   def draw_rect(port, x, y, width, height, color, target \\ 0)
@@ -51,7 +51,7 @@ defmodule AtomLGFX.Primitives do
              u16(width) and
              u16(height) and
              target_any(target) do
-    scalar_call(port, :drawRect, target, [x, y, width, height, color])
+    scalar_call(port, :draw_rect, target, [x, y, width, height, color])
   end
 
   def fill_rect(port, x, y, width, height, color, target \\ 0)
@@ -59,7 +59,7 @@ defmodule AtomLGFX.Primitives do
              u16(width) and
              u16(height) and
              target_any(target) do
-    scalar_call(port, :fillRect, target, [x, y, width, height, color])
+    scalar_call(port, :fill_rect, target, [x, y, width, height, color])
   end
 
   def draw_round_rect(port, x, y, width, height, radius, color, target \\ 0)
@@ -68,7 +68,7 @@ defmodule AtomLGFX.Primitives do
              u16(height) and
              u16(radius) and
              target_any(target) do
-    scalar_call(port, :drawRoundRect, target, [x, y, width, height, radius, color])
+    scalar_call(port, :draw_round_rect, target, [x, y, width, height, radius, color])
   end
 
   def fill_round_rect(port, x, y, width, height, radius, color, target \\ 0)
@@ -77,21 +77,21 @@ defmodule AtomLGFX.Primitives do
              u16(height) and
              u16(radius) and
              target_any(target) do
-    scalar_call(port, :fillRoundRect, target, [x, y, width, height, radius, color])
+    scalar_call(port, :fill_round_rect, target, [x, y, width, height, radius, color])
   end
 
   def draw_circle(port, x, y, radius, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(radius) and
              target_any(target) do
-    scalar_call(port, :drawCircle, target, [x, y, radius, color])
+    scalar_call(port, :draw_circle, target, [x, y, radius, color])
   end
 
   def fill_circle(port, x, y, radius, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(radius) and
              target_any(target) do
-    scalar_call(port, :fillCircle, target, [x, y, radius, color])
+    scalar_call(port, :fill_circle, target, [x, y, radius, color])
   end
 
   def draw_ellipse(port, x, y, radius_x, radius_y, color, target \\ 0)
@@ -99,7 +99,7 @@ defmodule AtomLGFX.Primitives do
              u16(radius_x) and
              u16(radius_y) and
              target_any(target) do
-    scalar_call(port, :drawEllipse, target, [x, y, radius_x, radius_y, color])
+    scalar_call(port, :draw_ellipse, target, [x, y, radius_x, radius_y, color])
   end
 
   def fill_ellipse(port, x, y, radius_x, radius_y, color, target \\ 0)
@@ -107,7 +107,7 @@ defmodule AtomLGFX.Primitives do
              u16(radius_x) and
              u16(radius_y) and
              target_any(target) do
-    scalar_call(port, :fillEllipse, target, [x, y, radius_x, radius_y, color])
+    scalar_call(port, :fill_ellipse, target, [x, y, radius_x, radius_y, color])
   end
 
   def draw_arc(port, x, y, radius0, radius1, angle0, angle1, color, target \\ 0)
@@ -117,7 +117,7 @@ defmodule AtomLGFX.Primitives do
              target_any(target) do
     with {:ok, angle0} <- normalize_angle(angle0),
          {:ok, angle1} <- normalize_angle(angle1) do
-      scalar_call(port, :drawArc, target, [x, y, radius0, radius1, angle0, angle1, color])
+      scalar_call(port, :draw_arc, target, [x, y, radius0, radius1, angle0, angle1, color])
     end
   end
 
@@ -128,7 +128,7 @@ defmodule AtomLGFX.Primitives do
              target_any(target) do
     with {:ok, angle0} <- normalize_angle(angle0),
          {:ok, angle1} <- normalize_angle(angle1) do
-      scalar_call(port, :fillArc, target, [x, y, radius0, radius1, angle0, angle1, color])
+      scalar_call(port, :fill_arc, target, [x, y, radius0, radius1, angle0, angle1, color])
     end
   end
 
@@ -137,7 +137,7 @@ defmodule AtomLGFX.Primitives do
              i16(x1) and i16(y1) and
              i16(x2) and i16(y2) and
              target_any(target) do
-    scalar_call(port, :drawBezier, target, [x0, y0, x1, y1, x2, y2, color])
+    scalar_call(port, :draw_bezier, target, [x0, y0, x1, y1, x2, y2, color])
   end
 
   def draw_bezier(port, x0, y0, x1, y1, x2, y2, x3, y3, color, target \\ 0)
@@ -146,7 +146,7 @@ defmodule AtomLGFX.Primitives do
              i16(x2) and i16(y2) and
              i16(x3) and i16(y3) and
              target_any(target) do
-    scalar_call(port, :drawBezier, target, [x0, y0, x1, y1, x2, y2, x3, y3, color])
+    scalar_call(port, :draw_bezier, target, [x0, y0, x1, y1, x2, y2, x3, y3, color])
   end
 
   def draw_triangle(port, x0, y0, x1, y1, x2, y2, color, target \\ 0)
@@ -154,7 +154,7 @@ defmodule AtomLGFX.Primitives do
              i16(x1) and i16(y1) and
              i16(x2) and i16(y2) and
              target_any(target) do
-    scalar_call(port, :drawTriangle, target, [x0, y0, x1, y1, x2, y2, color])
+    scalar_call(port, :draw_triangle, target, [x0, y0, x1, y1, x2, y2, color])
   end
 
   def fill_triangle(port, x0, y0, x1, y1, x2, y2, color, target \\ 0)
@@ -162,7 +162,7 @@ defmodule AtomLGFX.Primitives do
              i16(x1) and i16(y1) and
              i16(x2) and i16(y2) and
              target_any(target) do
-    scalar_call(port, :fillTriangle, target, [x0, y0, x1, y1, x2, y2, color])
+    scalar_call(port, :fill_triangle, target, [x0, y0, x1, y1, x2, y2, color])
   end
 
   defp scalar_call(port, op, target, args) do

@@ -45,8 +45,6 @@
 #define LGFX_ERR_INTERNAL "internal"
 #define LGFX_ERR_UNSUPPORTED "unsupported"
 
-// Detail reason tags.
-#define LGFX_ERR_BATCH_FAILED "batch_failed"
 #endif
 
 // -----------------------------------------------------------------------------
@@ -54,7 +52,7 @@
 // -----------------------------------------------------------------------------
 
 #ifndef LGFX_PORT_PROTO_VER
-#define LGFX_PORT_PROTO_VER 1u
+#define LGFX_PORT_PROTO_VER 2u
 #endif
 
 #ifndef LGFX_PORT_MAX_BINARY_BYTES
@@ -218,9 +216,11 @@ static inline bool lgfx_validate_positive_f32(float value)
 // -----------------------------------------------------------------------------
 
 // Touch remains derived; the other current capability bits are always built in.
+//
+// LGFX_CAP_BATCH is the multi-target frame-script path used by animation workloads.
 #define LGFX_BUILD_CAP_MASK                                                 \
     ((uint32_t) (LGFX_CAP_SPRITE | LGFX_CAP_PUSHIMAGE | LGFX_CAP_LAST_ERROR \
-        | LGFX_CAP_PALETTE | LGFX_CAP_BATCH                                 \
+        | LGFX_CAP_PALETTE | LGFX_CAP_BATCH                    \
         | (LGFX_PORT_SUPPORTS_TOUCH ? LGFX_CAP_TOUCH : 0u)))
 
 // -----------------------------------------------------------------------------
@@ -232,6 +232,34 @@ static inline bool lgfx_validate_positive_f32(float value)
 #define LGFX_F_TEXT_FG_INDEX (1u << 2) // setTextColor: fg is palette index, not non-index display color
 #define LGFX_F_TEXT_BG_INDEX (1u << 3) // setTextColor: bg is palette index, not non-index display color
 #define LGFX_F_TRANSPARENT_INDEX (1u << 4) // sprite push transparent value is palette index, not non-index display color
+
+// -----------------------------------------------------------------------------
+// Render-batch private command opcodes
+// -----------------------------------------------------------------------------
+
+#define LGFX_RENDER_OP_TARGET ((uint8_t) 0xF0u)
+#define LGFX_RENDER_OP_COLOR_MODE ((uint8_t) 0xF1u)
+#define LGFX_RENDER_OP_PUSH_SPRITE_TRANSPARENT ((uint8_t) 0xF2u)
+#define LGFX_RENDER_OP_PUSH_SPRITE_LIST ((uint8_t) 0xF3u)
+#define LGFX_RENDER_OP_PUSH_SPRITE_REGION_LIST ((uint8_t) 0xF4u)
+#define LGFX_RENDER_OP_BEGIN_STRIP ((uint8_t) 0xF5u)
+#define LGFX_RENDER_OP_PRESENT_STRIP ((uint8_t) 0xF6u)
+#define LGFX_RENDER_OP_FILL_RECT_LIST ((uint8_t) 0xF7u)
+#define LGFX_RENDER_OP_DRAW_LINE_LIST ((uint8_t) 0xF8u)
+#define LGFX_RENDER_OP_DRAW_PIXEL_LIST ((uint8_t) 0xF9u)
+#define LGFX_RENDER_OP_DRAW_RECT_LIST ((uint8_t) 0xFAu)
+#define LGFX_RENDER_OP_FILL_CIRCLE_LIST ((uint8_t) 0xFBu)
+#define LGFX_RENDER_OP_DRAW_CIRCLE_LIST ((uint8_t) 0xFCu)
+#define LGFX_RENDER_OP_FILL_TRIANGLE_LIST ((uint8_t) 0xFDu)
+#define LGFX_RENDER_OP_DRAW_TRIANGLE_LIST ((uint8_t) 0xFEu)
+#define LGFX_RENDER_OP_ELLIPSE_LIST ((uint8_t) 0xFFu)
+
+#define LGFX_RENDER_ELLIPSE_LIST_KIND_DRAW ((uint8_t) 0u)
+#define LGFX_RENDER_ELLIPSE_LIST_KIND_FILL ((uint8_t) 1u)
+
+#define LGFX_RENDER_COLOR_MODE_RGB565 ((uint8_t) 0u)
+#define LGFX_RENDER_COLOR_MODE_PALETTE_INDEX ((uint8_t) 1u)
+
 
 #ifndef F_TEXT_HAS_BG
 #define F_TEXT_HAS_BG LGFX_F_TEXT_HAS_BG

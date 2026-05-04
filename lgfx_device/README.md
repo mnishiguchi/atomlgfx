@@ -112,7 +112,8 @@ The native presentation path uses:
 - adaptive double strip buffers
 - direct-LCD fallback when native strip allocation is unavailable
 
-At the moment, the Elixir MovingIcons sample may still manage its own strip orchestration. Native strip presentation is therefore available as a device-layer capability without yet being the only active strip path.
+Native strip presentation is available as a device-layer capability without
+requiring the Elixir smoke sample to own strip orchestration.
 
 That means this layer may care about singleton ownership and native presentation state, but it should not care about protocol envelopes or AtomVM terms.
 

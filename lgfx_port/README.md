@@ -11,11 +11,11 @@ SPDX-License-Identifier: Apache-2.0
 It owns:
 
 - request tuple handling
-- metadata-driven validation
+- defensive envelope and native-state validation
 - handler dispatch for ordinary operations
 - reply mapping
-- explicit batch submission decode and validation
-- native batch command construction for the batch path
+- explicit binary batch submission decode and validation
+- render command validation and dispatch for the batch path
 
 See [the protocol spec](../docs/protocol.md) for wire-level rules and
 [the architecture overview](../docs/architecture.md) for the top-level repository map.
@@ -30,37 +30,36 @@ See [the protocol spec](../docs/protocol.md) for wire-level rules and
 
 - `proto_term.c`
   - request and reply term helpers
+  - request-envelope validation helpers
 
 - `open_config.c`
   - `open_port/2` option parsing and validation
 
-- `request_validation.c`
-  - request-envelope validation helpers
-
 - `op_registry.c`
   - `ops.def`-driven op metadata lookup
-  - dispatch-surface lookup
+  - opcode dispatch-surface lookup
   - capability derivation
 
-- `batch_decode.c`
-  - `submitBatch` decode and validation
-  - inner command validation against `ops.def`
-  - native batch command construction
+- `render_batch_dispatch.cpp`
+  - multi-target render script validation for `submitBinaryBatch`
+  - batch-local target and color-mode state
+  - sprite push, transform-list, scalar drawing, and display dispatch under one native write window
 
-- `handlers/*.c`
+- `handlers.c`
   - op-specific wire decode for ordinary operations
   - direct calls into `lgfx_device_*`
+  - includes small section files from `include_internal/lgfx_port/handlers/`
 
 - `include_internal/lgfx_port/handler_decode.h`
   - tiny shared decode helpers for handlers
   - cached LCD dimension refresh helper
 
 - `include_internal/lgfx_port/ops.def`
-  - protocol-visible operation metadata
+  - native safety metadata
   - allowed flags
   - target and state policy
   - capability linkage
-  - internal execution classification for batch support
+  - internal execution classification for binary batch support
 
 ## Responsibility split
 
@@ -70,12 +69,23 @@ The port thread owns all AtomVM-facing work:
 
 - mailbox handling
 - tuple decoding
-- metadata validation
+- crash-safety and native-state validation
 - handler dispatch
 - reply encoding
 - protocol-visible error state such as `last_error`
 
-### Ordinary handler path
+### Ordinary direct call path
+
+The ordinary path is synchronous and intentionally boring:
+
+```text
+request tuple
+  -> structural decode
+  -> `ops.def` metadata validation
+  -> one handler
+  -> one `lgfx_device_*` adapter call
+  -> one protocol reply
+```
 
 Handlers stay wire-oriented and small.
 
@@ -86,20 +96,32 @@ They are responsible for:
 - calling `lgfx_device_*`
 - mapping native results to protocol replies
 
-Handlers should not duplicate device semantics.
+Handlers should not duplicate device semantics. They should also not depend on
+binary-batch dispatch state.
 
-### Explicit batch path
+Payload-bearing scalar operations such as `drawString`, `print`, `println`,
+`drawJpg`, and `pushImage` remain valid on this direct synchronous path;
+borrowed binary pointers must be consumed before the handler returns. The
+render-batch path may also support explicitly framed payload operations, such as
+BinaryBatch `drawJpg` and `pushImage`, when the native decoder owns the full
+command stream.
 
-Explicit batch submission is also owned by `lgfx_port/`.
+### Render-batch path
+
+Explicit binary batch submission is also owned by `lgfx_port/`.
 
 This path is responsible for:
 
-- validating `submitBatch`
-- validating inner batch commands against `ops.def`
-- rejecting unsupported batch shapes at the protocol boundary
-- building native batch commands for execution by the batch runtime
+- validating `submitBinaryBatch`
+- accepting exactly one non-empty binary command stream
+- rejecting malformed command bytes as `bad_args`
+- rejecting unsupported binary command opcodes as `bad_op`
+- optionally prevalidating the full stream before device mutation
+- validating and dispatching supported render commands synchronously
 
-`lgfx_port/` does not execute batch commands itself. After command construction, execution responsibility moves to the batch runtime path.
+Batch dispatch remains inside `lgfx_port/` and routes decoded commands to
+`lgfx_device_*`. It keeps wire-protocol render script handling separate from
+the LovyanGFX adapter logic in `../lgfx_device/`.
 
 ### Device layer
 
@@ -133,32 +155,35 @@ Properties:
 
 - immediate execution
 - immediate success or failure
-- no batch runtime involvement
+- no batch involvement
 
-### Explicit batch submission
+### Explicit binary batch submission
 
 ```text
-submitBatch message
-  -> port thread decodes and validates submitBatch
-  -> inner commands are validated against ops.def
-  -> native batch commands are built
-  -> accepted batch is handed to lgfx_runtime
+submitBinaryBatch message
+  -> port thread decodes and validates submitBinaryBatch
+  -> render script is validated
+  -> supported render commands are dispatched in order
 ```
 
-This path is used only for explicit batching.
+This path is used only for explicit binary batching.
 
 Properties:
 
 - batching is opt-in
-- ordinary operations do not implicitly flow through the batch runtime
-- batch command execution happens outside the ordinary handler path
+- ordinary operations do not implicitly flow through the batch path
+- binary-batch command execution happens outside the ordinary handler path
+- command execution is synchronous and stops at the first malformed or failed command
+- with `LGFX_PORT_RENDER_BATCH_PREVALIDATE=ON`, malformed streams are rejected before any command mutates the device
+- with the default prevalidation-off build, malformed commands are detected while executing to avoid an extra hot-path pass
 
 ## Core rules
 
 - AtomVM terms stay in `lgfx_port/`.
 - `lgfx_device/` stays free of AtomVM term handling.
 - Handlers decode wire arguments, but should not duplicate device semantics.
-- Protocol metadata lives in `ops.def`.
+- Elixir owns public API policy and friendly validation.
+- Native metadata in `ops.def` is limited to safety, capability, and execution guardrails.
 - Shared handler-side decode helpers live in `handler_decode.h`.
 - Externally visible protocol changes must be reflected in `../docs/protocol.md`.
 - Generated protocol reference tables must stay synchronized with `ops.def` and protocol constants.
@@ -172,31 +197,28 @@ Policy:
 - keep AtomVM-facing protocol work in `lgfx_port/`
 - keep ordinary operations on the direct synchronous handler path
 - keep batching explicit rather than implicit
-- keep batch-runtime concerns out of ordinary handlers
+- keep batch dispatch out of ordinary handlers
 - keep request decoding close to the code that uses it
 - keep device truth in `../lgfx_device/`
 
 The goal is not to build another abstraction tower. The goal is to keep the protocol boundary easy to read, easy to change, and hard to misunderstand.
 
-## Relationship to the batch runtime
+## Relationship to batch dispatch
 
-`lgfx_port/` is protocol-facing. `lgfx_runtime/` is execution-facing.
+`lgfx_port/` is protocol-facing and owns explicit batch dispatch.
 
 The split is:
 
 - `lgfx_port/`
-  - accepts and validates explicit batch submission
-  - builds native batch commands
+  - accepts and validates explicit binary batch submission
+  - validates render scripts
+  - dispatches render commands in order
 
-- `lgfx_runtime/`
-  - owns accepted batch state
-  - executes batch commands in order
-  - records batch status and failure state
+- `lgfx_device/`
+  - owns the final LovyanGFX-facing behavior
 
-- `lgfx_command_dispatch`
-  - routes runtime-executed native commands to the appropriate `lgfx_device_*` entry point
-
-This keeps the batch runtime narrow and prevents it from becoming the default execution path for the whole API surface.
+This keeps binary batching explicit and prevents it from becoming the default execution
+path for the whole API surface.
 
 ## Binary payload rule
 
@@ -208,10 +230,9 @@ For ordinary operations:
 - device calls must fully consume borrowed payloads before returning
 - borrowed payload pointers must not survive the request boundary
 
-For explicit batching:
+For explicit binary batching:
 
-- payload-bearing batch commands are a separate concern
-- queued payload-bearing commands must use runtime-owned storage when that part of the batch path is supported
+- retained payloads must stay inside the current request unless native-owned storage is introduced later
 
 ## When changing this layer
 
@@ -219,9 +240,56 @@ When adding or changing a protocol-visible operation:
 
 - add or update one row in `ops.def`
 - add the handler declaration via `ops.h` when needed
-- implement the ordinary handler in `handlers/` when the op has a direct path
-- update `batch_decode.c` when the op participates in explicit batching
+- implement the ordinary handler in the relevant `handlers.c` section when the op has a direct path
+- update `render_batch_dispatch.cpp` when the op participates in binary batching
 - keep AtomVM decoding in `lgfx_port/`
 - keep detailed device semantics in `../lgfx_device/`
 - update protocol docs when the externally visible contract changes
 - resync generated protocol reference tables
+
+## Render-batch prevalidation
+
+`LGFX_PORT_RENDER_BATCH_PREVALIDATE=ON` enables a full syntax/support pass before
+starting the native write session. This preserves the strict no-partial-mutation
+behavior for malformed batches, but it parses each batch twice.
+
+The default is `OFF` so animation hot loops validate commands while executing
+and avoid the extra pass. Keep it off for performance demos; enable it while
+debugging native render-batch encoding issues.
+
+Example CMake override:
+
+```sh
+-DLGFX_PORT_RENDER_BATCH_PREVALIDATE=ON
+```
+
+## Render-batch trace logging
+
+`LGFX_PORT_ENABLE_RENDER_BATCH_TRACE=ON` enables native binary-batch execution counters.
+
+This is intended for temporary animation-performance diagnosis. It logs one line per
+`submitBinaryBatch` execution with timing and counters such as:
+
+- batch bytes
+- prevalidation time, when `LGFX_PORT_RENDER_BATCH_PREVALIDATE=ON`
+- native write-session start time
+- binary-batch execution time
+- native write-session end time
+- total measured native batch time
+- command count
+- scalar command count
+- text command count
+- sprite push count, including `pushSprite` and one-off `pushRotateZoom`
+- `pushRotateZoomList` command count
+- total transform-list instances
+- executed transform instances
+- approximately culled transform instances
+- display command count
+
+Example CMake override:
+
+```sh
+-DLGFX_PORT_ENABLE_RENDER_BATCH_TRACE=ON
+```
+
+Keep this disabled for normal demos to avoid serial log overhead in hot animation loops.

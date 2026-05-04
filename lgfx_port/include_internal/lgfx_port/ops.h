@@ -89,10 +89,11 @@ typedef term (*lgfx_handler_fn)(Context *ctx, lgfx_port_t *port, const lgfx_requ
 // Lookup
 // -----------------------------------------------------------------------------
 
-lgfx_handler_fn lgfx_dispatch_lookup(lgfx_port_t *port, term op);
-const lgfx_op_meta_t *lgfx_op_meta_lookup(const lgfx_port_t *port, term op_atom);
-const char *lgfx_op_name_from_atom(const lgfx_port_t *port, term op_atom);
-bool lgfx_op_try_from_atom(const lgfx_port_t *port, term op_atom, lgfx_op_t *out_op);
+lgfx_handler_fn lgfx_dispatch_lookup_by_op(lgfx_port_t *port, lgfx_op_t op);
+const lgfx_op_meta_t *lgfx_op_meta_lookup_by_op(lgfx_op_t op);
+const char *lgfx_op_name_from_op(lgfx_op_t op);
+bool lgfx_op_try_from_opcode(uint32_t opcode, lgfx_op_t *out_op);
+bool lgfx_port_op_is_enabled_by_op(const lgfx_port_t *port, lgfx_op_t op);
 
 #ifdef __cplusplus
 }

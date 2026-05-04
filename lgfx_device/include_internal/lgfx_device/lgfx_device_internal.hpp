@@ -1,6 +1,8 @@
-// SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-//
-// SPDX-License-Identifier: Apache-2.0
+/*
+ * SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 // lgfx_device/lgfx_device_internal.hpp
 //
@@ -12,11 +14,13 @@
 #ifndef LGFX_DEVICE_INTERNAL_HPP
 #define LGFX_DEVICE_INTERNAL_HPP
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include <LovyanGFX.hpp>
 
 #include "esp_err.h"
+#include "sdkconfig.h"
 #include "lgfx_device/lgfx_device.h"
 
 namespace lgfx_dev
@@ -29,6 +33,15 @@ struct LgfxRuntimeConfig;
 // -----------------------------------------------------------------------------
 
 uint16_t max_sprites_const();
+
+static inline bool should_use_psram_sprites()
+{
+#if (LGFX_PORT_ENABLE_PSRAM_SPRITES == 1) && defined(CONFIG_SPIRAM)
+    return true;
+#else
+    return false;
+#endif
+}
 
 // -----------------------------------------------------------------------------
 // Shared lock / lifecycle helpers (owned by lgfx_device_state.cpp)
@@ -139,6 +152,7 @@ uint16_t presentation_strip_height_locked();
 esp_err_t presentation_ensure_buffers_locked();
 esp_err_t presentation_begin_strip_locked(uint16_t y0);
 esp_err_t presentation_present_strip_locked();
+esp_err_t presentation_cancel_strip_locked();
 esp_err_t presentation_rebuild_locked();
 esp_err_t presentation_present_locked();
 esp_err_t presentation_destroy_buffers_locked();
@@ -312,7 +326,9 @@ static inline esp_err_t validate_sprite_transparent_scalar(
     uint32_t transparent_value)
 {
     if (!has_transparent) {
-        return ESP_OK;
+        return (!transparent_is_index && transparent_value == 0u)
+            ? ESP_OK
+            : ESP_ERR_INVALID_ARG;
     }
 
     if (!src) {
@@ -713,6 +729,56 @@ esp_err_t set_cursor_locked(
     int16_t x,
     int16_t y);
 
+esp_err_t draw_string_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    const uint8_t *text,
+    size_t text_len);
+
+esp_err_t print_locked(
+    uint8_t target,
+    const uint8_t *text,
+    size_t text_len);
+
+esp_err_t println_locked(
+    uint8_t target,
+    const uint8_t *text,
+    size_t text_len);
+
+esp_err_t draw_jpg_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t max_w,
+    uint16_t max_h,
+    int16_t off_x,
+    int16_t off_y,
+    float scale_x,
+    float scale_y,
+    const uint8_t *jpeg_bytes,
+    size_t jpeg_len);
+
+esp_err_t push_image_rgb565_strided_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t stride_pixels,
+    const uint8_t *pixels_le,
+    size_t pixels_len);
+
+esp_err_t set_palette_color_locked(
+    uint8_t handle,
+    uint8_t palette_index,
+    uint32_t rgb888);
+
+esp_err_t set_pivot_locked(
+    uint8_t target,
+    int16_t px,
+    int16_t py);
+
 esp_err_t push_sprite_locked(
     uint8_t src_handle,
     uint8_t dst_target,
@@ -721,6 +787,33 @@ esp_err_t push_sprite_locked(
     bool has_transparent,
     bool transparent_is_index,
     uint32_t transparent_value);
+
+struct PushSpriteListStats
+{
+    size_t instance_count = 0;
+};
+
+esp_err_t push_sprite_list_locked(
+    uint8_t dst_target,
+    const uint8_t *instance_records,
+    size_t instance_count,
+    bool has_transparent,
+    bool transparent_is_index,
+    uint32_t transparent_value,
+    PushSpriteListStats *out_stats);
+
+struct PushSpriteRegionListStats
+{
+    size_t instance_count = 0;
+};
+
+esp_err_t push_sprite_region_list_locked(
+    uint8_t dst_target,
+    const uint8_t *instance_records,
+    size_t instance_count,
+    bool has_transparent,
+    uint32_t transparent_value,
+    PushSpriteRegionListStats *out_stats);
 
 esp_err_t push_rotate_zoom_locked(
     uint8_t src_handle,
@@ -732,7 +825,40 @@ esp_err_t push_rotate_zoom_locked(
     float zoom_y,
     bool has_transparent,
     bool transparent_is_index,
-    uint32_t transparent_value);
+    uint32_t transparent_value,
+    bool approx_cull);
+
+esp_err_t push_rotate_zoom_checked_locked(
+    uint8_t src_handle,
+    uint8_t dst_target,
+    int16_t dst_x,
+    int16_t dst_y,
+    float angle,
+    float zoom_x,
+    float zoom_y,
+    bool has_transparent,
+    bool transparent_is_index,
+    uint32_t transparent_value,
+    bool approx_cull,
+    bool *out_was_culled);
+
+struct PushRotateZoomListStats
+{
+    size_t instance_count = 0;
+    size_t executed_count = 0;
+    size_t culled_count = 0;
+};
+
+esp_err_t push_rotate_zoom_list_locked(
+    uint8_t dst_target,
+    const uint8_t *instance_records,
+    size_t instance_count,
+    int16_t y_offset,
+    bool has_transparent,
+    bool transparent_is_index,
+    uint32_t transparent_value,
+    bool approx_cull,
+    PushRotateZoomListStats *out_stats);
 
 } // namespace lgfx_dev
 

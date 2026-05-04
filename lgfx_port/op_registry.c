@@ -19,12 +19,18 @@
 #endif
 
 _Static_assert(CHAR_BIT == 8, "This code assumes 8-bit bytes");
+_Static_assert(LGFX_REQ_MAX_INLINE_ARGS >= 1, "LGFX_REQ_MAX_INLINE_ARGS must be >= 1");
 _Static_assert(LGFX_OP_TARGET_BAD_TARGET == 0, "LGFX_OP_TARGET_BAD_TARGET must be 0");
 _Static_assert(LGFX_OP_TARGET_UNSUPPORTED == 1, "LGFX_OP_TARGET_UNSUPPORTED must be 1");
 _Static_assert(LGFX_OP_TARGET_ANY == 2, "LGFX_OP_TARGET_ANY must be 2");
 _Static_assert(LGFX_OP_TARGET_SPRITE_ONLY == 3, "LGFX_OP_TARGET_SPRITE_ONLY must be 3");
 _Static_assert(LGFX_OP_STATE_ANY == 0, "LGFX_OP_STATE_ANY must be 0");
 _Static_assert(LGFX_OP_STATE_REQUIRES_INIT == 1, "LGFX_OP_STATE_REQUIRES_INIT must be 1");
+
+#define X(op_name, _handler_fn, _atom_str, _min_arity_v, max_arity_v, ...) \
+    _Static_assert(((max_arity_v) - 5) <= LGFX_REQ_MAX_INLINE_ARGS, #op_name " exceeds LGFX_REQ_MAX_INLINE_ARGS");
+#include "lgfx_port/ops.def"
+#undef X
 
 #if LGFX_PORT_DEBUG
 _Static_assert(sizeof(lgfx_op_meta_t) == 16, "lgfx_op_meta_t must stay 16 bytes");
@@ -120,31 +126,10 @@ static const char *const s_op_names[LGFX_OP_COUNT] = {
 #undef X
 #endif
 
-#define X(op_name, handler_fn, _atom_str, ...) [LGFX_OP_##op_name] = (handler_fn),
-
-static const lgfx_handler_fn s_handlers[LGFX_OP_COUNT] = {
-#include "lgfx_port/ops.def"
-};
-#undef X
-
 _Static_assert((sizeof(s_op_meta) / sizeof(s_op_meta[0])) == LGFX_OP_COUNT, "s_op_meta size mismatch");
 #if LGFX_PORT_DEBUG
 _Static_assert((sizeof(s_op_names) / sizeof(s_op_names[0])) == LGFX_OP_COUNT, "s_op_names size mismatch");
 #endif
-_Static_assert((sizeof(s_handlers) / sizeof(s_handlers[0])) == LGFX_OP_COUNT, "s_handlers size mismatch");
-
-static int lgfx_op_index_from_atom(const lgfx_port_t *port, term op_atom)
-{
-#define X(op_name, _handler_fn, _atom_str, ...) \
-    if (op_atom == port->atoms.op_name) {       \
-        return LGFX_OP_##op_name;               \
-    }
-
-#include "lgfx_port/ops.def"
-#undef X
-
-    return -1;
-}
 
 static bool lgfx_port_touch_attached(const lgfx_port_t *port)
 {
@@ -228,48 +213,30 @@ static bool lgfx_op_gated_by_index(const lgfx_port_t *port, int op_index)
 
 static bool lgfx_op_enabled_by_index(const lgfx_port_t *port, int op_index)
 {
-    if (!lgfx_op_gated_by_index(port, op_index)) {
+    return lgfx_op_gated_by_index(port, op_index);
+}
+
+bool lgfx_op_try_from_opcode(uint32_t opcode, lgfx_op_t *out_op)
+{
+    if (out_op == NULL || opcode >= (uint32_t) LGFX_OP_COUNT) {
         return false;
     }
 
-    if (s_handlers[op_index] == NULL) {
-        return false;
-    }
-
+    *out_op = (lgfx_op_t) opcode;
     return true;
 }
 
-bool lgfx_op_try_from_atom(const lgfx_port_t *port, term op_atom, lgfx_op_t *out_op)
+const char *lgfx_op_name_from_op(lgfx_op_t op)
 {
-    if (port == NULL || out_op == NULL) {
-        return false;
+    if (op < 0 || op >= LGFX_OP_COUNT) {
+        return "unknown_op";
     }
 
-    int op_index = lgfx_op_index_from_atom(port, op_atom);
-    if (op_index < 0 || op_index >= (int) LGFX_OP_COUNT) {
-        return false;
-    }
-
-    *out_op = (lgfx_op_t) op_index;
-    return true;
-}
-
-term lgfx_op_atom_from_op(const lgfx_port_t *port, lgfx_op_t op)
-{
-    if (port == NULL) {
-        return term_invalid_term();
-    }
-
-    switch (op) {
-#define X(op_name, _handler_fn, _atom_str, ...) \
-    case LGFX_OP_##op_name:                     \
-        return port->atoms.op_name;
-#include "lgfx_port/ops.def"
-#undef X
-
-        default:
-            return port->atoms.none;
-    }
+#if LGFX_PORT_DEBUG
+    return s_op_names[op];
+#else
+    return "op";
+#endif
 }
 
 uint32_t lgfx_port_feature_bits(const lgfx_port_t *port)
@@ -302,54 +269,42 @@ uint8_t lgfx_port_max_sprites(const lgfx_port_t *port)
     return (uint8_t) LGFX_PORT_MAX_SPRITES;
 }
 
-bool lgfx_port_op_is_enabled(const lgfx_port_t *port, term op_atom)
+bool lgfx_port_op_is_enabled_by_op(const lgfx_port_t *port, lgfx_op_t op)
 {
-    if (port == NULL) {
+    if (port == NULL || op < 0 || op >= LGFX_OP_COUNT) {
         return false;
     }
 
-    const int op_index = lgfx_op_index_from_atom(port, op_atom);
-    if (op_index < 0) {
-        return false;
-    }
-
-    return lgfx_op_enabled_by_index(port, op_index);
+    return lgfx_op_enabled_by_index(port, (int) op);
 }
 
-const lgfx_op_meta_t *lgfx_op_meta_lookup(const lgfx_port_t *port, term op_atom)
+const lgfx_op_meta_t *lgfx_op_meta_lookup_by_op(lgfx_op_t op)
 {
-    int op_index = lgfx_op_index_from_atom(port, op_atom);
-    if (op_index < 0) {
+    if (op < 0 || op >= LGFX_OP_COUNT) {
         return NULL;
     }
 
-    return &s_op_meta[op_index];
+    return &s_op_meta[(int) op];
 }
 
-const char *lgfx_op_name_from_atom(const lgfx_port_t *port, term op_atom)
+lgfx_handler_fn lgfx_dispatch_lookup_by_op(lgfx_port_t *port, lgfx_op_t op)
 {
-    int op_index = lgfx_op_index_from_atom(port, op_atom);
-    if (op_index < 0) {
-        return "unknown_op";
-    }
-
-#if LGFX_PORT_DEBUG
-    return s_op_names[op_index];
-#else
-    return "op";
-#endif
-}
-
-lgfx_handler_fn lgfx_dispatch_lookup(lgfx_port_t *port, term op_atom)
-{
-    int op_index = lgfx_op_index_from_atom((const lgfx_port_t *) port, op_atom);
-    if (op_index < 0) {
+    if (op < 0 || op >= LGFX_OP_COUNT) {
         return NULL;
     }
 
-    if (!lgfx_op_enabled_by_index(port, op_index)) {
+    if (!lgfx_op_enabled_by_index(port, (int) op)) {
         return NULL;
     }
 
-    return s_handlers[op_index];
+    switch (op) {
+#define X(op_name, handler_fn, _atom_str, ...) \
+        case LGFX_OP_##op_name:                \
+            return handler_fn;
+#include "lgfx_port/ops.def"
+#undef X
+
+        default:
+            return NULL;
+    }
 }

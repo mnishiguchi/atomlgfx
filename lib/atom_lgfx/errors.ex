@@ -17,6 +17,18 @@ defmodule AtomLGFX.Errors do
   def format_error(:empty_batch),
     do: "batch must not be empty"
 
+  def format_error({:bad_binary_batch, value}),
+    do: "bad binary batch #{inspect(value)}"
+
+  def format_error(:strip_already_active),
+    do: "presentation strip is already active"
+
+  def format_error(:strip_not_active),
+    do: "presentation strip is not active"
+
+  def format_error(:strip_not_presented),
+    do: "presentation strip was not presented before the end of the batch"
+
   def format_error(:missing_scalar_color),
     do: "missing scalar color"
 
@@ -44,6 +56,9 @@ defmodule AtomLGFX.Errors do
   def format_error({:bad_transparent_color, value}),
     do: "bad transparent color #{inspect(value)}"
 
+  def format_error({:bad_approx_cull, value}),
+    do: "bad approximate cull option #{inspect(value)}"
+
   def format_error({:bad_palette_index, value}),
     do: "bad palette index #{inspect(value)}"
 
@@ -69,6 +84,14 @@ defmodule AtomLGFX.Errors do
     do:
       "#{inspect(op_name)} payload too large: #{payload_size} bytes exceeds #{max_binary_bytes} bytes"
 
+  def format_error({:batch_failed, {index, opcode, reason}}),
+    do:
+      "render batch command #{inspect(index)} opcode #{inspect(opcode)} failed: #{format_error(reason)}"
+
+  def format_error({:batch_failed, index, opcode, reason}),
+    do:
+      "render batch command #{inspect(index)} opcode #{inspect(opcode)} failed: #{format_error(reason)}"
+
   def format_error({:pixels_size_not_even, size}),
     do: "RGB565 pixel payload size must be even, got #{size} bytes"
 
@@ -91,8 +114,24 @@ defmodule AtomLGFX.Errors do
   def format_error({:bad_touch_calibrate_params, value}),
     do: "bad touch calibration params #{inspect(value)}"
 
-  def format_error({:bad_batch_command, value}),
-    do: "bad batch command #{inspect(value)}"
+  def format_error({:unknown_lgfx_op, value}),
+    do: "unknown LovyanGFX operation #{inspect(value)}"
+
+  def format_error({:unsafe_lgfx_op, value}),
+    do: "unsafe LovyanGFX operation #{inspect(value)} is not available through the public API"
+
+  def format_error({:unbatchable_lgfx_op, value}),
+    do: "LovyanGFX operation #{inspect(value)} is not available through the public batch API"
+
+  def format_error({:bad_lgfx_arg_count, op_name, min, max, actual}) when min == max,
+    do: "#{inspect(op_name)} expects #{min} argument(s), got #{actual}"
+
+  def format_error({:bad_lgfx_arg_count, op_name, min, max, actual}),
+    do: "#{inspect(op_name)} expects #{min}..#{max} arguments, got #{actual}"
+
+  def format_error({:bad_lgfx_flags, op_name, allowed, actual}),
+    do:
+      "#{inspect(op_name)} received unsupported flags #{inspect(actual)}; allowed mask is #{inspect(allowed)}"
 
   def format_error({:unexpected_reply, value}),
     do: "unexpected port reply #{inspect(value)}"

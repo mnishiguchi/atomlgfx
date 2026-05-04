@@ -24,7 +24,7 @@ defmodule AtomLGFX.Color do
   """
   @spec color332(0..255, 0..255, 0..255) :: rgb332_value
   def color332(r, g, b) when u8(r) and u8(g) and u8(b) do
-    (r &&& 0xE0) ||| ((g &&& 0xE0) >>> 3) ||| (b >>> 6)
+    (r &&& 0xE0) ||| (g &&& 0xE0) >>> 3 ||| b >>> 6
   end
 
   @doc """
@@ -32,7 +32,7 @@ defmodule AtomLGFX.Color do
   """
   @spec color565(0..255, 0..255, 0..255) :: rgb565_value
   def color565(r, g, b) when u8(r) and u8(g) and u8(b) do
-    (r &&& 0xF8) <<< 8 ||| (g &&& 0xFC) <<< 3 ||| (b >>> 3)
+    (r &&& 0xF8) <<< 8 ||| (g &&& 0xFC) <<< 3 ||| b >>> 3
   end
 
   @doc """
@@ -40,7 +40,7 @@ defmodule AtomLGFX.Color do
   """
   @spec color888(0..255, 0..255, 0..255) :: rgb888_value
   def color888(r, g, b) when u8(r) and u8(g) and u8(b) do
-    (r <<< 16) ||| (g <<< 8) ||| b
+    r <<< 16 ||| g <<< 8 ||| b
   end
 
   @doc """
@@ -48,7 +48,7 @@ defmodule AtomLGFX.Color do
   """
   @spec swap565(rgb565_value) :: rgb565_value
   def swap565(color) when rgb565(color) do
-    ((color &&& 0x00FF) <<< 8) ||| ((color &&& 0xFF00) >>> 8)
+    (color &&& 0x00FF) <<< 8 ||| (color &&& 0xFF00) >>> 8
   end
 
   @doc """
@@ -66,7 +66,7 @@ defmodule AtomLGFX.Color do
   """
   @spec swap888(rgb888_value) :: rgb888_value
   def swap888(color) when color888(color) do
-    ((color &&& 0x0000FF) <<< 16) ||| (color &&& 0x00FF00) ||| ((color &&& 0xFF0000) >>> 16)
+    (color &&& 0x0000FF) <<< 16 ||| (color &&& 0x00FF00) ||| (color &&& 0xFF0000) >>> 16
   end
 
   @doc """
@@ -94,13 +94,13 @@ defmodule AtomLGFX.Color do
   """
   @spec color8to16(rgb332_value) :: rgb565_value
   def color8to16(color332_value) when u8(color332_value) do
-    r3 = (color332_value >>> 5) &&& 0x07
-    g3 = (color332_value >>> 2) &&& 0x07
+    r3 = color332_value >>> 5 &&& 0x07
+    g3 = color332_value >>> 2 &&& 0x07
     b2 = color332_value &&& 0x03
 
-    r8 = (r3 <<< 5) ||| (r3 <<< 2) ||| (r3 >>> 1)
-    g8 = (g3 <<< 5) ||| (g3 <<< 2) ||| (g3 >>> 1)
-    b8 = (b2 <<< 6) ||| (b2 <<< 4) ||| (b2 <<< 2) ||| b2
+    r8 = r3 <<< 5 ||| r3 <<< 2 ||| r3 >>> 1
+    g8 = g3 <<< 5 ||| g3 <<< 2 ||| g3 >>> 1
+    b8 = b2 <<< 6 ||| b2 <<< 4 ||| b2 <<< 2 ||| b2
 
     color565(r8, g8, b8)
   end
@@ -110,13 +110,13 @@ defmodule AtomLGFX.Color do
   """
   @spec color16to24(rgb565_value) :: rgb888_value
   def color16to24(color565_value) when rgb565(color565_value) do
-    r5 = (color565_value >>> 11) &&& 0x1F
-    g6 = (color565_value >>> 5) &&& 0x3F
+    r5 = color565_value >>> 11 &&& 0x1F
+    g6 = color565_value >>> 5 &&& 0x3F
     b5 = color565_value &&& 0x1F
 
-    r8 = (r5 <<< 3) ||| (r5 >>> 2)
-    g8 = (g6 <<< 2) ||| (g6 >>> 4)
-    b8 = (b5 <<< 3) ||| (b5 >>> 2)
+    r8 = r5 <<< 3 ||| r5 >>> 2
+    g8 = g6 <<< 2 ||| g6 >>> 4
+    b8 = b5 <<< 3 ||| b5 >>> 2
 
     color888(r8, g8, b8)
   end
@@ -382,7 +382,7 @@ defmodule AtomLGFX.Color do
     )
   end
 
-  defp red8(color888_value), do: (color888_value >>> 16) &&& 0xFF
-  defp green8(color888_value), do: (color888_value >>> 8) &&& 0xFF
+  defp red8(color888_value), do: color888_value >>> 16 &&& 0xFF
+  defp green8(color888_value), do: color888_value >>> 8 &&& 0xFF
   defp blue8(color888_value), do: color888_value &&& 0xFF
 end

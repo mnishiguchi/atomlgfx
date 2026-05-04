@@ -15,7 +15,7 @@ defmodule AtomLGFX.Images do
       when i16(x) and i16(y) and is_binary(jpeg) and target_any(target) do
     with :ok <- validate_non_empty_jpeg(jpeg),
          :ok <- validate_binary_size_within_limit(port, jpeg, :draw_jpg) do
-      Protocol.call_ok(port, :drawJpg, target, 0, [x, y, jpeg], Protocol.long_timeout())
+      Protocol.call_ok(port, :draw_jpg, target, 0, [x, y, jpeg], Protocol.long_timeout())
     end
   end
 
@@ -46,7 +46,7 @@ defmodule AtomLGFX.Images do
          :ok <- validate_binary_size_within_limit(port, jpeg, :draw_jpg) do
       Protocol.call_ok(
         port,
-        :drawJpg,
+        :draw_jpg,
         target,
         0,
         [x, y, max_width, max_height, off_x, off_y, normalized_scale_x, normalized_scale_y, jpeg],
@@ -208,7 +208,7 @@ defmodule AtomLGFX.Images do
   defp push_image_rgb565_raw(port, x, y, width, height, pixels, stride_pixels, target) do
     Protocol.call_ok(
       port,
-      :pushImage,
+      :push_image,
       target,
       0,
       [x, y, width, height, stride_pixels, pixels],

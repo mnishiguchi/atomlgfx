@@ -22,7 +22,7 @@ defmodule AtomLGFX.Text do
          :ok <-
            Protocol.call_ok(
              port,
-             :setTextSize,
+             :set_text_size,
              target,
              0,
              [normalized_scale],
@@ -40,7 +40,7 @@ defmodule AtomLGFX.Text do
          :ok <-
            Protocol.call_ok(
              port,
-             :setTextSize,
+             :set_text_size,
              target,
              0,
              [normalized_sx, normalized_sy],
@@ -53,17 +53,17 @@ defmodule AtomLGFX.Text do
 
   def set_text_datum(port, datum, target \\ 0)
       when u8(datum) and target_any(target) do
-    Protocol.call_ok(port, :setTextDatum, target, 0, [datum], Protocol.long_timeout())
+    Protocol.call_ok(port, :set_text_datum, target, 0, [datum], Protocol.long_timeout())
   end
 
   def set_text_wrap(port, wrap, target \\ 0)
       when is_boolean(wrap) and target_any(target) do
-    Protocol.call_ok(port, :setTextWrap, target, 0, [wrap], Protocol.long_timeout())
+    Protocol.call_ok(port, :set_text_wrap, target, 0, [wrap], Protocol.long_timeout())
   end
 
   def set_text_wrap_xy(port, wrap_x, wrap_y, target \\ 0)
       when is_boolean(wrap_x) and is_boolean(wrap_y) and target_any(target) do
-    Protocol.call_ok(port, :setTextWrap, target, 0, [wrap_x, wrap_y], Protocol.long_timeout())
+    Protocol.call_ok(port, :set_text_wrap, target, 0, [wrap_x, wrap_y], Protocol.long_timeout())
   end
 
   def set_text_font_preset(port, preset, target \\ 0)
@@ -72,7 +72,7 @@ defmodule AtomLGFX.Text do
          :ok <-
            Protocol.call_ok(
              port,
-             :setTextFontPreset,
+             :set_text_font_preset,
              target,
              0,
              [preset_id],
@@ -88,7 +88,7 @@ defmodule AtomLGFX.Text do
       when target_any(target) do
     with {:ok, flags, args, desired} <- normalize_text_color_args(fg_color, bg_color),
          :ok <-
-           Protocol.call_ok(port, :setTextColor, target, flags, args, Protocol.long_timeout()) do
+           Protocol.call_ok(port, :set_text_color, target, flags, args, Protocol.long_timeout()) do
       Cache.put_text_color(port, target, desired)
       :ok
     end
@@ -96,11 +96,11 @@ defmodule AtomLGFX.Text do
 
   def set_cursor(port, x, y, target \\ 0)
       when i16(x) and i16(y) and target_any(target) do
-    Protocol.call_ok(port, :setCursor, target, 0, [x, y], Protocol.long_timeout())
+    Protocol.call_ok(port, :set_cursor, target, 0, [x, y], Protocol.long_timeout())
   end
 
   def get_cursor(port, target \\ 0) when target_any(target) do
-    case Protocol.call(port, :getCursor, target, 0, [], Protocol.short_timeout()) do
+    case Protocol.call(port, :get_cursor, target, 0, [], Protocol.short_timeout()) do
       {:ok, {x, y}} when i16(x) and i16(y) ->
         {:ok, {x, y}}
 
@@ -115,7 +115,7 @@ defmodule AtomLGFX.Text do
   def draw_string(port, x, y, text, target \\ 0)
       when i16(x) and i16(y) and is_binary(text) and target_any(target) do
     with :ok <- validate_nonempty_text_binary(text) do
-      Protocol.call_ok(port, :drawString, target, 0, [x, y, text], Protocol.long_timeout())
+      Protocol.call_ok(port, :draw_string, target, 0, [x, y, text], Protocol.long_timeout())
     end
   end
 

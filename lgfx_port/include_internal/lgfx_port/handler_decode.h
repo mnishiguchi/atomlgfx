@@ -30,7 +30,16 @@
 
 static inline term lgfx_req_elem(const lgfx_request_t *req, int index)
 {
-    return term_get_tuple_element(req->request_tuple, index);
+    if (req == NULL || index < 5) {
+        return term_invalid_term();
+    }
+
+    int arg_index = index - 5;
+    if (arg_index < 0 || arg_index >= req->arg_count) {
+        return term_invalid_term();
+    }
+
+    return req->args[arg_index];
 }
 
 // ----------------------------------------------------------------------------

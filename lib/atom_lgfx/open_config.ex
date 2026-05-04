@@ -142,8 +142,7 @@ defmodule AtomLGFX.OpenConfig do
 
   defp normalize_open_option_by_rule(:panel_driver, key, value) do
     {:error,
-     {:bad_open_option_value, key, value,
-      ":ili9488, :ili9341, :ili9341_2, :st7789, or :ili9342c"}}
+     {:bad_open_option_value, key, value, ":ili9488, :ili9341, :ili9341_2, :st7789, or :ili9342c"}}
   end
 
   defp normalize_open_option_by_rule(:touch_driver, _key, value)
