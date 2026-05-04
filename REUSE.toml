@@ -23,20 +23,9 @@ path = [
   "CMakeLists.txt",
   "README.md",
   "docs/**",
-  "eim_config.toml",
   "include/**",
-  "lgfx_device/README.md",
-  "lgfx_device/*.cpp",
-  "lgfx_device/*.h",
-  "lgfx_device/*.hpp",
-  "lgfx_runtime/README.md",
-  "lgfx_runtime/*.c",
-  "lgfx_runtime/*.h",
-  "lgfx_port/README.md",
-  "lgfx_port/cmake/**",
-  "lgfx_port/handlers/*.c",
-  "lgfx_port/include_internal/**",
-  "lgfx_port/*.c",
+  "lgfx_device/**",
+  "lgfx_port/**",
   "lib/**",
   "mix.exs",
   "scripts/*.exs",
@@ -45,14 +34,33 @@ path = [
   "examples/elixir/config/**",
   "examples/elixir/lib/**",
   "examples/elixir/mix.exs",
-  "examples/elixir/priv/assets/icons/*.rgb565",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Masatoshi Nishiguchi"
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
-path = "lgfx_device/fonts/generated/ui_font_ja_16_min.cpp"
+path = [
+  "examples/elixir/priv/assets/icons/alert.rgb565",
+  "examples/elixir/priv/assets/icons/close.rgb565",
+  "examples/elixir/priv/assets/icons/info.rgb565",
+]
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2026 Masatoshi Nishiguchi"
+SPDX-FileCopyrightText = "2020 lovyan03 (https://github.com/lovyan03)"
+SPDX-License-Identifier = "BSD-2-Clause"
+
+[[annotations]]
+path = "examples/elixir/priv/assets/icons/piyopiyo.rgb565"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "piyopiyo.ex contributors (https://github.com/piyopiyoex)"
 SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "lgfx_device/fonts/generated/ui_font_ja_16_min.cpp"
+precedence = "override"
+SPDX-FileCopyrightText = [
+  "2026 Masatoshi Nishiguchi",
+  "2020 lovyan03 (https://github.com/lovyan03)",
+  "lgfxFontSubsetGenerator contributors (https://github.com/yamamaya/lgfxFontSubsetGenerator)",
+]
+SPDX-License-Identifier = "IPA"

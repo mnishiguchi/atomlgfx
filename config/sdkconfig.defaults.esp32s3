@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# ESP32-S3 defaults for AtomLGFX animation demos.
+#
+# MovingIcons and Stack-chan use LovyanGFX sprites / presentation strips.
+# On ESP32-S3 boards with external PSRAM, keep those buffers out of
+# internal RAM.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_USE_CAPS_ALLOC=y

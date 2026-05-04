@@ -10,3 +10,9 @@
 /tmp/
 .atomvm*
 eim_config.toml
+# Example build artifacts
+/examples/.expert/
+/examples/elixir/_build/
+/examples/elixir/deps/
+/examples/elixir/.expert/
+/examples/elixir/*.avm

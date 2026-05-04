@@ -15,6 +15,7 @@ defmodule Main do
   @atomvm_esp32_rel_path "src/platforms/esp32"
   @components_dirname "components"
   @sdkconfig_defaults_filename "sdkconfig.defaults"
+  @sdkconfig_defaults_dirname "config"
 
   @elixir_boot_avm_rel_path "build/libs/esp32boot/elixir_esp32boot.avm"
   @erlang_boot_avm_rel_path "build/libs/esp32boot/esp32boot.avm"
@@ -95,8 +96,16 @@ defmodule Main do
     fullclean = Keyword.get(options, :fullclean, false)
     clean_host = Keyword.get(options, :clean_host, false)
     clean_platform = Keyword.get(options, :clean_platform, false)
-    components = Keyword.get_values(options, :component) |> Enum.map(&Path.expand/1)
-    sdkconfigs = Keyword.get_values(options, :sdkconfig) |> Enum.map(&Path.expand/1)
+    requested_components = Keyword.get_values(options, :component) |> Enum.map(&Path.expand/1)
+    sdkconfig_components = uniq_paths(requested_components ++ linked_components(esp32_dir))
+    explicit_sdkconfigs = Keyword.get_values(options, :sdkconfig) |> Enum.map(&Path.expand/1)
+
+    sdkconfigs =
+      uniq_paths(
+        component_sdkconfigs(sdkconfig_components, target) ++
+          local_sdkconfigs(target) ++ explicit_sdkconfigs
+      )
+
     cmake_defines = Keyword.get_values(options, :cmake_define)
     out_dir = options |> Keyword.get(:out_dir, "") |> expand_optional_path()
     {atomvm_ref, atomvm_ref_source} = resolve_atomvm_ref(options)
@@ -116,7 +125,8 @@ defmodule Main do
       fullclean: fullclean,
       clean_host: clean_host,
       clean_platform: clean_platform,
-      components: components,
+      components: requested_components,
+      sdkconfig_components: sdkconfig_components,
       sdkconfigs: sdkconfigs,
       cmake_defines: cmake_defines,
       out_dir: out_dir
@@ -138,6 +148,15 @@ defmodule Main do
       "build-host" ->
         build_host_cmd(shared)
 
+      "component-status" ->
+        component_status_cmd(shared)
+
+      "component-link" ->
+        component_link_cmd(shared)
+
+      "component-unlink" ->
+        component_unlink_cmd(shared)
+
       _ ->
         eim_info = resolve_eim_env_info!()
         shared = Map.merge(shared, eim_info)
@@ -147,12 +166,24 @@ defmodule Main do
         end
 
         case command do
-          "info" -> info_cmd(shared)
-          "build" -> build_cmd(shared)
-          "flash" -> flash_cmd(shared)
-          "install" -> install_cmd(shared)
-          "monitor" -> monitor_cmd(shared)
-          "mkimage" -> mkimage_cmd(shared, extra_args)
+          "info" ->
+            info_cmd(shared)
+
+          "build" ->
+            build_cmd(shared)
+
+          "flash" ->
+            flash_cmd(shared)
+
+          "install" ->
+            install_cmd(shared)
+
+          "monitor" ->
+            monitor_cmd(shared)
+
+          "mkimage" ->
+            mkimage_cmd(shared, extra_args)
+
           _ ->
             usage()
             die("Unknown command: #{command}")
@@ -179,6 +210,12 @@ defmodule Main do
       clean-platform
                   Remove AtomVM ESP32 platform build directory
       clean-host  Remove AtomVM host build directory
+      component-status
+                  Show the AtomVM ESP32 component symlink status
+      component-link
+                  Link a component into AtomVM ESP32 components
+      component-unlink
+                  Remove the component symlink when it points to the requested component
 
     Common options:
       --atomvm-dir PATH       AtomVM repo root
@@ -225,7 +262,9 @@ defmodule Main do
 
     Generic defaults:
       - No external project component is linked unless --component is passed.
-      - No project SDKCONFIG override file is generated.
+      - Linked/current component SDK defaults are used when present.
+      - Supported paths: sdkconfig.defaults, sdkconfig.defaults.<target>,
+        config/sdkconfig.defaults, config/sdkconfig.defaults.<target>
       - Elixir support is enabled by default. Use --no-elixir-support to opt out.
 
     Examples:
@@ -244,6 +283,9 @@ defmodule Main do
       #{@script_name} mkimage --target esp32s3 --out-dir ./build/atomvm-images
       #{@script_name} mkimage --clean-host --clean-platform --target esp32c3 --out-dir ~/Desktop
       #{@script_name} mkimage -- --main build/my_app.avm
+      #{@script_name} component-status --component .
+      #{@script_name} component-link --component .
+      #{@script_name} component-unlink --component .
       #{@script_name} clean
       #{@script_name} clean-host
 
@@ -276,7 +318,11 @@ defmodule Main do
     say("- allow_dirty:        #{shared.allow_dirty}")
     say("- eim_version:        #{shared.eim_version}")
     say("- expected_idf:       #{shared.expected_idf_version}.x")
-    say("- idf_ok:             #{if supported_idf_version?(shared.eim_version, shared.expected_idf_version), do: "yes", else: "no"}")
+
+    say(
+      "- idf_ok:             #{if supported_idf_version?(shared.eim_version, shared.expected_idf_version), do: "yes", else: "no"}"
+    )
+
     say("- elixir_support:     #{shared.elixir_support}")
     say("- release:            #{shared.release}")
     say("- fullclean:          #{shared.fullclean}")
@@ -285,10 +331,14 @@ defmodule Main do
 
     say("")
     say("Optional integration")
-    say("- components:         #{display_list(shared.components)}")
-    say("- sdkconfigs:         #{display_list(shared.sdkconfigs)}")
+    say("- requested components: #{display_list(shared.components)}")
+    say("- sdkconfig components: #{display_list(shared.sdkconfig_components)}")
+    say("- sdkconfigs:           #{display_list(shared.sdkconfigs)}")
     say("- cmake_defines:      #{display_list(shared.cmake_defines)}")
-    say("- mkimage_out_dir:    #{if present?(shared.out_dir), do: shared.out_dir, else: "(platform build dir)"}")
+
+    say(
+      "- mkimage_out_dir:    #{if present?(shared.out_dir), do: shared.out_dir, else: "(platform build dir)"}"
+    )
 
     say("")
     say("Checks")
@@ -316,13 +366,19 @@ defmodule Main do
     end
 
     say("- ESP32 dir:          #{if File.dir?(shared.esp32_dir), do: "ok", else: "missing"}")
-    say("- sdkconfig.defaults: #{if File.regular?(sdkconfig_defaults), do: "ok", else: "missing"}")
+
+    say(
+      "- sdkconfig.defaults: #{if File.regular?(sdkconfig_defaults), do: "ok", else: "missing"}"
+    )
 
     components_dir = Path.join(shared.esp32_dir, @components_dirname)
 
     say("")
     say("Inspect")
-    say("- components dir:     #{if File.dir?(components_dir), do: components_dir, else: "missing (#{components_dir})"}")
+
+    say(
+      "- components dir:     #{if File.dir?(components_dir), do: components_dir, else: "missing (#{components_dir})"}"
+    )
 
     if File.dir?(components_dir) do
       case File.ls(components_dir) do
@@ -452,6 +508,41 @@ defmodule Main do
     host_build_dir = Path.join(shared.atomvm_root, @default_host_build_dirname)
     remove_dir_if_present!(host_build_dir, "AtomVM host build dir")
     say("✔ clean-host complete")
+  end
+
+  defp component_status_cmd(shared) do
+    ensure_atomvm_layout!(shared.atomvm_root, shared.esp32_dir)
+
+    shared
+    |> component_command_components()
+    |> Enum.each(&show_component_status!(&1, shared.esp32_dir))
+  end
+
+  defp component_link_cmd(shared) do
+    ensure_atomvm_layout!(shared.atomvm_root, shared.esp32_dir)
+
+    shared
+    |> component_command_components()
+    |> Enum.each(&ensure_component_link!(&1, shared.esp32_dir))
+
+    say("✔ component-link complete")
+  end
+
+  defp component_unlink_cmd(shared) do
+    ensure_atomvm_layout!(shared.atomvm_root, shared.esp32_dir)
+
+    shared
+    |> component_command_components()
+    |> Enum.each(&remove_component_link!(&1, shared.esp32_dir))
+
+    say("✔ component-unlink complete")
+  end
+
+  defp component_command_components(shared) do
+    case shared.components do
+      [] -> [File.cwd!()]
+      components -> components
+    end
   end
 
   defp prepare_platform_build_dir!(shared, platform_build_dir) do
@@ -754,7 +845,8 @@ defmodule Main do
     end
   end
 
-  defp supported_idf_version?(version, expected) when is_binary(version) and is_binary(expected) do
+  defp supported_idf_version?(version, expected)
+       when is_binary(version) and is_binary(expected) do
     normalized_version = version |> String.trim() |> String.trim_leading("v")
     normalized_expected = expected |> String.trim() |> String.trim_leading("v")
 
@@ -802,6 +894,75 @@ defmodule Main do
           :ok -> :ok
           {:error, reason} -> die("Failed to create symlink: #{want} (#{inspect(reason)})")
         end
+    end
+  end
+
+  defp remove_component_link!(component_dir, esp32_dir) do
+    if not File.dir?(component_dir), do: die("Component directory not found: #{component_dir}")
+
+    name = Path.basename(component_dir)
+    want = Path.join([esp32_dir, @components_dirname, name])
+
+    cond do
+      symlink?(want) ->
+        want_real = canonical_path(want)
+        component_real = canonical_path(component_dir)
+
+        cond do
+          present?(want_real) and present?(component_real) and want_real == component_real ->
+            File.rm!(want)
+            say("✔ removed component symlink: #{want}")
+
+          present?(want_real) and present?(component_real) ->
+            die("Refusing to remove component symlink because it points elsewhere: #{want} -> #{want_real}")
+
+          true ->
+            die("Refusing to remove component symlink because its target could not be resolved: #{want}")
+        end
+
+      File.exists?(want) ->
+        die("Refusing to remove component path because it is not a symlink: #{want}")
+
+      true ->
+        say("Component symlink not present: #{want}")
+    end
+  end
+
+  defp show_component_status!(component_dir, esp32_dir) do
+    name = Path.basename(component_dir)
+    want = Path.join([esp32_dir, @components_dirname, name])
+
+    say("")
+    say("Component")
+    say("- component_dir: #{component_dir}")
+    say("- link_path:     #{want}")
+
+    cond do
+      not File.dir?(component_dir) ->
+        say("- status:        component directory missing")
+
+      symlink?(want) ->
+        want_real = canonical_path(want)
+        component_real = canonical_path(component_dir)
+
+        cond do
+          present?(want_real) and present?(component_real) and want_real == component_real ->
+            say("- status:        linked to this component")
+            say("- target:        #{want_real}")
+
+          present?(want_real) ->
+            say("- status:        linked elsewhere")
+            say("- target:        #{want_real}")
+
+          true ->
+            say("- status:        symlink target could not be resolved")
+        end
+
+      File.exists?(want) ->
+        say("- status:        path exists but is not a symlink")
+
+      true ->
+        say("- status:        not linked")
     end
   end
 
@@ -862,6 +1023,47 @@ defmodule Main do
 
   defp maybe_append(args, true, value), do: args ++ [value]
   defp maybe_append(args, false, _value), do: args
+
+  defp component_sdkconfigs(components, target) do
+    Enum.flat_map(components, fn component ->
+      [
+        Path.join(component, @sdkconfig_defaults_filename),
+        Path.join([component, @sdkconfig_defaults_dirname, @sdkconfig_defaults_filename]),
+        Path.join(component, "#{@sdkconfig_defaults_filename}.#{target}"),
+        Path.join([component, @sdkconfig_defaults_dirname, "#{@sdkconfig_defaults_filename}.#{target}"])
+      ]
+    end)
+    |> Enum.filter(&File.regular?/1)
+    |> Enum.map(&Path.expand/1)
+  end
+
+  defp local_sdkconfigs(target) do
+    component_sdkconfigs([File.cwd!()], target)
+  end
+
+  defp linked_components(esp32_dir) do
+    components_dir = Path.join(esp32_dir, @components_dirname)
+
+    case File.ls(components_dir) do
+      {:ok, entries} ->
+        entries
+        |> Enum.map(&Path.join(components_dir, &1))
+        |> Enum.filter(&File.dir?/1)
+        |> Enum.map(fn path ->
+          case canonical_path(path) do
+            "" -> Path.expand(path)
+            real_path -> real_path
+          end
+        end)
+
+      {:error, _reason} ->
+        []
+    end
+  end
+
+  defp uniq_paths(paths) do
+    Enum.uniq_by(paths, &Path.expand/1)
+  end
 
   defp normalize_cmake_define(value) do
     value = to_string(value)

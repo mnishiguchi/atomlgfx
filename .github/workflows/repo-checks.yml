@@ -28,8 +28,8 @@ jobs:
       - name: Check REUSE compliance
         run: reuse lint --plain
 
-  docs-protocol-check:
-    name: Protocol docs and SPDX headers
+  elixir-check:
+    name: Elixir format, generated protocol files, and tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -39,5 +39,11 @@ jobs:
           otp-version: "27"
           elixir-version: "1.17"
 
-      - name: Check protocol docs are up to date
+      - name: Check Elixir formatting
+        run: mix format --check-formatted
+
+      - name: Check generated protocol files
         run: elixir scripts/sync_lgfx_protocol_doc.exs --check
+
+      - name: Run Elixir tests
+        run: mix test
