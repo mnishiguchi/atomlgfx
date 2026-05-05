@@ -559,6 +559,7 @@ defmodule AtomLGFX do
 
   - `:transparent` accepts an RGB565 integer or `{:index, n}`
   - `:y_offset` is subtracted from each instance y coordinate natively
+  - `:approx_cull` asks native code to skip off-target transforms when safe
   """
   def push_rotate_zoom_list_to(port, dst_target, instances, opts \\ []) do
     Sprites.push_rotate_zoom_list_to(port, dst_target, instances, opts)

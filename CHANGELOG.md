@@ -48,6 +48,6 @@ This project is still pre-release. Until a versioned release is cut, entries des
 
 ## v1 baseline
 
-The v1 baseline is the pre-v2 implementation on `main` around commit `67e487f`.
+The v1 baseline is the pre-v2 implementation that now lives on the `v1` branch. Historically, it was on `main` around commit `67e487f`.
 
-Use the migration guide when moving example applications or downstream code from v1 to the v2 branch.
+Use the migration guide when moving example applications or downstream code from the v1 branch to the v2 `main` branch.

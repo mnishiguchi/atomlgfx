@@ -12,13 +12,16 @@ It is a wrapper around the native `lgfx_port` driver in this repository. The
 package provides the Elixir-facing API, convenience helpers, and wrapper-side
 normalization on top of the shared native protocol.
 
-The current native protocol is v3:
+The current native protocol is v2:
 
 - ordinary drawing and control calls are synchronous tuple requests
 - binary batches are explicit binary frame scripts built with
   `AtomLGFX.BinaryBatch` and submitted with `AtomLGFX.submit_binary_batch/2`
-- text, JPEG, image payloads, sprite lifecycle, and touch operations stay on the
-  ordinary call path
+- render-time text, JPEG, image payload, sprite push, and palette color
+  commands may be encoded in binary batches when supported by
+  `AtomLGFX.BinaryBatch` builders
+- setup, queries, allocation, calibration, sprite lifecycle, palette creation,
+  and touch operations stay on the ordinary call path
 
 ## Requirements
 
@@ -37,7 +40,7 @@ choose the branch or revision you intend to track.
 ```elixir
 defp deps do
   [
-    {:atomlgfx, git: "https://github.com/mnishiguchi/atomlgfx.git", branch: "v2"}
+    {:atomlgfx, git: "https://github.com/mnishiguchi/atomlgfx.git", branch: "main"}
   ]
 end
 ```

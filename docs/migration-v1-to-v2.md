@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 # Migrating from v1 to v2
 
 This guide summarizes the practical changes needed when moving code from the v1
-`main` branch to the v2 branch.
+`v1` branch to the v2 `main` branch.
 
 v2 keeps the same project goal: an AtomVM-facing LovyanGFX wrapper for
 ESP32-class boards. The main change is the protocol and batching model.
@@ -111,16 +111,19 @@ The v2 binary batch path is intentionally explicit.
 It is suitable for building one compact frame script that executes
 synchronously.
 
+Binary batches may include render-time payload commands such as text, JPEG
+drawing, RGB565 image payloads, sprite push/rotate/zoom commands, and palette
+color writes when represented by `AtomLGFX.BinaryBatch` builders.
+
 Keep these on the ordinary call path:
 
-- JPEG drawing
-- image payload upload
+- setup, queries, allocation, and calibration
 - sprite lifecycle operations
-- palette lifecycle operations
+- palette creation
 - touch operations
 
-This keeps the hot path small while avoiding complex lifetime rules for
-borrowed binary payloads.
+This keeps the hot path explicit while avoiding accidental expansion into a
+general-purpose deferred LovyanGFX API.
 
 ## Capability check
 
@@ -160,8 +163,8 @@ internal forms unless the protocol document explicitly defines them.
   or `AtomLGFX.BinaryBatch.render/2`.
 - Use public `AtomLGFX` wrappers for ordinary operations.
 - Use `snake_case` atoms for low-level `AtomLGFX.call/4`.
-- Keep JPEG, image payload, sprite lifecycle, palette, and touch operations
-  outside binary batches.
+- Keep setup, queries, allocation, calibration, sprite lifecycle, palette
+  creation, and touch operations outside binary batches.
 - Run protocol smoke tests on hardware.
 - Run performance smoke tests for rendering paths that matter to the
   application.

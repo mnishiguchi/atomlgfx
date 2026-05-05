@@ -212,8 +212,10 @@ For explicit batching:
 
 - `submitBinaryBatch` borrows its binary only for the synchronous request boundary
 - the render decoder must not retain pointers into the caller binary
-- payload-bearing ordinary operations are intentionally outside this render path
-- callers should not assume that any payload-bearing ordinary op is automatically batchable
+- payload-bearing binary-batch commands are decoded and consumed synchronously
+  within the render path
+- callers should not assume that any payload-bearing ordinary op is automatically
+  batchable; only documented `AtomLGFX.BinaryBatch` builders are in scope
 
 ## Common data and encodings
 

@@ -16,6 +16,8 @@ Current v2 readers should normally start with these active ADRs:
   - scalar call protocol and generated numeric opcode model
 - [ADR 2026-05-03: Treat BinaryBatch as the standard render transaction API](2026-05-03-binary-batch-as-render-transaction-api.md)
   - active render-batch and animation hot-path rule
+- [ADR 2026-05-05: Allow native frame render commands for hot animation loops](2026-05-05-native-frame-render-commands-for-hot-animation.md)
+  - native frame-level render commands for measured hot animation loops
 - [ADR 2026-04-29: Flatten native v2 implementation](2026-04-29-flatten-native-v2-implementation.md)
   - native implementation shape for the v2 protocol
 - [ADR 2026-04-07: Controller-first panel and touch support](2026-04-07-controller-first-panel-and-touch-support.md)
