@@ -153,7 +153,7 @@ defmodule SampleApp.MovingIcons do
       case prepare_render_target(port, w, h) do
         {:ok, render_target} ->
           try do
-            {_seed, objects} = init_objects(1, @obj_count, w, h)
+            {_seed, objects} = init_objects(1, @obj_count, w, h, icon_handles)
 
             # State tuple:
             # {w, h, render_target, flip, objects, icon_handles, fps, frame_count, psec}
@@ -377,23 +377,23 @@ defmodule SampleApp.MovingIcons do
   # -----------------------------------------------------------------------------
 
   # Internal object tuple:
-  # {x, y, dx, dy, img_index, angle_cdeg, zoom_x1024, dangle_cdeg, dzoom_x1024}
-  defp init_objects(seed, count, w, h) do
-    init_objects_i(seed, 0, count, w, h, [])
+  # {x, y, dx, dy, src_handle, angle_cdeg, zoom_x1024, dangle_cdeg, dzoom_x1024}
+  defp init_objects(seed, count, w, h, icon_handles) do
+    init_objects_i(seed, 0, count, w, h, icon_handles, [])
   end
 
-  defp init_objects_i(seed, _i, count, _w, _h, acc) when count <= 0 do
+  defp init_objects_i(seed, _i, count, _w, _h, _icon_handles, acc) when count <= 0 do
     {seed, :lists.reverse(acc)}
   end
 
-  defp init_objects_i(seed, i, count, w, h, acc) do
+  defp init_objects_i(seed, i, count, w, h, icon_handles, acc) do
     {seed, r1} = rand_u32(seed)
     {seed, r2} = rand_u32(seed)
     {seed, r3} = rand_u32(seed)
     {seed, r4} = rand_u32(seed)
     {seed, r5} = rand_u32(seed)
 
-    img = rem(i, @obj_icon_count)
+    src = src_handle_for_index(rem(i, @obj_icon_count), icon_handles)
 
     x = rem(r1, w)
     y = rem(r2, h)
@@ -417,8 +417,8 @@ defmodule SampleApp.MovingIcons do
     dz100 = rem(r4 >>> 8, 10) + 1
     dz_x1024 = div(dz100 * 1024, 100)
 
-    obj = {x, y, dx0, dy0, img, 0, z_x1024, dr_cdeg, dz_x1024}
-    init_objects_i(seed, i + 1, count - 1, w, h, [obj | acc])
+    obj = {x, y, dx0, dy0, src, 0, z_x1024, dr_cdeg, dz_x1024}
+    init_objects_i(seed, i + 1, count - 1, w, h, icon_handles, [obj | acc])
   end
 
   defp band3(u32), do: u32 >>> 16 &&& 3
@@ -433,7 +433,7 @@ defmodule SampleApp.MovingIcons do
   defp move_objects_i([], _w, _h, acc), do: :lists.reverse(acc)
 
   defp move_objects_i(
-         [{x, y, dx, dy, img, angle_cdeg, zoom_x1024, dangle_cdeg, dzoom_x1024} | rest],
+         [{x, y, dx, dy, src, angle_cdeg, zoom_x1024, dangle_cdeg, dzoom_x1024} | rest],
          w,
          h,
          acc
@@ -446,7 +446,7 @@ defmodule SampleApp.MovingIcons do
     zoom2 = zoom_x1024 + dzoom_x1024
     {zoom3, dzoom2} = bounce_i32(zoom2, dzoom_x1024, @zoom_min_x1024, @zoom_max_x1024)
 
-    move_objects_i(rest, w, h, [{x2, y2, dx2, dy2, img, angle2, zoom3, dangle_cdeg, dzoom2} | acc])
+    move_objects_i(rest, w, h, [{x2, y2, dx2, dy2, src, angle2, zoom3, dangle_cdeg, dzoom2} | acc])
   end
 
   defp bounce_i16(pos, delta, min_v, max_v) do
@@ -816,13 +816,11 @@ defmodule SampleApp.MovingIcons do
 
   defp draw_all_objects_to_target_i(
          port,
-         [{x, y, _dx, _dy, img, angle_cdeg, zoom_x1024, _dangle, _dzoom} | rest],
+         [{x, y, _dx, _dy, src, angle_cdeg, zoom_x1024, _dangle, _dzoom} | rest],
          icon_handles,
          dst_target,
          y0
        ) do
-    src = src_handle_for_index(img, icon_handles)
-
     # Target-local coordinates: subtract the current strip's top y-offset.
     # For direct LCD mode, y0 is 0.
     dst_x = x
@@ -918,7 +916,7 @@ defmodule SampleApp.MovingIcons do
   end
 
   defp add_objects_to_sprite_push_list(
-         [{x, y, _dx, _dy, img, _angle_cdeg, _zoom_x1024, _dangle, _dzoom} = object | rest],
+         [{x, y, _dx, _dy, src, _angle_cdeg, _zoom_x1024, _dangle, _dzoom} = object | rest],
          icon_handles,
          y0,
          y1,
@@ -926,7 +924,6 @@ defmodule SampleApp.MovingIcons do
        ) do
     next_acc =
       if object_may_touch_strip?(object, y0, y1) do
-        src = src_handle_for_index(img, icon_handles)
         dst_x = x - div(Assets.icon_w(), 2)
         dst_y = y - y0 - div(Assets.icon_h(), 2)
 
@@ -951,7 +948,7 @@ defmodule SampleApp.MovingIcons do
   end
 
   defp add_objects_to_sprite_region_list(
-         [{x, y, _dx, _dy, img, _angle_cdeg, _zoom_x1024, _dangle, _dzoom} = object | rest],
+         [{x, y, _dx, _dy, src, _angle_cdeg, _zoom_x1024, _dangle, _dzoom} = object | rest],
          icon_handles,
          y0,
          y1,
@@ -959,7 +956,6 @@ defmodule SampleApp.MovingIcons do
        ) do
     next_acc =
       if object_may_touch_strip?(object, y0, y1) do
-        src = src_handle_for_index(img, icon_handles)
         src_x = 0
         src_y = 0
         src_w = Assets.icon_w()
@@ -998,7 +994,7 @@ defmodule SampleApp.MovingIcons do
   end
 
   defp add_objects_to_batch(
-         [{x, y, _dx, _dy, img, angle_cdeg, zoom_x1024, _dangle, _dzoom} = object | rest],
+         [{x, y, _dx, _dy, src, angle_cdeg, zoom_x1024, _dangle, _dzoom} = object | rest],
          icon_handles,
          y0,
          y1,
@@ -1006,8 +1002,6 @@ defmodule SampleApp.MovingIcons do
        ) do
     next_acc =
       if object_may_touch_strip?(object, y0, y1) do
-        src = src_handle_for_index(img, icon_handles)
-
         # Keep global coordinates and submit `y_offset` separately.
         # This matches the native fixed-point hot path.
         dst_x = x
@@ -1026,7 +1020,7 @@ defmodule SampleApp.MovingIcons do
   defp object_may_touch_strip?(_object, _y0, _y1) when not @use_elixir_strip_cull, do: true
 
   defp object_may_touch_strip?(
-         {_x, y, _dx, _dy, _img, _angle_cdeg, zoom_x1024, _dangle, _dzoom},
+         {_x, y, _dx, _dy, _src, _angle_cdeg, zoom_x1024, _dangle, _dzoom},
          y0,
          y1
        ) do
@@ -1147,14 +1141,12 @@ defmodule SampleApp.MovingIcons do
   end
 
   defp encode_transform_frame_records_i(
-         [{x, y, _dx, _dy, img, angle_cdeg, zoom_x1024, _dangle, _dzoom} | rest],
+         [{x, y, _dx, _dy, src, angle_cdeg, zoom_x1024, _dangle, _dzoom} | rest],
          icon_handles,
          count,
          acc
        )
        when count < @przf_max_count do
-    src = src_handle_for_index(img, icon_handles)
-
     record =
       <<src, 0, x::little-signed-16, y::little-signed-16, angle_cdeg::little-16,
         zoom_x1024::little-16, zoom_x1024::little-16>>
