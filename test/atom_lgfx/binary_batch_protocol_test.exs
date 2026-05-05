@@ -29,8 +29,8 @@ defmodule AtomLGFX.BinaryBatchProtocolTest do
   }
 
   @expected_render_extended_defines %{
-    "LGFX_RENDER_EXT_OP_ELLIPSE_LIST" => 0x00,
-    "LGFX_RENDER_EXT_OP_PUSH_ROTATE_ZOOM_FRAME_STRIPS" => 0x01
+    "LGFX_RENDER_EXT_OP_ELLIPSE_LIST" => {:ellipse_list, 0x00},
+    "LGFX_RENDER_EXT_OP_PUSH_ROTATE_ZOOM_FRAME_STRIPS" => {:push_rotate_zoom_frame_strips, 0x01}
   }
 
   describe "render-private opcode drift checks" do
@@ -55,6 +55,13 @@ defmodule AtomLGFX.BinaryBatchProtocolTest do
              ]
 
       assert Keyword.values(BinaryBatch.__render_private_opcodes__()) == Enum.to_list(0xF0..0xFF)
+    end
+
+    test "Elixir keeps extended render sub-opcodes explicit" do
+      assert BinaryBatch.__render_extended_opcodes__() == [
+               ellipse_list: 0x00,
+               push_rotate_zoom_frame_strips: 0x01
+             ]
     end
 
     test "known batch opcode registry has no duplicate opcode values" do
@@ -84,7 +91,23 @@ defmodule AtomLGFX.BinaryBatchProtocolTest do
     end
 
     test "native protocol.h extended render defines remain stable" do
-      assert parse_native_render_extended_defines() == @expected_render_extended_defines
+      native_defines = parse_native_render_extended_defines()
+
+      expected_defines =
+        Map.new(@expected_render_extended_defines, fn {define_name, {_op_name, subopcode}} ->
+          {define_name, subopcode}
+        end)
+
+      assert native_defines == expected_defines
+    end
+
+    test "native protocol.h extended render defines match the expected Elixir names" do
+      elixir_subopcodes = Map.new(BinaryBatch.__render_extended_opcodes__())
+
+      for {define_name, {op_name, expected_subopcode}} <- @expected_render_extended_defines do
+        assert Map.fetch!(elixir_subopcodes, op_name) == expected_subopcode,
+               "#{define_name} should remain wired to #{inspect(op_name)}"
+      end
     end
   end
 

@@ -1487,6 +1487,17 @@ defmodule AtomLGFX.BinaryBatchTest do
                {:error, {:batch_failed, 1, 13, :strip_not_presented}}
     end
 
+    test "rejects native frame commands inside an active strip" do
+      frame = [
+        BinaryBatch.begin_strip(160),
+        BinaryBatch.push_rotate_zoom_frame_strips([{1, 0, 0, 0, 1_024, 1_024}],
+          frame_height: 320
+        )
+      ]
+
+      assert BinaryBatch.validate(frame) == {:error, {:batch_failed, 1, 0xFF, :strip_already_active}}
+    end
+
     test "rejects empty command streams before native rendering" do
       assert BinaryBatch.validate(<<>>) == {:error, :empty_batch}
       assert BinaryBatch.render_checked(:not_a_port, <<>>) == {:error, :empty_batch}
@@ -1635,6 +1646,31 @@ defmodule AtomLGFX.BinaryBatchTest do
                push_rotate_zoom_list: 1,
                display: 1
              }
+    end
+
+    test "counts native frame commands as packed sprite work" do
+      frame =
+        BinaryBatch.push_rotate_zoom_frame_strips(
+          [{1, 10, -20, 9_000, 1_024, 2_048}],
+          frame_height: 320,
+          background: 0x1234,
+          transparent: {:index, 0},
+          approx_cull: true
+        )
+
+      assert {:ok, summary} = BinaryBatch.summary(frame)
+
+      assert summary.batch_bytes == byte_size(frame)
+      assert summary.command_count == 1
+      assert summary.render_private_count == 1
+      assert summary.packed_list_count == 1
+      assert summary.packed_list_instance_count == 1
+      assert summary.packed_list_record_bytes == 12
+      assert summary.dynamic_payload_bytes == 12
+      assert summary.sprite_push_count == 1
+      assert summary.push_rotate_zoom_frame_count == 1
+      assert summary.push_rotate_zoom_frame_instance_count == 1
+      assert summary.ops == %{push_rotate_zoom_frame_strips: 1}
     end
 
     test "returns decode errors for malformed streams" do

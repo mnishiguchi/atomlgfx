@@ -382,6 +382,7 @@ frame = [
 - `draw_jpg/3`, `draw_jpg/9`
 - `push_image_rgb565/5`, `push_image_rgb565/6`
 - `push_rotate_zoom_list/2`
+- `push_rotate_zoom_frame_strips/2`
 - `display/0`
 
 ```elixir
@@ -408,7 +409,7 @@ frame = [
 
 `AtomLGFX.BinaryBatch.render/2` は iodata を受け取ります。呼び出し側は、背景、スプライト、表示反映などの断片を安く連結できます。
 
-`AtomLGFX.BinaryBatch.summary/1` は、ネイティブ側を呼ばずに描画指示列を読み取り、合計バイト数、内部描画命令数、可変長データ量、圧縮一覧命令数、圧縮一覧要素数などを返します。重い描画の確認、生成したフレームの検査、性能比較用の記録に使えます。`AtomLGFX.BinaryBatch.compare/2` は、基準のフレームと候補のフレームを同じ集計値で比べます。
+生成した描画指示列の確認には、後述の `decode/1`、`summary/1`、`compare/2`、`check_budget/2`、`diagnose/1` を使えます。
 
 `draw_pixel_list/1` は、同じ対象へ複数の点を描く場合の compact な命令です。粒子、きらめき、簡易ノイズ、小さなアイコン効果などでは、`draw_pixel/3` を多数並べるより command 数を減らせます。
 
@@ -435,6 +436,8 @@ frame = [
 `push_image_rgb565/5` と `push_image_rgb565/6` は、RGB565 の画素バイナリーを明示的な長さ付きの命令として送ります。大きな画像は `submitBinaryBatch` 全体のバイナリー上限にかかるため、必要に応じて従来の `AtomLGFX.push_image_rgb565/8` による分割転送を使います。
 
 `push_rotate_zoom_list/2` の `approx_cull: true` は、ストリップ描画のように対象外の変換描画が多い場合に、ネイティブ側で保守的に省略するための指定です。
+
+`push_rotate_zoom_frame_strips/2` は、変換スプライト一覧をネイティブ側のストリップループで描画する高負荷アニメーション向け命令です。Elixir 側はオブジェクト状態を持ち、ネイティブ側はストリップの消去、描画、転送をまとめて実行します。通常の描画ではなく、測定済みの熱い描画経路に限定して使います。
 
 `set_clip_rect/4` と `clear_clip_rect/0` は、現在の対象に対して切り取り矩形を設定または解除します。後続の命令にも対象側の切り取り状態が残るため、必要な範囲だけを明示的に囲むのが安全です。
 

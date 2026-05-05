@@ -136,6 +136,10 @@ struct lgfx_render_batch_trace_t
     uint32_t przl_instance_count = 0u;
     uint32_t przl_executed_count = 0u;
     uint32_t przl_culled_count = 0u;
+    uint32_t przf_command_count = 0u;
+    uint32_t przf_instance_count = 0u;
+    uint32_t przf_executed_count = 0u;
+    uint32_t przf_culled_count = 0u;
     uint32_t strip_begin_count = 0u;
     uint32_t strip_present_count = 0u;
     uint32_t display_count = 0u;
@@ -1285,10 +1289,10 @@ static esp_err_t lgfx_render_batch_parse_or_dispatch_przf(
         }
 
         if (trace) {
-            trace->przl_command_count++;
-            trace->przl_instance_count += stats.instance_count;
-            trace->przl_executed_count += stats.executed_count;
-            trace->przl_culled_count += stats.culled_count;
+            trace->przf_command_count++;
+            trace->przf_instance_count += stats.instance_count;
+            trace->przf_executed_count += stats.executed_count;
+            trace->przf_culled_count += stats.culled_count;
             trace->strip_begin_count += stats.strip_count;
             trace->strip_present_count += stats.strip_count;
             trace->frame_clear_us += stats.clear_us;
@@ -2726,7 +2730,7 @@ extern "C" esp_err_t lgfx_render_batch_dispatch_run(
 
     ESP_LOGI(
         LOG_TAG,
-        "stats batch_bytes=%u prevalidate_us=%lld start_write_us=%lld execute_us=%lld end_write_us=%lld total_us=%lld commands=%u target=%u color_mode=%u scalar=%u draw_pixel_lists=%u draw_pixel_list_instances=%u draw_rect_lists=%u draw_rect_list_instances=%u fill_rect_lists=%u fill_rect_list_instances=%u draw_circle_lists=%u draw_circle_list_instances=%u fill_circle_lists=%u fill_circle_list_instances=%u draw_ellipse_lists=%u draw_ellipse_list_instances=%u fill_ellipse_lists=%u fill_ellipse_list_instances=%u draw_line_lists=%u draw_line_list_instances=%u draw_triangle_lists=%u draw_triangle_list_instances=%u fill_triangle_lists=%u fill_triangle_list_instances=%u clip=%u text=%u image=%u sprite_push=%u sprite_push_lists=%u sprite_push_list_instances=%u sprite_region_lists=%u sprite_region_list_instances=%u przl_commands=%u przl_instances=%u przl_executed=%u przl_culled=%u strip_begin=%u strip_present=%u display=%u frame_clear_us=%lld frame_draw_us=%lld frame_present_us=%lld display_us=%lld err=%d end_err=%d",
+        "stats batch_bytes=%u prevalidate_us=%lld start_write_us=%lld execute_us=%lld end_write_us=%lld total_us=%lld commands=%u target=%u color_mode=%u scalar=%u draw_pixel_lists=%u draw_pixel_list_instances=%u draw_rect_lists=%u draw_rect_list_instances=%u fill_rect_lists=%u fill_rect_list_instances=%u draw_circle_lists=%u draw_circle_list_instances=%u fill_circle_lists=%u fill_circle_list_instances=%u draw_ellipse_lists=%u draw_ellipse_list_instances=%u fill_ellipse_lists=%u fill_ellipse_list_instances=%u draw_line_lists=%u draw_line_list_instances=%u draw_triangle_lists=%u draw_triangle_list_instances=%u fill_triangle_lists=%u fill_triangle_list_instances=%u clip=%u text=%u image=%u sprite_push=%u sprite_push_lists=%u sprite_push_list_instances=%u sprite_region_lists=%u sprite_region_list_instances=%u przl_commands=%u przl_instances=%u przl_executed=%u przl_culled=%u przf_commands=%u przf_instances=%u przf_executed=%u przf_culled=%u strip_begin=%u strip_present=%u display=%u frame_clear_us=%lld frame_draw_us=%lld frame_present_us=%lld display_us=%lld err=%d end_err=%d",
         (unsigned) len,
         (long long) prevalidate_us,
         (long long) start_write_us,
@@ -2769,6 +2773,10 @@ extern "C" esp_err_t lgfx_render_batch_dispatch_run(
         (unsigned) trace.przl_instance_count,
         (unsigned) trace.przl_executed_count,
         (unsigned) trace.przl_culled_count,
+        (unsigned) trace.przf_command_count,
+        (unsigned) trace.przf_instance_count,
+        (unsigned) trace.przf_executed_count,
+        (unsigned) trace.przf_culled_count,
         (unsigned) trace.strip_begin_count,
         (unsigned) trace.strip_present_count,
         (unsigned) trace.display_count,

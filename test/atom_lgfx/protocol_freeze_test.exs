@@ -139,6 +139,11 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     extended: 0xFF
   }
 
+  @binary_batch_render_extended_ops %{
+    ellipse_list: 0x00,
+    push_rotate_zoom_frame_strips: 0x01
+  }
+
   @binary_batch_command_sizes %{
     target: 2,
     color_mode: 2,
@@ -211,7 +216,9 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     push_sprite_region_list_record: 14,
     push_rotate_zoom: 25,
     push_rotate_zoom_list_header: 15,
-    push_rotate_zoom_list_record: 12
+    push_rotate_zoom_list_record: 12,
+    push_rotate_zoom_frame_strips_header: 18,
+    push_rotate_zoom_frame_strips_record: 12
   }
 
   @capabilities %{
@@ -282,6 +289,14 @@ defmodule AtomLGFX.ProtocolFreezeTest do
 
   test "keeps binary-batch render-private opcodes aligned with protocol.h" do
     assert native_render_private_opcodes() == @binary_batch_render_private_ops
+  end
+
+  test "freezes the binary-batch extended render sub-opcodes" do
+    assert Map.new(BinaryBatch.__render_extended_opcodes__()) == @binary_batch_render_extended_ops
+  end
+
+  test "keeps binary-batch extended render sub-opcodes aligned with protocol.h" do
+    assert native_render_extended_opcodes() == @binary_batch_render_extended_ops
   end
 
   test "keeps binary-batch render-private opcodes contiguous" do
@@ -458,7 +473,9 @@ defmodule AtomLGFX.ProtocolFreezeTest do
       push_sprite_region_list_record: push_sprite_region_list_record_size(),
       push_rotate_zoom: byte_size(BinaryBatch.push_rotate_zoom(1, 0, 0, 0, 1)),
       push_rotate_zoom_list_header: push_rotate_zoom_list_header_size(),
-      push_rotate_zoom_list_record: push_rotate_zoom_list_record_size()
+      push_rotate_zoom_list_record: push_rotate_zoom_list_record_size(),
+      push_rotate_zoom_frame_strips_header: push_rotate_zoom_frame_strips_header_size(),
+      push_rotate_zoom_frame_strips_record: push_rotate_zoom_frame_strips_record_size()
     }
 
     assert actual_sizes == @binary_batch_command_sizes
@@ -487,6 +504,18 @@ defmodule AtomLGFX.ProtocolFreezeTest do
       Path.expand("../../lgfx_port/include_internal/lgfx_port/protocol.h", __DIR__)
 
     ~r/#define LGFX_RENDER_OP_([A-Z0-9_]+)\s+\(\(uint8_t\)\s+0x([0-9A-Fa-f]+)u\)/
+    |> Regex.scan(File.read!(protocol_h_path))
+    |> Enum.map(fn [_match, name, value] ->
+      {name |> String.downcase() |> String.to_atom(), String.to_integer(value, 16)}
+    end)
+    |> Map.new()
+  end
+
+  defp native_render_extended_opcodes do
+    protocol_h_path =
+      Path.expand("../../lgfx_port/include_internal/lgfx_port/protocol.h", __DIR__)
+
+    ~r/#define LGFX_RENDER_EXT_OP_([A-Z0-9_]+)\s+\(\(uint8_t\)\s+0x([0-9A-Fa-f]+)u\)/
     |> Regex.scan(File.read!(protocol_h_path))
     |> Enum.map(fn [_match, name, value] ->
       {name |> String.downcase() |> String.to_atom(), String.to_integer(value, 16)}
@@ -552,6 +581,38 @@ defmodule AtomLGFX.ProtocolFreezeTest do
         {1, 0, 0, 0, 1_024, 1_024},
         {2, 1, 1, 0, 1_024, 1_024}
       ])
+
+    byte_size(double) - byte_size(single)
+  end
+
+  defp push_rotate_zoom_frame_strips_header_size do
+    single =
+      BinaryBatch.push_rotate_zoom_frame_strips([{1, 0, 0, 0, 1_024, 1_024}], frame_height: 1)
+
+    double =
+      BinaryBatch.push_rotate_zoom_frame_strips(
+        [
+          {1, 0, 0, 0, 1_024, 1_024},
+          {2, 1, 1, 0, 1_024, 1_024}
+        ],
+        frame_height: 1
+      )
+
+    2 * byte_size(single) - byte_size(double)
+  end
+
+  defp push_rotate_zoom_frame_strips_record_size do
+    single =
+      BinaryBatch.push_rotate_zoom_frame_strips([{1, 0, 0, 0, 1_024, 1_024}], frame_height: 1)
+
+    double =
+      BinaryBatch.push_rotate_zoom_frame_strips(
+        [
+          {1, 0, 0, 0, 1_024, 1_024},
+          {2, 1, 1, 0, 1_024, 1_024}
+        ],
+        frame_height: 1
+      )
 
     byte_size(double) - byte_size(single)
   end

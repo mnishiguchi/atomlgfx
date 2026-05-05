@@ -109,6 +109,11 @@ defmodule AtomLGFX.BinaryBatch do
     extended: @render_op_extended
   ]
 
+  @render_extended_opcodes [
+    ellipse_list: @render_ext_op_ellipse_list,
+    push_rotate_zoom_frame_strips: @render_ext_op_push_rotate_zoom_frame_strips
+  ]
+
   @render_private_opcode_values Keyword.values(@render_private_opcodes)
 
   @batch_scalar_opcodes [
@@ -185,6 +190,12 @@ defmodule AtomLGFX.BinaryBatch do
   @spec __render_private_opcodes__() :: [{atom(), byte()}]
   def __render_private_opcodes__ do
     @render_private_opcodes
+  end
+
+  @doc false
+  @spec __render_extended_opcodes__() :: [{atom(), byte()}]
+  def __render_extended_opcodes__ do
+    @render_extended_opcodes
   end
 
   @doc false
@@ -1621,6 +1632,8 @@ defmodule AtomLGFX.BinaryBatch do
       sprite_region_list_instance_count: 0,
       push_rotate_zoom_list_count: 0,
       push_rotate_zoom_instance_count: 0,
+      push_rotate_zoom_frame_count: 0,
+      push_rotate_zoom_frame_instance_count: 0,
       strip_begin_count: 0,
       strip_present_count: 0,
       display_count: 0,
@@ -1903,6 +1916,16 @@ defmodule AtomLGFX.BinaryBatch do
     |> accumulate_packed_list(instance_count, @push_rotate_zoom_list_record_size)
   end
 
+  defp accumulate_summary_category(summary, %{op: :push_rotate_zoom_frame_strips, instances: instances}) do
+    instance_count = length(instances)
+
+    summary
+    |> Map.update!(:push_rotate_zoom_frame_count, &(&1 + 1))
+    |> Map.update!(:push_rotate_zoom_frame_instance_count, &(&1 + instance_count))
+    |> Map.update!(:sprite_push_count, &(&1 + instance_count))
+    |> accumulate_packed_list(instance_count, @push_rotate_zoom_list_record_size)
+  end
+
   defp accumulate_summary_category(summary, %{op: :begin_strip}) do
     Map.update!(summary, :strip_begin_count, &(&1 + 1))
   end
@@ -2010,6 +2033,13 @@ defmodule AtomLGFX.BinaryBatch do
 
   defp validate_strip_lifecycle([%{op: :present_strip} | rest], true) do
     validate_strip_lifecycle(rest, false)
+  end
+
+  defp validate_strip_lifecycle(
+         [%{op: :push_rotate_zoom_frame_strips, index: index, opcode: opcode} | _rest],
+         true
+       ) do
+    {:error, {:batch_failed, index, opcode, :strip_already_active}}
   end
 
   defp validate_strip_lifecycle([%{op: :display, index: index, opcode: opcode} | _rest], true) do
