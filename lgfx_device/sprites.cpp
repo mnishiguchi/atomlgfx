@@ -19,6 +19,72 @@
 namespace
 {
 
+static constexpr size_t SOURCE_SPRITE_CACHE_SIZE = 8u;
+
+struct SourceSpriteCacheEntry
+{
+    uint8_t handle = 0u;
+    lgfx::LGFX_Sprite *sprite = nullptr;
+    bool transparent_validated = false;
+};
+
+static esp_err_t resolve_source_sprite_cached(
+    SourceSpriteCacheEntry *cache,
+    uint8_t src_handle,
+    lgfx::LGFX_Sprite **out_src,
+    bool *out_transparent_validated)
+{
+    if (!cache || !out_src || !out_transparent_validated) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    for (size_t i = 0; i < SOURCE_SPRITE_CACHE_SIZE; ++i) {
+        if (cache[i].sprite && cache[i].handle == src_handle) {
+            *out_src = cache[i].sprite;
+            *out_transparent_validated = cache[i].transparent_validated;
+            return ESP_OK;
+        }
+    }
+
+    lgfx::LGFX_Sprite *src = lgfx_dev::resolve_sprite_locked(src_handle);
+    if (!src) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    for (size_t i = 0; i < SOURCE_SPRITE_CACHE_SIZE; ++i) {
+        if (!cache[i].sprite) {
+            cache[i].handle = src_handle;
+            cache[i].sprite = src;
+            cache[i].transparent_validated = false;
+            *out_src = src;
+            *out_transparent_validated = false;
+            return ESP_OK;
+        }
+    }
+
+    // Cache full. This should be rare for animation examples, but falling back
+    // to an uncached resolved pointer is safer than failing a valid frame.
+    *out_src = src;
+    *out_transparent_validated = false;
+    return ESP_OK;
+}
+
+static void mark_source_sprite_transparent_validated(
+    SourceSpriteCacheEntry *cache,
+    uint8_t src_handle)
+{
+    if (!cache) {
+        return;
+    }
+
+    for (size_t i = 0; i < SOURCE_SPRITE_CACHE_SIZE; ++i) {
+        if (cache[i].sprite && cache[i].handle == src_handle) {
+            cache[i].transparent_validated = true;
+            return;
+        }
+    }
+}
+
 static inline bool lgfx_rotate_zoom_args_are_valid(float angle, float zoom_x, float zoom_y)
 {
     return std::isfinite(angle)
@@ -217,8 +283,7 @@ static esp_err_t lgfx_push_sprite_list_to_resolved_target_locked(
     uint32_t transparent_value,
     lgfx_dev::PushSpriteListStats *out_stats)
 {
-    lgfx::LGFX_Sprite *source_cache[256] = {};
-    bool transparent_validated[256] = {};
+    SourceSpriteCacheEntry source_cache[SOURCE_SPRITE_CACHE_SIZE] = {};
 
     for (size_t i = 0; i < instance_count; ++i) {
         const uint8_t *record = instance_records + (i * LGFX_DEVICE_SPRITE_PUSH_RECORD_SIZE);
@@ -234,16 +299,18 @@ static esp_err_t lgfx_push_sprite_list_to_resolved_target_locked(
             return ESP_ERR_INVALID_ARG;
         }
 
-        lgfx::LGFX_Sprite *src = source_cache[src_handle];
-        if (!src) {
-            src = lgfx_dev::resolve_sprite_locked(src_handle);
-            if (!src) {
-                return ESP_ERR_NOT_FOUND;
-            }
-            source_cache[src_handle] = src;
+        lgfx::LGFX_Sprite *src = nullptr;
+        bool transparent_already_validated = false;
+        const esp_err_t resolve_err = resolve_source_sprite_cached(
+            source_cache,
+            src_handle,
+            &src,
+            &transparent_already_validated);
+        if (resolve_err != ESP_OK) {
+            return resolve_err;
         }
 
-        if (!transparent_validated[src_handle]) {
+        if (!transparent_already_validated) {
             const esp_err_t transparent_err = lgfx_dev::validate_sprite_transparent_scalar(
                 src,
                 has_transparent,
@@ -252,7 +319,7 @@ static esp_err_t lgfx_push_sprite_list_to_resolved_target_locked(
             if (transparent_err != ESP_OK) {
                 return transparent_err;
             }
-            transparent_validated[src_handle] = true;
+            mark_source_sprite_transparent_validated(source_cache, src_handle);
         }
 
         const esp_err_t err = lgfx_push_sprite_resolved_locked_impl(
@@ -529,8 +596,7 @@ static esp_err_t lgfx_push_rotate_zoom_list_to_resolved_target_locked(
     bool approx_cull,
     lgfx_dev::PushRotateZoomListStats *out_stats)
 {
-    lgfx::LGFX_Sprite *source_cache[256] = {};
-    bool transparent_validated[256] = {};
+    SourceSpriteCacheEntry source_cache[SOURCE_SPRITE_CACHE_SIZE] = {};
 
     for (size_t i = 0; i < instance_count; ++i) {
         const uint8_t *record = instance_records + (i * LGFX_DEVICE_SPRITE_TRANSFORM_RECORD_SIZE);
@@ -558,16 +624,18 @@ static esp_err_t lgfx_push_rotate_zoom_list_to_resolved_target_locked(
             return ESP_ERR_INVALID_ARG;
         }
 
-        lgfx::LGFX_Sprite *src = source_cache[src_handle];
-        if (!src) {
-            src = lgfx_dev::resolve_sprite_locked(src_handle);
-            if (!src) {
-                return ESP_ERR_NOT_FOUND;
-            }
-            source_cache[src_handle] = src;
+        lgfx::LGFX_Sprite *src = nullptr;
+        bool transparent_already_validated = false;
+        const esp_err_t resolve_err = resolve_source_sprite_cached(
+            source_cache,
+            src_handle,
+            &src,
+            &transparent_already_validated);
+        if (resolve_err != ESP_OK) {
+            return resolve_err;
         }
 
-        if (!transparent_validated[src_handle]) {
+        if (!transparent_already_validated) {
             const esp_err_t transparent_err = lgfx_dev::validate_sprite_transparent_scalar(
                 src,
                 has_transparent,
@@ -576,7 +644,7 @@ static esp_err_t lgfx_push_rotate_zoom_list_to_resolved_target_locked(
             if (transparent_err != ESP_OK) {
                 return transparent_err;
             }
-            transparent_validated[src_handle] = true;
+            mark_source_sprite_transparent_validated(source_cache, src_handle);
         }
 
         bool was_culled = false;
