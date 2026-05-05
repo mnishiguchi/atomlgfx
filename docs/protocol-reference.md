@@ -85,8 +85,8 @@ This table documents the implemented protocol surface.
 | `drawString` | `LGFX_OP_TARGET_ANY` | `F0` | `8` | `requires_init` | - | `batch`<br>`payload` |
 | `print` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - | `batch`<br>`payload` |
 | `println` | `LGFX_OP_TARGET_ANY` | `F0` | `6` | `requires_init` | - | `batch`<br>`payload` |
-| `drawJpg` | `LGFX_OP_TARGET_ANY` | `F0` | `8/14` | `requires_init` | - | `payload`<br>`sync_only` |
-| `pushImage` | `LGFX_OP_TARGET_ANY` | `F0` | `11` | `requires_init` | `LGFX_CAP_PUSHIMAGE` | `payload`<br>`sync_only` |
+| `drawJpg` | `LGFX_OP_TARGET_ANY` | `F0` | `8/14` | `requires_init` | - | `payload`<br>`sync` |
+| `pushImage` | `LGFX_OP_TARGET_ANY` | `F0` | `11` | `requires_init` | `LGFX_CAP_PUSHIMAGE` | `payload`<br>`sync` |
 | `setClipRect` | `LGFX_OP_TARGET_ANY` | `F0` | `9` | `requires_init` | - | `batch` |
 | `clearClipRect` | `LGFX_OP_TARGET_ANY` | `F0` | `5` | `requires_init` | - | `batch` |
 | `createSprite` | `LGFX_OP_TARGET_SPRITE_ONLY` | `F0` | `7/8` | `requires_init` | `LGFX_CAP_SPRITE` | `sync` |
