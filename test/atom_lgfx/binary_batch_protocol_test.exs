@@ -13,53 +13,29 @@ defmodule AtomLGFX.BinaryBatchProtocolTest do
     "LGFX_RENDER_OP_TARGET" => {:target, 0xF0},
     "LGFX_RENDER_OP_COLOR_MODE" => {:color_mode, 0xF1},
     "LGFX_RENDER_OP_PUSH_SPRITE_TRANSPARENT" => {:push_sprite_transparent, 0xF2},
-    "LGFX_RENDER_OP_PUSH_SPRITE_LIST" => {:push_sprite_list, 0xF3},
-    "LGFX_RENDER_OP_PUSH_SPRITE_REGION_LIST" => {:push_sprite_region_list, 0xF4},
-    "LGFX_RENDER_OP_BEGIN_STRIP" => {:begin_strip, 0xF5},
-    "LGFX_RENDER_OP_PRESENT_STRIP" => {:present_strip, 0xF6},
-    "LGFX_RENDER_OP_FILL_RECT_LIST" => {:fill_rect_list, 0xF7},
-    "LGFX_RENDER_OP_DRAW_LINE_LIST" => {:draw_line_list, 0xF8},
-    "LGFX_RENDER_OP_DRAW_PIXEL_LIST" => {:draw_pixel_list, 0xF9},
-    "LGFX_RENDER_OP_DRAW_RECT_LIST" => {:draw_rect_list, 0xFA},
-    "LGFX_RENDER_OP_FILL_CIRCLE_LIST" => {:fill_circle_list, 0xFB},
-    "LGFX_RENDER_OP_DRAW_CIRCLE_LIST" => {:draw_circle_list, 0xFC},
-    "LGFX_RENDER_OP_FILL_TRIANGLE_LIST" => {:fill_triangle_list, 0xFD},
-    "LGFX_RENDER_OP_DRAW_TRIANGLE_LIST" => {:draw_triangle_list, 0xFE},
+    "LGFX_RENDER_OP_BEGIN_STRIP" => {:begin_strip, 0xF3},
+    "LGFX_RENDER_OP_PRESENT_STRIP" => {:present_strip, 0xF4},
     "LGFX_RENDER_OP_EXTENDED" => {:extended, 0xFF}
   }
 
   @expected_render_extended_defines %{
-    "LGFX_RENDER_EXT_OP_ELLIPSE_LIST" => {:ellipse_list, 0x00},
     "LGFX_RENDER_EXT_OP_PUSH_ROTATE_ZOOM_FRAME_STRIPS" => {:push_rotate_zoom_frame_strips, 0x01}
   }
 
   describe "render-private opcode drift checks" do
-    test "Elixir keeps the render-private opcode range explicit and contiguous" do
+    test "Elixir keeps the minimal render-private opcode registry explicit" do
       assert BinaryBatch.__render_private_opcodes__() == [
                target: 0xF0,
                color_mode: 0xF1,
                push_sprite_transparent: 0xF2,
-               push_sprite_list: 0xF3,
-               push_sprite_region_list: 0xF4,
-               begin_strip: 0xF5,
-               present_strip: 0xF6,
-               fill_rect_list: 0xF7,
-               draw_line_list: 0xF8,
-               draw_pixel_list: 0xF9,
-               draw_rect_list: 0xFA,
-               fill_circle_list: 0xFB,
-               draw_circle_list: 0xFC,
-               fill_triangle_list: 0xFD,
-               draw_triangle_list: 0xFE,
+               begin_strip: 0xF3,
+               present_strip: 0xF4,
                extended: 0xFF
              ]
-
-      assert Keyword.values(BinaryBatch.__render_private_opcodes__()) == Enum.to_list(0xF0..0xFF)
     end
 
     test "Elixir keeps extended render sub-opcodes explicit" do
       assert BinaryBatch.__render_extended_opcodes__() == [
-               ellipse_list: 0x00,
                push_rotate_zoom_frame_strips: 0x01
              ]
     end

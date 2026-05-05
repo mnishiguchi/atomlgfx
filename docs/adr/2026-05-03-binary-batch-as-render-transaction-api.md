@@ -8,7 +8,11 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Status
 
-Accepted
+Superseded
+
+Superseded by:
+
+- [ADR 2026-05-05: Keep BinaryBatch minimal and measured](2026-05-05-keep-binary-batch-minimal-and-measured.md)
 
 Supersedes:
 
@@ -29,7 +33,9 @@ Earlier ADRs explored packed scalar batches, paletted sprite workloads, instance
 
 ## Decision
 
-Anything that is normally useful inside a LovyanGFX `startWrite` / `endWrite` drawing transaction should be expressible in `BinaryBatch`.
+This decision has been superseded by [ADR 2026-05-05: Keep BinaryBatch minimal and measured](2026-05-05-keep-binary-batch-minimal-and-measured.md).
+
+The original decision was that anything normally useful inside a LovyanGFX `startWrite` / `endWrite` drawing transaction should be expressible in `BinaryBatch`.
 
 Scalar calls remain the preferred mechanism for:
 

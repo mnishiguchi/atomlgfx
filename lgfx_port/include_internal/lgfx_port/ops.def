@@ -90,8 +90,8 @@ X(println, lgfx_handle_println, ATOM_STR("\x07", "println"), 6, 6, 0, LGFX_OP_TA
 //
 // Images
 //
-X(drawJpg, lgfx_handle_drawJpg, ATOM_STR("\x07", "drawJpg"), 8, 14, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 1, 0, 0)
-X(pushImage, lgfx_handle_pushImage, ATOM_STR("\x09", "pushImage"), 11, 11, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_PUSHIMAGE, 1, 1, 0, 0)
+X(drawJpg, lgfx_handle_drawJpg, ATOM_STR("\x07", "drawJpg"), 8, 14, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 0, 1, 1, 0)
+X(pushImage, lgfx_handle_pushImage, ATOM_STR("\x09", "pushImage"), 11, 11, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_PUSHIMAGE, 0, 1, 1, 0)
 
 //
 // Clipping

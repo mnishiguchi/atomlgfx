@@ -56,6 +56,7 @@ In short:
 - ordinary operations execute immediately
 - ordinary operations return real success or failure immediately
 - binary batching is explicit and opt-in
+- the binary-batch MVP surface is intentionally small and measured
 - frame scripts are built in Elixir and executed natively
 - native presentation policy stays in `lgfx_device`
 - `startWrite` / `endWrite` grouping is internal to binary-batch execution
@@ -138,6 +139,7 @@ Properties:
 - malformed commands or device/runtime failures can stop execution after earlier commands have run
 - `startWrite` / `endWrite` grouping happens inside batch execution
 - command-local state controls render target and color interpretation
+- speculative compact list commands stay out of the MVP unless measured workloads justify them
 
 ## Responsibility split
 
@@ -298,8 +300,8 @@ Policy:
 - [`docs/protocol-reference.md`](protocol-reference.md)
   - generated operation, capability, and error tables
 
-- [`docs/adr/2026-05-03-binary-batch-as-render-transaction-api.md`](adr/2026-05-03-binary-batch-as-render-transaction-api.md)
-  - active BinaryBatch render transaction decision
+- [`docs/adr/2026-05-05-keep-binary-batch-minimal-and-measured.md`](adr/2026-05-05-keep-binary-batch-minimal-and-measured.md)
+  - active minimal BinaryBatch surface decision
 
 - [`docs/adr/2026-05-05-native-frame-render-commands-for-hot-animation.md`](adr/2026-05-05-native-frame-render-commands-for-hot-animation.md)
   - native frame render commands for measured hot animation loops

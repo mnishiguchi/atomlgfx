@@ -620,9 +620,9 @@ defmodule AtomLGFX.Generated do
       target_policy: :any,
       state_policy: :requires_init,
       capability: nil,
-      batchable: true,
+      batchable: false,
       needs_owned_payload: true,
-      sync_only: false,
+      sync_only: true,
       batch_boundary_sensitive: false
     ],
     push_image: [
@@ -634,9 +634,9 @@ defmodule AtomLGFX.Generated do
       target_policy: :any,
       state_policy: :requires_init,
       capability: :pushimage,
-      batchable: true,
+      batchable: false,
       needs_owned_payload: true,
-      sync_only: false,
+      sync_only: true,
       batch_boundary_sensitive: false
     ],
     set_clip_rect: [

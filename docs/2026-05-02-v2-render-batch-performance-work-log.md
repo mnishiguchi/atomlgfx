@@ -128,7 +128,9 @@ The goal is to identify whether the next bottleneck is command decode, LovyanGFX
 This work log is preserved as the measurement trail for the primitive render-batch work.
 The active v2 hot-rendering decisions are now:
 
-- [ADR 2026-05-03: Treat BinaryBatch as the standard render transaction API](adr/2026-05-03-binary-batch-as-render-transaction-api.md)
+- [ADR 2026-05-05: Keep BinaryBatch minimal and measured](adr/2026-05-05-keep-binary-batch-minimal-and-measured.md)
 - [ADR 2026-05-05: Allow native frame render commands for hot animation loops](adr/2026-05-05-native-frame-render-commands-for-hot-animation.md)
 
 Later benchmarking showed that primitive render batches are necessary but not always sufficient for the hottest animation loops. For MovingIcons-style workloads, the accepted direction is to keep animation state in Elixir while allowing selected generic native frame render commands to own the tight strip-rendering loop.
+
+Before the v2 MVP freeze, speculative packed-list commands such as whole-sprite list blits, sprite-region list blits, and generic primitive shape lists were removed from the active batch surface. Their measurements remain useful history, but they are not part of the retained MVP protocol.

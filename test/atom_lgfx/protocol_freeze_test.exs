@@ -109,8 +109,6 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     draw_string: 40,
     print: 41,
     println: 42,
-    draw_jpg: 43,
-    push_image: 44,
     set_clip_rect: 45,
     clear_clip_rect: 46,
     set_palette_color: 50,
@@ -124,23 +122,12 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     target: 0xF0,
     color_mode: 0xF1,
     push_sprite_transparent: 0xF2,
-    push_sprite_list: 0xF3,
-    push_sprite_region_list: 0xF4,
-    begin_strip: 0xF5,
-    present_strip: 0xF6,
-    fill_rect_list: 0xF7,
-    draw_line_list: 0xF8,
-    draw_pixel_list: 0xF9,
-    draw_rect_list: 0xFA,
-    fill_circle_list: 0xFB,
-    draw_circle_list: 0xFC,
-    fill_triangle_list: 0xFD,
-    draw_triangle_list: 0xFE,
+    begin_strip: 0xF3,
+    present_strip: 0xF4,
     extended: 0xFF
   }
 
   @binary_batch_render_extended_ops %{
-    ellipse_list: 0x00,
     push_rotate_zoom_frame_strips: 0x01
   }
 
@@ -170,26 +157,6 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     draw_bezier_cubic: 21,
     draw_triangle: 15,
     fill_triangle: 15,
-    draw_pixel_list_header: 5,
-    draw_pixel_list_record: 6,
-    draw_rect_list_header: 5,
-    draw_rect_list_record: 10,
-    fill_rect_list_header: 5,
-    fill_rect_list_record: 10,
-    draw_circle_list_header: 5,
-    draw_circle_list_record: 8,
-    fill_circle_list_header: 5,
-    fill_circle_list_record: 8,
-    draw_ellipse_list_header: 8,
-    draw_ellipse_list_record: 10,
-    fill_ellipse_list_header: 8,
-    fill_ellipse_list_record: 10,
-    draw_line_list_header: 5,
-    draw_line_list_record: 10,
-    draw_triangle_list_header: 5,
-    draw_triangle_list_record: 14,
-    fill_triangle_list_header: 5,
-    fill_triangle_list_record: 14,
     set_clip_rect: 9,
     clear_clip_rect: 1,
     set_text_font_preset: 2,
@@ -203,17 +170,10 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     print_one_byte: 4,
     println_empty: 3,
     println_one_byte: 4,
-    draw_jpg_header: 11,
-    draw_jpg_scaled_header: 27,
-    push_image_rgb565_header: 15,
     set_palette_color: 7,
     set_pivot: 5,
     push_sprite: 6,
     push_sprite_transparent: 10,
-    push_sprite_list_header: 7,
-    push_sprite_list_record: 6,
-    push_sprite_region_list_header: 7,
-    push_sprite_region_list_record: 14,
     push_rotate_zoom: 25,
     push_rotate_zoom_list_header: 15,
     push_rotate_zoom_list_record: 12,
@@ -283,6 +243,11 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     assert actual_opcodes == @binary_batch_public_ops
   end
 
+  test "payload-heavy image operations stay scalar-only" do
+    refute OpSchema.batchable?(:draw_jpg)
+    refute OpSchema.batchable?(:push_image)
+  end
+
   test "freezes the binary-batch render-private opcodes" do
     assert Map.new(BinaryBatch.__render_private_opcodes__()) == @binary_batch_render_private_ops
   end
@@ -297,15 +262,6 @@ defmodule AtomLGFX.ProtocolFreezeTest do
 
   test "keeps binary-batch extended render sub-opcodes aligned with protocol.h" do
     assert native_render_extended_opcodes() == @binary_batch_render_extended_ops
-  end
-
-  test "keeps binary-batch render-private opcodes contiguous" do
-    actual_opcodes =
-      BinaryBatch.__render_private_opcodes__()
-      |> Keyword.values()
-      |> Enum.sort()
-
-    assert actual_opcodes == Enum.to_list(0xF0..0xFF)
   end
 
   test "keeps known binary-batch opcodes aligned with frozen opcode sets" do
@@ -349,102 +305,6 @@ defmodule AtomLGFX.ProtocolFreezeTest do
       draw_bezier_cubic: byte_size(BinaryBatch.draw_bezier(0, 0, 1, 1, 2, 2, 3, 3, 0x0000)),
       draw_triangle: byte_size(BinaryBatch.draw_triangle(0, 0, 1, 0, 0, 1, 0x0000)),
       fill_triangle: byte_size(BinaryBatch.fill_triangle(0, 0, 1, 0, 0, 1, 0x0000)),
-      draw_pixel_list_header:
-        list_header_size(&BinaryBatch.draw_pixel_list/1, {0, 0, 0x0000}, {1, 1, 0xFFFF}),
-      draw_pixel_list_record:
-        list_record_size(&BinaryBatch.draw_pixel_list/1, {0, 0, 0x0000}, {1, 1, 0xFFFF}),
-      draw_rect_list_header:
-        list_header_size(
-          &BinaryBatch.draw_rect_list/1,
-          {0, 0, 1, 1, 0x0000},
-          {1, 1, 2, 2, 0xFFFF}
-        ),
-      draw_rect_list_record:
-        list_record_size(
-          &BinaryBatch.draw_rect_list/1,
-          {0, 0, 1, 1, 0x0000},
-          {1, 1, 2, 2, 0xFFFF}
-        ),
-      fill_rect_list_header:
-        list_header_size(
-          &BinaryBatch.fill_rect_list/1,
-          {0, 0, 1, 1, 0x0000},
-          {1, 1, 2, 2, 0xFFFF}
-        ),
-      fill_rect_list_record:
-        list_record_size(
-          &BinaryBatch.fill_rect_list/1,
-          {0, 0, 1, 1, 0x0000},
-          {1, 1, 2, 2, 0xFFFF}
-        ),
-      draw_circle_list_header:
-        list_header_size(&BinaryBatch.draw_circle_list/1, {0, 0, 1, 0x0000}, {1, 1, 2, 0xFFFF}),
-      draw_circle_list_record:
-        list_record_size(&BinaryBatch.draw_circle_list/1, {0, 0, 1, 0x0000}, {1, 1, 2, 0xFFFF}),
-      fill_circle_list_header:
-        list_header_size(&BinaryBatch.fill_circle_list/1, {0, 0, 1, 0x0000}, {1, 1, 2, 0xFFFF}),
-      fill_circle_list_record:
-        list_record_size(&BinaryBatch.fill_circle_list/1, {0, 0, 1, 0x0000}, {1, 1, 2, 0xFFFF}),
-      draw_ellipse_list_header:
-        list_header_size(
-          &BinaryBatch.draw_ellipse_list/1,
-          {0, 0, 1, 1, 0x0000},
-          {1, 1, 2, 2, 0xFFFF}
-        ),
-      draw_ellipse_list_record:
-        list_record_size(
-          &BinaryBatch.draw_ellipse_list/1,
-          {0, 0, 1, 1, 0x0000},
-          {1, 1, 2, 2, 0xFFFF}
-        ),
-      fill_ellipse_list_header:
-        list_header_size(
-          &BinaryBatch.fill_ellipse_list/1,
-          {0, 0, 1, 1, 0x0000},
-          {1, 1, 2, 2, 0xFFFF}
-        ),
-      fill_ellipse_list_record:
-        list_record_size(
-          &BinaryBatch.fill_ellipse_list/1,
-          {0, 0, 1, 1, 0x0000},
-          {1, 1, 2, 2, 0xFFFF}
-        ),
-      draw_line_list_header:
-        list_header_size(
-          &BinaryBatch.draw_line_list/1,
-          {0, 0, 1, 1, 0x0000},
-          {1, 1, 2, 2, 0xFFFF}
-        ),
-      draw_line_list_record:
-        list_record_size(
-          &BinaryBatch.draw_line_list/1,
-          {0, 0, 1, 1, 0x0000},
-          {1, 1, 2, 2, 0xFFFF}
-        ),
-      draw_triangle_list_header:
-        list_header_size(
-          &BinaryBatch.draw_triangle_list/1,
-          {0, 0, 1, 0, 0, 1, 0x0000},
-          {1, 1, 2, 1, 1, 2, 0xFFFF}
-        ),
-      draw_triangle_list_record:
-        list_record_size(
-          &BinaryBatch.draw_triangle_list/1,
-          {0, 0, 1, 0, 0, 1, 0x0000},
-          {1, 1, 2, 1, 1, 2, 0xFFFF}
-        ),
-      fill_triangle_list_header:
-        list_header_size(
-          &BinaryBatch.fill_triangle_list/1,
-          {0, 0, 1, 0, 0, 1, 0x0000},
-          {1, 1, 2, 1, 1, 2, 0xFFFF}
-        ),
-      fill_triangle_list_record:
-        list_record_size(
-          &BinaryBatch.fill_triangle_list/1,
-          {0, 0, 1, 0, 0, 1, 0x0000},
-          {1, 1, 2, 1, 1, 2, 0xFFFF}
-        ),
       set_clip_rect: byte_size(BinaryBatch.set_clip_rect(0, 0, 1, 1)),
       clear_clip_rect: byte_size(BinaryBatch.clear_clip_rect()),
       set_text_font_preset: byte_size(BinaryBatch.set_text_font_preset(:ascii)),
@@ -458,19 +318,10 @@ defmodule AtomLGFX.ProtocolFreezeTest do
       print_one_byte: byte_size(BinaryBatch.print("a")),
       println_empty: byte_size(BinaryBatch.println()),
       println_one_byte: byte_size(BinaryBatch.println("a")),
-      draw_jpg_header: payload_header_size(BinaryBatch.draw_jpg(0, 0, <<1>>), 1),
-      draw_jpg_scaled_header:
-        payload_header_size(BinaryBatch.draw_jpg(0, 0, 0, 0, 0, 0, 1, 1, <<1>>), 1),
-      push_image_rgb565_header:
-        payload_header_size(BinaryBatch.push_image_rgb565(0, 0, 1, 1, <<0, 0>>), 2),
       set_palette_color: byte_size(BinaryBatch.set_palette_color(0, 0x000000)),
       set_pivot: byte_size(BinaryBatch.set_pivot(0, 0)),
       push_sprite: byte_size(BinaryBatch.push_sprite(1, 0, 0)),
       push_sprite_transparent: byte_size(BinaryBatch.push_sprite(1, 0, 0, 0x0000)),
-      push_sprite_list_header: push_sprite_list_header_size(),
-      push_sprite_list_record: push_sprite_list_record_size(),
-      push_sprite_region_list_header: push_sprite_region_list_header_size(),
-      push_sprite_region_list_record: push_sprite_region_list_record_size(),
       push_rotate_zoom: byte_size(BinaryBatch.push_rotate_zoom(1, 0, 0, 0, 1)),
       push_rotate_zoom_list_header: push_rotate_zoom_list_header_size(),
       push_rotate_zoom_list_record: push_rotate_zoom_list_record_size(),
@@ -481,22 +332,13 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     assert actual_sizes == @binary_batch_command_sizes
   end
 
-  defp list_header_size(builder, first_record, second_record) do
-    single = builder.([first_record])
-    double = builder.([first_record, second_record])
-
-    2 * byte_size(single) - byte_size(double)
-  end
-
-  defp list_record_size(builder, first_record, second_record) do
-    single = builder.([first_record])
-    double = builder.([first_record, second_record])
-
-    byte_size(double) - byte_size(single)
-  end
-
-  defp payload_header_size(command, payload_size) do
-    byte_size(command) - payload_size
+  test "freezes Elixir protocol capability bits" do
+    assert Protocol.cap_sprite() == @capabilities.sprite
+    assert Protocol.cap_pushimage() == @capabilities.pushimage
+    assert Protocol.cap_last_error() == @capabilities.last_error
+    assert Protocol.cap_touch() == @capabilities.touch
+    assert Protocol.cap_palette() == @capabilities.palette
+    assert Protocol.cap_batch() == @capabilities.batch
   end
 
   defp native_render_private_opcodes do
@@ -523,78 +365,34 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     |> Map.new()
   end
 
-  defp push_sprite_list_header_size do
-    single = BinaryBatch.push_sprite_list([{1, 0, 0}])
-    double = BinaryBatch.push_sprite_list([{1, 0, 0}, {2, 1, 1}])
-
-    2 * byte_size(single) - byte_size(double)
-  end
-
-  defp push_sprite_list_record_size do
-    single = BinaryBatch.push_sprite_list([{1, 0, 0}])
-    double = BinaryBatch.push_sprite_list([{1, 0, 0}, {2, 1, 1}])
-
-    byte_size(double) - byte_size(single)
-  end
-
-  defp push_sprite_region_list_header_size do
-    single = BinaryBatch.push_sprite_region_list([{1, 0, 0, 1, 1, 0, 0}])
-
-    double =
-      BinaryBatch.push_sprite_region_list([
-        {1, 0, 0, 1, 1, 0, 0},
-        {2, 0, 0, 1, 1, 1, 1}
-      ])
-
-    2 * byte_size(single) - byte_size(double)
-  end
-
-  defp push_sprite_region_list_record_size do
-    single = BinaryBatch.push_sprite_region_list([{1, 0, 0, 1, 1, 0, 0}])
-
-    double =
-      BinaryBatch.push_sprite_region_list([
-        {1, 0, 0, 1, 1, 0, 0},
-        {2, 0, 0, 1, 1, 1, 1}
-      ])
-
-    byte_size(double) - byte_size(single)
-  end
-
   defp push_rotate_zoom_list_header_size do
-    single = BinaryBatch.push_rotate_zoom_list([{1, 0, 0, 0, 1_024, 1_024}])
+    single = BinaryBatch.push_rotate_zoom_list([{1, 0, 0, 0, 1024, 1024}])
 
     double =
-      BinaryBatch.push_rotate_zoom_list([
-        {1, 0, 0, 0, 1_024, 1_024},
-        {2, 1, 1, 0, 1_024, 1_024}
-      ])
+      BinaryBatch.push_rotate_zoom_list([{1, 0, 0, 0, 1024, 1024}, {2, 1, 1, 1, 1024, 1024}])
 
     2 * byte_size(single) - byte_size(double)
   end
 
   defp push_rotate_zoom_list_record_size do
-    single = BinaryBatch.push_rotate_zoom_list([{1, 0, 0, 0, 1_024, 1_024}])
+    single = BinaryBatch.push_rotate_zoom_list([{1, 0, 0, 0, 1024, 1024}])
 
     double =
-      BinaryBatch.push_rotate_zoom_list([
-        {1, 0, 0, 0, 1_024, 1_024},
-        {2, 1, 1, 0, 1_024, 1_024}
-      ])
+      BinaryBatch.push_rotate_zoom_list([{1, 0, 0, 0, 1024, 1024}, {2, 1, 1, 1, 1024, 1024}])
 
     byte_size(double) - byte_size(single)
   end
 
   defp push_rotate_zoom_frame_strips_header_size do
     single =
-      BinaryBatch.push_rotate_zoom_frame_strips([{1, 0, 0, 0, 1_024, 1_024}], frame_height: 1)
+      BinaryBatch.push_rotate_zoom_frame_strips(
+        [{1, 0, 0, 0, 1024, 1024}],
+        frame_height: 1
+      )
 
     double =
       BinaryBatch.push_rotate_zoom_frame_strips(
-        [
-          {1, 0, 0, 0, 1_024, 1_024},
-          {2, 1, 1, 0, 1_024, 1_024}
-        ],
+        [{1, 0, 0, 0, 1024, 1024}, {2, 1, 1, 1, 1024, 1024}],
         frame_height: 1
       )
 
@@ -603,30 +401,17 @@ defmodule AtomLGFX.ProtocolFreezeTest do
 
   defp push_rotate_zoom_frame_strips_record_size do
     single =
-      BinaryBatch.push_rotate_zoom_frame_strips([{1, 0, 0, 0, 1_024, 1_024}], frame_height: 1)
+      BinaryBatch.push_rotate_zoom_frame_strips(
+        [{1, 0, 0, 0, 1024, 1024}],
+        frame_height: 1
+      )
 
     double =
       BinaryBatch.push_rotate_zoom_frame_strips(
-        [
-          {1, 0, 0, 0, 1_024, 1_024},
-          {2, 1, 1, 0, 1_024, 1_024}
-        ],
+        [{1, 0, 0, 0, 1024, 1024}, {2, 1, 1, 1, 1024, 1024}],
         frame_height: 1
       )
 
     byte_size(double) - byte_size(single)
-  end
-
-  test "freezes Elixir protocol capability bits" do
-    actual_capabilities = %{
-      sprite: Protocol.cap_sprite(),
-      pushimage: Protocol.cap_pushimage(),
-      last_error: Protocol.cap_last_error(),
-      touch: Protocol.cap_touch(),
-      palette: Protocol.cap_palette(),
-      batch: Protocol.cap_batch()
-    }
-
-    assert actual_capabilities == @capabilities
   end
 end

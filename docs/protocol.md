@@ -473,7 +473,9 @@ It is not a scheduler, queue, or general tuple/list batch runtime. It is an expl
 
 Elixir callers should build frame scripts with `AtomLGFX.BinaryBatch` and submit them with `AtomLGFX.submit_binary_batch/2` or `AtomLGFX.BinaryBatch.render/2`.
 
-For generated or experimental frame scripts, `AtomLGFX.BinaryBatch.validate/1` can preflight the stream without calling native code, and `AtomLGFX.BinaryBatch.render_checked/2` validates before submitting. This gives callers an opt-in no-partial-render safety path when native `LGFX_PORT_RENDER_BATCH_PREVALIDATE` is disabled. `AtomLGFX.BinaryBatch.summary/1` reports diagnostic counts such as batch bytes, render-private command count, dynamic payload bytes, fixed overhead bytes, packed-list record bytes, packed-list command count, packed-list instance count, and integer x1000 wire-efficiency ratios without calling native code. `AtomLGFX.BinaryBatch.diagnose/1` returns the same summary information for valid streams and partial context for invalid streams, including failing command index, opcode, best-effort operation name, and last successfully decoded command. `AtomLGFX.BinaryBatch.compare/2` compares a baseline frame script with a candidate frame script using the same summary metrics, which is useful when replacing repeated scalar commands with compact list commands. `AtomLGFX.BinaryBatch.check_budget/2` validates the same diagnostic metrics against caller-provided limits, which is useful for CI and generated-frame guardrails.
+For generated or experimental frame scripts, `AtomLGFX.BinaryBatch.validate/1` can preflight the stream without calling native code, and `AtomLGFX.BinaryBatch.render_checked/2` validates before submitting. This gives callers an opt-in no-partial-render safety path when native `LGFX_PORT_RENDER_BATCH_PREVALIDATE` is disabled. `AtomLGFX.BinaryBatch.summary/1` reports diagnostic counts such as batch bytes, render-private command count, dynamic payload bytes, fixed overhead bytes, retained packed-list record bytes, retained packed-list command count, retained packed-list instance count, and integer x1000 wire-efficiency ratios without calling native code. `AtomLGFX.BinaryBatch.diagnose/1` returns the same summary information for valid streams and partial context for invalid streams, including failing command index, opcode, best-effort operation name, and last successfully decoded command. `AtomLGFX.BinaryBatch.compare/2` compares a baseline frame script with a candidate frame script using the same summary metrics. `AtomLGFX.BinaryBatch.check_budget/2` validates the same diagnostic metrics against caller-provided limits, which is useful for CI and generated-frame guardrails.
+
+The v2 MVP intentionally keeps the binary-batch surface small. Generic primitive packed-list commands, sprite-region list commands, batch-level JPEG drawing, and batch-level RGB565 image pushing are not part of the retained MVP batch surface.
 
 ### Wire shape
 
@@ -560,36 +562,6 @@ pushSprite:
   source_target u8
   x i16le
   y i16le
-
-pushSpriteList:
-  op u8
-  flags u16le
-  transparent u16le
-  instance_count u16le
-  InstanceRecord instance_count * 6 bytes
-
-PushSpriteList InstanceRecord:
-  source_target u8
-  reserved u8 = 0
-  x i16le
-  y i16le
-
-pushSpriteRegionList:
-  op u8
-  flags u16le
-  transparent u16le
-  instance_count u16le
-  InstanceRecord instance_count * 14 bytes
-
-PushSpriteRegionList InstanceRecord:
-  source_target u8
-  reserved u8 = 0
-  src_x u16le
-  src_y u16le
-  width u16le
-  height u16le
-  dst_x i16le
-  dst_y i16le
 
 pushRotateZoomList:
   normal operation opcode with one PRZL payload binary

@@ -78,7 +78,7 @@ _Static_assert(offsetof(lgfx_op_meta_t, batch_boundary_sensitive) == 15, "batch_
     _Static_assert(((needs_owned_payload_v) == 0) || ((needs_owned_payload_v) == 1), #op_name " needs_owned_payload must be 0 or 1");                                                                            \
     _Static_assert(((sync_only_v) == 0) || ((sync_only_v) == 1), #op_name " sync_only must be 0 or 1");                                                                                                          \
     _Static_assert(((batch_boundary_sensitive_v) == 0) || ((batch_boundary_sensitive_v) == 1), #op_name " batch_boundary_sensitive must be 0 or 1");                                                             \
-    _Static_assert(!((needs_owned_payload_v) && !(batchable_v)), #op_name " needs_owned_payload requires batchable");                                                                                            \
+    _Static_assert(!((needs_owned_payload_v) && !((batchable_v) || (sync_only_v))), #op_name " needs_owned_payload requires batchable or sync_only");                                                                                            \
     _Static_assert(!((sync_only_v) && (batchable_v)), #op_name " sync_only and batchable cannot both be 1");                                                                                                     \
     _Static_assert(!((batch_boundary_sensitive_v) && !(batchable_v)), #op_name " batch_boundary_sensitive requires batchable");                                                                                  \
     _Static_assert(((batchable_v) + (sync_only_v)) == 1, #op_name " exactly one of batchable or sync_only must be 1");

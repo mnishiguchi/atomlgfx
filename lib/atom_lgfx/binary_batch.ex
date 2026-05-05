@@ -6,23 +6,21 @@ defmodule AtomLGFX.BinaryBatch do
   @moduledoc """
   Packed binary-batch command builders.
 
-  The binary-batch path uses scalar command encodings plus render-only control
-  commands such as `target/1`, `color_mode/1`, `display/0`, `set_text_datum/1`, `set_text_wrap/1`,
-  `set_text_wrap_xy/2`, `set_cursor/2`, `set_text_color/2`, `draw_string/3`, `print/1`, `println/1`,
-  `set_palette_color/2`, `set_palette_color/4`, `set_pivot/2`,
-  `draw_pixel_list/1`, `draw_rect_list/1`, `fill_rect_list/1`, `draw_circle_list/1`,
-  `fill_circle_list/1`, `draw_ellipse_list/1`, `fill_ellipse_list/1`, `draw_line_list/1`,
-  `draw_triangle_list/1`, `fill_triangle_list/1`, `push_sprite/3`,
-  `push_sprite/4`, `push_rotate_zoom/5`,
-  `push_rotate_zoom/6`, `push_rotate_zoom/7`, `push_sprite_list/2`,
-  `push_sprite_region_list/2`, `draw_jpg/3`, `draw_jpg/9`,
-  `push_image_rgb565/5`, `push_image_rgb565/6`, `draw_arc/7`, `fill_arc/7`,
-  `draw_bezier/7`, `draw_bezier/9`, `push_rotate_zoom_list/2`, and
-  `push_rotate_zoom_frame_strips/2`. Submit
-  binary batches with `render/2`. Use `summary/1`, `diagnose/1`,
-  `compare/2`, and `check_budget/2` for Elixir-side diagnostics.
-  """
+  The binary-batch path uses scalar render command encodings plus a small set of
+  render-only control commands such as `target/1`, `color_mode/1`, `begin_strip/1`,
+  `present_strip/0`, `display/0`, `set_text_datum/1`, `set_text_wrap/1`,
+  `set_text_wrap_xy/2`, `set_cursor/2`, `set_text_color/2`, `draw_string/3`,
+  `print/1`, `println/1`, `set_palette_color/2`, `set_pivot/2`,
+  `push_sprite/3`, `push_sprite/4`,
+  `push_rotate_zoom/5`, `push_rotate_zoom/6`, `push_rotate_zoom/7`,
+  `draw_arc/7`, `fill_arc/7`, `draw_bezier/7`, `draw_bezier/9`,
+  `push_rotate_zoom_list/2`, and `push_rotate_zoom_frame_strips/2`.
 
+  Speculative packed-list commands for generic primitive shapes were intentionally
+  removed before the v2 MVP freeze. Repeated primitive drawing should use ordinary
+  scalar batch commands unless a future measured workload justifies a compact
+  list command.
+  """
   import Bitwise
   import AtomLGFX.Guards
 
@@ -59,11 +57,9 @@ defmodule AtomLGFX.BinaryBatch do
   @op_draw_string OpSchema.opcode!(:draw_string)
   @op_print OpSchema.opcode!(:print)
   @op_println OpSchema.opcode!(:println)
-  @op_draw_jpg OpSchema.opcode!(:draw_jpg)
   @op_set_clip_rect OpSchema.opcode!(:set_clip_rect)
   @op_clear_clip_rect OpSchema.opcode!(:clear_clip_rect)
   @op_display OpSchema.opcode!(:display)
-  @op_push_image OpSchema.opcode!(:push_image)
   @op_set_palette_color OpSchema.opcode!(:set_palette_color)
   @op_set_pivot OpSchema.opcode!(:set_pivot)
   @op_push_sprite OpSchema.opcode!(:push_sprite)
@@ -73,44 +69,22 @@ defmodule AtomLGFX.BinaryBatch do
   @render_op_target 0xF0
   @render_op_color_mode 0xF1
   @render_op_push_sprite_transparent 0xF2
-  @render_op_push_sprite_list 0xF3
-  @render_op_push_sprite_region_list 0xF4
-  @render_op_begin_strip 0xF5
-  @render_op_present_strip 0xF6
-  @render_op_fill_rect_list 0xF7
-  @render_op_draw_line_list 0xF8
-  @render_op_draw_pixel_list 0xF9
-  @render_op_draw_rect_list 0xFA
-  @render_op_fill_circle_list 0xFB
-  @render_op_draw_circle_list 0xFC
-  @render_op_fill_triangle_list 0xFD
-  @render_op_draw_triangle_list 0xFE
+  @render_op_begin_strip 0xF3
+  @render_op_present_strip 0xF4
   @render_op_extended 0xFF
 
-  @render_ext_op_ellipse_list 0x00
   @render_ext_op_push_rotate_zoom_frame_strips 0x01
 
   @render_private_opcodes [
     target: @render_op_target,
     color_mode: @render_op_color_mode,
     push_sprite_transparent: @render_op_push_sprite_transparent,
-    push_sprite_list: @render_op_push_sprite_list,
-    push_sprite_region_list: @render_op_push_sprite_region_list,
     begin_strip: @render_op_begin_strip,
     present_strip: @render_op_present_strip,
-    fill_rect_list: @render_op_fill_rect_list,
-    draw_line_list: @render_op_draw_line_list,
-    draw_pixel_list: @render_op_draw_pixel_list,
-    draw_rect_list: @render_op_draw_rect_list,
-    fill_circle_list: @render_op_fill_circle_list,
-    draw_circle_list: @render_op_draw_circle_list,
-    fill_triangle_list: @render_op_fill_triangle_list,
-    draw_triangle_list: @render_op_draw_triangle_list,
     extended: @render_op_extended
   ]
 
   @render_extended_opcodes [
-    ellipse_list: @render_ext_op_ellipse_list,
     push_rotate_zoom_frame_strips: @render_ext_op_push_rotate_zoom_frame_strips
   ]
 
@@ -148,8 +122,6 @@ defmodule AtomLGFX.BinaryBatch do
     @op_draw_string,
     @op_print,
     @op_println,
-    @op_draw_jpg,
-    @op_push_image,
     @op_set_palette_color,
     @op_set_pivot,
     @op_push_sprite,
@@ -169,21 +141,6 @@ defmodule AtomLGFX.BinaryBatch do
   @max_text_scale_x1024 0xFFFF
   @max_f32 3.4028234663852886e38
 
-  @sprite_list_flag_has_transparent 0x0001
-  @sprite_region_list_flag_has_transparent 0x0001
-  @sprite_list_record_size 6
-  @sprite_region_list_record_size 14
-  @fill_rect_list_record_size 10
-  @draw_line_list_record_size 10
-  @draw_pixel_list_record_size 6
-  @draw_rect_list_record_size 10
-  @fill_circle_list_record_size 8
-  @draw_circle_list_record_size 8
-  @ellipse_list_kind_draw 0
-  @ellipse_list_kind_fill 1
-  @ellipse_list_record_size 10
-  @fill_triangle_list_record_size 14
-  @draw_triangle_list_record_size 14
   @push_rotate_zoom_list_record_size 12
 
   @doc false
@@ -375,218 +332,6 @@ defmodule AtomLGFX.BinaryBatch do
              u16(color) do
     <<@op_fill_rect, x::signed-little-16, y::signed-little-16, width::little-16,
       height::little-16, color::little-16>>
-  end
-
-  @doc """
-  Draws many pixels on the current render target with compact records.
-
-  `pixels` is a list of fixed-width tuples:
-
-      {x, y, color}
-
-  The current `color_mode/1` controls whether `color` is interpreted as RGB565
-  or as a palette index, matching `draw_pixel/3`.
-  """
-  @spec draw_pixel_list(list()) :: binary()
-  def draw_pixel_list(pixels) when is_list(pixels) do
-    case encode_draw_pixel_list_payload(pixels) do
-      {:ok, count, payload} ->
-        <<@render_op_draw_pixel_list, 0::little-16, count::little-16, payload::binary>>
-
-      {:error, reason} ->
-        raise ArgumentError, Errors.format_error(reason)
-    end
-  end
-
-  @doc """
-  Draws many rectangle outlines on the current render target with compact records.
-
-  `rectangles` is a list of fixed-width tuples:
-
-      {x, y, width, height, color}
-
-  The current `color_mode/1` controls whether `color` is interpreted as RGB565
-  or as a palette index, matching `draw_rect/5`.
-  """
-  @spec draw_rect_list(list()) :: binary()
-  def draw_rect_list(rectangles) when is_list(rectangles) do
-    case encode_draw_rect_list_payload(rectangles) do
-      {:ok, count, payload} ->
-        <<@render_op_draw_rect_list, 0::little-16, count::little-16, payload::binary>>
-
-      {:error, reason} ->
-        raise ArgumentError, Errors.format_error(reason)
-    end
-  end
-
-  @doc """
-  Fills many rectangles on the current render target with compact records.
-
-  `rectangles` is a list of fixed-width tuples:
-
-      {x, y, width, height, color}
-
-  The current `color_mode/1` controls whether `color` is interpreted as RGB565
-  or as a palette index, matching `fill_rect/5`.
-  """
-  @spec fill_rect_list(list()) :: binary()
-  def fill_rect_list(rectangles) when is_list(rectangles) do
-    case encode_fill_rect_list_payload(rectangles) do
-      {:ok, count, payload} ->
-        <<@render_op_fill_rect_list, 0::little-16, count::little-16, payload::binary>>
-
-      {:error, reason} ->
-        raise ArgumentError, Errors.format_error(reason)
-    end
-  end
-
-  @doc """
-  Draws many circle outlines on the current render target with compact records.
-
-  `circles` is a list of fixed-width tuples:
-
-      {x, y, radius, color}
-
-  The current `color_mode/1` controls whether `color` is interpreted as RGB565
-  or as a palette index, matching `draw_circle/4`.
-  """
-  @spec draw_circle_list(list()) :: binary()
-  def draw_circle_list(circles) when is_list(circles) do
-    case encode_draw_circle_list_payload(circles) do
-      {:ok, count, payload} ->
-        <<@render_op_draw_circle_list, 0::little-16, count::little-16, payload::binary>>
-
-      {:error, reason} ->
-        raise ArgumentError, Errors.format_error(reason)
-    end
-  end
-
-  @doc """
-  Fills many circles on the current render target with compact records.
-
-  `circles` is a list of fixed-width tuples:
-
-      {x, y, radius, color}
-
-  The current `color_mode/1` controls whether `color` is interpreted as RGB565
-  or as a palette index, matching `fill_circle/4`.
-  """
-  @spec fill_circle_list(list()) :: binary()
-  def fill_circle_list(circles) when is_list(circles) do
-    case encode_fill_circle_list_payload(circles) do
-      {:ok, count, payload} ->
-        <<@render_op_fill_circle_list, 0::little-16, count::little-16, payload::binary>>
-
-      {:error, reason} ->
-        raise ArgumentError, Errors.format_error(reason)
-    end
-  end
-
-  @doc """
-  Draws many ellipse outlines on the current render target with compact records.
-
-  `ellipses` is a list of fixed-width tuples:
-
-      {x, y, radius_x, radius_y, color}
-
-  The current `color_mode/1` controls whether `color` is interpreted as RGB565
-  or as a palette index, matching `draw_ellipse/5`.
-  """
-  @spec draw_ellipse_list(list()) :: binary()
-  def draw_ellipse_list(ellipses) when is_list(ellipses) do
-    case encode_ellipse_list_payload(:draw_ellipse_list, ellipses) do
-      {:ok, count, payload} ->
-        <<@render_op_extended, @render_ext_op_ellipse_list, @ellipse_list_kind_draw, 0,
-          0::little-16, count::little-16, payload::binary>>
-
-      {:error, reason} ->
-        raise ArgumentError, Errors.format_error(reason)
-    end
-  end
-
-  @doc """
-  Fills many ellipses on the current render target with compact records.
-
-  `ellipses` is a list of fixed-width tuples:
-
-      {x, y, radius_x, radius_y, color}
-
-  The current `color_mode/1` controls whether `color` is interpreted as RGB565
-  or as a palette index, matching `fill_ellipse/5`.
-  """
-  @spec fill_ellipse_list(list()) :: binary()
-  def fill_ellipse_list(ellipses) when is_list(ellipses) do
-    case encode_ellipse_list_payload(:fill_ellipse_list, ellipses) do
-      {:ok, count, payload} ->
-        <<@render_op_extended, @render_ext_op_ellipse_list, @ellipse_list_kind_fill, 0,
-          0::little-16, count::little-16, payload::binary>>
-
-      {:error, reason} ->
-        raise ArgumentError, Errors.format_error(reason)
-    end
-  end
-
-  @doc """
-  Draws many lines on the current render target with compact records.
-
-  `lines` is a list of fixed-width tuples:
-
-      {x0, y0, x1, y1, color}
-
-  The current `color_mode/1` controls whether `color` is interpreted as RGB565
-  or as a palette index, matching `draw_line/5`.
-  """
-  @spec draw_line_list(list()) :: binary()
-  def draw_line_list(lines) when is_list(lines) do
-    case encode_draw_line_list_payload(lines) do
-      {:ok, count, payload} ->
-        <<@render_op_draw_line_list, 0::little-16, count::little-16, payload::binary>>
-
-      {:error, reason} ->
-        raise ArgumentError, Errors.format_error(reason)
-    end
-  end
-
-  @doc """
-  Draws many triangle outlines on the current render target with compact records.
-
-  `triangles` is a list of fixed-width tuples:
-
-      {x0, y0, x1, y1, x2, y2, color}
-
-  The current `color_mode/1` controls whether `color` is interpreted as RGB565
-  or as a palette index, matching `draw_triangle/7`.
-  """
-  @spec draw_triangle_list(list()) :: binary()
-  def draw_triangle_list(triangles) when is_list(triangles) do
-    case encode_draw_triangle_list_payload(triangles) do
-      {:ok, count, payload} ->
-        <<@render_op_draw_triangle_list, 0::little-16, count::little-16, payload::binary>>
-
-      {:error, reason} ->
-        raise ArgumentError, Errors.format_error(reason)
-    end
-  end
-
-  @doc """
-  Fills many triangles on the current render target with compact records.
-
-  `triangles` is a list of fixed-width tuples:
-
-      {x0, y0, x1, y1, x2, y2, color}
-
-  The current `color_mode/1` controls whether `color` is interpreted as RGB565
-  or as a palette index, matching `fill_triangle/7`.
-  """
-  @spec fill_triangle_list(list()) :: binary()
-  def fill_triangle_list(triangles) when is_list(triangles) do
-    case encode_fill_triangle_list_payload(triangles) do
-      {:ok, count, payload} ->
-        <<@render_op_fill_triangle_list, 0::little-16, count::little-16, payload::binary>>
-
-      {:error, reason} ->
-        raise ArgumentError, Errors.format_error(reason)
-    end
   end
 
   @spec draw_round_rect(integer(), integer(), integer(), integer(), integer(), integer()) ::
@@ -873,108 +618,16 @@ defmodule AtomLGFX.BinaryBatch do
   end
 
   @doc """
-  Draws JPEG bytes at `{x, y}` on the current render target.
-
-  The JPEG payload is length-prefixed in the binary batch so following commands
-  can be decoded without copying or scanning the image bytes.
+  Sets one palette color on a palette-backed sprite target.
   """
-  @spec draw_jpg(integer(), integer(), binary()) :: binary()
-  def draw_jpg(x, y, jpeg) when i16(x) and i16(y) and is_binary(jpeg) do
-    case validate_jpeg_payload(jpeg) do
-      {:ok, jpeg_len} ->
-        <<@op_draw_jpg, 0, 0, x::signed-little-16, y::signed-little-16, jpeg_len::little-32,
-          jpeg::binary>>
-
-      {:error, reason} ->
-        raise ArgumentError, Errors.format_error(reason)
-    end
-  end
-
-  @doc """
-  Draws JPEG bytes with clipping offset and independent X/Y scale.
-
-  `max_width` or `max_height` may be zero to use LovyanGFX's default behavior,
-  matching the scalar `AtomLGFX.draw_jpg/11` contract.
-  """
-  @spec draw_jpg(
-          integer(),
-          integer(),
-          non_neg_integer(),
-          non_neg_integer(),
-          integer(),
-          integer(),
-          number(),
-          number(),
-          binary()
-        ) :: binary()
-  def draw_jpg(x, y, max_width, max_height, off_x, off_y, scale_x, scale_y, jpeg)
-      when i16(x) and i16(y) and u16(max_width) and u16(max_height) and i16(off_x) and
-             i16(off_y) and is_number(scale_x) and is_number(scale_y) and is_binary(jpeg) do
-    with {:ok, scale_x} <- normalize_image_scale(scale_x),
-         {:ok, scale_y} <- normalize_image_scale(scale_y),
-         {:ok, jpeg_len} <- validate_jpeg_payload(jpeg) do
-      <<@op_draw_jpg, 1, 0, x::signed-little-16, y::signed-little-16, max_width::little-16,
-        max_height::little-16, off_x::signed-little-16, off_y::signed-little-16,
-        scale_x::little-float-32, scale_y::little-float-32, jpeg_len::little-32, jpeg::binary>>
-    else
-      {:error, reason} -> raise ArgumentError, Errors.format_error(reason)
-    end
-  end
-
-  @doc """
-  Pushes RGB565 image pixels to the current render target.
-
-  Pixel data must be little-endian RGB565 words. `stride_pixels` defaults to
-  `width`; use a larger value when each source row has padding.
-  """
-  @spec push_image_rgb565(integer(), integer(), integer(), integer(), binary(), non_neg_integer()) ::
-          binary()
-  def push_image_rgb565(x, y, width, height, pixels, stride_pixels \\ 0)
-      when i16(x) and i16(y) and u16(width) and u16(height) and is_binary(pixels) and
-             u16(stride_pixels) do
-    case validate_push_image_rgb565_payload(width, height, pixels, stride_pixels) do
-      {:ok, pixels_len} ->
-        <<@op_push_image, x::signed-little-16, y::signed-little-16, width::little-16,
-          height::little-16, stride_pixels::little-16, pixels_len::little-32, pixels::binary>>
-
-      {:error, reason} ->
-        raise ArgumentError, Errors.format_error(reason)
-    end
-  end
-
-  @doc """
-  Sets one palette entry on the current sprite target.
-
-  The current batch target must be a palette-backed sprite when this command is
-  executed natively. `rgb888` uses the same `0x00RRGGBB` format as the scalar
-  API.
-  """
-  @spec set_palette_color(non_neg_integer(), non_neg_integer()) :: binary()
-  def set_palette_color(palette_index, rgb888) when u8(palette_index) and color888(rgb888) do
+  @spec set_palette_color(integer(), integer()) :: binary()
+  def set_palette_color(palette_index, rgb888)
+      when palette_index(palette_index) and color888(rgb888) do
     <<@op_set_palette_color, palette_index, 0, rgb888::little-32>>
   end
 
   @doc """
-  Sets one palette entry from RGB components on the current sprite target.
-  """
-  @spec set_palette_color(
-          non_neg_integer(),
-          non_neg_integer(),
-          non_neg_integer(),
-          non_neg_integer()
-        ) ::
-          binary()
-  def set_palette_color(palette_index, red, green, blue)
-      when u8(palette_index) and u8(red) and u8(green) and u8(blue) do
-    rgb888 = red <<< 16 ||| green <<< 8 ||| blue
-    set_palette_color(palette_index, rgb888)
-  end
-
-  @doc """
-  Sets the pivot point on the current render target.
-
-  This is useful before one-off or list-based transformed sprite pushes when the
-  source sprite pivot is part of frame construction.
+  Sets the sprite pivot used by transformed sprite drawing.
   """
   @spec set_pivot(integer(), integer()) :: binary()
   def set_pivot(x, y) when i16(x) and i16(y) do
@@ -982,7 +635,7 @@ defmodule AtomLGFX.BinaryBatch do
   end
 
   @doc """
-  Pushes a sprite to the current render target.
+  Pushes a source sprite to the current render target.
   """
   @spec push_sprite(integer(), integer(), integer()) :: binary()
   def push_sprite(source_target, x, y) when sprite_handle(source_target) and i16(x) and i16(y) do
@@ -990,7 +643,7 @@ defmodule AtomLGFX.BinaryBatch do
   end
 
   @doc """
-  Pushes a sprite to the current render target using a transparent key.
+  Pushes a source sprite to the current render target using a transparent key.
 
   The transparent key accepts an RGB565 integer, `{:rgb565, value}`, or
   `{:index, value}` for palette-backed source sprites.
@@ -1014,7 +667,7 @@ defmodule AtomLGFX.BinaryBatch do
   end
 
   @doc """
-  Pushes a transformed source sprite to the current render target.
+  Pushes a transformed source sprite with uniform zoom.
 
   This is the one-off BinaryBatch form of `pushRotateZoom`. Use
   `push_rotate_zoom_list/2` for many transformed sprites in the same frame.
@@ -1056,55 +709,6 @@ defmodule AtomLGFX.BinaryBatch do
       when sprite_handle(source_target) and i16(x) and i16(y) and is_number(angle_deg) and
              is_number(zoom_x) and zoom_x > 0 and is_number(zoom_y) and zoom_y > 0 do
     encode_push_rotate_zoom_command(source_target, x, y, angle_deg, zoom_x, zoom_y, transparent)
-  end
-
-  @doc """
-  Pushes many whole source sprites to the current render target.
-
-  `instances` is a list of fixed-width tuples:
-
-      {source_target, x, y}
-
-  Options:
-
-  - `:transparent` accepts an RGB565 integer, `{:rgb565, n}`, or `{:index, n}`
-  """
-  @spec push_sprite_list(list(), keyword()) :: binary()
-  def push_sprite_list(instances, opts \\ []) when is_list(instances) and is_list(opts) do
-    case encode_push_sprite_list_payload(instances, opts) do
-      {:ok, flags, transparent_value, count, payload} ->
-        <<@render_op_push_sprite_list, flags::little-16, transparent_value::little-16,
-          count::little-16, payload::binary>>
-
-      {:error, reason} ->
-        raise ArgumentError, Errors.format_error(reason)
-    end
-  end
-
-  @doc """
-  Pushes many RGB565 source-sprite regions to the current render target.
-
-  `instances` is a list of fixed-width tuples:
-
-      {source_target, src_x, src_y, src_w, src_h, dst_x, dst_y}
-
-  This is intended for atlas-style rendering where setup code prepares sprite
-  variants once and the hot frame path only blits selected regions.
-
-  Options:
-
-  - `:transparent` accepts an RGB565 integer or `{:rgb565, n}`
-  """
-  @spec push_sprite_region_list(list(), keyword()) :: binary()
-  def push_sprite_region_list(instances, opts \\ []) when is_list(instances) and is_list(opts) do
-    case encode_push_sprite_region_list_payload(instances, opts) do
-      {:ok, flags, transparent_value, count, payload} ->
-        <<@render_op_push_sprite_region_list, flags::little-16, transparent_value::little-16,
-          count::little-16, payload::binary>>
-
-      {:error, reason} ->
-        raise ArgumentError, Errors.format_error(reason)
-    end
   end
 
   @doc """
@@ -1600,36 +1204,11 @@ defmodule AtomLGFX.BinaryBatch do
       packed_list_record_bytes: 0,
       packed_list_count: 0,
       packed_list_instance_count: 0,
-      draw_pixel_list_count: 0,
-      draw_pixel_list_instance_count: 0,
-      draw_rect_list_count: 0,
-      draw_rect_list_instance_count: 0,
-      fill_rect_list_count: 0,
-      fill_rect_list_instance_count: 0,
-      draw_circle_list_count: 0,
-      draw_circle_list_instance_count: 0,
-      fill_circle_list_count: 0,
-      fill_circle_list_instance_count: 0,
-      draw_ellipse_list_count: 0,
-      draw_ellipse_list_instance_count: 0,
-      fill_ellipse_list_count: 0,
-      fill_ellipse_list_instance_count: 0,
-      draw_line_list_count: 0,
-      draw_line_list_instance_count: 0,
-      draw_triangle_list_count: 0,
-      draw_triangle_list_instance_count: 0,
-      fill_triangle_list_count: 0,
-      fill_triangle_list_instance_count: 0,
       clip_count: 0,
       text_count: 0,
-      image_count: 0,
       sprite_state_count: 0,
       sprite_push_count: 0,
       push_rotate_zoom_count: 0,
-      sprite_push_list_count: 0,
-      sprite_push_list_instance_count: 0,
-      sprite_region_list_count: 0,
-      sprite_region_list_instance_count: 0,
       push_rotate_zoom_list_count: 0,
       push_rotate_zoom_instance_count: 0,
       push_rotate_zoom_frame_count: 0,
@@ -1736,106 +1315,6 @@ defmodule AtomLGFX.BinaryBatch do
     Map.update!(summary, :scalar_count, &(&1 + 1))
   end
 
-  defp accumulate_summary_category(summary, %{op: :draw_pixel_list, pixels: pixels}) do
-    pixel_count = length(pixels)
-
-    summary
-    |> Map.update!(:scalar_count, &(&1 + pixel_count))
-    |> Map.update!(:draw_pixel_list_count, &(&1 + 1))
-    |> Map.update!(:draw_pixel_list_instance_count, &(&1 + pixel_count))
-    |> accumulate_packed_list(pixel_count, @draw_pixel_list_record_size)
-  end
-
-  defp accumulate_summary_category(summary, %{op: :draw_rect_list, rectangles: rectangles}) do
-    rectangle_count = length(rectangles)
-
-    summary
-    |> Map.update!(:scalar_count, &(&1 + rectangle_count))
-    |> Map.update!(:draw_rect_list_count, &(&1 + 1))
-    |> Map.update!(:draw_rect_list_instance_count, &(&1 + rectangle_count))
-    |> accumulate_packed_list(rectangle_count, @draw_rect_list_record_size)
-  end
-
-  defp accumulate_summary_category(summary, %{op: :fill_rect_list, rectangles: rectangles}) do
-    rectangle_count = length(rectangles)
-
-    summary
-    |> Map.update!(:scalar_count, &(&1 + rectangle_count))
-    |> Map.update!(:fill_rect_list_count, &(&1 + 1))
-    |> Map.update!(:fill_rect_list_instance_count, &(&1 + rectangle_count))
-    |> accumulate_packed_list(rectangle_count, @fill_rect_list_record_size)
-  end
-
-  defp accumulate_summary_category(summary, %{op: :draw_circle_list, circles: circles}) do
-    circle_count = length(circles)
-
-    summary
-    |> Map.update!(:scalar_count, &(&1 + circle_count))
-    |> Map.update!(:draw_circle_list_count, &(&1 + 1))
-    |> Map.update!(:draw_circle_list_instance_count, &(&1 + circle_count))
-    |> accumulate_packed_list(circle_count, @draw_circle_list_record_size)
-  end
-
-  defp accumulate_summary_category(summary, %{op: :fill_circle_list, circles: circles}) do
-    circle_count = length(circles)
-
-    summary
-    |> Map.update!(:scalar_count, &(&1 + circle_count))
-    |> Map.update!(:fill_circle_list_count, &(&1 + 1))
-    |> Map.update!(:fill_circle_list_instance_count, &(&1 + circle_count))
-    |> accumulate_packed_list(circle_count, @fill_circle_list_record_size)
-  end
-
-  defp accumulate_summary_category(summary, %{op: :draw_ellipse_list, ellipses: ellipses}) do
-    ellipse_count = length(ellipses)
-
-    summary
-    |> Map.update!(:scalar_count, &(&1 + ellipse_count))
-    |> Map.update!(:draw_ellipse_list_count, &(&1 + 1))
-    |> Map.update!(:draw_ellipse_list_instance_count, &(&1 + ellipse_count))
-    |> accumulate_packed_list(ellipse_count, @ellipse_list_record_size)
-  end
-
-  defp accumulate_summary_category(summary, %{op: :fill_ellipse_list, ellipses: ellipses}) do
-    ellipse_count = length(ellipses)
-
-    summary
-    |> Map.update!(:scalar_count, &(&1 + ellipse_count))
-    |> Map.update!(:fill_ellipse_list_count, &(&1 + 1))
-    |> Map.update!(:fill_ellipse_list_instance_count, &(&1 + ellipse_count))
-    |> accumulate_packed_list(ellipse_count, @ellipse_list_record_size)
-  end
-
-  defp accumulate_summary_category(summary, %{op: :draw_line_list, lines: lines}) do
-    line_count = length(lines)
-
-    summary
-    |> Map.update!(:scalar_count, &(&1 + line_count))
-    |> Map.update!(:draw_line_list_count, &(&1 + 1))
-    |> Map.update!(:draw_line_list_instance_count, &(&1 + line_count))
-    |> accumulate_packed_list(line_count, @draw_line_list_record_size)
-  end
-
-  defp accumulate_summary_category(summary, %{op: :draw_triangle_list, triangles: triangles}) do
-    triangle_count = length(triangles)
-
-    summary
-    |> Map.update!(:scalar_count, &(&1 + triangle_count))
-    |> Map.update!(:draw_triangle_list_count, &(&1 + 1))
-    |> Map.update!(:draw_triangle_list_instance_count, &(&1 + triangle_count))
-    |> accumulate_packed_list(triangle_count, @draw_triangle_list_record_size)
-  end
-
-  defp accumulate_summary_category(summary, %{op: :fill_triangle_list, triangles: triangles}) do
-    triangle_count = length(triangles)
-
-    summary
-    |> Map.update!(:scalar_count, &(&1 + triangle_count))
-    |> Map.update!(:fill_triangle_list_count, &(&1 + 1))
-    |> Map.update!(:fill_triangle_list_instance_count, &(&1 + triangle_count))
-    |> accumulate_packed_list(triangle_count, @fill_triangle_list_record_size)
-  end
-
   defp accumulate_summary_category(summary, %{op: op})
        when op in [:set_clip_rect, :clear_clip_rect] do
     Map.update!(summary, :clip_count, &(&1 + 1))
@@ -1860,18 +1339,6 @@ defmodule AtomLGFX.BinaryBatch do
     Map.update!(summary, :text_count, &(&1 + 1))
   end
 
-  defp accumulate_summary_category(summary, %{op: :draw_jpg, jpeg_len: jpeg_len}) do
-    summary
-    |> Map.update!(:image_count, &(&1 + 1))
-    |> accumulate_dynamic_payload_bytes(jpeg_len)
-  end
-
-  defp accumulate_summary_category(summary, %{op: :push_image, pixels_len: pixels_len}) do
-    summary
-    |> Map.update!(:image_count, &(&1 + 1))
-    |> accumulate_dynamic_payload_bytes(pixels_len)
-  end
-
   defp accumulate_summary_category(summary, %{op: op})
        when op in [:set_palette_color, :set_pivot] do
     Map.update!(summary, :sprite_state_count, &(&1 + 1))
@@ -1887,26 +1354,6 @@ defmodule AtomLGFX.BinaryBatch do
     |> Map.update!(:sprite_push_count, &(&1 + 1))
   end
 
-  defp accumulate_summary_category(summary, %{op: :push_sprite_list, instances: instances}) do
-    instance_count = length(instances)
-
-    summary
-    |> Map.update!(:sprite_push_list_count, &(&1 + 1))
-    |> Map.update!(:sprite_push_list_instance_count, &(&1 + instance_count))
-    |> Map.update!(:sprite_push_count, &(&1 + instance_count))
-    |> accumulate_packed_list(instance_count, @sprite_list_record_size)
-  end
-
-  defp accumulate_summary_category(summary, %{op: :push_sprite_region_list, instances: instances}) do
-    instance_count = length(instances)
-
-    summary
-    |> Map.update!(:sprite_region_list_count, &(&1 + 1))
-    |> Map.update!(:sprite_region_list_instance_count, &(&1 + instance_count))
-    |> Map.update!(:sprite_push_count, &(&1 + instance_count))
-    |> accumulate_packed_list(instance_count, @sprite_region_list_record_size)
-  end
-
   defp accumulate_summary_category(summary, %{op: :push_rotate_zoom_list, instances: instances}) do
     instance_count = length(instances)
 
@@ -1916,7 +1363,10 @@ defmodule AtomLGFX.BinaryBatch do
     |> accumulate_packed_list(instance_count, @push_rotate_zoom_list_record_size)
   end
 
-  defp accumulate_summary_category(summary, %{op: :push_rotate_zoom_frame_strips, instances: instances}) do
+  defp accumulate_summary_category(summary, %{
+         op: :push_rotate_zoom_frame_strips,
+         instances: instances
+       }) do
     instance_count = length(instances)
 
     summary
@@ -2173,210 +1623,6 @@ defmodule AtomLGFX.BinaryBatch do
     with :ok <- validate_non_zero(width, :width),
          :ok <- validate_non_zero(height, :height) do
       {:ok, %{op: :fill_rect, x: x, y: y, width: width, height: height, color: color}, rest}
-    end
-  end
-
-  defp decode_command(
-         @render_op_draw_pixel_list,
-         <<flags::little-16, count::little-16, rest::binary>>
-       ) do
-    records_len = count * @draw_pixel_list_record_size
-
-    with :ok <- validate_draw_pixel_list_header(flags, count) do
-      case rest do
-        <<records::binary-size(records_len), remaining::binary>> ->
-          {:ok,
-           %{
-             op: :draw_pixel_list,
-             flags: flags,
-             pixels: decode_draw_pixel_records(records, [])
-           }, remaining}
-
-        _ ->
-          {:error, :truncated}
-      end
-    end
-  end
-
-  defp decode_command(
-         @render_op_draw_rect_list,
-         <<flags::little-16, count::little-16, rest::binary>>
-       ) do
-    records_len = count * @draw_rect_list_record_size
-
-    with :ok <- validate_draw_rect_list_header(flags, count) do
-      case rest do
-        <<records::binary-size(records_len), remaining::binary>> ->
-          case decode_draw_rect_records(records, []) do
-            {:ok, rectangles} ->
-              {:ok,
-               %{
-                 op: :draw_rect_list,
-                 flags: flags,
-                 rectangles: rectangles
-               }, remaining}
-
-            {:error, reason} ->
-              {:error, reason}
-          end
-
-        _ ->
-          {:error, :truncated}
-      end
-    end
-  end
-
-  defp decode_command(
-         @render_op_fill_rect_list,
-         <<flags::little-16, count::little-16, rest::binary>>
-       ) do
-    records_len = count * @fill_rect_list_record_size
-
-    with :ok <- validate_fill_rect_list_header(flags, count) do
-      case rest do
-        <<records::binary-size(records_len), remaining::binary>> ->
-          case decode_fill_rect_records(records, []) do
-            {:ok, rectangles} ->
-              {:ok,
-               %{
-                 op: :fill_rect_list,
-                 flags: flags,
-                 rectangles: rectangles
-               }, remaining}
-
-            {:error, reason} ->
-              {:error, reason}
-          end
-
-        _ ->
-          {:error, :truncated}
-      end
-    end
-  end
-
-  defp decode_command(
-         @render_op_draw_circle_list,
-         <<flags::little-16, count::little-16, rest::binary>>
-       ) do
-    records_len = count * @draw_circle_list_record_size
-
-    with :ok <- validate_draw_circle_list_header(flags, count) do
-      case rest do
-        <<records::binary-size(records_len), remaining::binary>> ->
-          case decode_draw_circle_records(records, []) do
-            {:ok, circles} ->
-              {:ok,
-               %{
-                 op: :draw_circle_list,
-                 flags: flags,
-                 circles: circles
-               }, remaining}
-
-            {:error, reason} ->
-              {:error, reason}
-          end
-
-        _ ->
-          {:error, :truncated}
-      end
-    end
-  end
-
-  defp decode_command(
-         @render_op_fill_circle_list,
-         <<flags::little-16, count::little-16, rest::binary>>
-       ) do
-    records_len = count * @fill_circle_list_record_size
-
-    with :ok <- validate_fill_circle_list_header(flags, count) do
-      case rest do
-        <<records::binary-size(records_len), remaining::binary>> ->
-          case decode_fill_circle_records(records, []) do
-            {:ok, circles} ->
-              {:ok,
-               %{
-                 op: :fill_circle_list,
-                 flags: flags,
-                 circles: circles
-               }, remaining}
-
-            {:error, reason} ->
-              {:error, reason}
-          end
-
-        _ ->
-          {:error, :truncated}
-      end
-    end
-  end
-
-  defp decode_command(@render_op_extended, <<subop, rest::binary>>) do
-    decode_extended_command(subop, rest)
-  end
-
-  defp decode_command(
-         @render_op_draw_line_list,
-         <<flags::little-16, count::little-16, rest::binary>>
-       ) do
-    records_len = count * @draw_line_list_record_size
-
-    with :ok <- validate_draw_line_list_header(flags, count) do
-      case rest do
-        <<records::binary-size(records_len), remaining::binary>> ->
-          {:ok,
-           %{
-             op: :draw_line_list,
-             flags: flags,
-             lines: decode_draw_line_records(records, [])
-           }, remaining}
-
-        _ ->
-          {:error, :truncated}
-      end
-    end
-  end
-
-  defp decode_command(
-         @render_op_draw_triangle_list,
-         <<flags::little-16, count::little-16, rest::binary>>
-       ) do
-    records_len = count * @draw_triangle_list_record_size
-
-    with :ok <- validate_draw_triangle_list_header(flags, count) do
-      case rest do
-        <<records::binary-size(records_len), remaining::binary>> ->
-          {:ok,
-           %{
-             op: :draw_triangle_list,
-             flags: flags,
-             triangles: decode_draw_triangle_records(records, [])
-           }, remaining}
-
-        _ ->
-          {:error, :truncated}
-      end
-    end
-  end
-
-  defp decode_command(
-         @render_op_fill_triangle_list,
-         <<flags::little-16, count::little-16, rest::binary>>
-       ) do
-    records_len = count * @fill_triangle_list_record_size
-
-    with :ok <- validate_fill_triangle_list_header(flags, count) do
-      case rest do
-        <<records::binary-size(records_len), remaining::binary>> ->
-          {:ok,
-           %{
-             op: :fill_triangle_list,
-             flags: flags,
-             triangles: decode_fill_triangle_records(records, [])
-           }, remaining}
-
-        _ ->
-          {:error, :truncated}
-      end
     end
   end
 
@@ -2695,140 +1941,6 @@ defmodule AtomLGFX.BinaryBatch do
   end
 
   defp decode_command(
-         @render_op_push_sprite_list,
-         <<flags::little-16, transparent::little-16, count::little-16, rest::binary>>
-       ) do
-    records_len = count * @sprite_list_record_size
-
-    with :ok <- validate_push_sprite_list_header(flags, transparent, count) do
-      case rest do
-        <<records::binary-size(records_len), remaining::binary>> ->
-          case decode_push_sprite_records(records, []) do
-            {:ok, instances} ->
-              {:ok,
-               %{
-                 op: :push_sprite_list,
-                 flags: flags,
-                 transparent: decode_push_sprite_list_transparent(flags, transparent),
-                 instances: instances
-               }, remaining}
-
-            {:error, reason} ->
-              {:error, reason}
-          end
-
-        _ ->
-          {:error, :truncated}
-      end
-    end
-  end
-
-  defp decode_command(
-         @render_op_push_sprite_region_list,
-         <<flags::little-16, transparent::little-16, count::little-16, rest::binary>>
-       ) do
-    records_len = count * @sprite_region_list_record_size
-
-    with :ok <- validate_push_sprite_region_list_header(flags, transparent, count) do
-      case rest do
-        <<records::binary-size(records_len), remaining::binary>> ->
-          case decode_push_sprite_region_records(records, []) do
-            {:ok, instances} ->
-              {:ok,
-               %{
-                 op: :push_sprite_region_list,
-                 flags: flags,
-                 transparent: decode_push_sprite_region_list_transparent(flags, transparent),
-                 instances: instances
-               }, remaining}
-
-            {:error, reason} ->
-              {:error, reason}
-          end
-
-        _ ->
-          {:error, :truncated}
-      end
-    end
-  end
-
-  defp decode_command(
-         @op_draw_jpg,
-         <<0, 0, x::little-signed-16, y::little-signed-16, jpeg_len::little-32, rest::binary>>
-       ) do
-    decode_jpeg_payload(
-      %{op: :draw_jpg, x: x, y: y, variant: :basic, jpeg_len: jpeg_len},
-      jpeg_len,
-      rest
-    )
-  end
-
-  defp decode_command(
-         @op_draw_jpg,
-         <<1, 0, x::little-signed-16, y::little-signed-16, max_width::little-16,
-           max_height::little-16, off_x::little-signed-16, off_y::little-signed-16,
-           scale_x::little-float-32, scale_y::little-float-32, jpeg_len::little-32, rest::binary>>
-       ) do
-    with :ok <- validate_image_scale(scale_x),
-         :ok <- validate_image_scale(scale_y) do
-      decode_jpeg_payload(
-        %{
-          op: :draw_jpg,
-          x: x,
-          y: y,
-          variant: :scaled,
-          max_width: max_width,
-          max_height: max_height,
-          off_x: off_x,
-          off_y: off_y,
-          scale_x: scale_x,
-          scale_y: scale_y,
-          jpeg_len: jpeg_len
-        },
-        jpeg_len,
-        rest
-      )
-    end
-  end
-
-  defp decode_command(@op_draw_jpg, <<_variant, reserved, _rest::binary>>) when reserved != 0 do
-    {:error, {:bad_reserved, reserved}}
-  end
-
-  defp decode_command(@op_draw_jpg, <<variant, _reserved, _rest::binary>>) do
-    {:error, {:bad_jpeg_variant, variant}}
-  end
-
-  defp decode_command(
-         @op_push_image,
-         <<x::little-signed-16, y::little-signed-16, width::little-16, height::little-16,
-           stride_pixels::little-16, pixels_len::little-32, rest::binary>>
-       ) do
-    case rest do
-      <<pixels::binary-size(pixels_len), remaining::binary>> ->
-        case validate_push_image_rgb565_payload(width, height, pixels, stride_pixels) do
-          {:ok, _pixels_len} ->
-            {:ok,
-             %{
-               op: :push_image,
-               x: x,
-               y: y,
-               width: width,
-               height: height,
-               stride_pixels: stride_pixels,
-               pixels_len: pixels_len
-             }, remaining}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-
-      _ ->
-        {:error, :truncated}
-    end
-  end
-
-  defp decode_command(
          @op_set_palette_color,
          <<palette_index, 0, rgb888::little-32, rest::binary>>
        ) do
@@ -2976,47 +2088,16 @@ defmodule AtomLGFX.BinaryBatch do
     end
   end
 
+  defp decode_command(@render_op_extended, <<subop, rest::binary>>) do
+    decode_extended_command(subop, rest)
+  end
+
   defp decode_command(opcode, _rest) when opcode in @known_batch_opcodes do
     {:error, :truncated}
   end
 
   defp decode_command(_opcode, _rest) do
     {:error, :unsupported_command}
-  end
-
-  defp decode_extended_command(
-         @render_ext_op_ellipse_list,
-         <<kind, reserved, flags::little-16, count::little-16, rest::binary>>
-       ) do
-    records_len = count * @ellipse_list_record_size
-
-    with :ok <- validate_ellipse_list_header(kind, reserved, flags, count) do
-      case rest do
-        <<records::binary-size(records_len), remaining::binary>> ->
-          case decode_ellipse_records(records, []) do
-            {:ok, ellipses} ->
-              op =
-                if kind == @ellipse_list_kind_draw,
-                  do: :draw_ellipse_list,
-                  else: :fill_ellipse_list
-
-              {:ok,
-               %{
-                 opcode: @render_op_extended,
-                 op: op,
-                 kind: kind,
-                 flags: flags,
-                 ellipses: ellipses
-               }, remaining}
-
-            {:error, reason} ->
-              {:error, reason}
-          end
-
-        _ ->
-          {:error, :truncated}
-      end
-    end
   end
 
   defp decode_extended_command(
@@ -3068,573 +2149,6 @@ defmodule AtomLGFX.BinaryBatch do
 
   defp decode_extended_command(subop, _rest) do
     {:error, {:unsupported_extended_opcode, subop}}
-  end
-
-  defp encode_draw_pixel_list_payload([]), do: {:error, :empty_batch}
-
-  defp encode_draw_pixel_list_payload(pixels) when length(pixels) <= 0xFFFF do
-    encode_draw_pixel_records(pixels, 0, [])
-  end
-
-  defp encode_draw_pixel_list_payload(pixels),
-    do: {:error, {:too_many_records, :draw_pixel_list, length(pixels), 0xFFFF}}
-
-  defp encode_draw_pixel_records([], count, acc) do
-    {:ok, count, :erlang.iolist_to_binary(:lists.reverse(acc))}
-  end
-
-  defp encode_draw_pixel_records([{x, y, color} | rest], count, acc)
-       when i16(x) and i16(y) and u16(color) do
-    record = <<x::signed-little-16, y::signed-little-16, color::little-16>>
-
-    encode_draw_pixel_records(rest, count + 1, [record | acc])
-  end
-
-  defp encode_draw_pixel_records([bad_pixel | _rest], _count, _acc) do
-    {:error, {:bad_draw_pixel_record, bad_pixel}}
-  end
-
-  defp validate_draw_pixel_list_header(flags, count) do
-    cond do
-      flags != 0 ->
-        {:error, {:bad_flags, flags}}
-
-      count == 0 ->
-        {:error, :empty_batch}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp decode_draw_pixel_records(<<>>, acc), do: :lists.reverse(acc)
-
-  defp decode_draw_pixel_records(
-         <<x::little-signed-16, y::little-signed-16, color::little-16, rest::binary>>,
-         acc
-       ) do
-    pixel = %{x: x, y: y, color: color}
-    decode_draw_pixel_records(rest, [pixel | acc])
-  end
-
-  defp encode_draw_rect_list_payload([]), do: {:error, :empty_batch}
-
-  defp encode_draw_rect_list_payload(rectangles) when length(rectangles) <= 0xFFFF do
-    encode_draw_rect_records(rectangles, 0, [])
-  end
-
-  defp encode_draw_rect_list_payload(rectangles),
-    do: {:error, {:too_many_records, :draw_rect_list, length(rectangles), 0xFFFF}}
-
-  defp encode_draw_rect_records([], count, acc) do
-    {:ok, count, :erlang.iolist_to_binary(:lists.reverse(acc))}
-  end
-
-  defp encode_draw_rect_records([{x, y, width, height, color} | rest], count, acc)
-       when i16(x) and i16(y) and u16(width) and width >= 1 and u16(height) and height >= 1 and
-              u16(color) do
-    record =
-      <<x::signed-little-16, y::signed-little-16, width::little-16, height::little-16,
-        color::little-16>>
-
-    encode_draw_rect_records(rest, count + 1, [record | acc])
-  end
-
-  defp encode_draw_rect_records([bad_rectangle | _rest], _count, _acc) do
-    {:error, {:bad_draw_rect_record, bad_rectangle}}
-  end
-
-  defp validate_draw_rect_list_header(flags, count) do
-    cond do
-      flags != 0 ->
-        {:error, {:bad_flags, flags}}
-
-      count == 0 ->
-        {:error, :empty_batch}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp decode_draw_rect_records(<<>>, acc), do: {:ok, :lists.reverse(acc)}
-
-  defp decode_draw_rect_records(
-         <<x::little-signed-16, y::little-signed-16, width::little-16, height::little-16,
-           color::little-16, rest::binary>>,
-         acc
-       ) do
-    cond do
-      width == 0 ->
-        {:error, {:bad_zero_value, :width}}
-
-      height == 0 ->
-        {:error, {:bad_zero_value, :height}}
-
-      true ->
-        rectangle = %{x: x, y: y, width: width, height: height, color: color}
-        decode_draw_rect_records(rest, [rectangle | acc])
-    end
-  end
-
-  defp encode_fill_rect_list_payload([]), do: {:error, :empty_batch}
-
-  defp encode_fill_rect_list_payload(rectangles) when length(rectangles) <= 0xFFFF do
-    encode_fill_rect_records(rectangles, 0, [])
-  end
-
-  defp encode_fill_rect_list_payload(rectangles),
-    do: {:error, {:too_many_records, :fill_rect_list, length(rectangles), 0xFFFF}}
-
-  defp encode_fill_rect_records([], count, acc) do
-    {:ok, count, :erlang.iolist_to_binary(:lists.reverse(acc))}
-  end
-
-  defp encode_fill_rect_records([{x, y, width, height, color} | rest], count, acc)
-       when i16(x) and i16(y) and u16(width) and width >= 1 and u16(height) and height >= 1 and
-              u16(color) do
-    record =
-      <<x::signed-little-16, y::signed-little-16, width::little-16, height::little-16,
-        color::little-16>>
-
-    encode_fill_rect_records(rest, count + 1, [record | acc])
-  end
-
-  defp encode_fill_rect_records([bad_rectangle | _rest], _count, _acc) do
-    {:error, {:bad_fill_rect_record, bad_rectangle}}
-  end
-
-  defp validate_fill_rect_list_header(flags, count) do
-    cond do
-      flags != 0 ->
-        {:error, {:bad_flags, flags}}
-
-      count == 0 ->
-        {:error, :empty_batch}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp decode_fill_rect_records(<<>>, acc), do: {:ok, :lists.reverse(acc)}
-
-  defp decode_fill_rect_records(
-         <<x::little-signed-16, y::little-signed-16, width::little-16, height::little-16,
-           color::little-16, rest::binary>>,
-         acc
-       ) do
-    cond do
-      width == 0 ->
-        {:error, {:bad_zero_value, :width}}
-
-      height == 0 ->
-        {:error, {:bad_zero_value, :height}}
-
-      true ->
-        rectangle = %{x: x, y: y, width: width, height: height, color: color}
-        decode_fill_rect_records(rest, [rectangle | acc])
-    end
-  end
-
-  defp encode_draw_circle_list_payload([]), do: {:error, :empty_batch}
-
-  defp encode_draw_circle_list_payload(circles) when length(circles) <= 0xFFFF do
-    encode_draw_circle_records(circles, 0, [])
-  end
-
-  defp encode_draw_circle_list_payload(circles),
-    do: {:error, {:too_many_records, :draw_circle_list, length(circles), 0xFFFF}}
-
-  defp encode_draw_circle_records([], count, acc) do
-    {:ok, count, :erlang.iolist_to_binary(:lists.reverse(acc))}
-  end
-
-  defp encode_draw_circle_records([{x, y, radius, color} | rest], count, acc)
-       when i16(x) and i16(y) and u16(radius) and radius >= 1 and u16(color) do
-    record =
-      <<x::signed-little-16, y::signed-little-16, radius::little-16, color::little-16>>
-
-    encode_draw_circle_records(rest, count + 1, [record | acc])
-  end
-
-  defp encode_draw_circle_records([bad_circle | _rest], _count, _acc) do
-    {:error, {:bad_draw_circle_record, bad_circle}}
-  end
-
-  defp validate_draw_circle_list_header(flags, count) do
-    cond do
-      flags != 0 ->
-        {:error, {:bad_flags, flags}}
-
-      count == 0 ->
-        {:error, :empty_batch}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp decode_draw_circle_records(<<>>, acc), do: {:ok, :lists.reverse(acc)}
-
-  defp decode_draw_circle_records(
-         <<x::little-signed-16, y::little-signed-16, radius::little-16, color::little-16,
-           rest::binary>>,
-         acc
-       ) do
-    cond do
-      radius == 0 ->
-        {:error, {:bad_zero_value, :radius}}
-
-      true ->
-        circle = %{x: x, y: y, radius: radius, color: color}
-        decode_draw_circle_records(rest, [circle | acc])
-    end
-  end
-
-  defp encode_fill_circle_list_payload([]), do: {:error, :empty_batch}
-
-  defp encode_fill_circle_list_payload(circles) when length(circles) <= 0xFFFF do
-    encode_fill_circle_records(circles, 0, [])
-  end
-
-  defp encode_fill_circle_list_payload(circles),
-    do: {:error, {:too_many_records, :fill_circle_list, length(circles), 0xFFFF}}
-
-  defp encode_fill_circle_records([], count, acc) do
-    {:ok, count, :erlang.iolist_to_binary(:lists.reverse(acc))}
-  end
-
-  defp encode_fill_circle_records([{x, y, radius, color} | rest], count, acc)
-       when i16(x) and i16(y) and u16(radius) and radius >= 1 and u16(color) do
-    record =
-      <<x::signed-little-16, y::signed-little-16, radius::little-16, color::little-16>>
-
-    encode_fill_circle_records(rest, count + 1, [record | acc])
-  end
-
-  defp encode_fill_circle_records([bad_circle | _rest], _count, _acc) do
-    {:error, {:bad_fill_circle_record, bad_circle}}
-  end
-
-  defp validate_fill_circle_list_header(flags, count) do
-    cond do
-      flags != 0 ->
-        {:error, {:bad_flags, flags}}
-
-      count == 0 ->
-        {:error, :empty_batch}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp decode_fill_circle_records(<<>>, acc), do: {:ok, :lists.reverse(acc)}
-
-  defp decode_fill_circle_records(
-         <<x::little-signed-16, y::little-signed-16, radius::little-16, color::little-16,
-           rest::binary>>,
-         acc
-       ) do
-    cond do
-      radius == 0 ->
-        {:error, {:bad_zero_value, :radius}}
-
-      true ->
-        circle = %{x: x, y: y, radius: radius, color: color}
-        decode_fill_circle_records(rest, [circle | acc])
-    end
-  end
-
-  defp encode_ellipse_list_payload(_op, []), do: {:error, :empty_batch}
-
-  defp encode_ellipse_list_payload(op, ellipses) when length(ellipses) <= 0xFFFF do
-    encode_ellipse_records(op, ellipses, 0, [])
-  end
-
-  defp encode_ellipse_list_payload(op, ellipses),
-    do: {:error, {:too_many_records, op, length(ellipses), 0xFFFF}}
-
-  defp encode_ellipse_records(_op, [], count, acc) do
-    {:ok, count, :erlang.iolist_to_binary(:lists.reverse(acc))}
-  end
-
-  defp encode_ellipse_records(op, [{x, y, radius_x, radius_y, color} | rest], count, acc)
-       when i16(x) and i16(y) and u16(radius_x) and radius_x >= 1 and u16(radius_y) and
-              radius_y >= 1 and u16(color) do
-    record =
-      <<x::signed-little-16, y::signed-little-16, radius_x::little-16, radius_y::little-16,
-        color::little-16>>
-
-    encode_ellipse_records(op, rest, count + 1, [record | acc])
-  end
-
-  defp encode_ellipse_records(op, [bad_ellipse | _rest], _count, _acc) do
-    {:error, {bad_ellipse_record_reason(op), bad_ellipse}}
-  end
-
-  defp bad_ellipse_record_reason(:draw_ellipse_list), do: :bad_draw_ellipse_record
-  defp bad_ellipse_record_reason(:fill_ellipse_list), do: :bad_fill_ellipse_record
-
-  defp validate_ellipse_list_header(kind, reserved, flags, count) do
-    cond do
-      kind not in [@ellipse_list_kind_draw, @ellipse_list_kind_fill] ->
-        {:error, {:bad_ellipse_list_kind, kind}}
-
-      reserved != 0 ->
-        {:error, {:bad_reserved, reserved}}
-
-      flags != 0 ->
-        {:error, {:bad_flags, flags}}
-
-      count == 0 ->
-        {:error, :empty_batch}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp decode_ellipse_records(<<>>, acc), do: {:ok, :lists.reverse(acc)}
-
-  defp decode_ellipse_records(
-         <<x::little-signed-16, y::little-signed-16, radius_x::little-16, radius_y::little-16,
-           color::little-16, rest::binary>>,
-         acc
-       ) do
-    cond do
-      radius_x == 0 ->
-        {:error, {:bad_zero_value, :radius_x}}
-
-      radius_y == 0 ->
-        {:error, {:bad_zero_value, :radius_y}}
-
-      true ->
-        ellipse = %{x: x, y: y, radius_x: radius_x, radius_y: radius_y, color: color}
-        decode_ellipse_records(rest, [ellipse | acc])
-    end
-  end
-
-  defp encode_draw_line_list_payload([]), do: {:error, :empty_batch}
-
-  defp encode_draw_line_list_payload(lines) when length(lines) <= 0xFFFF do
-    encode_draw_line_records(lines, 0, [])
-  end
-
-  defp encode_draw_line_list_payload(lines),
-    do: {:error, {:too_many_records, :draw_line_list, length(lines), 0xFFFF}}
-
-  defp encode_draw_line_records([], count, acc) do
-    {:ok, count, :erlang.iolist_to_binary(:lists.reverse(acc))}
-  end
-
-  defp encode_draw_line_records([{x0, y0, x1, y1, color} | rest], count, acc)
-       when i16(x0) and i16(y0) and i16(x1) and i16(y1) and u16(color) do
-    record =
-      <<x0::signed-little-16, y0::signed-little-16, x1::signed-little-16, y1::signed-little-16,
-        color::little-16>>
-
-    encode_draw_line_records(rest, count + 1, [record | acc])
-  end
-
-  defp encode_draw_line_records([bad_line | _rest], _count, _acc) do
-    {:error, {:bad_draw_line_record, bad_line}}
-  end
-
-  defp validate_draw_line_list_header(flags, count) do
-    cond do
-      flags != 0 ->
-        {:error, {:bad_flags, flags}}
-
-      count == 0 ->
-        {:error, :empty_batch}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp decode_draw_line_records(<<>>, acc), do: :lists.reverse(acc)
-
-  defp decode_draw_line_records(
-         <<x0::little-signed-16, y0::little-signed-16, x1::little-signed-16, y1::little-signed-16,
-           color::little-16, rest::binary>>,
-         acc
-       ) do
-    line = %{x0: x0, y0: y0, x1: x1, y1: y1, color: color}
-    decode_draw_line_records(rest, [line | acc])
-  end
-
-  defp encode_draw_triangle_list_payload([]), do: {:error, :empty_batch}
-
-  defp encode_draw_triangle_list_payload(triangles) when length(triangles) <= 0xFFFF do
-    encode_draw_triangle_records(triangles, 0, [])
-  end
-
-  defp encode_draw_triangle_list_payload(triangles),
-    do: {:error, {:too_many_records, :draw_triangle_list, length(triangles), 0xFFFF}}
-
-  defp encode_draw_triangle_records([], count, acc) do
-    {:ok, count, :erlang.iolist_to_binary(:lists.reverse(acc))}
-  end
-
-  defp encode_draw_triangle_records([{x0, y0, x1, y1, x2, y2, color} | rest], count, acc)
-       when i16(x0) and i16(y0) and i16(x1) and i16(y1) and i16(x2) and i16(y2) and
-              u16(color) do
-    record =
-      <<x0::signed-little-16, y0::signed-little-16, x1::signed-little-16, y1::signed-little-16,
-        x2::signed-little-16, y2::signed-little-16, color::little-16>>
-
-    encode_draw_triangle_records(rest, count + 1, [record | acc])
-  end
-
-  defp encode_draw_triangle_records([bad_triangle | _rest], _count, _acc) do
-    {:error, {:bad_draw_triangle_record, bad_triangle}}
-  end
-
-  defp validate_draw_triangle_list_header(flags, count) do
-    cond do
-      flags != 0 ->
-        {:error, {:bad_flags, flags}}
-
-      count == 0 ->
-        {:error, :empty_batch}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp decode_draw_triangle_records(<<>>, acc), do: :lists.reverse(acc)
-
-  defp decode_draw_triangle_records(
-         <<x0::little-signed-16, y0::little-signed-16, x1::little-signed-16, y1::little-signed-16,
-           x2::little-signed-16, y2::little-signed-16, color::little-16, rest::binary>>,
-         acc
-       ) do
-    triangle = %{x0: x0, y0: y0, x1: x1, y1: y1, x2: x2, y2: y2, color: color}
-    decode_draw_triangle_records(rest, [triangle | acc])
-  end
-
-  defp encode_fill_triangle_list_payload([]), do: {:error, :empty_batch}
-
-  defp encode_fill_triangle_list_payload(triangles) when length(triangles) <= 0xFFFF do
-    encode_fill_triangle_records(triangles, 0, [])
-  end
-
-  defp encode_fill_triangle_list_payload(triangles),
-    do: {:error, {:too_many_records, :fill_triangle_list, length(triangles), 0xFFFF}}
-
-  defp encode_fill_triangle_records([], count, acc) do
-    {:ok, count, :erlang.iolist_to_binary(:lists.reverse(acc))}
-  end
-
-  defp encode_fill_triangle_records([{x0, y0, x1, y1, x2, y2, color} | rest], count, acc)
-       when i16(x0) and i16(y0) and i16(x1) and i16(y1) and i16(x2) and i16(y2) and
-              u16(color) do
-    record =
-      <<x0::signed-little-16, y0::signed-little-16, x1::signed-little-16, y1::signed-little-16,
-        x2::signed-little-16, y2::signed-little-16, color::little-16>>
-
-    encode_fill_triangle_records(rest, count + 1, [record | acc])
-  end
-
-  defp encode_fill_triangle_records([bad_triangle | _rest], _count, _acc) do
-    {:error, {:bad_fill_triangle_record, bad_triangle}}
-  end
-
-  defp validate_fill_triangle_list_header(flags, count) do
-    cond do
-      flags != 0 ->
-        {:error, {:bad_flags, flags}}
-
-      count == 0 ->
-        {:error, :empty_batch}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp decode_fill_triangle_records(<<>>, acc), do: :lists.reverse(acc)
-
-  defp decode_fill_triangle_records(
-         <<x0::little-signed-16, y0::little-signed-16, x1::little-signed-16, y1::little-signed-16,
-           x2::little-signed-16, y2::little-signed-16, color::little-16, rest::binary>>,
-         acc
-       ) do
-    triangle = %{x0: x0, y0: y0, x1: x1, y1: y1, x2: x2, y2: y2, color: color}
-    decode_fill_triangle_records(rest, [triangle | acc])
-  end
-
-  defp validate_jpeg_payload(jpeg) do
-    jpeg_len = byte_size(jpeg)
-
-    cond do
-      jpeg_len == 0 ->
-        {:error, :empty_jpeg}
-
-      jpeg_len > 0xFFFFFFFF ->
-        {:error, {:binary_too_large, :draw_jpg, jpeg_len, 0xFFFFFFFF}}
-
-      true ->
-        {:ok, jpeg_len}
-    end
-  end
-
-  defp decode_jpeg_payload(command, jpeg_len, rest) do
-    case rest do
-      <<_jpeg::binary-size(jpeg_len), remaining::binary>> when jpeg_len > 0 ->
-        {:ok, command, remaining}
-
-      <<_jpeg::binary-size(jpeg_len), _remaining::binary>> ->
-        {:error, :empty_jpeg}
-
-      _ ->
-        {:error, :truncated}
-    end
-  end
-
-  defp normalize_image_scale(value)
-       when is_integer(value) and value > 0 and value <= @max_f32 do
-    {:ok, value * 1.0}
-  end
-
-  defp normalize_image_scale(value) when is_float(value) and value > 0 and value <= @max_f32 do
-    {:ok, value}
-  end
-
-  defp normalize_image_scale(value), do: {:error, {:bad_image_scale, value}}
-
-  defp validate_image_scale(value) when is_float(value) and value > 0 and value <= @max_f32,
-    do: :ok
-
-  defp validate_image_scale(value), do: {:error, {:bad_image_scale, value}}
-
-  defp validate_push_image_rgb565_payload(width, height, pixels, stride_pixels) do
-    pixels_len = byte_size(pixels)
-    stride = if stride_pixels == 0, do: width, else: stride_pixels
-
-    cond do
-      width == 0 or height == 0 ->
-        {:error, {:bad_image_dimensions, width, height}}
-
-      stride < width ->
-        {:error, {:bad_stride, stride_pixels, width}}
-
-      rem(pixels_len, 2) != 0 ->
-        {:error, {:pixels_size_not_even, pixels_len}}
-
-      pixels_len > 0xFFFFFFFF ->
-        {:error, {:binary_too_large, :push_image, pixels_len, 0xFFFFFFFF}}
-
-      pixels_len < stride * height * 2 ->
-        {:error, {:pixels_size_too_small, stride * height * 2, pixels_len}}
-
-      true ->
-        {:ok, pixels_len}
-    end
   end
 
   defp encode_push_rotate_zoom_command(
@@ -3702,6 +2216,57 @@ defmodule AtomLGFX.BinaryBatch do
     end
   end
 
+  defp encode_push_rotate_zoom_frame_strips_payload(instances, opts) do
+    with {:ok, frame_height} <- normalize_frame_height(Keyword.fetch(opts, :frame_height)),
+         {:ok, background} <- normalize_background(Keyword.get(opts, :background, 0)),
+         {:ok, flags,
+          <<?P, ?R, ?Z, ?L, 1, options, transparent::little-16, _y_offset::little-signed-16,
+            count::little-16, records::binary>>} <-
+           Sprites.encode_push_rotate_zoom_list_payload(
+             instances,
+             opts
+             |> Keyword.delete(:frame_height)
+             |> Keyword.delete(:background)
+             |> Keyword.delete(:y_offset)
+           ) do
+      payload =
+        [
+          <<?P, ?R, ?Z, ?F, 1, options, transparent::little-16, frame_height::little-16,
+            background::little-16, count::little-16>>,
+          records
+        ]
+        |> :erlang.iolist_to_binary()
+
+      {:ok, flags, payload}
+    end
+  end
+
+  defp normalize_frame_height({:ok, frame_height}) when u16(frame_height) and frame_height >= 1 do
+    {:ok, frame_height}
+  end
+
+  defp normalize_frame_height({:ok, other}), do: {:error, {:bad_frame_height, other}}
+  defp normalize_frame_height(:error), do: {:error, :missing_frame_height}
+
+  defp normalize_background(background) when u16(background), do: {:ok, background}
+  defp normalize_background(other), do: {:error, {:bad_background_color, other}}
+
+  defp normalize_image_scale(value)
+       when is_integer(value) and value > 0 and value <= @max_f32 do
+    {:ok, value * 1.0}
+  end
+
+  defp normalize_image_scale(value) when is_float(value) and value > 0 and value <= @max_f32 do
+    {:ok, value}
+  end
+
+  defp normalize_image_scale(value), do: {:error, {:bad_image_scale, value}}
+
+  defp validate_image_scale(value) when is_float(value) and value > 0 and value <= @max_f32,
+    do: :ok
+
+  defp validate_image_scale(value), do: {:error, {:bad_image_scale, value}}
+
   defp normalize_angle(value)
        when is_integer(value) and value >= -@max_f32 and value <= @max_f32 do
     {:ok, value * 1.0}
@@ -3740,120 +2305,6 @@ defmodule AtomLGFX.BinaryBatch do
   defp decode_text_color_rest(flags, fg, rest, false, _bg_is_index) do
     fg_color = decode_color_by_flag(flags, Protocol.text_fg_index_flag(), fg)
     {:ok, %{op: :set_text_color, flags: flags, fg: fg_color}, rest}
-  end
-
-  defp validate_push_sprite_list_header(flags, transparent, count) do
-    allowed_flags = @sprite_list_flag_has_transparent ||| Protocol.transparent_index_flag()
-    has_transparent = flag_set?(flags, @sprite_list_flag_has_transparent)
-    transparent_is_index = flag_set?(flags, Protocol.transparent_index_flag())
-
-    cond do
-      (flags &&& bnot(allowed_flags)) != 0 ->
-        {:error, {:bad_flags, flags}}
-
-      not has_transparent and transparent != 0 ->
-        {:error, {:bad_transparent_color, transparent}}
-
-      transparent_is_index and not has_transparent ->
-        {:error, {:bad_flags, flags}}
-
-      transparent_is_index and transparent > 0xFF ->
-        {:error, {:bad_transparent_color, {:index, transparent}}}
-
-      count == 0 ->
-        {:error, :empty_batch}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp validate_push_sprite_region_list_header(flags, transparent, count) do
-    cond do
-      (flags &&& bnot(@sprite_region_list_flag_has_transparent)) != 0 ->
-        {:error, {:bad_flags, flags}}
-
-      not flag_set?(flags, @sprite_region_list_flag_has_transparent) and transparent != 0 ->
-        {:error, {:bad_transparent_color, transparent}}
-
-      count == 0 ->
-        {:error, :empty_batch}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp encode_push_rotate_zoom_frame_strips_payload(instances, opts) do
-    with {:ok, frame_height} <- normalize_frame_height(Keyword.fetch(opts, :frame_height)),
-         {:ok, background} <- normalize_background(Keyword.get(opts, :background, 0)),
-         {:ok, flags,
-          <<?P, ?R, ?Z, ?L, 1, options, transparent::little-16, _y_offset::little-signed-16,
-            count::little-16, records::binary>>} <-
-           Sprites.encode_push_rotate_zoom_list_payload(
-             instances,
-             opts
-             |> Keyword.delete(:frame_height)
-             |> Keyword.delete(:background)
-             |> Keyword.delete(:y_offset)
-           ) do
-      payload =
-        [
-          <<?P, ?R, ?Z, ?F, 1, options, transparent::little-16, frame_height::little-16,
-            background::little-16, count::little-16>>,
-          records
-        ]
-        |> :erlang.iolist_to_binary()
-
-      {:ok, flags, payload}
-    end
-  end
-
-  defp normalize_frame_height({:ok, frame_height}) when u16(frame_height) and frame_height >= 1 do
-    {:ok, frame_height}
-  end
-
-  defp normalize_frame_height({:ok, other}), do: {:error, {:bad_frame_height, other}}
-  defp normalize_frame_height(:error), do: {:error, :missing_frame_height}
-
-  defp normalize_background(background) when u16(background), do: {:ok, background}
-  defp normalize_background(other), do: {:error, {:bad_background_color, other}}
-
-  defp validate_push_rotate_zoom_frame_strips_header(
-         flags,
-         options,
-         transparent,
-         frame_height,
-         count
-       ) do
-    has_transparent = flag_set?(options, 0x01)
-    transparent_is_index = flag_set?(flags, Protocol.transparent_index_flag())
-
-    cond do
-      (flags &&& bnot(Protocol.transparent_index_flag())) != 0 ->
-        {:error, {:bad_flags, flags}}
-
-      (options &&& bnot(0x03)) != 0 ->
-        {:error, {:bad_options, options}}
-
-      not has_transparent and transparent != 0 ->
-        {:error, {:bad_transparent_color, transparent}}
-
-      transparent_is_index and not has_transparent ->
-        {:error, {:bad_flags, flags}}
-
-      transparent_is_index and transparent > 0xFF ->
-        {:error, {:bad_transparent_color, {:index, transparent}}}
-
-      frame_height == 0 ->
-        {:error, {:bad_frame_height, frame_height}}
-
-      count == 0 ->
-        {:error, :empty_batch}
-
-      true ->
-        :ok
-    end
   end
 
   defp decode_push_rotate_zoom_frame_strips_transparent(options, flags, value) do
@@ -3921,62 +2372,42 @@ defmodule AtomLGFX.BinaryBatch do
     end
   end
 
-  defp decode_push_sprite_records(<<>>, acc), do: {:ok, :lists.reverse(acc)}
-
-  defp decode_push_sprite_records(
-         <<source_target, 0, x::little-signed-16, y::little-signed-16, rest::binary>>,
-         acc
+  defp validate_push_rotate_zoom_frame_strips_header(
+         flags,
+         options,
+         transparent,
+         frame_height,
+         count
        ) do
-    if sprite_handle(source_target) do
-      instance = %{source_target: source_target, x: x, y: y}
-      decode_push_sprite_records(rest, [instance | acc])
-    else
-      {:error, {:bad_sprite_target, source_target}}
-    end
-  end
+    has_transparent = flag_set?(options, 0x01)
+    transparent_is_index = flag_set?(flags, Protocol.transparent_index_flag())
 
-  defp decode_push_sprite_records(<<_source_target, reserved, _rest::binary>>, _acc)
-       when reserved != 0 do
-    {:error, {:bad_reserved, reserved}}
-  end
-
-  defp decode_push_sprite_records(_truncated, _acc), do: {:error, :truncated}
-
-  defp decode_push_sprite_region_records(<<>>, acc), do: {:ok, :lists.reverse(acc)}
-
-  defp decode_push_sprite_region_records(
-         <<source_target, 0, src_x::little-16, src_y::little-16, src_w::little-16,
-           src_h::little-16, dst_x::little-signed-16, dst_y::little-signed-16, rest::binary>>,
-         acc
-       ) do
     cond do
-      not sprite_handle(source_target) ->
-        {:error, {:bad_sprite_target, source_target}}
+      (flags &&& bnot(Protocol.transparent_index_flag())) != 0 ->
+        {:error, {:bad_flags, flags}}
 
-      src_w == 0 or src_h == 0 ->
-        {:error, {:bad_sprite_region, src_w, src_h}}
+      (options &&& bnot(0x03)) != 0 ->
+        {:error, {:bad_options, options}}
+
+      not has_transparent and transparent != 0 ->
+        {:error, {:bad_transparent_color, transparent}}
+
+      transparent_is_index and not has_transparent ->
+        {:error, {:bad_flags, flags}}
+
+      transparent_is_index and transparent > 0xFF ->
+        {:error, {:bad_transparent_color, {:index, transparent}}}
+
+      frame_height == 0 ->
+        {:error, {:bad_frame_height, frame_height}}
+
+      count == 0 ->
+        {:error, :empty_batch}
 
       true ->
-        instance = %{
-          source_target: source_target,
-          src_x: src_x,
-          src_y: src_y,
-          src_w: src_w,
-          src_h: src_h,
-          dst_x: dst_x,
-          dst_y: dst_y
-        }
-
-        decode_push_sprite_region_records(rest, [instance | acc])
+        :ok
     end
   end
-
-  defp decode_push_sprite_region_records(<<_source_target, reserved, _rest::binary>>, _acc)
-       when reserved != 0 do
-    {:error, {:bad_reserved, reserved}}
-  end
-
-  defp decode_push_sprite_region_records(_truncated, _acc), do: {:error, :truncated}
 
   defp decode_push_rotate_zoom_records(<<>>, acc), do: {:ok, :lists.reverse(acc)}
 
@@ -4028,22 +2459,6 @@ defmodule AtomLGFX.BinaryBatch do
     decode_color_by_flag(flags, Protocol.transparent_index_flag(), value)
   end
 
-  defp decode_push_sprite_list_transparent(flags, value) do
-    if flag_set?(flags, @sprite_list_flag_has_transparent) do
-      decode_transparent_by_flags(flags, value)
-    else
-      nil
-    end
-  end
-
-  defp decode_push_sprite_region_list_transparent(flags, value) do
-    if flag_set?(flags, @sprite_region_list_flag_has_transparent) do
-      {:rgb565, value}
-    else
-      nil
-    end
-  end
-
   defp decode_push_rotate_zoom_transparent(flags, options, value) do
     if flag_set?(options, 0x01) do
       decode_transparent_by_flags(flags, value)
@@ -4068,117 +2483,6 @@ defmodule AtomLGFX.BinaryBatch do
 
   defp flag_set?(flags, flag) do
     (flags &&& flag) != 0
-  end
-
-  defp encode_push_sprite_list_payload(instances, opts) do
-    with {:ok, flags, transparent_value} <- normalize_sprite_list_options(opts),
-         {:ok, count, records} <- encode_push_sprite_list_records(instances) do
-      {:ok, flags, transparent_value, count, records}
-    end
-  end
-
-  defp normalize_sprite_list_options(opts) do
-    case Keyword.fetch(opts, :transparent) do
-      {:ok, transparent} ->
-        case normalize_transparent_arg(transparent) do
-          {:ok, flags, transparent_value} ->
-            {:ok, @sprite_list_flag_has_transparent ||| flags, transparent_value}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-
-      :error ->
-        {:ok, 0, 0}
-    end
-  end
-
-  defp encode_push_sprite_list_records(instances) do
-    case encode_push_sprite_list_records(instances, 0, []) do
-      {:ok, 0, _records} -> {:error, :empty_batch}
-      other -> other
-    end
-  end
-
-  defp encode_push_sprite_list_records([], count, acc) do
-    {:ok, count, :erlang.iolist_to_binary(:lists.reverse(acc))}
-  end
-
-  defp encode_push_sprite_list_records([{source_target, x, y} | rest], count, acc)
-       when count < 0xFFFF and sprite_handle(source_target) and i16(x) and i16(y) do
-    record = <<source_target, 0, x::signed-little-16, y::signed-little-16>>
-    encode_push_sprite_list_records(rest, count + 1, [record | acc])
-  end
-
-  defp encode_push_sprite_list_records([_instance | _rest], count, _acc) when count >= 0xFFFF do
-    {:error, {:binary_too_large, :push_sprite_list, count + 1, 0xFFFF}}
-  end
-
-  defp encode_push_sprite_list_records([bad | _rest], _count, _acc) do
-    {:error, {:bad_push_sprite_list_instance, bad}}
-  end
-
-  defp encode_push_sprite_region_list_payload(instances, opts) do
-    with {:ok, flags, transparent_value} <- normalize_sprite_region_list_options(opts),
-         {:ok, count, records} <- encode_push_sprite_region_list_records(instances) do
-      {:ok, flags, transparent_value, count, records}
-    end
-  end
-
-  defp normalize_sprite_region_list_options(opts) do
-    case Keyword.fetch(opts, :transparent) do
-      {:ok, transparent} ->
-        case normalize_rgb565_transparent_arg(transparent) do
-          {:ok, transparent_value} ->
-            {:ok, @sprite_region_list_flag_has_transparent, transparent_value}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
-
-      :error ->
-        {:ok, 0, 0}
-    end
-  end
-
-  defp normalize_rgb565_transparent_arg({:rgb565, value}) when u16(value), do: {:ok, value}
-  defp normalize_rgb565_transparent_arg(value) when u16(value), do: {:ok, value}
-  defp normalize_rgb565_transparent_arg({:index, _value}), do: {:error, :bad_transparent}
-  defp normalize_rgb565_transparent_arg(_value), do: {:error, :bad_transparent}
-
-  defp encode_push_sprite_region_list_records(instances) do
-    case encode_push_sprite_region_list_records(instances, 0, []) do
-      {:ok, 0, _records} -> {:error, :empty_batch}
-      other -> other
-    end
-  end
-
-  defp encode_push_sprite_region_list_records([], count, acc) do
-    {:ok, count, :erlang.iolist_to_binary(:lists.reverse(acc))}
-  end
-
-  defp encode_push_sprite_region_list_records(
-         [{source_target, src_x, src_y, src_w, src_h, dst_x, dst_y} | rest],
-         count,
-         acc
-       )
-       when count < 0xFFFF and sprite_handle(source_target) and u16(src_x) and u16(src_y) and
-              u16(src_w) and src_w >= 1 and u16(src_h) and src_h >= 1 and i16(dst_x) and
-              i16(dst_y) do
-    record =
-      <<source_target, 0, src_x::little-16, src_y::little-16, src_w::little-16, src_h::little-16,
-        dst_x::signed-little-16, dst_y::signed-little-16>>
-
-    encode_push_sprite_region_list_records(rest, count + 1, [record | acc])
-  end
-
-  defp encode_push_sprite_region_list_records([_instance | _rest], count, _acc)
-       when count >= 0xFFFF do
-    {:error, {:binary_too_large, :push_sprite_region_list, count + 1, 0xFFFF}}
-  end
-
-  defp encode_push_sprite_region_list_records([bad | _rest], _count, _acc) do
-    {:error, {:bad_push_sprite_region_list_instance, bad}}
   end
 
   defp normalize_text_scale_x1024(value) when is_number(value) and value > 0 do

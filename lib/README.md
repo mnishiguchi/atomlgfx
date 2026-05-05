@@ -322,31 +322,16 @@ message = AtomLGFX.format_error({:bad_text_scale, -1})
 
 `AtomLGFX.BinaryBatch` には、render script 向けの命令ビルダーがあります。
 
-現在のビルダーは次のとおりです。
+v2 MVP では、保守しやすさを優先して BinaryBatch の面を小さく保ちます。通常の描画は scalar 命令を 1 つの batch に並べ、測定済みの高負荷経路だけ compact な一覧命令または native frame 命令として残します。
 
-- `fill_screen/1`
-- `draw_pixel/3`
-- `draw_fast_vline/4`
-- `draw_fast_hline/4`
-- `draw_line/5`
-- `draw_rect/5`
-- `fill_rect/5`
-- `draw_pixel_list/1`
-- `draw_rect_list/1`
-- `fill_rect_list/1`
-- `draw_circle_list/1`
-- `fill_circle_list/1`
-- `draw_ellipse_list/1`
-- `fill_ellipse_list/1`
-- `draw_line_list/1`
-- `draw_triangle_list/1`
-- `fill_triangle_list/1`
-- `draw_circle/4`
-- `fill_circle/4`
-- `draw_ellipse/5`
-- `fill_ellipse/5`
-- `draw_triangle/7`
-- `fill_triangle/7`
+主なビルダーは次のとおりです。
+
+- 描画先と状態: `target/1`, `color_mode/1`, `begin_strip/1`, `present_strip/0`, `display/0`
+- 基本描画: `fill_screen/1`, `clear/1`, `draw_pixel/3`, `draw_line/5`, `draw_rect/5`, `fill_rect/5`, `draw_circle/4`, `fill_circle/4`
+- 切り取り: `set_clip_rect/4`, `clear_clip_rect/0`
+- 文字: `set_text_font_preset/1`, `set_text_size/1`, `set_text_color/2`, `set_cursor/2`, `draw_string/3`, `print/1`, `println/1`
+- スプライト: `set_pivot/2`, `push_sprite/3`, `push_sprite/4`, `push_rotate_zoom/5`, `push_rotate_zoom/6`, `push_rotate_zoom/7`
+- 測定済みの高負荷経路: `push_rotate_zoom_list/2`, `push_rotate_zoom_frame_strips/2`
 
 各ビルダーは 1 命令分の binary を返します。複数命令を送る場合は iodata として組み立て、`batch/1` または `render/2` に渡します。
 
@@ -371,16 +356,12 @@ frame = [
 - `color_mode/1`
 - `clear/1`
 - `fill_screen/1`
-- 基本図形命令（例: `draw_pixel/3`, `draw_pixel_list/1`, `draw_rect/5`, `draw_rect_list/1`, `fill_rect/5`, `fill_rect_list/1`, `draw_line/5`, `draw_line_list/1`, `draw_circle/4`, `draw_circle_list/1`, `fill_circle/4`, `fill_circle_list/1`, `draw_ellipse/5`, `draw_ellipse_list/1`, `fill_ellipse/5`, `fill_ellipse_list/1`, `draw_triangle/7`, `draw_triangle_list/1`, `fill_triangle/7`, `fill_triangle_list/1`）
-- 最小限の文字命令（`set_text_font_preset/1`, `set_text_size/1`, `set_text_color/2`, `draw_string/3`）
-- `set_palette_color/2`, `set_palette_color/4`
+- 基本図形命令（例: `draw_pixel/3`, `draw_rect/5`, `fill_rect/5`, `draw_line/5`, `draw_circle/4`, `fill_circle/4`）
+- 軽い文字命令（例: `set_text_font_preset/1`, `set_text_size/1`, `set_text_color/2`, `draw_string/3`）
 - `set_pivot/2`
 - `push_sprite/3`
 - `push_sprite/4`
-- `push_sprite_list/2`
-- `push_sprite_region_list/2`
-- `draw_jpg/3`, `draw_jpg/9`
-- `push_image_rgb565/5`, `push_image_rgb565/6`
+- `push_rotate_zoom/5`, `push_rotate_zoom/6`, `push_rotate_zoom/7`
 - `push_rotate_zoom_list/2`
 - `push_rotate_zoom_frame_strips/2`
 - `display/0`
@@ -411,37 +392,13 @@ frame = [
 
 生成した描画指示列の確認には、後述の `decode/1`、`summary/1`、`compare/2`、`check_budget/2`、`diagnose/1` を使えます。
 
-`draw_pixel_list/1` は、同じ対象へ複数の点を描く場合の compact な命令です。粒子、きらめき、簡易ノイズ、小さなアイコン効果などでは、`draw_pixel/3` を多数並べるより command 数を減らせます。
-
-`draw_rect_list/1` は、同じ対象へ複数の矩形枠を描く場合の compact な命令です。枠線、簡易的な表示部品、確認用の重ね描きなどでは、`draw_rect/5` を多数並べるより command 数を減らせます。
-
-`fill_rect_list/1` は、同じ対象へ複数の塗りつぶし矩形を描く場合の compact な命令です。小さな矩形を多数使う効果や簡易的な UI 部品では、`fill_rect/5` を多数並べるより command 数を減らせます。
-
-`draw_circle_list/1` は、同じ対象へ複数の円の輪郭を描く場合の compact な命令です。リング、接触位置の表示、簡易的なレーダー表示、確認用の目印などでは、`draw_circle/4` を多数並べるより command 数を減らせます。
-
-`fill_circle_list/1` は、同じ対象へ複数の塗りつぶし円を描く場合の compact な命令です。粒子、丸いハイライト、簡易的な影などでは、`fill_circle/4` を多数並べるより command 数を減らせます。
-
-`draw_ellipse_list/1` と `fill_ellipse_list/1` は、同じ対象へ複数の楕円を描く場合の compact な命令です。影、光、楕円形の目印などで `draw_ellipse/5` または `fill_ellipse/5` を多数並べるより command 数を減らせます。
-
-`draw_line_list/1` は、同じ対象へ複数の線分を描く場合の compact な命令です。単純な軌跡、枠線、効果線などで `draw_line/5` を多数並べるより command 数を減らせます。
-
-`draw_triangle_list/1` は、同じ対象へ複数の三角形の輪郭を描く場合の compact な命令です。簡易マーカー、方向表示、確認用の形状表示などで `draw_triangle/7` を多数並べるより command 数を減らせます。
-
-`fill_triangle_list/1` は、同じ対象へ複数の塗りつぶし三角形を描く場合の compact な命令です。矢印、小さな粒子、簡易マーカーなどで `fill_triangle/7` を多数並べるより command 数を減らせます。
-
-`set_palette_color/2`、`set_palette_color/4` は、現在のスプライト対象のパレット色を更新します。`create_palette/2` は生成処理なので通常の API を使います。
-
-`set_pivot/2` は、現在の対象の回転・拡大縮小の基準点を更新します。`push_rotate_zoom/5`、`push_rotate_zoom/6`、`push_rotate_zoom/7` は、現在の描画先へ 1 個のスプライトを回転・拡大縮小して転送します。多数のスプライトを扱う場合は `push_rotate_zoom_list/2` を使います。
-
-`push_image_rgb565/5` と `push_image_rgb565/6` は、RGB565 の画素バイナリーを明示的な長さ付きの命令として送ります。大きな画像は `submitBinaryBatch` 全体のバイナリー上限にかかるため、必要に応じて従来の `AtomLGFX.push_image_rgb565/8` による分割転送を使います。
-
-`push_rotate_zoom_list/2` の `approx_cull: true` は、ストリップ描画のように対象外の変換描画が多い場合に、ネイティブ側で保守的に省略するための指定です。
+`push_rotate_zoom_list/2` は、同じ描画先へ複数の変換スプライトを描くための compact な命令です。MovingIcons のように同種の変換描画が多い場合に使います。
 
 `push_rotate_zoom_frame_strips/2` は、変換スプライト一覧をネイティブ側のストリップループで描画する高負荷アニメーション向け命令です。Elixir 側はオブジェクト状態を持ち、ネイティブ側はストリップの消去、描画、転送をまとめて実行します。通常の描画ではなく、測定済みの熱い描画経路に限定して使います。
 
-`set_clip_rect/4` と `clear_clip_rect/0` は、現在の対象に対して切り取り矩形を設定または解除します。後続の命令にも対象側の切り取り状態が残るため、必要な範囲だけを明示的に囲むのが安全です。
+`draw_jpg` と `push_image_rgb565` は、MVP の BinaryBatch には含めません。画像のような大きな payload は通常の scalar API で扱う方針です。
 
-render-private opcode は `0xF0..0xFF` の範囲に固定しています。Elixir 側では一覧を 1 か所に集約し、テストで `protocol.h` の `LGFX_RENDER_OP_*` 定義と照合します。`ops.def` の batch metadata は生成された `AtomLGFX.Generated` と `AtomLGFX.OpSchema` から確認できます。`ProtocolFreezeTest` は、metadata から導いた batchable operation 一覧と、固定長 command / record の byte size も固定します。新しい render-private 命令を増やす場合は、既存の多重化命令を使うか、wire format の拡張を先に決めます。
+render-private opcode は `protocol.h` に集約し、Elixir 側では一覧を `AtomLGFX.BinaryBatch` に集約しています。テストでは両者を照合し、MVP の batch 面が不用意に広がらないようにします。
 
 生成した render script を確認したい場合は、`AtomLGFX.BinaryBatch.decode/1` を使えます。ネイティブ側の `{:batch_failed, index, opcode, reason}` と照合しやすいように、各命令は `index` と `opcode` を含む map として返ります。
 
@@ -449,7 +406,7 @@ render-private opcode は `0xF0..0xFF` の範囲に固定しています。Elixi
 {:ok, decoded_commands} = AtomLGFX.BinaryBatch.decode(frame)
 ```
 
-ログや比較用に命令数やバイト効率を見たい場合は、`AtomLGFX.BinaryBatch.summary/1` が使えます。`batch_bytes`、命令数、図形命令数、可変長データ量、固定部分のバイト数、圧縮一覧命令の record バイト数、`draw_pixel_list`、`draw_rect_list`、`fill_rect_list`、`draw_circle_list`、`fill_circle_list`、`draw_ellipse_list`、`fill_ellipse_list`、`draw_line_list`、`draw_triangle_list`、`fill_triangle_list` の instance 数、文字命令数、スプライト状態命令数、スプライト転送数、`push_sprite_list`、`push_sprite_region_list`、`push_rotate_zoom`、`push_rotate_zoom_list` の instance 数などを map で返します。割合は小数ではなく x1000 の整数値として返すため、記録や比較に使いやすくしています。
+ログや比較用に命令数やバイト効率を見たい場合は、`AtomLGFX.BinaryBatch.summary/1` が使えます。`batch_bytes`、命令数、図形命令数、可変長データ量、固定部分のバイト数、変換スプライト一覧命令の record バイト数、文字命令数、スプライト転送数、`push_rotate_zoom`、`push_rotate_zoom_list`、`push_rotate_zoom_frame_strips` の instance 数などを map で返します。割合は小数ではなく x1000 の整数値として返すため、記録や比較に使いやすくしています。
 
 ```elixir
 {:ok, summary} = AtomLGFX.BinaryBatch.summary(frame)
@@ -459,7 +416,7 @@ IO.inspect(summary.bytes_per_logical_scalar_x1000, label: "bytes_per_logical_sca
 IO.inspect(summary.push_rotate_zoom_instance_count, label: "transform_instances")
 ```
 
-繰り返しの通常命令と圧縮一覧命令を比べたい場合は、`AtomLGFX.BinaryBatch.compare/2` が使えます。第 1 引数を基準、第 2 引数を候補として `summary/1` の値を比較し、差分を `delta` として返します。多くの差分値は「候補 - 基準」ですが、`batch_bytes_savings` は「基準 - 候補」なので、バイト数をどれだけ減らせたかをそのまま確認できます。
+繰り返しの通常命令と compact な変換スプライト一覧命令を比べたい場合は、`AtomLGFX.BinaryBatch.compare/2` が使えます。第 1 引数を基準、第 2 引数を候補として `summary/1` の値を比較し、差分を `delta` として返します。多くの差分値は「候補 - 基準」ですが、`batch_bytes_savings` は「基準 - 候補」なので、バイト数をどれだけ減らせたかをそのまま確認できます。
 
 ```elixir
 {:ok, comparison} = AtomLGFX.BinaryBatch.compare(baseline_frame, candidate_frame)
@@ -469,7 +426,7 @@ IO.inspect(comparison.delta.command_count, label: "command_count_delta")
 IO.inspect(comparison.delta.batch_bytes_savings_ratio_x1000, label: "savings_ratio_x1000")
 ```
 
-生成した描画指示列に上限を設けたい場合は、`AtomLGFX.BinaryBatch.check_budget/2` が使えます。`summary/1` と同じ集計値に対して、バイト数、命令数、可変長データ量、圧縮一覧命令の利用数などを確認できます。継続的な検査や生成処理の退行検出に向いています。
+生成した描画指示列に上限を設けたい場合は、`AtomLGFX.BinaryBatch.check_budget/2` が使えます。`summary/1` と同じ集計値に対して、バイト数、命令数、可変長データ量、変換スプライト一覧命令の利用数などを確認できます。継続的な検査や生成処理の退行検出に向いています。
 
 ```elixir
 {:ok, report} =

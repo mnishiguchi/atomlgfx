@@ -169,8 +169,6 @@ defmodule AtomLGFX.OpSchemaTest do
              :draw_string,
              :print,
              :println,
-             :draw_jpg,
-             :push_image,
              :set_clip_rect,
              :clear_clip_rect,
              :set_palette_color,
@@ -196,7 +194,7 @@ defmodule AtomLGFX.OpSchemaTest do
       assert operation.batchable == "1" != (operation.sync_only == "1")
 
       if operation.needs_owned_payload == "1" do
-        assert operation.batchable == "1"
+        assert operation.batchable == "1" or operation.sync_only == "1"
       end
 
       if operation.batch_boundary_sensitive == "1" do
