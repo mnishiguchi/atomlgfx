@@ -708,15 +708,40 @@ defmodule SampleApp.MovingIcons do
   end
 
   defp render_native_strips_binary_batch(port, h, strip_h, flip0, objects, icon_handles, fps) do
-    case build_native_strips_binary_batch_commands(h, strip_h, 0, objects, icon_handles, fps, []) do
-      {:ok, commands} ->
-        case binary_batch_ok(port, [commands, BinaryBatch.display()]) do
-          :ok -> {:ok, flip0}
-          {:error, reason} -> {:error, reason}
+    case @moving_icons_draw_mode do
+      :push_rotate_zoom_list ->
+        with {:ok, instances} <- build_direct_lcd_frame_batch(objects, icon_handles) do
+          commands = [
+            BinaryBatch.push_rotate_zoom_frame_strips(instances, transform_frame_opts(h)),
+            fps_overlay_commands(fps),
+            BinaryBatch.display()
+          ]
+
+          case binary_batch_ok(port, commands) do
+            :ok -> {:ok, flip0}
+            {:error, reason} -> {:error, reason}
+          end
         end
 
-      {:error, _} = err ->
-        err
+      _other ->
+        case build_native_strips_binary_batch_commands(
+               h,
+               strip_h,
+               0,
+               objects,
+               icon_handles,
+               fps,
+               []
+             ) do
+          {:ok, commands} ->
+            case binary_batch_ok(port, [commands, BinaryBatch.display()]) do
+              :ok -> {:ok, flip0}
+              {:error, reason} -> {:error, reason}
+            end
+
+          {:error, _} = err ->
+            err
+        end
     end
   end
 
@@ -1035,6 +1060,20 @@ defmodule SampleApp.MovingIcons do
       [transparent: @transparent_key_color565, y_offset: y0, approx_cull: @use_approx_cull]
     else
       [y_offset: y0, approx_cull: @use_approx_cull]
+    end
+  end
+
+  defp transform_frame_opts(frame_height) do
+    base_opts = [
+      frame_height: frame_height,
+      background: @bg,
+      approx_cull: @use_approx_cull
+    ]
+
+    if @use_transparent_key do
+      Keyword.put(base_opts, :transparent, @transparent_key_color565)
+    else
+      base_opts
     end
   end
 

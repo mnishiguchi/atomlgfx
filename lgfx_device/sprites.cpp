@@ -213,8 +213,8 @@ static esp_err_t lgfx_push_sprite_list_to_resolved_target_locked(
     uint32_t transparent_value,
     lgfx_dev::PushSpriteListStats *out_stats)
 {
-    uint8_t cached_src_handle = 0u;
-    lgfx::LGFX_Sprite *cached_src = nullptr;
+    lgfx::LGFX_Sprite *source_cache[256] = {};
+    bool transparent_validated[256] = {};
 
     for (size_t i = 0; i < instance_count; ++i) {
         const uint8_t *record = instance_records + (i * LGFX_DEVICE_SPRITE_PUSH_RECORD_SIZE);
@@ -230,25 +230,29 @@ static esp_err_t lgfx_push_sprite_list_to_resolved_target_locked(
             return ESP_ERR_INVALID_ARG;
         }
 
-        if (!cached_src || src_handle != cached_src_handle) {
-            cached_src = lgfx_dev::resolve_sprite_locked(src_handle);
-            cached_src_handle = src_handle;
-            if (!cached_src) {
+        lgfx::LGFX_Sprite *src = source_cache[src_handle];
+        if (!src) {
+            src = lgfx_dev::resolve_sprite_locked(src_handle);
+            if (!src) {
                 return ESP_ERR_NOT_FOUND;
             }
+            source_cache[src_handle] = src;
+        }
 
+        if (!transparent_validated[src_handle]) {
             const esp_err_t transparent_err = lgfx_dev::validate_sprite_transparent_scalar(
-                cached_src,
+                src,
                 has_transparent,
                 transparent_is_index,
                 transparent_value);
             if (transparent_err != ESP_OK) {
                 return transparent_err;
             }
+            transparent_validated[src_handle] = true;
         }
 
         const esp_err_t err = lgfx_push_sprite_resolved_locked_impl(
-            cached_src,
+            src,
             dst,
             x,
             y,
@@ -521,8 +525,8 @@ static esp_err_t lgfx_push_rotate_zoom_list_to_resolved_target_locked(
     bool approx_cull,
     lgfx_dev::PushRotateZoomListStats *out_stats)
 {
-    uint8_t cached_src_handle = 0u;
-    lgfx::LGFX_Sprite *cached_src = nullptr;
+    lgfx::LGFX_Sprite *source_cache[256] = {};
+    bool transparent_validated[256] = {};
 
     for (size_t i = 0; i < instance_count; ++i) {
         const uint8_t *record = instance_records + (i * LGFX_DEVICE_SPRITE_TRANSFORM_RECORD_SIZE);
@@ -550,26 +554,30 @@ static esp_err_t lgfx_push_rotate_zoom_list_to_resolved_target_locked(
             return ESP_ERR_INVALID_ARG;
         }
 
-        if (!cached_src || src_handle != cached_src_handle) {
-            cached_src = lgfx_dev::resolve_sprite_locked(src_handle);
-            cached_src_handle = src_handle;
-            if (!cached_src) {
+        lgfx::LGFX_Sprite *src = source_cache[src_handle];
+        if (!src) {
+            src = lgfx_dev::resolve_sprite_locked(src_handle);
+            if (!src) {
                 return ESP_ERR_NOT_FOUND;
             }
+            source_cache[src_handle] = src;
+        }
 
+        if (!transparent_validated[src_handle]) {
             const esp_err_t transparent_err = lgfx_dev::validate_sprite_transparent_scalar(
-                cached_src,
+                src,
                 has_transparent,
                 transparent_is_index,
                 transparent_value);
             if (transparent_err != ESP_OK) {
                 return transparent_err;
             }
+            transparent_validated[src_handle] = true;
         }
 
         bool was_culled = false;
         const esp_err_t err = lgfx_push_rotate_zoom_resolved_locked_impl(
-            cached_src,
+            src,
             dst,
             x,
             static_cast<int16_t>(shifted_y32),
@@ -957,6 +965,99 @@ esp_err_t lgfx_dev::push_rotate_zoom_list_locked(
         transparent_value,
         approx_cull,
         out_stats);
+}
+
+esp_err_t lgfx_dev::push_rotate_zoom_frame_strips_locked(
+    uint16_t frame_height,
+    uint32_t background_color,
+    const uint8_t *instance_records,
+    size_t instance_count,
+    bool has_transparent,
+    bool transparent_is_index,
+    uint32_t transparent_value,
+    bool approx_cull,
+    PushRotateZoomFrameStats *out_stats)
+{
+    if (out_stats) {
+        *out_stats = PushRotateZoomFrameStats{};
+    }
+
+    if (frame_height == 0u || instance_count == 0u || !instance_records) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!has_transparent && (transparent_is_index || transparent_value != 0u)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    auto *lcd = lgfx_dev::lcd_device_locked();
+    if (!lcd) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_err_t err = lgfx_dev::presentation_ensure_buffers_locked();
+    if (err == ESP_ERR_NO_MEM) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    const uint16_t strip_height = lgfx_dev::presentation_strip_height_locked();
+    if (strip_height == 0u) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    for (uint16_t y0 = 0u; y0 < frame_height;) {
+        err = lgfx_dev::presentation_begin_strip_locked(y0);
+        if (err != ESP_OK) {
+            return err;
+        }
+
+        auto *dst = lgfx_dev::resolve_render_surface_locked(0u);
+        if (!dst) {
+            (void) lgfx_dev::presentation_cancel_strip_locked();
+            return ESP_ERR_INVALID_STATE;
+        }
+
+        dst->clear(background_color);
+
+        PushRotateZoomListStats strip_stats{};
+        err = lgfx_push_rotate_zoom_list_to_resolved_target_locked(
+            dst,
+            instance_records,
+            instance_count,
+            static_cast<int16_t>(y0),
+            has_transparent,
+            transparent_is_index,
+            transparent_value,
+            approx_cull,
+            &strip_stats);
+        if (err != ESP_OK) {
+            (void) lgfx_dev::presentation_cancel_strip_locked();
+            return err;
+        }
+
+        err = lgfx_dev::presentation_present_strip_locked();
+        if (err != ESP_OK) {
+            (void) lgfx_dev::presentation_cancel_strip_locked();
+            return err;
+        }
+
+        if (out_stats) {
+            out_stats->strip_count++;
+            out_stats->instance_count += strip_stats.instance_count;
+            out_stats->executed_count += strip_stats.executed_count;
+            out_stats->culled_count += strip_stats.culled_count;
+        }
+
+        const uint32_t next_y = static_cast<uint32_t>(y0) + static_cast<uint32_t>(strip_height);
+        if (next_y > UINT16_MAX) {
+            break;
+        }
+        y0 = static_cast<uint16_t>(next_y);
+    }
+
+    return ESP_OK;
 }
 
 

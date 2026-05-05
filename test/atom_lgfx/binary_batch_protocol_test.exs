@@ -25,7 +25,7 @@ defmodule AtomLGFX.BinaryBatchProtocolTest do
     "LGFX_RENDER_OP_DRAW_CIRCLE_LIST" => {:draw_circle_list, 0xFC},
     "LGFX_RENDER_OP_FILL_TRIANGLE_LIST" => {:fill_triangle_list, 0xFD},
     "LGFX_RENDER_OP_DRAW_TRIANGLE_LIST" => {:draw_triangle_list, 0xFE},
-    "LGFX_RENDER_OP_ELLIPSE_LIST" => {:ellipse_list, 0xFF}
+    "LGFX_RENDER_OP_EXTENDED" => {:extended, 0xFF}
   }
 
   describe "render-private opcode drift checks" do
@@ -46,7 +46,7 @@ defmodule AtomLGFX.BinaryBatchProtocolTest do
                draw_circle_list: 0xFC,
                fill_triangle_list: 0xFD,
                draw_triangle_list: 0xFE,
-               ellipse_list: 0xFF
+               extended: 0xFF
              ]
 
       assert Keyword.values(BinaryBatch.__render_private_opcodes__()) == Enum.to_list(0xF0..0xFF)

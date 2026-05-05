@@ -849,6 +849,14 @@ struct PushRotateZoomListStats
     size_t culled_count = 0;
 };
 
+struct PushRotateZoomFrameStats
+{
+    size_t strip_count = 0;
+    size_t instance_count = 0;
+    size_t executed_count = 0;
+    size_t culled_count = 0;
+};
+
 esp_err_t push_rotate_zoom_list_locked(
     uint8_t dst_target,
     const uint8_t *instance_records,
@@ -859,6 +867,17 @@ esp_err_t push_rotate_zoom_list_locked(
     uint32_t transparent_value,
     bool approx_cull,
     PushRotateZoomListStats *out_stats);
+
+esp_err_t push_rotate_zoom_frame_strips_locked(
+    uint16_t frame_height,
+    uint32_t background_color,
+    const uint8_t *instance_records,
+    size_t instance_count,
+    bool has_transparent,
+    bool transparent_is_index,
+    uint32_t transparent_value,
+    bool approx_cull,
+    PushRotateZoomFrameStats *out_stats);
 
 } // namespace lgfx_dev
 

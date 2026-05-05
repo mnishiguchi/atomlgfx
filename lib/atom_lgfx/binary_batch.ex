@@ -84,7 +84,10 @@ defmodule AtomLGFX.BinaryBatch do
   @render_op_draw_circle_list 0xFC
   @render_op_fill_triangle_list 0xFD
   @render_op_draw_triangle_list 0xFE
-  @render_op_ellipse_list 0xFF
+  @render_op_extended 0xFF
+
+  @render_ext_op_ellipse_list 0x00
+  @render_ext_op_push_rotate_zoom_frame_strips 0x01
 
   @render_private_opcodes [
     target: @render_op_target,
@@ -102,7 +105,7 @@ defmodule AtomLGFX.BinaryBatch do
     draw_circle_list: @render_op_draw_circle_list,
     fill_triangle_list: @render_op_fill_triangle_list,
     draw_triangle_list: @render_op_draw_triangle_list,
-    ellipse_list: @render_op_ellipse_list
+    extended: @render_op_extended
   ]
 
   @render_private_opcode_values Keyword.values(@render_private_opcodes)
@@ -481,8 +484,8 @@ defmodule AtomLGFX.BinaryBatch do
   def draw_ellipse_list(ellipses) when is_list(ellipses) do
     case encode_ellipse_list_payload(:draw_ellipse_list, ellipses) do
       {:ok, count, payload} ->
-        <<@render_op_ellipse_list, @ellipse_list_kind_draw, 0, 0::little-16, count::little-16,
-          payload::binary>>
+        <<@render_op_extended, @render_ext_op_ellipse_list, @ellipse_list_kind_draw, 0,
+          0::little-16, count::little-16, payload::binary>>
 
       {:error, reason} ->
         raise ArgumentError, Errors.format_error(reason)
@@ -503,8 +506,8 @@ defmodule AtomLGFX.BinaryBatch do
   def fill_ellipse_list(ellipses) when is_list(ellipses) do
     case encode_ellipse_list_payload(:fill_ellipse_list, ellipses) do
       {:ok, count, payload} ->
-        <<@render_op_ellipse_list, @ellipse_list_kind_fill, 0, 0::little-16, count::little-16,
-          payload::binary>>
+        <<@render_op_extended, @render_ext_op_ellipse_list, @ellipse_list_kind_fill, 0,
+          0::little-16, count::little-16, payload::binary>>
 
       {:error, reason} ->
         raise ArgumentError, Errors.format_error(reason)
@@ -574,8 +577,7 @@ defmodule AtomLGFX.BinaryBatch do
     end
   end
 
-  @spec draw_round_rect(integer(), integer(), integer(), integer(), integer(), integer()) ::
-          binary()
+  @spec draw_round_rect(integer(), integer(), integer(), integer(), integer(), integer()) :: binary()
   def draw_round_rect(x, y, width, height, radius, color)
       when i16(x) and i16(y) and u16(width) and width >= 1 and u16(height) and height >= 1 and
              u16(radius) and radius >= 1 and u16(color) do
@@ -583,8 +585,7 @@ defmodule AtomLGFX.BinaryBatch do
       height::little-16, radius::little-16, color::little-16>>
   end
 
-  @spec fill_round_rect(integer(), integer(), integer(), integer(), integer(), integer()) ::
-          binary()
+  @spec fill_round_rect(integer(), integer(), integer(), integer(), integer(), integer()) :: binary()
   def fill_round_rect(x, y, width, height, radius, color)
       when i16(x) and i16(y) and u16(width) and width >= 1 and u16(height) and height >= 1 and
              u16(radius) and radius >= 1 and u16(color) do
@@ -622,16 +623,15 @@ defmodule AtomLGFX.BinaryBatch do
       radius_y::little-16, color::little-16>>
   end
 
-  @spec draw_arc(integer(), integer(), integer(), integer(), number(), number(), integer()) ::
-          binary()
+
+  @spec draw_arc(integer(), integer(), integer(), integer(), number(), number(), integer()) :: binary()
   def draw_arc(x, y, radius0, radius1, angle0, angle1, color)
       when i16(x) and i16(y) and u16(radius0) and radius0 >= 1 and u16(radius1) and
              radius1 >= 1 and u16(color) do
     encode_arc_command(@op_draw_arc, x, y, radius0, radius1, angle0, angle1, color)
   end
 
-  @spec fill_arc(integer(), integer(), integer(), integer(), number(), number(), integer()) ::
-          binary()
+  @spec fill_arc(integer(), integer(), integer(), integer(), number(), number(), integer()) :: binary()
   def fill_arc(x, y, radius0, radius1, angle0, angle1, color)
       when i16(x) and i16(y) and u16(radius0) and radius0 >= 1 and u16(radius1) and
              radius1 >= 1 and u16(color) do
@@ -650,8 +650,9 @@ defmodule AtomLGFX.BinaryBatch do
   def draw_bezier(x0, y0, x1, y1, x2, y2, color)
       when i16(x0) and i16(y0) and i16(x1) and i16(y1) and i16(x2) and i16(y2) and
              u16(color) do
-    <<@op_draw_bezier, 3, 0, x0::signed-little-16, y0::signed-little-16, x1::signed-little-16,
-      y1::signed-little-16, x2::signed-little-16, y2::signed-little-16, color::little-16>>
+    <<@op_draw_bezier, 3, 0, x0::signed-little-16, y0::signed-little-16,
+      x1::signed-little-16, y1::signed-little-16, x2::signed-little-16,
+      y2::signed-little-16, color::little-16>>
   end
 
   @spec draw_bezier(
@@ -668,9 +669,10 @@ defmodule AtomLGFX.BinaryBatch do
   def draw_bezier(x0, y0, x1, y1, x2, y2, x3, y3, color)
       when i16(x0) and i16(y0) and i16(x1) and i16(y1) and i16(x2) and i16(y2) and
              i16(x3) and i16(y3) and u16(color) do
-    <<@op_draw_bezier, 4, 0, x0::signed-little-16, y0::signed-little-16, x1::signed-little-16,
-      y1::signed-little-16, x2::signed-little-16, y2::signed-little-16, x3::signed-little-16,
-      y3::signed-little-16, color::little-16>>
+    <<@op_draw_bezier, 4, 0, x0::signed-little-16, y0::signed-little-16,
+      x1::signed-little-16, y1::signed-little-16, x2::signed-little-16,
+      y2::signed-little-16, x3::signed-little-16, y3::signed-little-16,
+      color::little-16>>
   end
 
   @spec draw_triangle(
@@ -867,8 +869,8 @@ defmodule AtomLGFX.BinaryBatch do
   def draw_jpg(x, y, jpeg) when i16(x) and i16(y) and is_binary(jpeg) do
     case validate_jpeg_payload(jpeg) do
       {:ok, jpeg_len} ->
-        <<@op_draw_jpg, 0, 0, x::signed-little-16, y::signed-little-16, jpeg_len::little-32,
-          jpeg::binary>>
+        <<@op_draw_jpg, 0, 0, x::signed-little-16, y::signed-little-16,
+          jpeg_len::little-32, jpeg::binary>>
 
       {:error, reason} ->
         raise ArgumentError, Errors.format_error(reason)
@@ -898,9 +900,10 @@ defmodule AtomLGFX.BinaryBatch do
     with {:ok, scale_x} <- normalize_image_scale(scale_x),
          {:ok, scale_y} <- normalize_image_scale(scale_y),
          {:ok, jpeg_len} <- validate_jpeg_payload(jpeg) do
-      <<@op_draw_jpg, 1, 0, x::signed-little-16, y::signed-little-16, max_width::little-16,
-        max_height::little-16, off_x::signed-little-16, off_y::signed-little-16,
-        scale_x::little-float-32, scale_y::little-float-32, jpeg_len::little-32, jpeg::binary>>
+      <<@op_draw_jpg, 1, 0, x::signed-little-16, y::signed-little-16,
+        max_width::little-16, max_height::little-16, off_x::signed-little-16,
+        off_y::signed-little-16, scale_x::little-float-32, scale_y::little-float-32,
+        jpeg_len::little-32, jpeg::binary>>
     else
       {:error, reason} -> raise ArgumentError, Errors.format_error(reason)
     end
@@ -942,16 +945,11 @@ defmodule AtomLGFX.BinaryBatch do
   @doc """
   Sets one palette entry from RGB components on the current sprite target.
   """
-  @spec set_palette_color(
-          non_neg_integer(),
-          non_neg_integer(),
-          non_neg_integer(),
-          non_neg_integer()
-        ) ::
+  @spec set_palette_color(non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()) ::
           binary()
   def set_palette_color(palette_index, red, green, blue)
       when u8(palette_index) and u8(red) and u8(green) and u8(blue) do
-    rgb888 = red <<< 16 ||| green <<< 8 ||| blue
+    rgb888 = (red <<< 16) ||| (green <<< 8) ||| blue
     set_palette_color(palette_index, rgb888)
   end
 
@@ -1014,8 +1012,7 @@ defmodule AtomLGFX.BinaryBatch do
   @doc """
   Pushes a transformed source sprite with independent X/Y zoom.
   """
-  @spec push_rotate_zoom(integer(), integer(), integer(), number(), number(), number()) ::
-          binary()
+  @spec push_rotate_zoom(integer(), integer(), integer(), number(), number(), number()) :: binary()
   def push_rotate_zoom(source_target, x, y, angle_deg, zoom_x, zoom_y)
       when sprite_handle(source_target) and i16(x) and i16(y) and is_number(angle_deg) and
              is_number(zoom_x) and zoom_x > 0 and is_number(zoom_y) and zoom_y > 0 do
@@ -1116,6 +1113,38 @@ defmodule AtomLGFX.BinaryBatch do
         raise ArgumentError, Errors.format_error(reason)
     end
   end
+
+  @doc """
+  Pushes many transformed source sprites through native presentation strips.
+
+  This is a frame-level hot-path command: native code owns the strip loop while
+  Elixir supplies compact object state. It is intended for MovingIcons-style
+  animation workloads where the upstream LovyanGFX implementation keeps the
+  inner frame loop in C++.
+
+  `instances` uses the same fixed-point tuple shape as `push_rotate_zoom_list/2`:
+
+      {source_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024}
+
+  Options:
+
+  - `:frame_height` is required and controls the native strip loop limit
+  - `:background` is the RGB565 color used to clear each strip, default `0x0000`
+  - `:transparent` accepts an RGB565 integer or `{:index, n}`
+  - `:approx_cull` asks native code to skip off-target transforms when safe
+  """
+  @spec push_rotate_zoom_frame_strips(list(), keyword()) :: binary()
+  def push_rotate_zoom_frame_strips(instances, opts) when is_list(instances) and is_list(opts) do
+    case encode_push_rotate_zoom_frame_strips_payload(instances, opts) do
+      {:ok, flags, payload} ->
+        <<@render_op_extended, @render_ext_op_push_rotate_zoom_frame_strips, flags::little-16,
+          payload::binary>>
+
+      {:error, reason} ->
+        raise ArgumentError, Errors.format_error(reason)
+    end
+  end
+
 
   @doc """
   Decodes a binary-batch command stream into readable command maps.
@@ -1268,6 +1297,7 @@ defmodule AtomLGFX.BinaryBatch do
     end
   end
 
+
   @doc """
   Checks a binary-batch command stream against caller-provided diagnostic limits.
 
@@ -1335,8 +1365,7 @@ defmodule AtomLGFX.BinaryBatch do
         raise ArgumentError, format_budget_exceeded(report)
 
       {:error, {:invalid_budget_limit, key, value}} ->
-        raise ArgumentError,
-              "invalid binary batch budget limit #{inspect(key)}: #{inspect(value)}"
+        raise ArgumentError, "invalid binary batch budget limit #{inspect(key)}: #{inspect(value)}"
 
       {:error, {:invalid_budget_limits, value}} ->
         raise ArgumentError, "invalid binary batch budget limits: #{inspect(value)}"
@@ -1357,10 +1386,12 @@ defmodule AtomLGFX.BinaryBatch do
     max_bytes_per_logical_scalar_x1000: {:max, :bytes_per_logical_scalar_x1000},
     max_dynamic_payload_ratio_x1000: {:max, :dynamic_payload_ratio_x1000},
     max_packed_list_record_ratio_x1000: {:max, :packed_list_record_ratio_x1000},
-    max_packed_list_instances_per_command_x1000: {:max, :packed_list_instances_per_command_x1000},
+    max_packed_list_instances_per_command_x1000:
+      {:max, :packed_list_instances_per_command_x1000},
     min_packed_list_count: {:min, :packed_list_count},
     min_packed_list_instance_count: {:min, :packed_list_instance_count},
-    min_packed_list_instances_per_command_x1000: {:min, :packed_list_instances_per_command_x1000}
+    min_packed_list_instances_per_command_x1000:
+      {:min, :packed_list_instances_per_command_x1000}
   }
 
   defp normalize_budget_limits(limits) when is_map(limits) do
@@ -1613,10 +1644,7 @@ defmodule AtomLGFX.BinaryBatch do
     |> Map.put(:bytes_per_command_x1000, ratio_x1000(batch_bytes, command_count))
     |> Map.put(:bytes_per_logical_scalar_x1000, ratio_x1000(batch_bytes, scalar_count))
     |> Map.put(:dynamic_payload_ratio_x1000, ratio_x1000(dynamic_payload_bytes, batch_bytes))
-    |> Map.put(
-      :packed_list_record_ratio_x1000,
-      ratio_x1000(packed_list_record_bytes, batch_bytes)
-    )
+    |> Map.put(:packed_list_record_ratio_x1000, ratio_x1000(packed_list_record_bytes, batch_bytes))
     |> Map.put(
       :packed_list_instances_per_command_x1000,
       ratio_x1000(packed_list_instance_count, packed_list_count)
@@ -1824,8 +1852,7 @@ defmodule AtomLGFX.BinaryBatch do
     |> accumulate_dynamic_payload_bytes(pixels_len)
   end
 
-  defp accumulate_summary_category(summary, %{op: op})
-       when op in [:set_palette_color, :set_pivot] do
+  defp accumulate_summary_category(summary, %{op: op}) when op in [:set_palette_color, :set_pivot] do
     Map.update!(summary, :sprite_state_count, &(&1 + 1))
   end
 
@@ -1937,8 +1964,7 @@ defmodule AtomLGFX.BinaryBatch do
 
   defp find_render_private_opcode_name([], _opcode), do: nil
 
-  defp find_render_private_opcode_name([{name, value} | _rest], opcode) when value == opcode,
-    do: name
+  defp find_render_private_opcode_name([{name, value} | _rest], opcode) when value == opcode, do: name
 
   defp find_render_private_opcode_name([_entry | rest], opcode) do
     find_render_private_opcode_name(rest, opcode)
@@ -2245,38 +2271,8 @@ defmodule AtomLGFX.BinaryBatch do
     end
   end
 
-  defp decode_command(
-         @render_op_ellipse_list,
-         <<kind, reserved, flags::little-16, count::little-16, rest::binary>>
-       ) do
-    records_len = count * @ellipse_list_record_size
-
-    with :ok <- validate_ellipse_list_header(kind, reserved, flags, count) do
-      case rest do
-        <<records::binary-size(records_len), remaining::binary>> ->
-          case decode_ellipse_records(records, []) do
-            {:ok, ellipses} ->
-              op =
-                if kind == @ellipse_list_kind_draw,
-                  do: :draw_ellipse_list,
-                  else: :fill_ellipse_list
-
-              {:ok,
-               %{
-                 op: op,
-                 kind: kind,
-                 flags: flags,
-                 ellipses: ellipses
-               }, remaining}
-
-            {:error, reason} ->
-              {:error, reason}
-          end
-
-        _ ->
-          {:error, :truncated}
-      end
-    end
+  defp decode_command(@render_op_extended, <<subop, rest::binary>>) do
+    decode_extended_command(subop, rest)
   end
 
   defp decode_command(
@@ -2354,15 +2350,8 @@ defmodule AtomLGFX.BinaryBatch do
          :ok <- validate_non_zero(height, :height),
          :ok <- validate_non_zero(radius, :radius) do
       {:ok,
-       %{
-         op: :draw_round_rect,
-         x: x,
-         y: y,
-         width: width,
-         height: height,
-         radius: radius,
-         color: color
-       }, rest}
+       %{op: :draw_round_rect, x: x, y: y, width: width, height: height, radius: radius, color: color},
+       rest}
     end
   end
 
@@ -2375,15 +2364,8 @@ defmodule AtomLGFX.BinaryBatch do
          :ok <- validate_non_zero(height, :height),
          :ok <- validate_non_zero(radius, :radius) do
       {:ok,
-       %{
-         op: :fill_round_rect,
-         x: x,
-         y: y,
-         width: width,
-         height: height,
-         radius: radius,
-         color: color
-       }, rest}
+       %{op: :fill_round_rect, x: x, y: y, width: width, height: height, radius: radius, color: color},
+       rest}
     end
   end
 
@@ -2432,6 +2414,7 @@ defmodule AtomLGFX.BinaryBatch do
        rest}
     end
   end
+
 
   defp decode_command(
          @op_draw_arc,
@@ -2482,8 +2465,8 @@ defmodule AtomLGFX.BinaryBatch do
   defp decode_command(
          @op_draw_bezier,
          <<3, 0, x0::little-signed-16, y0::little-signed-16, x1::little-signed-16,
-           y1::little-signed-16, x2::little-signed-16, y2::little-signed-16, color::little-16,
-           rest::binary>>
+           y1::little-signed-16, x2::little-signed-16, y2::little-signed-16,
+           color::little-16, rest::binary>>
        ) do
     {:ok,
      %{
@@ -2502,8 +2485,8 @@ defmodule AtomLGFX.BinaryBatch do
   defp decode_command(
          @op_draw_bezier,
          <<4, 0, x0::little-signed-16, y0::little-signed-16, x1::little-signed-16,
-           y1::little-signed-16, x2::little-signed-16, y2::little-signed-16, x3::little-signed-16,
-           y3::little-signed-16, color::little-16, rest::binary>>
+           y1::little-signed-16, x2::little-signed-16, y2::little-signed-16,
+           x3::little-signed-16, y3::little-signed-16, color::little-16, rest::binary>>
        ) do
     {:ok,
      %{
@@ -2732,7 +2715,8 @@ defmodule AtomLGFX.BinaryBatch do
          @op_draw_jpg,
          <<1, 0, x::little-signed-16, y::little-signed-16, max_width::little-16,
            max_height::little-16, off_x::little-signed-16, off_y::little-signed-16,
-           scale_x::little-float-32, scale_y::little-float-32, jpeg_len::little-32, rest::binary>>
+           scale_x::little-float-32, scale_y::little-float-32, jpeg_len::little-32,
+           rest::binary>>
        ) do
     with :ok <- validate_image_scale(scale_x),
          :ok <- validate_image_scale(scale_y) do
@@ -2922,6 +2906,7 @@ defmodule AtomLGFX.BinaryBatch do
     end
   end
 
+
   defp decode_command(@op_print, <<text_len::little-16, rest::binary>>) do
     decode_print_text(:print, text_len, rest)
   end
@@ -2948,6 +2933,83 @@ defmodule AtomLGFX.BinaryBatch do
   defp decode_command(_opcode, _rest) do
     {:error, :unsupported_command}
   end
+
+  defp decode_extended_command(
+         @render_ext_op_ellipse_list,
+         <<kind, reserved, flags::little-16, count::little-16, rest::binary>>
+       ) do
+    records_len = count * @ellipse_list_record_size
+
+    with :ok <- validate_ellipse_list_header(kind, reserved, flags, count) do
+      case rest do
+        <<records::binary-size(records_len), remaining::binary>> ->
+          case decode_ellipse_records(records, []) do
+            {:ok, ellipses} ->
+              op = if kind == @ellipse_list_kind_draw, do: :draw_ellipse_list, else: :fill_ellipse_list
+
+              {:ok,
+               %{
+                 opcode: @render_op_extended,
+                 op: op,
+                 kind: kind,
+                 flags: flags,
+                 ellipses: ellipses
+               }, remaining}
+
+            {:error, reason} ->
+              {:error, reason}
+          end
+
+        _ ->
+          {:error, :truncated}
+      end
+    end
+  end
+
+  defp decode_extended_command(
+         @render_ext_op_push_rotate_zoom_frame_strips,
+         <<flags::little-16, "PRZF", 1, options, transparent::little-16, frame_height::little-16,
+           background::little-16, count::little-16, rest::binary>>
+       ) do
+    records_len = count * @push_rotate_zoom_list_record_size
+
+    with :ok <- validate_push_rotate_zoom_frame_strips_header(flags, options, transparent, frame_height, count) do
+      case rest do
+        <<records::binary-size(records_len), remaining::binary>> ->
+          case decode_push_rotate_zoom_records(records, []) do
+            {:ok, instances} ->
+              {:ok,
+               %{
+                 opcode: @render_op_extended,
+                 subop: @render_ext_op_push_rotate_zoom_frame_strips,
+                 op: :push_rotate_zoom_frame_strips,
+                 flags: flags,
+                 options: options,
+                 transparent: decode_push_rotate_zoom_frame_strips_transparent(options, flags, transparent),
+                 frame_height: frame_height,
+                 background: background,
+                 instances: instances
+               }, remaining}
+
+            {:error, reason} ->
+              {:error, reason}
+          end
+
+        _ ->
+          {:error, :truncated}
+      end
+    end
+  end
+
+  defp decode_extended_command(@render_ext_op_push_rotate_zoom_frame_strips, _bad) do
+    {:error, :truncated}
+  end
+
+  defp decode_extended_command(subop, _rest) do
+    {:error, {:unsupported_extended_opcode, subop}}
+  end
+
+
 
   defp encode_draw_pixel_list_payload([]), do: {:error, :empty_batch}
 
@@ -3243,8 +3305,8 @@ defmodule AtomLGFX.BinaryBatch do
        when i16(x) and i16(y) and u16(radius_x) and radius_x >= 1 and u16(radius_y) and
               radius_y >= 1 and u16(color) do
     record =
-      <<x::signed-little-16, y::signed-little-16, radius_x::little-16, radius_y::little-16,
-        color::little-16>>
+      <<x::signed-little-16, y::signed-little-16, radius_x::little-16,
+        radius_y::little-16, color::little-16>>
 
     encode_ellipse_records(op, rest, count + 1, [record | acc])
   end
@@ -3311,8 +3373,8 @@ defmodule AtomLGFX.BinaryBatch do
   defp encode_draw_line_records([{x0, y0, x1, y1, color} | rest], count, acc)
        when i16(x0) and i16(y0) and i16(x1) and i16(y1) and u16(color) do
     record =
-      <<x0::signed-little-16, y0::signed-little-16, x1::signed-little-16, y1::signed-little-16,
-        color::little-16>>
+      <<x0::signed-little-16, y0::signed-little-16, x1::signed-little-16,
+        y1::signed-little-16, color::little-16>>
 
     encode_draw_line_records(rest, count + 1, [record | acc])
   end
@@ -3337,8 +3399,8 @@ defmodule AtomLGFX.BinaryBatch do
   defp decode_draw_line_records(<<>>, acc), do: :lists.reverse(acc)
 
   defp decode_draw_line_records(
-         <<x0::little-signed-16, y0::little-signed-16, x1::little-signed-16, y1::little-signed-16,
-           color::little-16, rest::binary>>,
+         <<x0::little-signed-16, y0::little-signed-16, x1::little-signed-16,
+           y1::little-signed-16, color::little-16, rest::binary>>,
          acc
        ) do
     line = %{x0: x0, y0: y0, x1: x1, y1: y1, color: color}
@@ -3362,8 +3424,9 @@ defmodule AtomLGFX.BinaryBatch do
        when i16(x0) and i16(y0) and i16(x1) and i16(y1) and i16(x2) and i16(y2) and
               u16(color) do
     record =
-      <<x0::signed-little-16, y0::signed-little-16, x1::signed-little-16, y1::signed-little-16,
-        x2::signed-little-16, y2::signed-little-16, color::little-16>>
+      <<x0::signed-little-16, y0::signed-little-16, x1::signed-little-16,
+        y1::signed-little-16, x2::signed-little-16, y2::signed-little-16,
+        color::little-16>>
 
     encode_draw_triangle_records(rest, count + 1, [record | acc])
   end
@@ -3388,8 +3451,9 @@ defmodule AtomLGFX.BinaryBatch do
   defp decode_draw_triangle_records(<<>>, acc), do: :lists.reverse(acc)
 
   defp decode_draw_triangle_records(
-         <<x0::little-signed-16, y0::little-signed-16, x1::little-signed-16, y1::little-signed-16,
-           x2::little-signed-16, y2::little-signed-16, color::little-16, rest::binary>>,
+         <<x0::little-signed-16, y0::little-signed-16, x1::little-signed-16,
+           y1::little-signed-16, x2::little-signed-16, y2::little-signed-16,
+           color::little-16, rest::binary>>,
          acc
        ) do
     triangle = %{x0: x0, y0: y0, x1: x1, y1: y1, x2: x2, y2: y2, color: color}
@@ -3413,8 +3477,9 @@ defmodule AtomLGFX.BinaryBatch do
        when i16(x0) and i16(y0) and i16(x1) and i16(y1) and i16(x2) and i16(y2) and
               u16(color) do
     record =
-      <<x0::signed-little-16, y0::signed-little-16, x1::signed-little-16, y1::signed-little-16,
-        x2::signed-little-16, y2::signed-little-16, color::little-16>>
+      <<x0::signed-little-16, y0::signed-little-16, x1::signed-little-16,
+        y1::signed-little-16, x2::signed-little-16, y2::signed-little-16,
+        color::little-16>>
 
     encode_fill_triangle_records(rest, count + 1, [record | acc])
   end
@@ -3439,8 +3504,9 @@ defmodule AtomLGFX.BinaryBatch do
   defp decode_fill_triangle_records(<<>>, acc), do: :lists.reverse(acc)
 
   defp decode_fill_triangle_records(
-         <<x0::little-signed-16, y0::little-signed-16, x1::little-signed-16, y1::little-signed-16,
-           x2::little-signed-16, y2::little-signed-16, color::little-16, rest::binary>>,
+         <<x0::little-signed-16, y0::little-signed-16, x1::little-signed-16,
+           y1::little-signed-16, x2::little-signed-16, y2::little-signed-16,
+           color::little-16, rest::binary>>,
          acc
        ) do
     triangle = %{x0: x0, y0: y0, x1: x1, y1: y1, x2: x2, y2: y2, color: color}
@@ -3516,23 +3582,14 @@ defmodule AtomLGFX.BinaryBatch do
     end
   end
 
-  defp encode_push_rotate_zoom_command(
-         source_target,
-         x,
-         y,
-         angle_deg,
-         zoom_x,
-         zoom_y,
-         transparent
-       ) do
+  defp encode_push_rotate_zoom_command(source_target, x, y, angle_deg, zoom_x, zoom_y, transparent) do
     with {:ok, angle_deg} <- normalize_angle(angle_deg),
          {:ok, zoom_x} <- normalize_image_scale(zoom_x),
          {:ok, zoom_y} <- normalize_image_scale(zoom_y),
-         {:ok, flags, options, transparent_value} <-
-           normalize_push_rotate_zoom_options(transparent) do
-      <<@op_push_rotate_zoom, options, 0, flags::little-16, source_target, 0, x::signed-little-16,
-        y::signed-little-16, angle_deg::little-float-32, zoom_x::little-float-32,
-        zoom_y::little-float-32, transparent_value::little-16>>
+         {:ok, flags, options, transparent_value} <- normalize_push_rotate_zoom_options(transparent) do
+      <<@op_push_rotate_zoom, options, 0, flags::little-16, source_target, 0,
+        x::signed-little-16, y::signed-little-16, angle_deg::little-float-32,
+        zoom_x::little-float-32, zoom_y::little-float-32, transparent_value::little-16>>
     else
       {:error, reason} -> raise ArgumentError, Errors.format_error(reason)
     end
@@ -3574,8 +3631,9 @@ defmodule AtomLGFX.BinaryBatch do
   defp encode_arc_command(opcode, x, y, radius0, radius1, angle0, angle1, color) do
     with {:ok, angle0} <- normalize_angle(angle0),
          {:ok, angle1} <- normalize_angle(angle1) do
-      <<opcode, x::signed-little-16, y::signed-little-16, radius0::little-16, radius1::little-16,
-        angle0::little-float-32, angle1::little-float-32, color::little-16>>
+      <<opcode, x::signed-little-16, y::signed-little-16, radius0::little-16,
+        radius1::little-16, angle0::little-float-32, angle1::little-float-32,
+        color::little-16>>
     else
       {:error, reason} -> raise ArgumentError, Errors.format_error(reason)
     end
@@ -3660,6 +3718,77 @@ defmodule AtomLGFX.BinaryBatch do
 
       true ->
         :ok
+    end
+  end
+
+  defp encode_push_rotate_zoom_frame_strips_payload(instances, opts) do
+    with {:ok, frame_height} <- normalize_frame_height(Keyword.fetch(opts, :frame_height)),
+         {:ok, background} <- normalize_background(Keyword.get(opts, :background, 0)),
+         {:ok, flags, <<?P, ?R, ?Z, ?L, 1, options, transparent::little-16, _y_offset::little-signed-16,
+                       count::little-16, records::binary>>} <-
+           Sprites.encode_push_rotate_zoom_list_payload(instances, Keyword.delete(opts, :y_offset)) do
+      payload =
+        [
+          <<?P, ?R, ?Z, ?F, 1, options, transparent::little-16, frame_height::little-16,
+            background::little-16, count::little-16>>,
+          records
+        ]
+        |> :erlang.iolist_to_binary()
+
+      {:ok, flags, payload}
+    end
+  end
+
+  defp normalize_frame_height({:ok, frame_height}) when u16(frame_height) and frame_height >= 1 do
+    {:ok, frame_height}
+  end
+
+  defp normalize_frame_height({:ok, other}), do: {:error, {:bad_frame_height, other}}
+  defp normalize_frame_height(:error), do: {:error, :missing_frame_height}
+
+  defp normalize_background(background) when u16(background), do: {:ok, background}
+  defp normalize_background(other), do: {:error, {:bad_background_color, other}}
+
+  defp validate_push_rotate_zoom_frame_strips_header(flags, options, transparent, frame_height, count) do
+    has_transparent = flag_set?(options, 0x01)
+    transparent_is_index = flag_set?(flags, Protocol.transparent_index_flag())
+
+    cond do
+      (flags &&& bnot(Protocol.transparent_index_flag())) != 0 ->
+        {:error, {:bad_flags, flags}}
+
+      (options &&& bnot(0x03)) != 0 ->
+        {:error, {:bad_options, options}}
+
+      not has_transparent and transparent != 0 ->
+        {:error, {:bad_transparent_color, transparent}}
+
+      transparent_is_index and not has_transparent ->
+        {:error, {:bad_flags, flags}}
+
+      transparent_is_index and transparent > 0xFF ->
+        {:error, {:bad_transparent_color, {:index, transparent}}}
+
+      frame_height == 0 ->
+        {:error, {:bad_frame_height, frame_height}}
+
+      count == 0 ->
+        {:error, :empty_batch}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp decode_push_rotate_zoom_frame_strips_transparent(options, flags, value) do
+    if flag_set?(options, 0x01) do
+      if flag_set?(flags, Protocol.transparent_index_flag()) do
+        {:index, value}
+      else
+        value
+      end
+    else
+      nil
     end
   end
 

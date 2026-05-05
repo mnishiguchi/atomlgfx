@@ -252,7 +252,10 @@ static inline bool lgfx_validate_positive_f32(float value)
 #define LGFX_RENDER_OP_DRAW_CIRCLE_LIST ((uint8_t) 0xFCu)
 #define LGFX_RENDER_OP_FILL_TRIANGLE_LIST ((uint8_t) 0xFDu)
 #define LGFX_RENDER_OP_DRAW_TRIANGLE_LIST ((uint8_t) 0xFEu)
-#define LGFX_RENDER_OP_ELLIPSE_LIST ((uint8_t) 0xFFu)
+#define LGFX_RENDER_OP_EXTENDED ((uint8_t) 0xFFu)
+
+#define LGFX_RENDER_EXT_OP_ELLIPSE_LIST ((uint8_t) 0x00u)
+#define LGFX_RENDER_EXT_OP_PUSH_ROTATE_ZOOM_FRAME_STRIPS ((uint8_t) 0x01u)
 
 #define LGFX_RENDER_ELLIPSE_LIST_KIND_DRAW ((uint8_t) 0u)
 #define LGFX_RENDER_ELLIPSE_LIST_KIND_FILL ((uint8_t) 1u)

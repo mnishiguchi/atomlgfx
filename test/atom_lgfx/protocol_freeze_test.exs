@@ -136,7 +136,7 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     draw_circle_list: 0xFC,
     fill_triangle_list: 0xFD,
     draw_triangle_list: 0xFE,
-    ellipse_list: 0xFF
+    extended: 0xFF
   }
 
   @binary_batch_command_sizes %{
@@ -175,9 +175,9 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     draw_circle_list_record: 8,
     fill_circle_list_header: 5,
     fill_circle_list_record: 8,
-    draw_ellipse_list_header: 7,
+    draw_ellipse_list_header: 8,
     draw_ellipse_list_record: 10,
-    fill_ellipse_list_header: 7,
+    fill_ellipse_list_header: 8,
     fill_ellipse_list_record: 10,
     draw_line_list_header: 5,
     draw_line_list_record: 10,

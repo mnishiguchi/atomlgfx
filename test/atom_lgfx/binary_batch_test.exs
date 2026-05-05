@@ -83,9 +83,10 @@ defmodule AtomLGFX.BinaryBatchTest do
                {1, 2, 3, 4, 0xF800},
                {-5, -6, 7, 8, 0x07E0}
              ]) ==
-               <<0xFF, 0, 0, 0::little-16, 2::little-16, 1::little-signed-16, 2::little-signed-16,
-                 3::little-16, 4::little-16, 0xF800::little-16, -5::little-signed-16,
-                 -6::little-signed-16, 7::little-16, 8::little-16, 0x07E0::little-16>>
+               <<0xFF, 0, 0, 0, 0::little-16, 2::little-16, 1::little-signed-16,
+                 2::little-signed-16, 3::little-16, 4::little-16, 0xF800::little-16,
+                 -5::little-signed-16, -6::little-signed-16, 7::little-16, 8::little-16,
+                 0x07E0::little-16>>
     end
 
     test "encodes fill ellipse lists as compact render-private records" do
@@ -93,9 +94,10 @@ defmodule AtomLGFX.BinaryBatchTest do
                {1, 2, 3, 4, 0xF800},
                {-5, -6, 7, 8, 0x07E0}
              ]) ==
-               <<0xFF, 1, 0, 0::little-16, 2::little-16, 1::little-signed-16, 2::little-signed-16,
-                 3::little-16, 4::little-16, 0xF800::little-16, -5::little-signed-16,
-                 -6::little-signed-16, 7::little-16, 8::little-16, 0x07E0::little-16>>
+               <<0xFF, 0, 1, 0, 0::little-16, 2::little-16, 1::little-signed-16,
+                 2::little-signed-16, 3::little-16, 4::little-16, 0xF800::little-16,
+                 -5::little-signed-16, -6::little-signed-16, 7::little-16, 8::little-16,
+                 0x07E0::little-16>>
     end
 
     test "encodes draw line lists as compact render-private records" do
@@ -1184,30 +1186,30 @@ defmodule AtomLGFX.BinaryBatchTest do
                  0::little-16, 0::little-16>>
              ) == {:error, {:batch_failed, 0, 0xFB, {:bad_zero_value, :radius}}}
 
-      assert BinaryBatch.decode(<<0xFF, 2, 0, 0::little-16, 1::little-16>>) ==
+      assert BinaryBatch.decode(<<0xFF, 0, 2, 0, 0::little-16, 1::little-16>>) ==
                {:error, {:batch_failed, 0, 0xFF, {:bad_ellipse_list_kind, 2}}}
 
-      assert BinaryBatch.decode(<<0xFF, 0, 1, 0::little-16, 1::little-16>>) ==
+      assert BinaryBatch.decode(<<0xFF, 0, 0, 1, 0::little-16, 1::little-16>>) ==
                {:error, {:batch_failed, 0, 0xFF, {:bad_reserved, 1}}}
 
-      assert BinaryBatch.decode(<<0xFF, 0, 0, 1::little-16, 1::little-16>>) ==
+      assert BinaryBatch.decode(<<0xFF, 0, 0, 0, 1::little-16, 1::little-16>>) ==
                {:error, {:batch_failed, 0, 0xFF, {:bad_flags, 1}}}
 
-      assert BinaryBatch.decode(<<0xFF, 0, 0, 0::little-16, 0::little-16>>) ==
+      assert BinaryBatch.decode(<<0xFF, 0, 0, 0, 0::little-16, 0::little-16>>) ==
                {:error, {:batch_failed, 0, 0xFF, :empty_batch}}
 
       assert BinaryBatch.decode(
-               <<0xFF, 0, 0, 0::little-16, 1::little-16, 0::little-signed-16, 0::little-signed-16,
-                 0::little-16, 1::little-16, 0::little-16>>
+               <<0xFF, 0, 0, 0, 0::little-16, 1::little-16, 0::little-signed-16,
+                 0::little-signed-16, 0::little-16, 1::little-16, 0::little-16>>
              ) == {:error, {:batch_failed, 0, 0xFF, {:bad_zero_value, :radius_x}}}
 
       assert BinaryBatch.decode(
-               <<0xFF, 1, 0, 0::little-16, 1::little-16, 0::little-signed-16, 0::little-signed-16,
-                 1::little-16, 0::little-16, 0::little-16>>
+               <<0xFF, 0, 1, 0, 0::little-16, 1::little-16, 0::little-signed-16,
+                 0::little-signed-16, 1::little-16, 0::little-16, 0::little-16>>
              ) == {:error, {:batch_failed, 0, 0xFF, {:bad_zero_value, :radius_y}}}
 
       assert BinaryBatch.decode(
-               <<0xFF, 0, 0, 0::little-16, 1::little-16, 0::little-signed-16,
+               <<0xFF, 0, 0, 0, 0::little-16, 1::little-16, 0::little-signed-16,
                  0::little-signed-16>>
              ) == {:error, {:batch_failed, 0, 0xFF, :truncated}}
 

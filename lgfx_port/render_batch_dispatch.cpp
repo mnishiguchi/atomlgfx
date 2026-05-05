@@ -51,7 +51,7 @@ static_assert(LGFX_RENDER_OP_FILL_CIRCLE_LIST >= 240, "render-private opcodes mu
 static_assert(LGFX_RENDER_OP_DRAW_CIRCLE_LIST >= 240, "render-private opcodes must stay above protocol opcodes");
 static_assert(LGFX_RENDER_OP_FILL_TRIANGLE_LIST >= 240, "render-private opcodes must stay above protocol opcodes");
 static_assert(LGFX_RENDER_OP_DRAW_TRIANGLE_LIST >= 240, "render-private opcodes must stay above protocol opcodes");
-static_assert(LGFX_RENDER_OP_ELLIPSE_LIST >= 240, "render-private opcodes must stay above protocol opcodes");
+static_assert(LGFX_RENDER_OP_EXTENDED >= 240, "render-private opcodes must stay above protocol opcodes");
 
 namespace
 {
@@ -70,6 +70,9 @@ static constexpr size_t SPRITE_LIST_RECORD_SIZE = LGFX_DEVICE_SPRITE_PUSH_RECORD
 static constexpr size_t SPRITE_REGION_LIST_RECORD_SIZE = LGFX_DEVICE_SPRITE_REGION_RECORD_SIZE;
 static constexpr size_t PRZL_HEADER_SIZE = 12u;
 static constexpr size_t PRZL_RECORD_SIZE = LGFX_DEVICE_SPRITE_TRANSFORM_RECORD_SIZE;
+static constexpr uint8_t PRZF_OPTION_HAS_TRANSPARENT = 0x01u;
+static constexpr uint8_t PRZF_OPTION_APPROX_CULL = 0x02u;
+static constexpr size_t PRZF_HEADER_SIZE = 14u;
 static constexpr uint16_t TEXT_ALLOWED_FLAGS =
     LGFX_F_TEXT_HAS_BG | LGFX_F_TEXT_FG_INDEX | LGFX_F_TEXT_BG_INDEX;
 static constexpr size_t FILL_RECT_LIST_RECORD_SIZE = 10u;
@@ -1187,6 +1190,150 @@ static esp_err_t lgfx_render_batch_parse_or_dispatch_przl(
 }
 
 
+static esp_err_t lgfx_render_batch_parse_or_dispatch_przf(
+    const uint8_t **cursor,
+    const uint8_t *end,
+    bool *out_malformed_command,
+    lgfx_render_batch_mode_t mode,
+    lgfx_render_batch_trace_t *trace)
+{
+    uint16_t flags = 0u;
+    if (!lgfx_render_batch_take_u16(cursor, end, &flags)) {
+        return lgfx_render_batch_malformed(out_malformed_command);
+    }
+
+    if ((flags & ~((uint16_t) LGFX_F_TRANSPARENT_INDEX)) != 0u) {
+        return lgfx_render_batch_malformed(out_malformed_command);
+    }
+
+    if (*cursor > end || (size_t) (end - *cursor) < PRZF_HEADER_SIZE) {
+        return lgfx_render_batch_malformed(out_malformed_command);
+    }
+
+    const uint8_t *header = *cursor;
+    if (header[0] != 'P' || header[1] != 'R' || header[2] != 'Z' || header[3] != 'F') {
+        return lgfx_render_batch_malformed(out_malformed_command);
+    }
+
+    const uint8_t version = header[4];
+    const uint8_t options = header[5];
+    const uint16_t transparent_value = lgfx_render_batch_read_le_u16(header + 6);
+    const uint16_t frame_height = lgfx_render_batch_read_le_u16(header + 8);
+    const uint16_t background_color = lgfx_render_batch_read_le_u16(header + 10);
+    const uint16_t count = lgfx_render_batch_read_le_u16(header + 12);
+
+    if (version != 1u || (options & ~(PRZF_OPTION_HAS_TRANSPARENT | PRZF_OPTION_APPROX_CULL)) != 0u) {
+        return lgfx_render_batch_malformed(out_malformed_command);
+    }
+
+    const bool has_transparent = (options & PRZF_OPTION_HAS_TRANSPARENT) != 0u;
+    const bool approx_cull = (options & PRZF_OPTION_APPROX_CULL) != 0u;
+    const bool transparent_is_index = (flags & LGFX_F_TRANSPARENT_INDEX) != 0u;
+    if (!has_transparent && transparent_value != 0u) {
+        return lgfx_render_batch_malformed(out_malformed_command);
+    }
+    if (transparent_is_index && !has_transparent) {
+        return lgfx_render_batch_malformed(out_malformed_command);
+    }
+    if (transparent_is_index && transparent_value > UINT8_MAX) {
+        return lgfx_render_batch_malformed(out_malformed_command);
+    }
+    if (frame_height == 0u || count == 0u || count > (SIZE_MAX / PRZL_RECORD_SIZE)) {
+        return lgfx_render_batch_malformed(out_malformed_command);
+    }
+
+    const size_t records_len = (size_t) count * PRZL_RECORD_SIZE;
+    const uint8_t *records = header + PRZF_HEADER_SIZE;
+    if (records > end || (size_t) (end - records) < records_len) {
+        return lgfx_render_batch_malformed(out_malformed_command);
+    }
+
+    for (uint16_t i = 0; i < count; i++) {
+        const uint8_t *record = records + ((size_t) i * PRZL_RECORD_SIZE);
+        const uint8_t src_handle = record[0];
+        const uint16_t angle_cdeg = lgfx_render_batch_read_le_u16(record + 6);
+        const uint16_t zoom_x1024 = lgfx_render_batch_read_le_u16(record + 8);
+        const uint16_t zoom_y1024 = lgfx_render_batch_read_le_u16(record + 10);
+
+        if (!lgfx_device_is_sprite_target(src_handle)
+            || record[1] != 0u
+            || angle_cdeg >= 36000u
+            || zoom_x1024 == 0u
+            || zoom_y1024 == 0u) {
+            return lgfx_render_batch_malformed(out_malformed_command);
+        }
+    }
+
+    if (mode == LGFX_RENDER_BATCH_EXECUTE) {
+        lgfx_dev::PushRotateZoomFrameStats stats{};
+        const esp_err_t err = lgfx_dev::push_rotate_zoom_frame_strips_locked(
+            frame_height,
+            (uint32_t) background_color,
+            records,
+            count,
+            has_transparent,
+            transparent_is_index,
+            (uint32_t) transparent_value,
+            approx_cull,
+            &stats);
+        if (err != ESP_OK) {
+            return err;
+        }
+
+        if (trace) {
+            trace->przl_command_count++;
+            trace->przl_instance_count += stats.instance_count;
+            trace->przl_executed_count += stats.executed_count;
+            trace->przl_culled_count += stats.culled_count;
+            trace->strip_begin_count += stats.strip_count;
+            trace->strip_present_count += stats.strip_count;
+        }
+    }
+
+    *cursor = records + records_len;
+    return ESP_OK;
+}
+
+static esp_err_t lgfx_render_batch_parse_or_dispatch_extended(
+    lgfx_render_batch_state_t *state,
+    const uint8_t **cursor,
+    const uint8_t *end,
+    bool *out_malformed_command,
+    lgfx_render_batch_mode_t mode,
+    lgfx_render_batch_trace_t *trace)
+{
+    uint8_t subop = 0u;
+    if (!lgfx_render_batch_take_u8(cursor, end, &subop)) {
+        return lgfx_render_batch_malformed(out_malformed_command);
+    }
+
+    switch (subop) {
+        case LGFX_RENDER_EXT_OP_ELLIPSE_LIST:
+            return lgfx_render_batch_parse_or_dispatch_ellipse_list(
+                state,
+                cursor,
+                end,
+                out_malformed_command,
+                mode,
+                trace);
+
+        case LGFX_RENDER_EXT_OP_PUSH_ROTATE_ZOOM_FRAME_STRIPS:
+            if (state && state->strip_active) {
+                return lgfx_render_batch_malformed(out_malformed_command);
+            }
+            return lgfx_render_batch_parse_or_dispatch_przf(
+                cursor,
+                end,
+                out_malformed_command,
+                mode,
+                trace);
+
+        default:
+            return ESP_ERR_NOT_SUPPORTED;
+    }
+}
+
+
 static esp_err_t lgfx_render_batch_parse_or_dispatch_one(
     lgfx_render_batch_state_t *state,
     uint8_t op,
@@ -1280,8 +1427,8 @@ static esp_err_t lgfx_render_batch_parse_or_dispatch_one(
                 mode,
                 trace);
 
-        case LGFX_RENDER_OP_ELLIPSE_LIST:
-            return lgfx_render_batch_parse_or_dispatch_ellipse_list(
+        case LGFX_RENDER_OP_EXTENDED:
+            return lgfx_render_batch_parse_or_dispatch_extended(
                 state,
                 cursor,
                 end,
