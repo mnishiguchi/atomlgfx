@@ -36,8 +36,8 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "27"
-          elixir-version: "1.17"
+          otp-version: "28"
+          elixir-version: "1.19"
 
       - name: Check Elixir formatting
         run: mix format --check-formatted
