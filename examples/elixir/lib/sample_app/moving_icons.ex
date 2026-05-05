@@ -725,9 +725,11 @@ defmodule SampleApp.MovingIcons do
       :push_rotate_zoom_list ->
         with {:ok, transform_frame_command} <-
                build_native_transform_frame_command(objects, icon_handles, h) do
+          # The native PRZF frame command clears and presents native strips internally.
+          # Drawing the HUD on the LCD after the frame command makes it blink on
+          # the next frame, when the first strip is cleared and presented again.
           commands = [
             transform_frame_command,
-            fps_overlay_commands(fps),
             BinaryBatch.display()
           ]
 
