@@ -100,6 +100,15 @@ defmodule SampleApp.MovingIcons do
   # Capability bit: sprite operations available.
   @cap_sprite 1 <<< 0
 
+  # Render-private extended opcode used by the native frame render command.
+  # Keep this example-local fast encoder aligned with AtomLGFX.BinaryBatch.
+  @render_op_extended 0xFF
+  @render_ext_op_push_rotate_zoom_frame_strips 0x01
+  @przf_version 1
+  @przf_option_has_transparent 0x01
+  @przf_option_approx_cull 0x02
+  @przf_max_count 0xFFFF
+
   # Source sprite handles (icons).
   @sprite_info 1
   @sprite_alert 2
@@ -714,9 +723,10 @@ defmodule SampleApp.MovingIcons do
 
     case @moving_icons_draw_mode do
       :push_rotate_zoom_list ->
-        with {:ok, instances} <- build_direct_lcd_frame_batch(objects, icon_handles) do
+        with {:ok, transform_frame_command} <-
+               build_native_transform_frame_command(objects, icon_handles, h) do
           commands = [
-            BinaryBatch.push_rotate_zoom_frame_strips(instances, transform_frame_opts(h)),
+            transform_frame_command,
             fps_overlay_commands(fps),
             BinaryBatch.display()
           ]
@@ -1071,18 +1081,94 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp transform_frame_opts(frame_height) do
-    base_opts = [
-      frame_height: frame_height,
-      background: @bg,
-      approx_cull: @use_approx_cull
-    ]
+  # Fast path for the native transform-frame command.
+  #
+  # The generic `BinaryBatch.push_rotate_zoom_frame_strips/2` helper accepts a
+  # list of normalized instance tuples. That is convenient for tests and normal
+  # callers, but it allocates an intermediate list before encoding. This demo
+  # already stores object state in the exact shape needed for MovingIcons, so the
+  # benchmark path encodes PRZF records directly from the object list.
+  defp build_native_transform_frame_command(objects, icon_handles, frame_height)
+       when is_integer(frame_height) and frame_height > 0 do
+    with {:ok, count, records} <- encode_transform_frame_records(objects, icon_handles) do
+      command = [
+        <<@render_op_extended, @render_ext_op_push_rotate_zoom_frame_strips,
+          transform_frame_flags()::little-16, ?P, ?R, ?Z, ?F, @przf_version,
+          transform_frame_options(), transform_frame_transparent()::little-16,
+          frame_height::little-16, @bg::little-16, count::little-16>>,
+        records
+      ]
 
-    if @use_transparent_key do
-      Keyword.put(base_opts, :transparent, @transparent_key_color565)
-    else
-      base_opts
+      {:ok, command}
     end
+  end
+
+  defp build_native_transform_frame_command(_objects, _icon_handles, frame_height) do
+    {:error, {:bad_frame_height, frame_height}}
+  end
+
+  # This demo uses an RGB565 transparent key, so no transparent-index protocol
+  # flag is needed. If the example later switches to indexed source sprites, use
+  # the public BinaryBatch helper or extend this encoder deliberately.
+  defp transform_frame_flags, do: 0
+
+  defp transform_frame_options do
+    options =
+      if @use_transparent_key do
+        @przf_option_has_transparent
+      else
+        0
+      end
+
+    if @use_approx_cull do
+      options ||| @przf_option_approx_cull
+    else
+      options
+    end
+  end
+
+  defp transform_frame_transparent do
+    if @use_transparent_key do
+      @transparent_key_color565
+    else
+      0
+    end
+  end
+
+  defp encode_transform_frame_records(objects, icon_handles) do
+    case encode_transform_frame_records_i(objects, icon_handles, 0, []) do
+      {:ok, 0, _records} -> {:error, :empty_batch}
+      other -> other
+    end
+  end
+
+  defp encode_transform_frame_records_i([], _icon_handles, count, acc) do
+    {:ok, count, :lists.reverse(acc)}
+  end
+
+  defp encode_transform_frame_records_i(
+         [{x, y, _dx, _dy, img, angle_cdeg, zoom_x1024, _dangle, _dzoom} | rest],
+         icon_handles,
+         count,
+         acc
+       )
+       when count < @przf_max_count do
+    src = src_handle_for_index(img, icon_handles)
+
+    record =
+      <<src, 0, x::little-signed-16, y::little-signed-16, angle_cdeg::little-16,
+        zoom_x1024::little-16, zoom_x1024::little-16>>
+
+    encode_transform_frame_records_i(rest, icon_handles, count + 1, [record | acc])
+  end
+
+  defp encode_transform_frame_records_i([_object | _rest], _icon_handles, count, _acc)
+       when count >= @przf_max_count do
+    {:error, {:too_many_sprite_transform_instances, count + 1}}
+  end
+
+  defp encode_transform_frame_records_i([object | _rest], _icon_handles, _count, _acc) do
+    {:error, {:bad_transform_frame_object, object}}
   end
 
   defp sprite_list_opts do
