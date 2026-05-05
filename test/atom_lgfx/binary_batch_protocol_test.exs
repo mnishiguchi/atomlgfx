@@ -28,6 +28,11 @@ defmodule AtomLGFX.BinaryBatchProtocolTest do
     "LGFX_RENDER_OP_EXTENDED" => {:extended, 0xFF}
   }
 
+  @expected_render_extended_defines %{
+    "LGFX_RENDER_EXT_OP_ELLIPSE_LIST" => 0x00,
+    "LGFX_RENDER_EXT_OP_PUSH_ROTATE_ZOOM_FRAME_STRIPS" => 0x01
+  }
+
   describe "render-private opcode drift checks" do
     test "Elixir keeps the render-private opcode range explicit and contiguous" do
       assert BinaryBatch.__render_private_opcodes__() == [
@@ -77,6 +82,10 @@ defmodule AtomLGFX.BinaryBatchProtocolTest do
                "#{define_name} should remain wired to #{inspect(op_name)}"
       end
     end
+
+    test "native protocol.h extended render defines remain stable" do
+      assert parse_native_render_extended_defines() == @expected_render_extended_defines
+    end
   end
 
   defp parse_native_render_private_defines do
@@ -90,5 +99,18 @@ defmodule AtomLGFX.BinaryBatchProtocolTest do
 
   defp render_private_define_regex do
     ~r/^#define\s+(LGFX_RENDER_OP_[A-Z0-9_]+)\s+\(\(uint8_t\)\s+0x([0-9A-Fa-f]+)u\)/m
+  end
+
+  defp parse_native_render_extended_defines do
+    @protocol_header
+    |> File.read!()
+    |> then(&Regex.scan(render_extended_define_regex(), &1))
+    |> Map.new(fn [_match, define_name, hex_opcode] ->
+      {define_name, String.to_integer(hex_opcode, 16)}
+    end)
+  end
+
+  defp render_extended_define_regex do
+    ~r/^#define\s+(LGFX_RENDER_EXT_OP_[A-Z0-9_]+)\s+\(\(uint8_t\)\s+0x([0-9A-Fa-f]+)u\)/m
   end
 end

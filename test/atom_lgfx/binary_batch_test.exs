@@ -432,6 +432,44 @@ defmodule AtomLGFX.BinaryBatchTest do
                  2_048::little-16
                >>
     end
+
+    test "encodes native push rotate zoom frame strips" do
+      instances = [
+        {1, 10, -20, 9_000, 1_024, 2_048}
+      ]
+
+      command =
+        BinaryBatch.push_rotate_zoom_frame_strips(instances,
+          frame_height: 320,
+          background: 0x0000,
+          transparent: {:index, 0},
+          approx_cull: true
+        )
+
+      assert command ==
+               <<
+                 0xFF,
+                 0x01,
+                 16::little-16,
+                 ?P,
+                 ?R,
+                 ?Z,
+                 ?F,
+                 1,
+                 3,
+                 0::little-16,
+                 320::little-16,
+                 0::little-16,
+                 1::little-16,
+                 1,
+                 0,
+                 10::little-signed-16,
+                 -20::little-signed-16,
+                 9_000::little-16,
+                 1_024::little-16,
+                 2_048::little-16
+               >>
+    end
   end
 
   describe "decode/1" do
@@ -896,6 +934,43 @@ defmodule AtomLGFX.BinaryBatchTest do
                     zoom_x: 1.5,
                     zoom_y: 2.0,
                     transparent: {:index, 3}
+                  }
+                ]}
+    end
+
+    test "decodes native push rotate zoom frame strips" do
+      frame =
+        BinaryBatch.push_rotate_zoom_frame_strips(
+          [{1, 10, -20, 9_000, 1_024, 2_048}],
+          frame_height: 320,
+          background: 0x1234,
+          transparent: {:index, 0},
+          approx_cull: true
+        )
+
+      assert BinaryBatch.decode(frame) ==
+               {:ok,
+                [
+                  %{
+                    index: 0,
+                    opcode: 0xFF,
+                    subop: 0x01,
+                    op: :push_rotate_zoom_frame_strips,
+                    flags: 16,
+                    options: 3,
+                    transparent: {:index, 0},
+                    frame_height: 320,
+                    background: 0x1234,
+                    instances: [
+                      %{
+                        source_target: 1,
+                        x: 10,
+                        y: -20,
+                        angle_cdeg: 9_000,
+                        zoom_x1024: 1_024,
+                        zoom_y1024: 2_048
+                      }
+                    ]
                   }
                 ]}
     end

@@ -17,7 +17,8 @@ defmodule AtomLGFX.BinaryBatch do
   `push_rotate_zoom/6`, `push_rotate_zoom/7`, `push_sprite_list/2`,
   `push_sprite_region_list/2`, `draw_jpg/3`, `draw_jpg/9`,
   `push_image_rgb565/5`, `push_image_rgb565/6`, `draw_arc/7`, `fill_arc/7`,
-  `draw_bezier/7`, `draw_bezier/9`, and `push_rotate_zoom_list/2`. Submit
+  `draw_bezier/7`, `draw_bezier/9`, `push_rotate_zoom_list/2`, and
+  `push_rotate_zoom_frame_strips/2`. Submit
   binary batches with `render/2`. Use `summary/1`, `diagnose/1`,
   `compare/2`, and `check_budget/2` for Elixir-side diagnostics.
   """
@@ -3761,7 +3762,10 @@ defmodule AtomLGFX.BinaryBatch do
             count::little-16, records::binary>>} <-
            Sprites.encode_push_rotate_zoom_list_payload(
              instances,
-             Keyword.delete(opts, :y_offset)
+             opts
+             |> Keyword.delete(:frame_height)
+             |> Keyword.delete(:background)
+             |> Keyword.delete(:y_offset)
            ) do
       payload =
         [

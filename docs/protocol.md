@@ -563,26 +563,96 @@ pushSprite:
 
 pushSpriteList:
   op u8
-  flags u8
+  flags u16le
   transparent u16le
   instance_count u16le
-  InstanceRecord instance_count * 5 bytes
+  InstanceRecord instance_count * 6 bytes
+
+PushSpriteList InstanceRecord:
+  source_target u8
+  reserved u8 = 0
+  x i16le
+  y i16le
 
 pushSpriteRegionList:
   op u8
-  flags u8
+  flags u16le
   transparent u16le
   instance_count u16le
-  InstanceRecord instance_count * 13 bytes
+  InstanceRecord instance_count * 14 bytes
+
+PushSpriteRegionList InstanceRecord:
+  source_target u8
+  reserved u8 = 0
+  src_x u16le
+  src_y u16le
+  width u16le
+  height u16le
+  dst_x i16le
+  dst_y i16le
 
 pushRotateZoomList:
   normal operation opcode with one PRZL payload binary
+
+pushRotateZoomFrameStrips:
+  extended op u8 = 0xFF
+  subop u8 = 0x01
+  flags u16le
+  PRZF payload
 
 display:
   op u8
 ```
 
 The generated protocol reference remains the source for numeric operation codes. Render-private command opcodes are internal to the binary render-batch command stream.
+
+### Native transformed-sprite frame command
+
+`pushRotateZoomFrameStrips` is an extended render-private command for hot animation loops that repeatedly draw transformed source sprites through native presentation strips. It is a frame-level command: native code owns the strip loop, strip clearing, strip presentation, and final transformed sprite draw calls. Elixir still owns object state and builds the frame-state payload.
+
+Wire layout:
+
+```text
+extended opcode:
+  op u8 = 0xFF
+  subop u8 = 0x01
+  flags u16le
+
+PRZF payload:
+  magic bytes[4] = "PRZF"
+  version u8 = 1
+  options u8
+  transparent u16le
+  frame_height u16le
+  background u16le
+  instance_count u16le
+  InstanceRecord instance_count * 12 bytes
+
+InstanceRecord:
+  source_target u8
+  reserved u8 = 0
+  x i16le
+  y i16le
+  angle_cdeg u16le
+  zoom_x1024 u16le
+  zoom_y1024 u16le
+```
+
+Rules:
+
+- `options & 0x01` means `transparent` is present
+- `options & 0x02` requests approximate native culling
+- unknown option bits are invalid
+- `flags` may only use `LGFX_F_TRANSPARENT_INDEX`
+- if `LGFX_F_TRANSPARENT_INDEX` is set, `transparent` is a palette index in the low byte
+- `LGFX_F_TRANSPARENT_INDEX` without the transparent option is invalid
+- `frame_height` must be greater than `0`
+- `instance_count` must be greater than `0`
+- `source_target` must be a sprite target
+- `reserved` must be `0`
+- `angle_cdeg` must be `0..35999`
+- `zoom_x1024` and `zoom_y1024` must be positive fixed-point scales where `1024 == 1.0x`
+- this command must not be nested inside an active `beginStrip` / `presentStrip` section
 
 ### Native presentation strips
 

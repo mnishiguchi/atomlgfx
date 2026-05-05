@@ -298,8 +298,11 @@ Policy:
 - [`docs/protocol-reference.md`](protocol-reference.md)
   - generated operation, capability, and error tables
 
-- [`docs/adr/2026-05-02-binary-batch-for-native-like-animation.md`](adr/2026-05-02-binary-batch-for-native-like-animation.md)
-  - accepted v2 hot-rendering decision
+- [`docs/adr/2026-05-03-binary-batch-as-render-transaction-api.md`](adr/2026-05-03-binary-batch-as-render-transaction-api.md)
+  - active BinaryBatch render transaction decision
+
+- [`docs/adr/2026-05-05-native-frame-render-commands-for-hot-animation.md`](adr/2026-05-05-native-frame-render-commands-for-hot-animation.md)
+  - native frame render commands for measured hot animation loops
 
 - [`docs/2026-05-02-v2-render-batch-performance-work-log.md`](2026-05-02-v2-render-batch-performance-work-log.md)
   - benchmark notes and follow-up measurements
