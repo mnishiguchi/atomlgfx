@@ -33,6 +33,11 @@ defmodule SampleApp do
 
   @sample_open_options [
     rgb_order: false,
+
+    # MovingIcons is presentation-heavy. Use an explicit high LCD write clock
+    # while keeping DMA enabled so native logs show the effective bus path.
+    lcd_freq_write_hz: 40_000_000,
+    lcd_dma_channel: :spi_dma_ch_auto,
     lcd_spi_host: :spi2_host,
     touch_spi_host: :spi2_host,
     lcd_bus_shared: true,

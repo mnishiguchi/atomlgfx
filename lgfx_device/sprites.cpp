@@ -12,6 +12,10 @@
 #include <cmath>
 #include <new>
 
+#if LGFX_PORT_ENABLE_RENDER_BATCH_TRACE
+#include "esp_timer.h"
+#endif
+
 namespace
 {
 
@@ -1019,7 +1023,15 @@ esp_err_t lgfx_dev::push_rotate_zoom_frame_strips_locked(
             return ESP_ERR_INVALID_STATE;
         }
 
+#if LGFX_PORT_ENABLE_RENDER_BATCH_TRACE
+        const int64_t clear_started_at_us = esp_timer_get_time();
+#endif
+
         dst->clear(background_color);
+
+#if LGFX_PORT_ENABLE_RENDER_BATCH_TRACE
+        const int64_t draw_started_at_us = esp_timer_get_time();
+#endif
 
         PushRotateZoomListStats strip_stats{};
         err = lgfx_push_rotate_zoom_list_to_resolved_target_locked(
@@ -1037,6 +1049,10 @@ esp_err_t lgfx_dev::push_rotate_zoom_frame_strips_locked(
             return err;
         }
 
+#if LGFX_PORT_ENABLE_RENDER_BATCH_TRACE
+        const int64_t present_started_at_us = esp_timer_get_time();
+#endif
+
         err = lgfx_dev::presentation_present_strip_locked();
         if (err != ESP_OK) {
             (void) lgfx_dev::presentation_cancel_strip_locked();
@@ -1048,6 +1064,12 @@ esp_err_t lgfx_dev::push_rotate_zoom_frame_strips_locked(
             out_stats->instance_count += strip_stats.instance_count;
             out_stats->executed_count += strip_stats.executed_count;
             out_stats->culled_count += strip_stats.culled_count;
+#if LGFX_PORT_ENABLE_RENDER_BATCH_TRACE
+            const int64_t strip_finished_at_us = esp_timer_get_time();
+            out_stats->clear_us += draw_started_at_us - clear_started_at_us;
+            out_stats->draw_us += present_started_at_us - draw_started_at_us;
+            out_stats->present_us += strip_finished_at_us - present_started_at_us;
+#endif
         }
 
         const uint32_t next_y = static_cast<uint32_t>(y0) + static_cast<uint32_t>(strip_height);

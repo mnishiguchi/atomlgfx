@@ -474,6 +474,7 @@ defmodule SampleApp.MovingIcons do
        ) do
     objects = move_objects(objects0, w, h)
     put_last_batch_bytes(0)
+    put_last_render_timings(0, 0, 0)
     frame_start_ms = monotonic_ms()
 
     case render_frame(port, h, render_target, flip0, objects, icon_handles, fps0) do
@@ -488,7 +489,8 @@ defmodule SampleApp.MovingIcons do
             render_target,
             h,
             frame_ms,
-            last_batch_bytes()
+            last_batch_bytes(),
+            last_render_timings()
           )
 
         yield()
@@ -708,6 +710,8 @@ defmodule SampleApp.MovingIcons do
   end
 
   defp render_native_strips_binary_batch(port, h, strip_h, flip0, objects, icon_handles, fps) do
+    build_started_ms = monotonic_ms()
+
     case @moving_icons_draw_mode do
       :push_rotate_zoom_list ->
         with {:ok, instances} <- build_direct_lcd_frame_batch(objects, icon_handles) do
@@ -716,6 +720,8 @@ defmodule SampleApp.MovingIcons do
             fps_overlay_commands(fps),
             BinaryBatch.display()
           ]
+
+          put_last_build_ms(monotonic_ms() - build_started_ms)
 
           case binary_batch_ok(port, commands) do
             :ok -> {:ok, flip0}
@@ -734,6 +740,8 @@ defmodule SampleApp.MovingIcons do
                []
              ) do
           {:ok, commands} ->
+            put_last_build_ms(monotonic_ms() - build_started_ms)
+
             case binary_batch_ok(port, [commands, BinaryBatch.display()]) do
               :ok -> {:ok, flip0}
               {:error, reason} -> {:error, reason}
@@ -1094,13 +1102,23 @@ defmodule SampleApp.MovingIcons do
   end
 
   defp binary_batch_ok(port, commands) do
+    encode_started_ms = monotonic_ms()
     command_binary = IO.iodata_to_binary(commands)
-    put_last_batch_bytes(byte_size(command_binary))
+    encode_ms = monotonic_ms() - encode_started_ms
 
-    case BinaryBatch.render(port, command_binary) do
-      :ok -> :ok
-      {:error, reason} -> {:error, reason}
-    end
+    put_last_batch_bytes(byte_size(command_binary))
+    put_last_encode_ms(encode_ms)
+
+    submit_started_ms = monotonic_ms()
+
+    result =
+      case BinaryBatch.render(port, command_binary) do
+        :ok -> :ok
+        {:error, reason} -> {:error, reason}
+      end
+
+    put_last_submit_ms(monotonic_ms() - submit_started_ms)
+    result
   end
 
   defp src_handle_for_index(0, icon_handles), do: elem(icon_handles, 0)
@@ -1145,11 +1163,11 @@ defmodule SampleApp.MovingIcons do
     "obj:#{@obj_count}  fps:#{fps}"
   end
 
-  defp update_fps(fps, frame_count, psec, render_target, h, frame_ms, batch_bytes) do
+  defp update_fps(fps, frame_count, psec, render_target, h, frame_ms, batch_bytes, render_timings) do
     sec = div(monotonic_ms(), 1000)
 
     if psec != sec do
-      log_frame_stats(frame_count, render_target, h, frame_ms, batch_bytes)
+      log_frame_stats(frame_count, render_target, h, frame_ms, batch_bytes, render_timings)
       {frame_count, 0, sec}
     else
       {fps, frame_count, psec}
@@ -1173,7 +1191,43 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp log_frame_stats(fps, render_target, h, frame_ms, batch_bytes) do
+  defp put_last_render_timings(build_ms, encode_ms, submit_ms)
+       when is_integer(build_ms) and build_ms >= 0 and is_integer(encode_ms) and encode_ms >= 0 and
+              is_integer(submit_ms) and submit_ms >= 0 do
+    :erlang.put(:moving_icons_last_render_timings, {build_ms, encode_ms, submit_ms})
+    :ok
+  end
+
+  defp put_last_build_ms(build_ms) when is_integer(build_ms) and build_ms >= 0 do
+    {_old_build_ms, encode_ms, submit_ms} = last_render_timings()
+    put_last_render_timings(build_ms, encode_ms, submit_ms)
+  end
+
+  defp put_last_encode_ms(encode_ms) when is_integer(encode_ms) and encode_ms >= 0 do
+    {build_ms, _old_encode_ms, submit_ms} = last_render_timings()
+    put_last_render_timings(build_ms, encode_ms, submit_ms)
+  end
+
+  defp put_last_submit_ms(submit_ms) when is_integer(submit_ms) and submit_ms >= 0 do
+    {build_ms, encode_ms, _old_submit_ms} = last_render_timings()
+    put_last_render_timings(build_ms, encode_ms, submit_ms)
+  end
+
+  defp last_render_timings do
+    case :erlang.get(:moving_icons_last_render_timings) do
+      {build_ms, encode_ms, submit_ms}
+      when is_integer(build_ms) and build_ms >= 0 and is_integer(encode_ms) and encode_ms >= 0 and
+             is_integer(submit_ms) and submit_ms >= 0 ->
+        {build_ms, encode_ms, submit_ms}
+
+      _ ->
+        {0, 0, 0}
+    end
+  end
+
+  defp log_frame_stats(fps, render_target, h, frame_ms, batch_bytes, render_timings) do
+    {build_ms, encode_ms, submit_ms} = render_timings
+
     IO.puts(
       "moving_icons stats " <>
         "obj_count=#{@obj_count} " <>
@@ -1182,6 +1236,9 @@ defmodule SampleApp.MovingIcons do
         "draw_mode=#{@moving_icons_draw_mode} " <>
         "fps=#{fps} " <>
         "frame_ms=#{frame_ms} " <>
+        "build_ms=#{build_ms} " <>
+        "encode_ms=#{encode_ms} " <>
+        "submit_ms=#{submit_ms} " <>
         "batch_bytes=#{batch_bytes} " <>
         "strip_count=#{strip_count(render_target, h)}"
     )

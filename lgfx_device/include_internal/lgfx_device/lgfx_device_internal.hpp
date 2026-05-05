@@ -855,6 +855,9 @@ struct PushRotateZoomFrameStats
     size_t instance_count = 0;
     size_t executed_count = 0;
     size_t culled_count = 0;
+    int64_t clear_us = 0;
+    int64_t draw_us = 0;
+    int64_t present_us = 0;
 };
 
 esp_err_t push_rotate_zoom_list_locked(
