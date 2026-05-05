@@ -57,16 +57,21 @@ This preserves protocol flexibility, but it still leaves extra work inside the n
 
 These costs are small individually, but they happen inside the frame-critical path. For workloads like MovingIcons, the goal is to get closer to the upstream native LovyanGFX loop while still allowing Elixir to own animation state.
 
-Early benchmarking confirmed this direction:
+Benchmarking confirmed this direction:
 
 - A native transformed-sprite frame command reduced MovingIcons frame time from roughly `746–815 ms` to roughly `628–629 ms`.
 - Raising the LCD write clock to `40 MHz` with DMA enabled reduced the frame time further to roughly `547–565 ms`.
 - Directly encoding the native transform-frame command from the MovingIcons object list reduced Elixir-side frame construction and brought the measured frame time to roughly `484 ms`.
+- Storing source sprite handles directly in animation state reduced frame construction further, bringing the measured frame time to roughly `403–421 ms`.
+- Raising the LCD write clock to `60 MHz` was visually stable and brought the measured frame time to roughly `396 ms`.
+- Raising the LCD write clock to `80 MHz` improved measured frame time, but rendering was visually incorrect, so it was rejected.
 - A trace run showed native execution dominated by strip presentation, with `frame_present_us` significantly larger than draw and clear time.
 - Full-height native strips reduced strip count from `2` to `1` but did not improve total frame time.
 - Per-object dirty-region presentation was rejected after causing instability and increasing presentation complexity.
+- Direct native strip presentation with `pushImageDMA()` did not improve frame time compared with the existing sprite presentation path.
+- Waiting for frame DMA completion did not resolve the low-object-count crash observed during later experiments, so that issue is treated as follow-up stability work rather than part of the accepted performance direction.
 
-These findings support native frame render commands as the right v2 hot-animation direction, while also showing that further work should focus on presentation efficiency and Elixir-side frame construction, not on ordinary batch dispatch or write transaction overhead.
+These findings support native frame render commands as the right v2 hot-animation direction. They also show that further work should focus on presentation efficiency, allocation-light Elixir frame construction, and embedded stack safety, not on ordinary batch dispatch or write transaction overhead.
 
 ## Decision
 
@@ -188,7 +193,7 @@ The command supports:
 
 - native presentation strips
 - a small fixed set of source sprite handles
-- object records with source index, x, y, angle, and zoom
+- object records with source sprite id, x, y, angle, and zoom
 - transparent key handling
 - one native loop over strips and objects
 - one final display operation
@@ -200,7 +205,11 @@ The command avoids:
 - repeated render command dispatch for each strip
 - application-specific object movement
 
-The MovingIcons example may use an example-local fast encoder that writes the native frame command directly from its object list. This is an implementation optimization for the benchmark path, not a replacement for the public `BinaryBatch` helpers.
+The MovingIcons example may use example-local fast encoders that write the native frame command directly from its object list. This is an implementation optimization for the benchmark path, not a replacement for the public `BinaryBatch` helpers.
+
+The MovingIcons example may also store source sprite handles directly in animation state. This avoids repeated source-index-to-handle conversion during frame construction and is compatible with the rule that Elixir owns animation state.
+
+The accepted demo configuration uses a high LCD write clock with DMA enabled. On the tested ILI9488 setup, `60 MHz` was stable and faster than `40 MHz`; `80 MHz` produced invalid rendering and must not be used as the default.
 
 ## Consequences
 
@@ -214,6 +223,7 @@ The MovingIcons example may use an example-local fast encoder that writes the na
 - Gives performance-critical examples a realistic native-like path.
 - Keeps the optimization reusable for sprite animation, particle systems, icon scenes, and face-part rendering.
 - Provides a scalable opcode-space strategy through extended render sub-opcodes.
+- Keeps benchmark-specific Elixir encoding optimizations outside the generic native protocol.
 
 ### Negative
 
@@ -223,6 +233,7 @@ The MovingIcons example may use an example-local fast encoder that writes the na
 - Risks drifting toward demo-specific native APIs if naming and boundaries are not kept strict.
 - Makes some render behavior less directly visible from the Elixir frame script.
 - Requires care to avoid benchmark-only optimizations leaking into the generic protocol surface.
+- Requires embedded-stack discipline in native hot paths, especially when adding caches or temporary arrays.
 
 ## Rejected alternatives
 
@@ -268,15 +279,35 @@ Rejected in the tested form.
 
 Per-object dirty presentation increased complexity and caused instability before the first frame statistics line. Future dirty-region work should use a coarser and safer strategy if revisited.
 
+### Present native strips through direct `pushImageDMA()`
+
+Rejected.
+
+Direct strip presentation with `pushImageDMA()` did not improve frame time compared with the existing sprite presentation path. The existing LovyanGFX sprite presentation path appears to be at least as good for this setup.
+
+### Use `80 MHz` LCD write clock by default
+
+Rejected.
+
+The measured frame time improved, but rendering was visually incorrect. Stable rendering is required for benchmark results to be meaningful.
+
+### Add frame-level DMA waits as a performance or stability fix
+
+Rejected for the tested issue.
+
+Waiting for frame DMA completion did not resolve the low-object-count crash observed during later experiments. DMA waits may still be useful in other situations, but they are not part of this ADR's accepted performance direction.
+
 ## Follow-up work
 
 Further performance work should focus on:
 
-- reducing Elixir-side frame construction cost
 - keeping benchmark encoders allocation-light
+- reducing Elixir-side frame construction cost only when it remains measurable
 - reducing native presentation cost
-- investigating lower-overhead strip presentation paths
+- investigating lower-overhead strip presentation paths only when backed by measurements
+- keeping native hot-path stack usage small
 - comparing against upstream native MovingIcons on the same board, panel, bus clock, and DMA configuration
+- investigating the low-object-count `pthread` stack overflow before adding more native hot-path caches
 
 Further work should not focus on:
 
@@ -284,6 +315,8 @@ Further work should not focus on:
 - removing write transactions
 - replacing primitive `BinaryBatch` operations
 - adding demo-specific native commands
+- using unstable LCD bus clocks for benchmark wins
+- adding per-object dirty presentation without a simpler, coarser strategy
 
 ## Related documents
 
