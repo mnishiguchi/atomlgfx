@@ -84,6 +84,7 @@ defmodule AtomLGFX do
   alias AtomLGFX.Errors
   alias AtomLGFX.OpSchema
   alias AtomLGFX.Images
+  alias AtomLGFX.ObjectBuffers
   alias AtomLGFX.OpenConfig
   alias AtomLGFX.Primitives
   alias AtomLGFX.Protocol
@@ -239,6 +240,7 @@ defmodule AtomLGFX do
   Returns whether multi-target binary-batch frame scripts are advertised by the driver.
   """
   def supports_batch?(port), do: Protocol.supports_batch?(port)
+  def supports_retained_render?(port), do: Protocol.supports_retained_render?(port)
 
   @doc """
   Returns the maximum accepted binary payload size for this driver instance.
@@ -446,6 +448,27 @@ defmodule AtomLGFX do
   Deletes the sprite at the given handle.
   """
   def delete_sprite(port, target), do: Sprites.delete_sprite(port, target)
+
+  @doc """
+  Allocates a retained native object buffer.
+  """
+  def create_object_buffer(port, opts) when is_list(opts) do
+    ObjectBuffers.create_object_buffer(port, opts)
+  end
+
+  @doc """
+  Replaces the contents of a retained native object buffer.
+  """
+  def write_object_buffer(port, handle, objects) do
+    ObjectBuffers.write_object_buffer(port, handle, objects)
+  end
+
+  @doc """
+  Deletes a retained native object buffer.
+  """
+  def delete_object_buffer(port, handle) do
+    ObjectBuffers.delete_object_buffer(port, handle)
+  end
 
   @doc """
   Creates palette backing for an existing paletted sprite target.

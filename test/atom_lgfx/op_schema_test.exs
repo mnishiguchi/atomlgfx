@@ -273,6 +273,7 @@ defmodule AtomLGFX.OpSchemaTest do
   defp expected_capability("LGFX_CAP_TOUCH"), do: :touch
   defp expected_capability("LGFX_CAP_PALETTE"), do: :palette
   defp expected_capability("LGFX_CAP_BATCH"), do: :batch
+  defp expected_capability("LGFX_CAP_RETAINED_RENDER"), do: :retained_render
 
   defp parse_operations(ops_def_content) do
     ops_def_content

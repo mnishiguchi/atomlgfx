@@ -130,3 +130,15 @@ X(calibrateTouch, lgfx_handle_calibrateTouch, ATOM_STR("\x0E", "calibrateTouch")
 X(pushRotateZoomList, lgfx_handle_pushRotateZoomList, ATOM_STR("\x12", "pushRotateZoomList"), 6, 6, LGFX_F_TRANSPARENT_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE, 1, 0, 0, 0)
 X(submitBinaryBatch, lgfx_handle_submitBinaryBatch, ATOM_STR("\x11", "submitBinaryBatch"), 6, 6, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_BATCH, 0, 0, 1, 0)
 X(getPresentationStripHeight, lgfx_handle_getPresentationStripHeight, ATOM_STR("\x1A", "getPresentationStripHeight"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_BATCH, 0, 0, 1, 0)
+
+//
+// Retained native render programs
+//
+X(createObjectBuffer, lgfx_handle_createObjectBuffer, ATOM_STR("\x12", "createObjectBuffer"), 7, 7, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_RETAINED_RENDER, 0, 0, 1, 0)
+X(writeObjectBuffer, lgfx_handle_writeObjectBuffer, ATOM_STR("\x11", "writeObjectBuffer"), 7, 7, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_RETAINED_RENDER, 0, 1, 1, 0)
+X(deleteObjectBuffer, lgfx_handle_deleteObjectBuffer, ATOM_STR("\x12", "deleteObjectBuffer"), 6, 6, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_RETAINED_RENDER, 0, 0, 1, 0)
+X(createRenderProgram, lgfx_handle_createRenderProgram, ATOM_STR("\x13", "createRenderProgram"), 15, 15, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_RETAINED_RENDER, 0, 1, 1, 0)
+X(startRenderProgram, lgfx_handle_startRenderProgram, ATOM_STR("\x12", "startRenderProgram"), 7, 7, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_RETAINED_RENDER, 0, 0, 1, 0)
+X(stopRenderProgram, lgfx_handle_stopRenderProgram, ATOM_STR("\x11", "stopRenderProgram"), 6, 6, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_RETAINED_RENDER, 0, 0, 1, 0)
+X(getRenderProgramStats, lgfx_handle_getRenderProgramStats, ATOM_STR("\x15", "getRenderProgramStats"), 6, 6, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_RETAINED_RENDER, 0, 0, 1, 0)
+X(destroyRenderProgram, lgfx_handle_destroyRenderProgram, ATOM_STR("\x14", "destroyRenderProgram"), 6, 6, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_RETAINED_RENDER, 0, 0, 1, 0)

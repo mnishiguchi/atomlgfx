@@ -150,6 +150,26 @@ static term lgfx_dispatch_direct_call(Context *ctx, lgfx_port_t *port, const lgf
         return precondition_reply;
     }
 
+    if (lgfx_device_retained_renderer_running()) {
+        switch (req->op) {
+            case LGFX_OP_ping:
+            case LGFX_OP_getCaps:
+            case LGFX_OP_getLastError:
+            case LGFX_OP_close:
+            case LGFX_OP_createObjectBuffer:
+            case LGFX_OP_writeObjectBuffer:
+            case LGFX_OP_deleteObjectBuffer:
+            case LGFX_OP_createRenderProgram:
+            case LGFX_OP_startRenderProgram:
+            case LGFX_OP_stopRenderProgram:
+            case LGFX_OP_getRenderProgramStats:
+            case LGFX_OP_destroyRenderProgram:
+                break;
+            default:
+                return reply_error(ctx, port, req, port->atoms.renderer_running, 0);
+        }
+    }
+
     lgfx_handler_fn handler = lgfx_dispatch_lookup_by_op(port, req->op);
     if (handler == NULL) {
         return reply_error(ctx, port, req, port->atoms.internal, 0);
@@ -324,5 +344,4 @@ static Context *lgfx_port_create_port(GlobalContext *global, term opts)
 }
 
 REGISTER_PORT_DRIVER(lgfx_port, lgfx_port_init, lgfx_port_destroy, lgfx_port_create_port);
-
 

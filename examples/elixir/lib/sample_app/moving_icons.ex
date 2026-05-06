@@ -9,6 +9,7 @@ defmodule SampleApp.MovingIcons do
   import SampleApp.AtomVMCompat, only: [yield: 0]
 
   alias AtomLGFX.BinaryBatch
+  alias AtomLGFX.RenderProgram
   alias SampleApp.Assets
 
   # -----------------------------------------------------------------------------
@@ -128,6 +129,10 @@ defmodule SampleApp.MovingIcons do
   @zoom_min_x1024 512
   @zoom_max_x1024 2048
 
+  @retained_update_policy :bounce
+  @retained_stats_poll_ms 1_000
+  @target_fps 10
+
   # -----------------------------------------------------------------------------
   # Public entry
   # -----------------------------------------------------------------------------
@@ -148,33 +153,266 @@ defmodule SampleApp.MovingIcons do
 
     with {:ok, caps} <- AtomLGFX.get_caps(port),
          :ok <- ensure_sprite_support(caps, required_sprite_count()),
+         {:ok, true} <- AtomLGFX.supports_retained_render?(port),
          :ok <- AtomLGFX.fill_screen(port, @bg),
          {:ok, icon_handles} <- prepare_icon_sprites(port, icons, icon_w, icon_h) do
-      case prepare_render_target(port, w, h) do
-        {:ok, render_target} ->
-          try do
-            {_seed, objects} = init_objects(1, @obj_count, w, h, icon_handles)
-
-            # State tuple:
-            # {w, h, render_target, flip, objects, icon_handles, fps, frame_count, psec}
-            state = {w, h, render_target, 0, objects, icon_handles, 0, 0, 0}
-
-            loop(port, state)
-          after
-            cleanup_frame_sprites(port)
-            cleanup_icon_sprites(port)
-          end
-
-        {:error, reason} ->
-          cleanup_frame_sprites(port)
-          cleanup_icon_sprites(port)
-          IO.puts("moving_icons setup failed: #{AtomLGFX.format_error(reason)}")
-          {:error, reason}
+      try do
+        run_retained_demo(port, w, h, icon_handles)
+      after
+        cleanup_icon_sprites(port)
       end
     else
+      {:ok, false} ->
+        reason = :cap_retained_render_missing
+        IO.puts("moving_icons setup failed: #{AtomLGFX.format_error(reason)}")
+        {:error, reason}
+
       {:error, reason} ->
         IO.puts("moving_icons setup failed: #{AtomLGFX.format_error(reason)}")
         {:error, reason}
+    end
+  end
+
+  defp run_retained_demo(port, w, h, icon_handles) do
+    {_seed, objects} = init_objects(1, @obj_count, w, h, icon_handles)
+
+    case prepare_retained_renderer(port, h, objects, icon_handles) do
+      {:ok, object_buffer, program} ->
+        try do
+          with :ok <- RenderProgram.start(port, program, mode: :exclusive) do
+            monitor_retained_renderer(port, program, 0, monotonic_ms(), false)
+          end
+        after
+          cleanup_retained_renderer(port, object_buffer, program)
+        end
+
+      {:error, reason} ->
+        IO.puts("moving_icons setup failed: #{AtomLGFX.format_error(reason)}")
+        {:error, reason}
+    end
+  end
+
+  defp prepare_retained_renderer(port, h, objects, icon_handles) do
+    with {:ok, native_strip_h} <- AtomLGFX.get_presentation_strip_height(port),
+         :ok <- validate_native_presentation_strip_height(native_strip_h),
+         {:ok, retained_objects} <- retained_object_records(objects, icon_handles) do
+      strip_h = min(h, native_strip_h)
+      sources = retained_source_handles(icon_handles)
+
+      IO.puts(
+        "moving_icons render mode=retained_native " <>
+          "target_fps=#{@target_fps} " <>
+          "requested_native_strip_h=#{@requested_native_presentation_strip_h} " <>
+          "native_strip_h=#{native_strip_h} " <>
+          "frame_strip_h=#{strip_h}"
+      )
+
+      create_retained_renderer_resources(port, strip_h, retained_objects, sources)
+    end
+  end
+
+  defp create_retained_renderer_resources(port, strip_h, retained_objects, sources) do
+    case AtomLGFX.create_object_buffer(port, layout: :sprite_transform_2d, capacity: @obj_count) do
+      {:ok, object_buffer} ->
+        case AtomLGFX.write_object_buffer(port, object_buffer, retained_objects) do
+          :ok ->
+            case create_retained_render_program(port, object_buffer, strip_h, sources) do
+              {:ok, program} ->
+                {:ok, object_buffer, program}
+
+              {:error, reason} ->
+                cleanup_object_buffer(port, object_buffer)
+                {:error, reason}
+            end
+
+          {:error, reason} ->
+            cleanup_object_buffer(port, object_buffer)
+            {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp create_retained_render_program(port, object_buffer, strip_h, sources) do
+    RenderProgram.create(
+      port,
+      type: :striped_sprite_transform,
+      object_buffer: object_buffer,
+      sources: sources,
+      strip_height: strip_h,
+      background_color: @bg,
+      transparent_color: retained_transparent_color(),
+      update: @retained_update_policy,
+      zoom_min: zoom_from_x1024(@zoom_min_x1024),
+      zoom_max: zoom_from_x1024(@zoom_max_x1024)
+    )
+  end
+
+  defp retained_transparent_color do
+    if @use_transparent_key do
+      @transparent_key_color565
+    else
+      nil
+    end
+  end
+
+  defp retained_source_handles(icon_handles) do
+    case @obj_icon_count do
+      1 ->
+        [elem(icon_handles, 0)]
+
+      2 ->
+        [elem(icon_handles, 0), elem(icon_handles, 1)]
+
+      3 ->
+        [elem(icon_handles, 0), elem(icon_handles, 1), elem(icon_handles, 2)]
+
+      _ ->
+        [
+          elem(icon_handles, 0),
+          elem(icon_handles, 1),
+          elem(icon_handles, 2),
+          elem(icon_handles, 3)
+        ]
+    end
+  end
+
+  defp retained_object_records(objects, icon_handles) do
+    retained_object_records_i(objects, retained_source_handles(icon_handles), [])
+  end
+
+  defp retained_object_records_i([], _sources, acc), do: {:ok, :lists.reverse(acc)}
+
+  defp retained_object_records_i(
+         [{x, y, dx, dy, src, angle_cdeg, zoom_x1024, dangle_cdeg, dzoom_x1024} | rest],
+         sources,
+         acc
+       ) do
+    with {:ok, source_index} <- source_index_for_handle(sources, src, 0) do
+      object = {
+        source_index,
+        x,
+        y,
+        dx,
+        dy,
+        deg_from_cdeg(angle_cdeg),
+        zoom_from_x1024(zoom_x1024),
+        deg_from_cdeg(dangle_cdeg),
+        zoom_from_x1024(dzoom_x1024)
+      }
+
+      retained_object_records_i(rest, sources, [object | acc])
+    end
+  end
+
+  defp source_index_for_handle([], src_handle, _index) do
+    {:error, {:bad_retained_render_sources, src_handle}}
+  end
+
+  defp source_index_for_handle([current_handle | _rest], src_handle, index)
+       when current_handle == src_handle,
+       do: {:ok, index}
+
+  defp source_index_for_handle([_other | rest], src_handle, index) do
+    source_index_for_handle(rest, src_handle, index + 1)
+  end
+
+  defp monitor_retained_renderer(port, program, last_frame_count, last_poll_ms, target_announced?) do
+    receive do
+    after
+      @retained_stats_poll_ms ->
+        case RenderProgram.stats(port, program) do
+          {:ok, %{running: true} = stats} ->
+            now_ms = monotonic_ms()
+            fps = retained_fps(stats.frame_count - last_frame_count, now_ms - last_poll_ms)
+            maybe_log_target_fps(fps, target_announced?)
+            log_retained_stats(stats, fps)
+
+            monitor_retained_renderer(
+              port,
+              program,
+              stats.frame_count,
+              now_ms,
+              target_announced? or fps >= @target_fps
+            )
+
+          {:ok, %{running: false}} ->
+            {:error, :retained_renderer_stopped}
+
+          {:error, reason} ->
+            IO.puts("moving_icons render failed: #{AtomLGFX.format_error(reason)}")
+            {:error, reason}
+        end
+    end
+  end
+
+  defp retained_fps(frame_delta, elapsed_ms)
+       when is_integer(frame_delta) and frame_delta > 0 and is_integer(elapsed_ms) and
+              elapsed_ms > 0 do
+    div(frame_delta * 1000 + div(elapsed_ms, 2), elapsed_ms)
+  end
+
+  defp retained_fps(_frame_delta, _elapsed_ms), do: 0
+
+  defp maybe_log_target_fps(fps, true) when is_integer(fps), do: :ok
+
+  defp maybe_log_target_fps(fps, false) when is_integer(fps) and fps >= @target_fps do
+    IO.puts("moving_icons target_fps=#{@target_fps} reached fps=#{fps}")
+    :ok
+  end
+
+  defp maybe_log_target_fps(_fps, false), do: :ok
+
+  defp log_retained_stats(stats, fps) do
+    IO.puts(
+      "moving_icons stats " <>
+        "renderer=retained_native " <>
+        "obj_count=#{stats.object_count} " <>
+        "fps=#{fps} " <>
+        "target_fps=#{@target_fps} " <>
+        "frame_ms=#{round_us_to_ms(stats.last_frame_us)} " <>
+        "update_ms=#{round_us_to_ms(stats.last_update_us)} " <>
+        "draw_ms=#{round_us_to_ms(stats.last_draw_us)} " <>
+        "present_ms=#{round_us_to_ms(stats.last_present_us)} " <>
+        "drawn=#{stats.drawn_count} " <>
+        "culled=#{stats.culled_count} " <>
+        "strip_h=#{stats.strip_height}"
+    )
+  end
+
+  defp round_us_to_ms(value) when is_integer(value) and value >= 0 do
+    div(value + 500, 1000)
+  end
+
+  defp round_us_to_ms(_value), do: 0
+
+  defp cleanup_retained_renderer(port, object_buffer, program) do
+    _ = safe_stop_render_program(port, program)
+    _ = safe_destroy_render_program(port, program)
+    _ = cleanup_object_buffer(port, object_buffer)
+    :ok
+  end
+
+  defp safe_stop_render_program(port, handle) do
+    case RenderProgram.stop(port, handle) do
+      :ok -> :ok
+      {:error, _} -> :ok
+    end
+  end
+
+  defp safe_destroy_render_program(port, handle) do
+    case RenderProgram.destroy(port, handle) do
+      :ok -> :ok
+      {:error, _} -> :ok
+    end
+  end
+
+  defp cleanup_object_buffer(port, handle) do
+    case AtomLGFX.delete_object_buffer(port, handle) do
+      :ok -> :ok
+      {:error, _} -> :ok
     end
   end
 
@@ -182,15 +420,7 @@ defmodule SampleApp.MovingIcons do
   # Setup / capabilities
   # -----------------------------------------------------------------------------
 
-  defp required_sprite_count do
-    case {@frame_render_mode, @frame_submit_mode} do
-      {:direct_lcd, _submit_mode} -> 4
-      {:strip_buffers, :binary_batch} -> 4
-      {:auto, :binary_batch} -> 4
-      {:strip_buffers, _submit_mode} -> 6
-      {:auto, _submit_mode} -> 6
-    end
-  end
+  defp required_sprite_count, do: 4
 
   defp ensure_sprite_support(%{feature_bits: feature_bits, max_sprites: max_sprites}, needed) do
     cond do
@@ -1354,7 +1584,13 @@ defmodule SampleApp.MovingIcons do
 
   defp log_render_config do
     IO.puts(
-      "moving_icons config obj_count=#{@obj_count} icon_count=#{@obj_icon_count} render_mode=#{inspect(@frame_render_mode)} submit_mode=#{inspect(@frame_submit_mode)} draw_mode=#{inspect(@moving_icons_draw_mode)}"
+      "moving_icons config " <>
+        "obj_count=#{@obj_count} " <>
+        "icon_count=#{@obj_icon_count} " <>
+        "renderer=retained_native " <>
+        "update=#{@retained_update_policy} " <>
+        "target_fps=#{@target_fps} " <>
+        "requested_native_strip_h=#{@requested_native_presentation_strip_h}"
     )
   end
 

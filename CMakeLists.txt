@@ -491,6 +491,7 @@ idf_component_register(
         "lgfx_device/images.cpp"
         "lgfx_device/clip.cpp"
         "lgfx_device/sprites.cpp"
+        "lgfx_device/render_programs.cpp"
     INCLUDE_DIRS
         "include"
     PRIV_INCLUDE_DIRS

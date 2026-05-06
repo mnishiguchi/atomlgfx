@@ -103,6 +103,14 @@ This table documents the implemented protocol surface.
 | `pushRotateZoomList` | `LGFX_OP_TARGET_ANY` | `Fmask(LGFX_F_TRANSPARENT_INDEX)` | `6` | `requires_init` | `LGFX_CAP_SPRITE` | `batch` |
 | `submitBinaryBatch` | `T0/bad_target` | `F0` | `6` | `requires_init` | `LGFX_CAP_BATCH` | `sync` |
 | `getPresentationStripHeight` | `T0/bad_target` | `F0` | `5` | `requires_init` | `LGFX_CAP_BATCH` | `sync` |
+| `createObjectBuffer` | `T0/bad_target` | `F0` | `7` | `requires_init` | `LGFX_CAP_RETAINED_RENDER` | `sync` |
+| `writeObjectBuffer` | `T0/bad_target` | `F0` | `7` | `requires_init` | `LGFX_CAP_RETAINED_RENDER` | `payload`<br>`sync` |
+| `deleteObjectBuffer` | `T0/bad_target` | `F0` | `6` | `requires_init` | `LGFX_CAP_RETAINED_RENDER` | `sync` |
+| `createRenderProgram` | `T0/bad_target` | `F0` | `15` | `requires_init` | `LGFX_CAP_RETAINED_RENDER` | `payload`<br>`sync` |
+| `startRenderProgram` | `T0/bad_target` | `F0` | `7` | `requires_init` | `LGFX_CAP_RETAINED_RENDER` | `sync` |
+| `stopRenderProgram` | `T0/bad_target` | `F0` | `6` | `requires_init` | `LGFX_CAP_RETAINED_RENDER` | `sync` |
+| `getRenderProgramStats` | `T0/bad_target` | `F0` | `6` | `requires_init` | `LGFX_CAP_RETAINED_RENDER` | `sync` |
+| `destroyRenderProgram` | `T0/bad_target` | `F0` | `6` | `requires_init` | `LGFX_CAP_RETAINED_RENDER` | `sync` |
 <!-- END:generated_ops_matrix -->
 
 ## Generated capability vocabulary
@@ -118,4 +126,5 @@ This table documents the implemented protocol surface.
 | `LGFX_CAP_TOUCH` | `CAP_TOUCH` | `3` | `0x0008` | `ops.def` feature_cap_bit |
 | `LGFX_CAP_PALETTE` | `CAP_PALETTE` | `4` | `0x0010` | `ops.def` feature_cap_bit |
 | `LGFX_CAP_BATCH` | `CAP_BATCH` | `5` | `0x0020` | `ops.def` feature_cap_bit |
+| `LGFX_CAP_RETAINED_RENDER` | `CAP_RETAINED_RENDER` | `6` | `0x0040` | `ops.def` feature_cap_bit |
 <!-- END:generated_caps_table -->

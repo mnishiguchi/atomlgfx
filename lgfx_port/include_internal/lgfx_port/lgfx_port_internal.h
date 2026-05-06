@@ -46,10 +46,13 @@ typedef struct
     term internal;
     term unsupported;
     term not_initialized;
+    term resource_busy;
+    term renderer_running;
 
     term caps;
     term last_error;
     term none;
+    term render_program_stats;
 
 } lgfx_atoms_t;
 

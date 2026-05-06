@@ -362,7 +362,14 @@ term lgfx_handle_createSprite(Context *ctx, lgfx_port_t *port, const lgfx_reques
 
 term lgfx_handle_deleteSprite(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
-    LGFX_RETURN_IF_ESP_ERR(ctx, port, req, lgfx_device_sprite_delete((uint8_t) req->target));
+    const esp_err_t err = lgfx_device_sprite_delete((uint8_t) req->target);
+    if (err == ESP_ERR_INVALID_STATE) {
+        return reply_error(ctx, port, req, port->atoms.resource_busy, (int32_t) err);
+    }
+    if (err != ESP_OK) {
+        return lgfx_reply_from_esp_err_req(ctx, port, req, err);
+    }
+
     return reply_ok(ctx, port, req, port->atoms.ok);
 }
 

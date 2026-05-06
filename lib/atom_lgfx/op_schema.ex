@@ -19,7 +19,15 @@ defmodule AtomLGFX.OpSchema do
             allowed_flags: non_neg_integer(),
             target_policy: :bad_target | :any | :sprite_only,
             state_policy: :any | :requires_init,
-            capability: nil | :sprite | :pushimage | :last_error | :touch | :palette | :batch,
+            capability:
+              nil
+              | :sprite
+              | :pushimage
+              | :last_error
+              | :touch
+              | :palette
+              | :batch
+              | :retained_render,
             batchable: boolean(),
             needs_owned_payload: boolean(),
             sync_only: boolean(),
