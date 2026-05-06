@@ -18,7 +18,7 @@ Supersedes:
 
 `atomlgfx` v2 introduced `BinaryBatch` to reduce AtomVM/native crossing overhead for frame rendering.
 
-During MVP work, the binary-batch surface expanded to include several render-private packed-list commands for generic primitive shapes, whole-sprite list blits, sprite-region list blits, JPEG drawing, and RGB565 image pushing.
+During v2 protocol development, the binary-batch surface expanded to include several render-private packed-list commands for generic primitive shapes, whole-sprite list blits, sprite-region list blits, JPEG drawing, and RGB565 image pushing.
 
 Those commands made the batch path more expressive, but they also increased maintenance cost across:
 
@@ -33,11 +33,11 @@ Those commands made the batch path more expressive, but they also increased main
 
 MovingIcons-focused measurements showed that the most important retained hot path is transformed-sprite animation. In particular, `push_rotate_zoom_list` is useful as a generic transformed-sprite batch primitive, and `push_rotate_zoom_frame_strips` is useful as a native frame command for MovingIcons-like workloads where the upstream LovyanGFX example keeps the strip loop in C++.
 
-The speculative packed-list commands for generic primitive shapes and atlas-style sprite regions did not justify their maintenance cost for the v2 MVP.
+The speculative packed-list commands for generic primitive shapes and atlas-style sprite regions did not justify their maintenance cost for the v2 protocol.
 
 ## Decision
 
-Keep `BinaryBatch` as the v2 render transaction API, but intentionally minimize its retained MVP surface.
+Keep `BinaryBatch` as the v2 render transaction API, but intentionally minimize the retained binary-batch surface.
 
 Retain only command categories that are justified by ordinary render-script ergonomics or measured hot-path value:
 
@@ -48,7 +48,7 @@ Retain only command categories that are justified by ordinary render-script ergo
 - `push_rotate_zoom_list` for generic transformed-sprite batch work
 - `push_rotate_zoom_frame_strips` for measured native-loop animation workloads
 
-Remove speculative batch commands before the v2 MVP freeze:
+Remove speculative batch commands before the v2 protocol freeze:
 
 - packed primitive-list commands for generic shapes
 - whole-sprite list and sprite-region list commands
@@ -56,7 +56,7 @@ Remove speculative batch commands before the v2 MVP freeze:
 - batch-level RGB565 image pushing
 - the extended ellipse-list sub-opcode
 
-Payload-heavy image operations remain available as ordinary scalar calls. They are not retained in `BinaryBatch` for the MVP because their payload lifetime, framing, and copying rules increase the batch contract surface without helping the measured animation hot path.
+Payload-heavy image operations remain available as ordinary scalar calls. They are not retained in `BinaryBatch` for the v2 protocol because their payload lifetime, framing, and copying rules increase the batch contract surface without helping the measured animation hot path.
 
 ## Retained layering
 
@@ -75,7 +75,7 @@ native frame render command
 
 ## Rationale
 
-The v2 MVP should optimize for a small maintainable protocol surface while preserving the measured performance path that motivated v2.
+The finalized v2 protocol optimizes for a small maintainable protocol surface while preserving the measured performance path that motivated v2.
 
 Repeated primitive drawing can still be expressed as repeated scalar commands inside one binary batch. That costs more bytes than a packed-list command, but it avoids a parallel compact record format for every primitive shape.
 
@@ -89,7 +89,7 @@ New compact list commands may be reintroduced later, but only when a real worklo
 - Smaller Elixir encoder and decoder surface.
 - Less protocol documentation and generated-reference churn.
 - Fewer malformed-input and freeze-test cases to maintain.
-- Clearer MVP contract.
+- Clearer v2 contract.
 - Keeps the transformed-sprite path that matters for MovingIcons-like workloads.
 - Keeps room for future measured additions without freezing speculative commands now.
 
@@ -110,7 +110,7 @@ Implementation existence is not enough to justify protocol surface. Each retaine
 
 ### Keep primitive packed-list commands but remove sprite-region commands only
 
-Rejected for the MVP.
+Rejected for the v2 protocol.
 
 The same maintenance argument applies to primitive packed-list commands. Repeated scalar batch commands are adequate until a benchmark proves otherwise.
 

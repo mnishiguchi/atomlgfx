@@ -23,7 +23,7 @@ The representative workloads are:
 - MovingIcons-style animation with many sprite blits or transformed sprite blits per frame
 - Stack-chan-style face rendering with sprite-backed drawing and palette-index colors
 
-The v2 MVP proved that the call-based protocol is viable, but it also showed that ordinary synchronous calls are not the right hot path for every-frame rendering.
+The initial v2 implementation proved that the call-based protocol is viable, but it also showed that ordinary synchronous calls are not the right hot path for every-frame rendering.
 
 Native-like animation needs this shape:
 

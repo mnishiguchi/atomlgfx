@@ -322,7 +322,7 @@ message = AtomLGFX.format_error({:bad_text_scale, -1})
 
 `AtomLGFX.BinaryBatch` には、render script 向けの命令ビルダーがあります。
 
-v2 MVP では、保守しやすさを優先して BinaryBatch の面を小さく保ちます。通常の描画は scalar 命令を 1 つの batch に並べ、測定済みの高負荷経路だけ compact な一覧命令または native frame 命令として残します。
+v2 protocol では、保守しやすさを優先して BinaryBatch の面を小さく保ちます。通常の描画は scalar 命令を 1 つの batch に並べ、測定済みの高負荷経路だけ compact な一覧命令または native frame 命令として残します。
 
 主なビルダーは次のとおりです。
 
@@ -396,9 +396,9 @@ frame = [
 
 `push_rotate_zoom_frame_strips/2` は、変換スプライト一覧をネイティブ側のストリップループで描画する高負荷アニメーション向け命令です。Elixir 側はオブジェクト状態を持ち、ネイティブ側はストリップの消去、描画、転送をまとめて実行します。通常の描画ではなく、測定済みの熱い描画経路に限定して使います。
 
-`draw_jpg` と `push_image_rgb565` は、MVP の BinaryBatch には含めません。画像のような大きな payload は通常の scalar API で扱う方針です。
+`draw_jpg` と `push_image_rgb565` は、v2 protocol の BinaryBatch には含めません。画像のような大きな payload は通常の scalar API で扱う方針です。
 
-render-private opcode は `protocol.h` に集約し、Elixir 側では一覧を `AtomLGFX.BinaryBatch` に集約しています。テストでは両者を照合し、MVP の batch 面が不用意に広がらないようにします。
+render-private opcode は `protocol.h` に集約し、Elixir 側では一覧を `AtomLGFX.BinaryBatch` に集約しています。テストでは両者を照合し、v2 protocol の batch 面が不用意に広がらないようにします。
 
 生成した render script を確認したい場合は、`AtomLGFX.BinaryBatch.decode/1` を使えます。ネイティブ側の `{:batch_failed, index, opcode, reason}` と照合しやすいように、各命令は `index` と `opcode` を含む map として返ります。
 
@@ -452,9 +452,9 @@ case AtomLGFX.BinaryBatch.diagnose(frame) do
 end
 ```
 
-### v2 MVP 完了条件
+### v2 protocol 確定条件
 
-v2 MVP は、次の条件を満たした時点で完了とみなせます。
+v2 protocol は、次の条件を満たした時点で確定とみなせます。
 
 - `mix test` が通る
 - `elixir scripts/sync_lgfx_protocol_doc.exs --check` が通る
@@ -464,7 +464,7 @@ v2 MVP は、次の条件を満たした時点で完了とみなせます。
 - `0xF0..0xFF` の render-private opcode 範囲を不用意に広げない
 - スプライト生成、削除、照会、タッチ操作、補正、低頻度の制御は通常の API に残す
 
-ここまで満たせていれば、v2 MVP としては十分です。以後は wire format を増やすよりも、Stack-chan などの実例で測定し、`summary/1`、`compare/2`、`check_budget/2` を使って frame script を調整するのが安全です。
+ここまで満たせていれば、v2 protocol の基準としては十分です。以後は wire format を増やすよりも、Stack-chan などの実例で測定し、`summary/1`、`compare/2`、`check_budget/2` を使って frame script を調整するのが安全です。
 
 ### 使い分け
 

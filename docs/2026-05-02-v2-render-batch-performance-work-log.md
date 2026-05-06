@@ -133,4 +133,4 @@ The active v2 hot-rendering decisions are now:
 
 Later benchmarking showed that primitive render batches are necessary but not always sufficient for the hottest animation loops. For MovingIcons-style workloads, the accepted direction is to keep animation state in Elixir while allowing selected generic native frame render commands to own the tight strip-rendering loop.
 
-Before the v2 MVP freeze, speculative packed-list commands such as whole-sprite list blits, sprite-region list blits, and generic primitive shape lists were removed from the active batch surface. Their measurements remain useful history, but they are not part of the retained MVP protocol.
+Before the v2 protocol freeze, speculative packed-list commands such as whole-sprite list blits, sprite-region list blits, and generic primitive shape lists were removed from the active batch surface. Their measurements remain useful history, but they are not part of the retained v2 protocol.

@@ -17,7 +17,7 @@ defmodule AtomLGFX.BinaryBatch do
   `push_rotate_zoom_list/2`, and `push_rotate_zoom_frame_strips/2`.
 
   Speculative packed-list commands for generic primitive shapes were intentionally
-  removed before the v2 MVP freeze. Repeated primitive drawing should use ordinary
+  removed before the v2 protocol freeze. Repeated primitive drawing should use ordinary
   scalar batch commands unless a future measured workload justifies a compact
   list command.
   """

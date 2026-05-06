@@ -154,16 +154,16 @@ The render-private opcode space is intentionally small.
 
 To avoid spending scarce private opcode values on every new frame-level command, `0xFF` may be used as an extended render opcode. Extended render commands should use a sub-opcode inside the extended command payload.
 
-The retained MVP extended command is:
+The retained v2 extended command is:
 
 ```text
 0xFF / subop 0x01
   transformed-sprite frame command for native presentation strips
 ```
 
-Earlier experiments also used extended sub-opcodes for speculative packed-list commands. Those commands were intentionally removed before the v2 MVP freeze by [ADR 2026-05-05: Keep BinaryBatch minimal and measured](./2026-05-05-keep-binary-batch-minimal-and-measured.md).
+Earlier experiments also used extended sub-opcodes for speculative packed-list commands. Those commands were intentionally removed before the v2 protocol freeze by [ADR 2026-05-05: Keep BinaryBatch minimal and measured](./2026-05-05-keep-binary-batch-minimal-and-measured.md).
 
-This keeps the render opcode space open for future frame-level commands while avoiding speculative MVP surface area.
+This keeps the render opcode space open for future frame-level commands while avoiding speculative protocol surface area.
 
 ## Rules
 

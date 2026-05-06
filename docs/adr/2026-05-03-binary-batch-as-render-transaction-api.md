@@ -136,9 +136,9 @@ The current implementation includes:
 
 Detailed wire layouts belong in [the protocol document](../protocol.md) and generated tables belong in [the protocol reference](../protocol-reference.md), not in this ADR.
 
-## MVP completion criteria
+## v2 baseline acceptance criteria
 
-The v2 MVP can be treated as complete when:
+The v2 baseline can be treated as accepted when:
 
 - `mix test` passes on the host development machine
 - `elixir scripts/sync_lgfx_protocol_doc.exs --check` passes
@@ -147,7 +147,7 @@ The v2 MVP can be treated as complete when:
 - `ops.def` batch metadata, generated Elixir metadata, native render-private opcodes, and protocol freeze tests agree
 - scalar APIs remain the preferred path for setup, allocation, query, touch, calibration, and low-frequency control operations
 
-Post-MVP work should be driven by measured examples and ergonomics rather than expanding the wire format by default.
+Follow-up work should be driven by measured examples and ergonomics rather than expanding the wire format by default.
 
 ## Non-goals
 

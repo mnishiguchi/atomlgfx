@@ -18,7 +18,7 @@ Render-batching details were superseded by [ADR 2026-05-03: Treat BinaryBatch as
 
 This project is an AtomVM ESP-IDF component that exposes LovyanGFX functionality to Elixir code running on AtomVM.
 
-The existing MVP, `atomlgfx`, proves that the concept works. It can call LovyanGFX from AtomVM and render graphics on ESP32 devices. However, the current native implementation has become larger than desirable for what is fundamentally a thin wrapper around the upstream LovyanGFX library.
+The existing `atomlgfx` implementation proves that the concept works. It can call LovyanGFX from AtomVM and render graphics on ESP32 devices. However, the current native implementation has become larger than desirable for what is fundamentally a thin wrapper around the upstream LovyanGFX library.
 
 The main source of complexity is that each LovyanGFX operation tends to require repeated native plumbing:
 
@@ -543,7 +543,7 @@ This keeps the handwritten native code focused on runtime concerns instead of AP
 
 ### One native function per LovyanGFX operation
 
-This is the approach used by the MVP.
+This is the approach used by the earlier implementation.
 
 It is explicit and easy to reason about for a small number of operations, but it creates too much repeated native code as the API surface grows.
 
@@ -597,7 +597,7 @@ Rejected because some operations are inappropriate across the AtomVM port bounda
 
 The accepted design is a curated public API with an optional raw escape hatch.
 
-## Initial MVP scope
+## Initial v2 scope
 
 The first implementation should support a small but useful subset of LovyanGFX operations.
 

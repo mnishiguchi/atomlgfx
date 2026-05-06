@@ -56,7 +56,7 @@ In short:
 - ordinary operations execute immediately
 - ordinary operations return real success or failure immediately
 - binary batching is explicit and opt-in
-- the binary-batch MVP surface is intentionally small and measured
+- the v2 binary-batch surface is intentionally small and measured
 - frame scripts are built in Elixir and executed natively
 - native presentation policy stays in `lgfx_device`
 - `startWrite` / `endWrite` grouping is internal to binary-batch execution
@@ -139,7 +139,7 @@ Properties:
 - malformed commands or device/runtime failures can stop execution after earlier commands have run
 - `startWrite` / `endWrite` grouping happens inside batch execution
 - command-local state controls render target and color interpretation
-- speculative compact list commands stay out of the MVP unless measured workloads justify them
+- speculative compact list commands stay out of the v2 protocol unless measured workloads justify them
 
 ## Responsibility split
 

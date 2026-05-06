@@ -144,7 +144,7 @@ defmodule AtomLGFX.BinaryBatchTest do
 
       for {name, arity} <- removed do
         refute function_exported?(BinaryBatch, name, arity),
-               "#{name}/#{arity} should stay outside the v2 MVP BinaryBatch surface"
+               "#{name}/#{arity} should stay outside the v2 protocol BinaryBatch surface"
       end
     end
   end
