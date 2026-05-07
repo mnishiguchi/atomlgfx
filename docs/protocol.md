@@ -146,7 +146,7 @@ Conventions:
 
 ## Execution model at the protocol boundary
 
-The protocol exposes two operation styles:
+The protocol exposes three operation styles:
 
 - ordinary operations
   - execute immediately
@@ -157,6 +157,11 @@ The protocol exposes two operation styles:
   - one binary contains one frame script
   - execution is synchronous
   - success means the script was fully decoded and executed
+
+- retained native render programs
+  - resource creation and updates are explicit and caller-owned
+  - native code owns the hot frame loop after `startRenderProgram`
+  - execution continues in the background until `stopRenderProgram` or `destroyRenderProgram`
 
 This distinction is part of the external contract for `AtomLGFX.submit_binary_batch/2`.
 Internal execution timing and runtime structure are implementation details.
@@ -216,6 +221,12 @@ For explicit batching:
   within the render path
 - callers should not assume that any payload-bearing ordinary op is automatically
   batchable; only documented `AtomLGFX.BinaryBatch` builders are in scope
+
+For retained native render programs:
+
+- `writeObjectBuffer` copies caller bytes into a native retained buffer
+- `createRenderProgram` copies source-handle bytes into native retained state
+- the driver must not retain raw pointers into caller binaries after the request returns
 
 ## Common data and encodings
 
@@ -460,6 +471,10 @@ Meaning:
   - binary batch submission is available
   - specifically `submitBinaryBatch` / `AtomLGFX.submit_binary_batch/2`
 
+- `CAP_RETAINED_RENDER`
+  - retained native render-program operations are available
+  - specifically object-buffer and render-program lifecycle calls
+
 Touch note:
 
 - `CAP_TOUCH` is advertised only when touch support is enabled in the build and touch is attached
@@ -476,6 +491,60 @@ Elixir callers should build frame scripts with `AtomLGFX.BinaryBatch` and submit
 For generated or experimental frame scripts, `AtomLGFX.BinaryBatch.validate/1` can preflight the stream without calling native code, and `AtomLGFX.BinaryBatch.render_checked/2` validates before submitting. This gives callers an opt-in no-partial-render safety path when native `LGFX_PORT_RENDER_BATCH_PREVALIDATE` is disabled. `AtomLGFX.BinaryBatch.summary/1` reports diagnostic counts such as batch bytes, render-private command count, dynamic payload bytes, fixed overhead bytes, retained packed-list record bytes, retained packed-list command count, retained packed-list instance count, and integer x1000 wire-efficiency ratios without calling native code. `AtomLGFX.BinaryBatch.diagnose/1` returns the same summary information for valid streams and partial context for invalid streams, including failing command index, opcode, best-effort operation name, and last successfully decoded command. `AtomLGFX.BinaryBatch.compare/2` compares a baseline frame script with a candidate frame script using the same summary metrics. `AtomLGFX.BinaryBatch.check_budget/2` validates the same diagnostic metrics against caller-provided limits, which is useful for CI and generated-frame guardrails.
 
 The v2 protocol intentionally keeps the binary-batch surface small. Generic primitive packed-list commands, sprite-region list commands, batch-level JPEG drawing, and batch-level RGB565 image pushing are not part of the retained v2 batch surface.
+
+## Retained native render programs
+
+Retained render programs are the native hot-loop extension accepted by
+[ADR 2026-05-06](adr/2026-05-06-retained-native-render-programs-for-hot-display-loops.md).
+
+Initial scope:
+
+- one object-buffer layout: `sprite_transform_2d`
+- one render-program type: `striped_sprite_transform`
+- two native update policies: `none` and `bounce`
+- one renderer mode: `exclusive`
+
+The retained protocol uses ordinary v2 request tuples. It does not introduce a
+new protocol version or a second outer envelope.
+
+Current retained lifecycle shape:
+
+```text
+createObjectBuffer(layout_id, capacity)
+writeObjectBuffer(handle, RecordsBinary)
+deleteObjectBuffer(handle)
+
+createRenderProgram(type_id, object_buffer_handle, SourceHandlesBinary, strip_height,
+                    background_color, update_policy, has_transparent,
+                    transparent_value, zoom_min_x1024, zoom_max_x1024)
+startRenderProgram(handle, mode_id)
+stopRenderProgram(handle)
+getRenderProgramStats(handle)
+destroyRenderProgram(handle)
+```
+
+Current `sprite_transform_2d` retained object record:
+
+```text
+source_index     u8
+reserved         u8 = 0
+x                i16le
+y                i16le
+vx               i16le
+vy               i16le
+angle_cdeg       u16le
+zoom_x1024       u16le
+dangle_cdeg      i16le
+dzoom_x1024      i16le
+```
+
+Rules:
+
+- `writeObjectBuffer` replaces the full retained object-buffer contents
+- empty object-buffer writes are allowed and clear the retained object count
+- `startRenderProgram(mode=exclusive)` grants native exclusive display ownership while running
+- ordinary drawing calls are rejected while an exclusive retained renderer is active
+- object buffers and source sprites must outlive the render programs that reference them
 
 ### Wire shape
 

@@ -14,9 +14,6 @@ This repository contains two closely related deliverables:
 - an Elixir package that provides the `AtomLGFX` wrapper module for that driver
 
 Both layers share the same current protocol and are intended to evolve together.
-Ordinary operations use a synchronous tuple call shape. The current batch fast
-path is a binary batch frame script submitted with
-`AtomLGFX.submit_binary_batch/2`.
 
 ## What to read
 

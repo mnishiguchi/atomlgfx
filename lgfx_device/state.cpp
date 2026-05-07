@@ -972,6 +972,29 @@ esp_err_t lock_ready(ScopedLcdLock &lock)
         return ESP_ERR_INVALID_STATE;
     }
 
+    if (lgfx_dev::retained_renderer_running()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    return ESP_OK;
+}
+
+esp_err_t lock_published_ready_ignoring_exclusive(ScopedLcdLock &lock)
+{
+    esp_err_t err = lgfx_dev::ensure_published();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    lock.lock();
+    if (!lock.is_locked()) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    if (!g_device_ready || !g_lcd_device) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
     return ESP_OK;
 }
 
@@ -1535,6 +1558,11 @@ static esp_err_t lgfx_device_deinit_for_owner(const void *owner_token)
         return snapshot_is_fully_unpublished(snapshot) ? ESP_OK : ESP_ERR_INVALID_STATE;
     }
 
+    esp_err_t stop_err = lgfx_dev::retained_stop_active_renderer();
+    if (stop_err != ESP_OK) {
+        return stop_err;
+    }
+
     // Idempotent teardown for the owning port. Allow close even if begin() never ran.
     ensure_lcd_mutex_created();
     if (!g_lcd_mutex) {
@@ -1554,6 +1582,7 @@ static esp_err_t lgfx_device_deinit_for_owner(const void *owner_token)
     // Keep the held mutex handle so it can be deleted at the end.
     SemaphoreHandle_t mutex_to_delete = g_lcd_mutex;
 
+    lgfx_dev::retained_destroy_all_locked();
     (void) lgfx_dev::presentation_destroy_buffers_locked();
     lgfx_dev::destroy_all_sprites_locked();
 

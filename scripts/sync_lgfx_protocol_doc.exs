@@ -840,6 +840,7 @@ defmodule Main do
   defp generated_capability("LGFX_CAP_TOUCH"), do: :touch
   defp generated_capability("LGFX_CAP_PALETTE"), do: :palette
   defp generated_capability("LGFX_CAP_BATCH"), do: :batch
+  defp generated_capability("LGFX_CAP_RETAINED_RENDER"), do: :retained_render
 
   defp generated_capability(feature_cap_bit) do
     raise "Unknown feature capability in ops.def: #{feature_cap_bit}"

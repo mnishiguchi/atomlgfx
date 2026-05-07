@@ -15,23 +15,16 @@ This project is still pre-release. Until a versioned release is cut, entries des
 ### Added
 
 - Added the v2 call-based protocol for ordinary LovyanGFX operations.
-- Added generated operation metadata around `lgfx_port/include_internal/lgfx_port/ops.def`.
-- Added generated protocol reference tables in `docs/protocol-reference.md`.
-- Added generated Elixir operation metadata in `lib/atom_lgfx/generated.ex`.
-- Derived Elixir protocol validation metadata from generated `ops.def` metadata instead of hand-maintained maps.
+- Added generated operation metadata, protocol reference tables, and Elixir validation metadata derived from `ops.def`.
 - Added explicit binary batching through `AtomLGFX.BinaryBatch` and `AtomLGFX.submit_binary_batch/2`.
-- Added `AtomLGFX.BinaryBatch.batch/1` to combine packed command fragments into one binary stream.
 - Added capability discovery for binary batch support.
-- Added protocol freeze and generated metadata consistency tests.
-- Added hardware smoke and performance notes for v2 validation.
+- Added retained native render programs with object buffers, lifecycle control, renderer stats, and Elixir helpers.
 
 ### Changed
 
-- Reworked the native port layer around a flatter metadata-driven dispatch structure.
-- Kept ordinary operations synchronous: the call that performs the operation returns its success or failure.
-- Moved grouped rendering work away from tuple/list command batches toward one explicit render command stream.
-- Clarified target, color, palette, sprite, text, JPEG, and image payload semantics in the protocol documentation.
-- Simplified the example application around smoke checks and performance checks.
+- Reworked the native port layer around flatter metadata-driven dispatch.
+- Clarified protocol semantics for targets, colors, palettes, sprites, text, JPEG, and image payloads.
+- Simplified the example application around smoke checks, performance checks, and retained native rendering.
 
 ### Removed
 
@@ -43,8 +36,8 @@ This project is still pre-release. Until a versioned release is cut, entries des
 
 - v2 is not wire-compatible with v1 batch usage.
 - The native driver and Elixir wrapper must be updated together.
-- Public Elixir-facing low-level operation names are canonical `snake_case` atoms.
-- LovyanGFX-style `camelCase` atoms are not part of the v2 Elixir-facing protocol; use canonical `snake_case` operation names.
+- Public low-level Elixir operation names use canonical `snake_case` atoms.
+- LovyanGFX-style `camelCase` atoms are not part of the v2 Elixir-facing protocol.
 
 ## v1 baseline
 

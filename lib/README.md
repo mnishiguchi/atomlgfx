@@ -6,26 +6,79 @@ SPDX-License-Identifier: Apache-2.0
 
 # AtomLGFX
 
-`AtomLGFX` は、AtomVM 上から LovyanGFX 系の表示機能を扱うための Elixir 窓口です。
+`AtomLGFX` は、AtomVM 上の Elixir から `lgfx_port` ドライバーを通じて LovyanGFX 系の表示機能を扱うためのライブラリーです。
 
-公開 API は、小さく扱いやすい LovyanGFX 風の形を目指しています。
+基本的な描画の考え方は LovyanGFX に合わせています。一方で、AtomVM から安全に使いやすくするために、開始時設定、返り値、明示的バッチ、保持型ネイティブ描画シーンなどは atomlgfx 独自の仕組みとして整理しています。
 
-- 文字倍率は `1`、`2`、`1.5` のような自然な数値で指定できます
-- 回転角は度数法で指定できます
-- 拡大率は `1.0`、`2.0`、`0.5` のような自然な数値で指定できます
+最初は通常の API だけを使い、LCD に文字や図形を表示するところから始めるのがおすすめです。その後、必要に応じてスプライト、明示的バッチ、保持型ネイティブ描画シーンへ進んでください。
 
-通常の操作は同期的に使えます。重い描画をまとめたい場合だけ、明示的にバッチを使います。
+## この README の読み方
+
+目的ごとのおすすめ順は次のとおりです。
+
+- 最初の 1 画面を表示したい: `はじめに` → `基本事項` → `開始と終了` → `表示制御` → `基本図形` → `文字`
+- スプライトや画像も使いたい: `スプライト` → `画像`
+- タッチ入力も使いたい: `タッチ`
+- 1 フレーム分の描画をまとめたい: `明示的バッチ`
+- 高負荷な表示ループをネイティブ側で動かしたい: `保持型ネイティブ描画シーン`
+
+ボード固有の既知設定から始めたい場合は、[M5Stack boards](../docs/boards/m5stack.md) も参照してください。
+
+## LovyanGFX に沿う部分と atomlgfx 固有の部分
+
+### LovyanGFX に沿う部分
+
+次のような描画操作は、LovyanGFX の使い方に近い考え方で扱えます。
+
+- LCD やスプライトを描画先にする
+- `fill_screen`, `draw_line`, `draw_rect`, `draw_string` などで描画する
+- スプライトを作成し、LCD や別のスプライトへ転送する
+- `push_rotate_zoom` 系の操作で、スプライトを回転・拡大縮小して描画する
+- 色は主に RGB565 整数で扱う
+- 角度は度数法、拡大率は `1.0`, `2.0`, `0.5` のような自然な数値で指定する
+
+関数名は Elixir らしく `snake_case` にしていますが、意味は LovyanGFX の操作に近づけています。
+
+### atomlgfx 固有の部分
+
+次の仕組みは、AtomVM から扱いやすくするための atomlgfx 固有の層です。
+
+- `open/1` と `init/1` を分けた開始手順
+- `:ok`, `{:ok, value}`, `{:error, reason}` の返り値
+- 対象番号 `0` を LCD、`1..254` をスプライトとして扱う規則
+- `AtomLGFX.Color` による色補助
+- `AtomLGFX.BinaryBatch` による明示的バッチ
+- `AtomLGFX.RenderScene` による保持型ネイティブ描画シーン
+- `get_caps/1` や `supports_*?/1` による機能確認
+
+通常の描画では、まず LovyanGFX に近い通常 API を使ってください。速度が問題になった段階で、atomlgfx 固有の高速化手段を選びます。
+
+## 描画経路の選び方
+
+AtomLGFX には、主に 3 つの描画経路があります。
+
+| 経路 | 使う場面 |
+| --- | --- |
+| 通常 API | 初期化、単発の描画、学習、動作確認 |
+| 明示的バッチ | Elixir 側で 1 フレーム分の描画をまとめたいとき |
+| 保持型ネイティブ描画シーン | 高負荷な表示ループをネイティブ側で継続実行したいとき |
+
+最初は通常 API を使います。`fill_screen/3`, `draw_line/7`, `draw_string/5`, `push_sprite/4` のような公開関数を直接呼ぶ形です。
+
+1 フレーム分の描画命令を Elixir 側でまとめたい場合は、`AtomLGFX.BinaryBatch.render/2` を使います。呼び出し回数を減らしたいときの選択肢です。
+
+毎フレームの重い描画ループをネイティブ側へ寄せたい場合は、`AtomLGFX.RenderScene` を使います。これは最適化向けの機能です。最初の動作確認や UI 試作から使い始める必要はありません。
 
 ## はじめに
 
 基本的な流れは次のとおりです。
 
-1. ドライバーを開く
-2. 疎通を確認する
-3. デバイスを初期化する
-4. 描画する
-5. 表示へ反映する
-6. 必要なら終了する
+1. `open/1` で開始時設定を記憶する
+2. `ping/1` で疎通を確認する
+3. `init/1` でネイティブデバイスを初期化する
+4. 図形や文字を描画する
+5. `display/1` で LCD へ反映する
+6. 必要なら `close/1` で終了する
 
 `ili9488` を使う最小例です。
 
@@ -50,17 +103,43 @@ SPDX-License-Identifier: Apache-2.0
 :ok = AtomLGFX.close(port)
 ```
 
+最初の動作確認では、描画より前に次の点を確認しておくと切り分けが速くなります。
+
+- `normalize_open_config/1` が成功すること
+- `width/2` と `height/2` が想定どおりの寸法を返すこと
+- `get_caps/1` で sprite, touch, batch などの利用可否を確認できること
+
+```elixir
+{:ok, normalized} =
+  AtomLGFX.normalize_open_config(
+    panel_driver: :ili9488,
+    width: 320,
+    height: 480
+  )
+
+{:ok, caps} = AtomLGFX.get_caps(port)
+{:ok, w} = AtomLGFX.width(port)
+{:ok, h} = AtomLGFX.height(port)
+```
+
 ## 基本事項
+
+### ライフサイクル
+
+`open/1` はポートを開き、そのポート用の開始時設定を Elixir 側に記憶します。実際にハードウェアを初期化するのは `init/1` です。
+
+`display/1` は、現在の描画結果を LCD へ反映します。描けているはずなのに画面が変わらない場合は、まず `display/1` を呼んでいるかを確認してください。
+
+`close/1` はネイティブ側のデバイス状態を終了します。BEAM のポート自体は閉じず、`open/1` で記憶した開始時設定も残ります。
+
+同時に生きているネイティブデバイスは 1 つです。複数ポートを開いても、実際のデバイス状態を所有できるのは 1 ポートだけです。
 
 ### 対象
 
-多くの関数は「対象」を扱います。
+多くの描画関数は「対象」を扱います。
 
-- `0`
-  - LCD
-
-- `1..254`
-  - スプライト番号
+- `0`: LCD
+- `1..254`: スプライト番号
 
 対象引数を省略できる関数では、通常 `0`、つまり LCD が使われます。
 
@@ -74,9 +153,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ### 色
 
-#### 表示色
-
-基本図形、文字色、非添字の透過色では RGB565 整数を使います。
+基本図形、文字色、透過色では主に RGB565 整数を使います。
 
 ```elixir
 0x0000
@@ -84,17 +161,11 @@ SPDX-License-Identifier: Apache-2.0
 0xF81F
 ```
 
-#### 添字色
-
-一部の関数では、添字色も使えます。
+パレット対応スプライトでは、添字色も使えます。
 
 ```elixir
 {:index, 3}
 ```
-
-添字色は、パレット対応スプライトに対してのみ有効です。
-
-#### パレット色
 
 `set_palette_color/4` では、`0x00RRGGBB` 形式の RGB888 整数を使います。
 
@@ -104,12 +175,7 @@ SPDX-License-Identifier: Apache-2.0
 0x00FF00
 ```
 
-#### スプライト転送時の透過色
-
-スプライト転送では、透過色として次のどちらかを指定できます。
-
-- RGB565 整数
-- 添字色
+スプライト転送時の透過色には、RGB565 整数または添字色を指定できます。
 
 ```elixir
 0x0000
@@ -118,7 +184,7 @@ SPDX-License-Identifier: Apache-2.0
 
 添字色による透過指定は、パレット対応の元スプライトに対してのみ有効です。
 
-#### 色補助
+### 色補助
 
 `AtomLGFX.Color` には、RGB565 表示色、RGB888 パレット色、添字色、RGB565 画素列を扱うための補助関数があります。
 
@@ -179,7 +245,11 @@ options = [
 {:ok, port} = AtomLGFX.open(options)
 ```
 
-`open/1` は、そのポート用の開始時設定を Elixir 側に記憶します。
+`open/1` は、そのポート用の開始時設定を Elixir 側に記憶します。実際のデバイス初期化は `init/1` で行われます。
+
+ピン設定を動的に組み立てる場合や、ボードの動作確認中に設定を切り分けたい場合は、先に `normalize_open_config/1` を通す方が安全です。
+
+M5Stack 系の既知設定を起点にしたい場合は、[M5Stack boards](../docs/boards/m5stack.md) を参照してください。
 
 ### `normalize_open_config/1`
 
@@ -218,6 +288,8 @@ options = [
 :ok = AtomLGFX.display(port)
 ```
 
+描画したのに LCD が変わらない場合は、まず `display/1` の呼び忘れを疑うと切り分けが速くなります。
+
 ### `close/1`
 
 そのポートが所有するネイティブ側のデバイス状態を終了します。
@@ -228,10 +300,10 @@ options = [
 
 `close/1` は次の性質を持ちます。
 
-- ネイティブ側のデバイス状態を終了します
-- Elixir 側の実行時記憶を消します
-- BEAM のポート自体は閉じません
-- `open/1` で記憶した開始時設定は残ります
+- ネイティブ側のデバイス状態を終了する
+- Elixir 側の実行時記憶を消す
+- BEAM のポート自体は閉じない
+- `open/1` で記憶した開始時設定は残る
 
 ## 照会と補助
 
@@ -249,6 +321,16 @@ options = [
 
 ```elixir
 {:ok, caps} = AtomLGFX.get_caps(port)
+```
+
+### `get_presentation_strip_height/1`
+
+ネイティブ側が確保した表示用ストリップの高さを返します。
+
+`begin_strip/1` と `present_strip/0` を使うバッチや、ストリップ単位のアニメーションでは、固定値を仮定せずこの値を使う方が安全です。
+
+```elixir
+{:ok, strip_height} = AtomLGFX.get_presentation_strip_height(port)
 ```
 
 ### `get_last_error/1`
@@ -273,15 +355,12 @@ options = [
 
 ### 機能確認
 
-- `supports_sprite?/1`
-- `supports_pushimage?/1`
-- `supports_last_error?/1`
-- `supports_touch?/1`
-- `supports_palette?/1`
-- `supports_batch?/1`
+機能差があるボードやファームウェアをまたぐ場合は、使う前に機能情報を見て分岐するのが安全です。特に `supports_sprite?/1`, `supports_touch?/1`, `supports_batch?/1`, `supports_retained_render?/1` は動作確認時に便利です。
 
 ```elixir
 {:ok, true} = AtomLGFX.supports_sprite?(port)
+{:ok, true} = AtomLGFX.supports_batch?(port)
+{:ok, true} = AtomLGFX.supports_retained_render?(port)
 ```
 
 ### `max_binary_bytes/1`
@@ -302,7 +381,7 @@ message = AtomLGFX.format_error({:bad_text_scale, -1})
 
 ### `raw_call/6`
 
-既知の操作名を数値 opcode に変換して、v2 の低水準 call 要求を送ります。疎通確認や低水準の実験向けです。
+既知の操作名を数値 opcode に変換し、低水準 call 要求を送ります。疎通確認や低水準の実験向けです。
 
 ```elixir
 {:ok, reply} = AtomLGFX.raw_call(port, :ping, 0, 0, [])
@@ -310,19 +389,17 @@ message = AtomLGFX.format_error({:bad_text_scale, -1})
 
 通常利用では、まず公開 API を使うのが安全です。
 
-より明示的な escape hatch として `AtomLGFX.Raw.call/4` も使えます。
+より明示的な逃げ道として、`AtomLGFX.Raw.call/4` も使えます。
 
 ## 明示的バッチ
 
-通常の API は、その場で同期的に実行されます。
+通常 API は、その場で同期的に実行されます。明示的バッチは、Elixir 側で 1 フレーム分の描画を組み立て、1 回の native 呼び出しで実行するための仕組みです。
 
-明示的バッチは、1 フレーム分の描画を 1 つの render script として送るための仕組みです。重い描画をまとめたい場合だけ使います。
+呼び出し回数を減らしたい描画経路に限定して使います。初期化、問い合わせ、大きな画像転送、タッチ操作には通常 API を使ってください。
 
 ### `AtomLGFX.BinaryBatch`
 
-`AtomLGFX.BinaryBatch` には、render script 向けの命令ビルダーがあります。
-
-v2 protocol では、保守しやすさを優先して BinaryBatch の面を小さく保ちます。通常の描画は scalar 命令を 1 つの batch に並べ、測定済みの高負荷経路だけ compact な一覧命令または native frame 命令として残します。
+`AtomLGFX.BinaryBatch` には、描画指示列を作るための命令ビルダーがあります。
 
 主なビルダーは次のとおりです。
 
@@ -333,7 +410,7 @@ v2 protocol では、保守しやすさを優先して BinaryBatch の面を小�
 - スプライト: `set_pivot/2`, `push_sprite/3`, `push_sprite/4`, `push_rotate_zoom/5`, `push_rotate_zoom/6`, `push_rotate_zoom/7`
 - 測定済みの高負荷経路: `push_rotate_zoom_list/2`, `push_rotate_zoom_frame_strips/2`
 
-各ビルダーは 1 命令分の binary を返します。複数命令を送る場合は iodata として組み立て、`batch/1` または `render/2` に渡します。
+各ビルダーは 1 命令分のバイナリーを返します。複数命令を送る場合は iodata として組み立て、`batch/1` または `render/2` に渡します。
 
 ```elixir
 frame = [
@@ -344,144 +421,96 @@ frame = [
   AtomLGFX.BinaryBatch.draw_line(0, 0, 100, 80, 0xF800),
   AtomLGFX.BinaryBatch.display()
 ]
-```
-
-### `submitBinaryBatch`
-
-`submitBinaryBatch` は、アニメーション向けの複数対象 render script 経路です。
-
-次のような命令を 1 つの frame batch として組み立て、1 回の native 呼び出しで実行します。
-
-- `target/1`
-- `color_mode/1`
-- `clear/1`
-- `fill_screen/1`
-- 基本図形命令（例: `draw_pixel/3`, `draw_rect/5`, `fill_rect/5`, `draw_line/5`, `draw_circle/4`, `fill_circle/4`）
-- 軽い文字命令（例: `set_text_font_preset/1`, `set_text_size/1`, `set_text_color/2`, `draw_string/3`）
-- `set_pivot/2`
-- `push_sprite/3`
-- `push_sprite/4`
-- `push_rotate_zoom/5`, `push_rotate_zoom/6`, `push_rotate_zoom/7`
-- `push_rotate_zoom_list/2`
-- `push_rotate_zoom_frame_strips/2`
-- `display/0`
-
-```elixir
-frame = [
-  AtomLGFX.BinaryBatch.target(1),
-  AtomLGFX.BinaryBatch.clear(0x0000),
-  AtomLGFX.BinaryBatch.set_clip_rect(0, 0, 160, 120),
-  AtomLGFX.BinaryBatch.push_rotate_zoom_list(instances,
-    transparent: 0x0000,
-    y_offset: 0,
-    approx_cull: true
-  ),
-  AtomLGFX.BinaryBatch.push_sprite(1, 0, 0, 0x0000),
-  AtomLGFX.BinaryBatch.target(0),
-  AtomLGFX.BinaryBatch.set_text_font_preset(:ascii),
-  AtomLGFX.BinaryBatch.set_text_size(1),
-  AtomLGFX.BinaryBatch.set_text_color(0xFFFF, 0x0000),
-  AtomLGFX.BinaryBatch.draw_string(0, 0, "fps:60"),
-  AtomLGFX.BinaryBatch.display()
-]
 
 :ok = AtomLGFX.BinaryBatch.render(port, frame)
 ```
 
-`AtomLGFX.BinaryBatch.render/2` は iodata を受け取ります。呼び出し側は、背景、スプライト、表示反映などの断片を安く連結できます。
+`AtomLGFX.BinaryBatch.render/2` は iodata を受け取ります。背景、スプライト、表示反映などの断片を安く連結できます。
 
-生成した描画指示列の確認には、後述の `decode/1`、`summary/1`、`compare/2`、`check_budget/2`、`diagnose/1` を使えます。
+生成した描画指示列を確認したい場合は、次の補助関数を使えます。
 
-`push_rotate_zoom_list/2` は、同じ描画先へ複数の変換スプライトを描くための compact な命令です。MovingIcons のように同種の変換描画が多い場合に使います。
-
-`push_rotate_zoom_frame_strips/2` は、変換スプライト一覧をネイティブ側のストリップループで描画する高負荷アニメーション向け命令です。Elixir 側はオブジェクト状態を持ち、ネイティブ側はストリップの消去、描画、転送をまとめて実行します。通常の描画ではなく、測定済みの熱い描画経路に限定して使います。
-
-`draw_jpg` と `push_image_rgb565` は、v2 protocol の BinaryBatch には含めません。画像のような大きな payload は通常の scalar API で扱う方針です。
-
-render-private opcode は `protocol.h` に集約し、Elixir 側では一覧を `AtomLGFX.BinaryBatch` に集約しています。テストでは両者を照合し、v2 protocol の batch 面が不用意に広がらないようにします。
-
-生成した render script を確認したい場合は、`AtomLGFX.BinaryBatch.decode/1` を使えます。ネイティブ側の `{:batch_failed, index, opcode, reason}` と照合しやすいように、各命令は `index` と `opcode` を含む map として返ります。
+- `decode/1`: 命令列を読みやすい map の列に変換する
+- `summary/1`: 命令数やバイト数を集計する
+- `compare/2`: 2 つの命令列を比較する
+- `check_budget/2`: バイト数や命令数の上限を確認する
+- `diagnose/1`: 不正な命令列の位置を調べる
 
 ```elixir
 {:ok, decoded_commands} = AtomLGFX.BinaryBatch.decode(frame)
-```
-
-ログや比較用に命令数やバイト効率を見たい場合は、`AtomLGFX.BinaryBatch.summary/1` が使えます。`batch_bytes`、命令数、図形命令数、可変長データ量、固定部分のバイト数、変換スプライト一覧命令の record バイト数、文字命令数、スプライト転送数、`push_rotate_zoom`、`push_rotate_zoom_list`、`push_rotate_zoom_frame_strips` の instance 数などを map で返します。割合は小数ではなく x1000 の整数値として返すため、記録や比較に使いやすくしています。
-
-```elixir
 {:ok, summary} = AtomLGFX.BinaryBatch.summary(frame)
-
-IO.inspect(summary.batch_bytes, label: "batch_bytes")
-IO.inspect(summary.bytes_per_logical_scalar_x1000, label: "bytes_per_logical_scalar_x1000")
-IO.inspect(summary.push_rotate_zoom_instance_count, label: "transform_instances")
 ```
 
-繰り返しの通常命令と compact な変換スプライト一覧命令を比べたい場合は、`AtomLGFX.BinaryBatch.compare/2` が使えます。第 1 引数を基準、第 2 引数を候補として `summary/1` の値を比較し、差分を `delta` として返します。多くの差分値は「候補 - 基準」ですが、`batch_bytes_savings` は「基準 - 候補」なので、バイト数をどれだけ減らせたかをそのまま確認できます。
+`push_rotate_zoom_list/2` は、同じ描画先へ複数の変換スプライトを描くための compact な命令です。MovingIcons のように、同種の変換描画が多い場合に使います。
+
+`push_rotate_zoom_frame_strips/2` は、変換スプライト一覧をネイティブ側のストリップループで描画する高負荷アニメーション向け命令です。Elixir 側はオブジェクト状態を持ち、ネイティブ側はストリップの消去、描画、転送をまとめて実行します。
+
+`draw_jpg` と `push_image_rgb565` は BinaryBatch には含めません。画像のような大きな payload は通常 API で扱う方針です。
+
+## 保持型ネイティブ描画シーン
+
+保持型ネイティブ描画シーンは、高負荷な表示ループをネイティブ側で継続実行するための仕組みです。
+
+これは最適化向けの機能です。最初の動作確認では、通常 API または明示的バッチから始める方が切り分けやすくなります。
+
+Elixir 側は、描画に必要な資源を作成し、初期データを渡し、開始と停止を制御します。開始後の重い描画ループはネイティブ側が所有します。
+
+主な用途は次のとおりです。
+
+- MovingIcons のように同種の変換スプライトを多数描く
+- Elixir 側から毎フレーム描画命令を送ると遅くなる
+- ネイティブ側でインスタンス更新、ストリップ描画、表示反映、統計記録をまとめたい
+
+基本的な流れは次のとおりです。
+
+1. スプライトなどの描画元を作成する
+2. インスタンスバッファーを作成する
+3. 初期インスタンス列を書き込む
+4. 描画シーンを作成する
+5. 描画シーンを開始する
+6. 必要に応じて統計を読む
+7. 描画シーンを停止または破棄する
 
 ```elixir
-{:ok, comparison} = AtomLGFX.BinaryBatch.compare(baseline_frame, candidate_frame)
+with {:ok, true} <- AtomLGFX.supports_retained_render?(port),
+     {:ok, instance_buffer} <-
+       AtomLGFX.create_instance_buffer(port,
+         layout: :sprite_transform_2d,
+         capacity: 50
+       ),
+     :ok <- AtomLGFX.write_instances(port, instance_buffer, objects),
+     {:ok, scene} <-
+       AtomLGFX.RenderScene.create(port,
+         renderer: :sprite_transform,
+         instance_buffer: instance_buffer,
+         sprites: [icon0, icon1, icon2],
+         strip_height: 160,
+         background_color: 0x0000,
+         transparent_color: 0x0000,
+         motion: :bounce,
+         zoom_min: 0.5,
+         zoom_max: 2.0
+       ),
+     :ok <- AtomLGFX.RenderScene.start(port, scene, mode: :exclusive) do
+  {:ok, stats} = AtomLGFX.RenderScene.stats(port, scene)
 
-IO.inspect(comparison.delta.batch_bytes_savings, label: "batch_bytes_savings")
-IO.inspect(comparison.delta.command_count, label: "command_count_delta")
-IO.inspect(comparison.delta.batch_bytes_savings_ratio_x1000, label: "savings_ratio_x1000")
-```
+  IO.inspect(stats.frame_count, label: "frame_count")
+  IO.inspect(stats.last_frame_us, label: "last_frame_us")
 
-生成した描画指示列に上限を設けたい場合は、`AtomLGFX.BinaryBatch.check_budget/2` が使えます。`summary/1` と同じ集計値に対して、バイト数、命令数、可変長データ量、変換スプライト一覧命令の利用数などを確認できます。継続的な検査や生成処理の退行検出に向いています。
-
-```elixir
-{:ok, report} =
-  AtomLGFX.BinaryBatch.check_budget(frame,
-    max_batch_bytes: 4096,
-    max_command_count: 64,
-    min_packed_list_count: 1
-  )
-
-IO.inspect(report.summary.batch_bytes, label: "batch_bytes")
-```
-
-不正な render script の場所を調べたい場合は、`AtomLGFX.BinaryBatch.diagnose/1` が使えます。成功時は `summary/1` と同じ集計値に `valid?: true` を加えて返し、失敗時は失敗した命令番号、opcode、推定される命令名、直前まで正常に読み取れた命令、部分的な集計値を返します。生成した frame script の検査や失敗時の記録に向いています。
-
-```elixir
-case AtomLGFX.BinaryBatch.diagnose(frame) do
-  {:ok, diagnosis} ->
-    IO.inspect(diagnosis.batch_bytes, label: "batch_bytes")
-
-  {:error, diagnosis} ->
-    IO.inspect(diagnosis.message, label: "binary_batch_error")
-    IO.inspect(diagnosis.last_decoded_command, label: "last_decoded_command")
+  :ok = AtomLGFX.RenderScene.stop(port, scene)
+  :ok = AtomLGFX.RenderScene.destroy(port, scene)
+  :ok = AtomLGFX.delete_instance_buffer(port, instance_buffer)
 end
 ```
 
-### v2 protocol 確定条件
+`mode: :exclusive` で開始した描画シーンは、実行中の表示をネイティブ側が所有します。その間、通常の描画 API は失敗する場合があります。通常の描画を行う場合は、先に描画シーンを停止してください。
 
-v2 protocol は、次の条件を満たした時点で確定とみなせます。
-
-- `mix test` が通る
-- `elixir scripts/sync_lgfx_protocol_doc.exs --check` が通る
-- 実機で MovingIcons が期待どおり動く
-- 1 frame の描画は `BinaryBatch.render/2` で 1 つの binary として送れる
-- `ops.def` の batch metadata、生成された Elixir metadata、native の render-private opcode、protocol freeze test が一致している
-- `0xF0..0xFF` の render-private opcode 範囲を不用意に広げない
-- スプライト生成、削除、照会、タッチ操作、補正、低頻度の制御は通常の API に残す
-
-ここまで満たせていれば、v2 protocol の基準としては十分です。以後は wire format を増やすよりも、Stack-chan などの実例で測定し、`summary/1`、`compare/2`、`check_budget/2` を使って frame script を調整するのが安全です。
-
-### 使い分け
-
-- 設定、初期化、単発の描画なら通常の API を使う
-- アニメーションの 1 frame をまとめる場合は `submitBinaryBatch` を使う
-- 大きな JPEG、巨大な `push_image`、スプライト作成、タッチ操作は通常の API を使う
-- アニメーション中の軽い文字重ね描きは `submitBinaryBatch` の文字命令を使える
-
-明示的バッチは任意機能です。通常の関数呼び出しはそのまま使えます。
+保持型ネイティブ描画シーンは、通常 API や明示的バッチと同じ AtomLGFX API の一部です。ただし、用途は高負荷な表示ループに限定して考えると分かりやすくなります。
 
 ## 表示制御
 
 ### `set_rotation/2`
 
-LCD の回転を設定します。
-
-受け付け値は `0..7` です。
+LCD の回転を設定します。受け付け値は `0..7` です。
 
 ```elixir
 :ok = AtomLGFX.set_rotation(port, 1)
@@ -594,8 +623,6 @@ LCD とスプライトは、それぞれ独立した切り取り状態を持ち�
 
 `AtomLGFX` では、文字種と文字倍率を別々に設定します。
 
-使う関数は次のとおりです。
-
 - `set_text_font_preset/3`
 - `set_text_size/3`
 - `set_text_size_xy/4`
@@ -610,7 +637,7 @@ LCD とスプライトは、それぞれ独立した切り取り状態を持ち�
 :ok = AtomLGFX.set_text_size(port, 2)
 ```
 
-倍率には `1`、`2`、`1.5` のような自然な値を使えます。
+倍率には `1`, `2`, `1.5` のような自然な値を使えます。
 
 ### 文字基準位置と折り返し
 
@@ -618,7 +645,7 @@ LCD とスプライトは、それぞれ独立した切り取り状態を持ち�
 - `set_text_wrap/3`
 - `set_text_wrap_xy/4`
 
-`set_text_datum/3` は `0..255` を受け付けるそのまま渡しの API です。
+`set_text_datum/3` は `0..255` をそのまま渡す API です。
 
 `set_text_wrap/3` は LovyanGFX 互換の 1 引数形式です。
 
@@ -745,13 +772,21 @@ JPEG 関連の関数は次のとおりです。
 
 ```elixir
 :ok = AtomLGFX.draw_jpg(port, 0, 0, jpeg_binary)
-```
 
-```elixir
-:ok = AtomLGFX.draw_jpg(port, 0, 0, 320, 480, 0, 0, 1.0, 1.0, jpeg_binary)
-```
+:ok =
+  AtomLGFX.draw_jpg(
+    port,
+    0,
+    0,
+    320,
+    480,
+    0,
+    0,
+    1.0,
+    1.0,
+    jpeg_binary
+  )
 
-```elixir
 :ok = AtomLGFX.draw_jpg_scaled(port, 0, 0, 320, 480, 0, 0, 1.5, jpeg_binary)
 ```
 
@@ -759,13 +794,10 @@ JPEG 関連の関数は次のとおりです。
 
 `push_image_rgb565/8` は、RGB565 の画素バイナリーを対象へ転送します。
 
-この画素バイナリーは、通常の RGB565 データをリトルエンディアン 16 ビット語として並べたものです。
+この画素バイナリーは、RGB565 データをリトルエンディアン 16 ビット語として並べたものです。
 
 ```elixir
 :ok = AtomLGFX.push_image_rgb565(port, 0, 0, width, height, pixels)
-```
-
-```elixir
 :ok = AtomLGFX.push_image_rgb565(port, 0, 0, width, height, pixels, stride_pixels)
 ```
 

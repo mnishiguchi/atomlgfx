@@ -20,6 +20,7 @@ this repository.
 - LovyanGFX-backed display operations
 - sprite, palette, image, text, and touch support
 - explicit binary batch submission for grouped rendering work
+- retained native render programs for native-owned hot display loops
 - protocol-level capabilities and diagnostics
 
 ## What this component does not provide
@@ -87,7 +88,7 @@ This component implements the native side of the tuple protocol used by
 `AtomLGFX`.
 
 For request and response semantics, validation rules, data encodings, and
-batching behavior, see [the protocol document](protocol.md).
+batching and retained-render behavior, see [the protocol document](protocol.md).
 
 For the generated operation matrix, error reasons, and capability vocabulary,
 see [the protocol reference](protocol-reference.md).

@@ -17,6 +17,9 @@ The current native protocol is v2:
 - ordinary drawing and control calls are synchronous tuple requests
 - binary batches are explicit binary frame scripts built with
   `AtomLGFX.BinaryBatch` and submitted with `AtomLGFX.submit_binary_batch/2`
+- retained native render programs allow Elixir to configure native-owned hot
+  display loops through `AtomLGFX.create_object_buffer/2`,
+  `AtomLGFX.write_object_buffer/3`, and `AtomLGFX.RenderProgram`
 - render-time text, JPEG, image payload, sprite push, and palette color
   commands may be encoded in binary batches when supported by
   `AtomLGFX.BinaryBatch` builders
@@ -92,6 +95,40 @@ frame = [
 Successful submission means the script was decoded and executed synchronously.
 Malformed bytes fail as protocol errors; unsupported render commands are
 rejected.
+
+## Retained render programs
+
+Use retained render programs when the hot display loop should stay native after
+setup.
+
+Typical shape:
+
+```elixir
+{:ok, object_buffer} =
+  AtomLGFX.create_object_buffer(port,
+    layout: :sprite_transform_2d,
+    capacity: 50
+  )
+
+:ok = AtomLGFX.write_object_buffer(port, object_buffer, objects)
+
+{:ok, program} =
+  AtomLGFX.RenderProgram.create(port,
+    type: :striped_sprite_transform,
+    object_buffer: object_buffer,
+    sources: source_handles,
+    strip_height: 160,
+    background_color: 0x0000,
+    transparent_color: 0x0000,
+    update: :bounce
+  )
+
+:ok = AtomLGFX.RenderProgram.start(port, program, mode: :exclusive)
+{:ok, stats} = AtomLGFX.RenderProgram.stats(port, program)
+```
+
+While an exclusive retained renderer is running, ordinary drawing operations are
+rejected until the program is stopped or destroyed.
 
 ## Scope
 

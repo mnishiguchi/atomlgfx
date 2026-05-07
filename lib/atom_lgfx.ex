@@ -84,6 +84,7 @@ defmodule AtomLGFX do
   alias AtomLGFX.Errors
   alias AtomLGFX.OpSchema
   alias AtomLGFX.Images
+  alias AtomLGFX.InstanceBuffer
   alias AtomLGFX.OpenConfig
   alias AtomLGFX.Primitives
   alias AtomLGFX.Protocol
@@ -239,6 +240,7 @@ defmodule AtomLGFX do
   Returns whether multi-target binary-batch frame scripts are advertised by the driver.
   """
   def supports_batch?(port), do: Protocol.supports_batch?(port)
+  def supports_retained_render?(port), do: Protocol.supports_retained_render?(port)
 
   @doc """
   Returns the maximum accepted binary payload size for this driver instance.
@@ -446,6 +448,54 @@ defmodule AtomLGFX do
   Deletes the sprite at the given handle.
   """
   def delete_sprite(port, target), do: Sprites.delete_sprite(port, target)
+
+  @doc """
+  Allocates a retained native instance buffer.
+  """
+  def create_instance_buffer(port, opts) when is_list(opts) do
+    InstanceBuffer.create(port, opts)
+  end
+
+  @doc """
+  Replaces the contents of a retained native instance buffer.
+  """
+  def write_instances(port, handle, instances) do
+    InstanceBuffer.write(port, handle, instances)
+  end
+
+  @doc """
+  Deletes a retained native instance buffer.
+  """
+  def delete_instance_buffer(port, handle) do
+    InstanceBuffer.delete(port, handle)
+  end
+
+  @doc """
+  Allocates a retained native object buffer.
+
+  Prefer `create_instance_buffer/2` for new code.
+  """
+  def create_object_buffer(port, opts) when is_list(opts) do
+    create_instance_buffer(port, opts)
+  end
+
+  @doc """
+  Replaces the contents of a retained native object buffer.
+
+  Prefer `write_instances/3` for new code.
+  """
+  def write_object_buffer(port, handle, objects) do
+    write_instances(port, handle, objects)
+  end
+
+  @doc """
+  Deletes a retained native object buffer.
+
+  Prefer `delete_instance_buffer/2` for new code.
+  """
+  def delete_object_buffer(port, handle) do
+    delete_instance_buffer(port, handle)
+  end
 
   @doc """
   Creates palette backing for an existing paletted sprite target.

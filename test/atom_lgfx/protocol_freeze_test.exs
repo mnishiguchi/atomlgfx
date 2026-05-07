@@ -73,7 +73,15 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     {:calibrate_touch, 57},
     {:push_rotate_zoom_list, 58},
     {:submit_binary_batch, 59},
-    {:get_presentation_strip_height, 60}
+    {:get_presentation_strip_height, 60},
+    {:create_object_buffer, 61},
+    {:write_object_buffer, 62},
+    {:delete_object_buffer, 63},
+    {:create_render_program, 64},
+    {:start_render_program, 65},
+    {:stop_render_program, 66},
+    {:get_render_program_stats, 67},
+    {:destroy_render_program, 68}
   ]
 
   @hidden_ops [:start_write, :end_write, :draw_pixel]
@@ -187,7 +195,8 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     last_error: 1 <<< 2,
     touch: 1 <<< 3,
     palette: 1 <<< 4,
-    batch: 1 <<< 5
+    batch: 1 <<< 5,
+    retained_render: 1 <<< 6
   }
 
   test "freezes the v2 operation names and opcode order" do

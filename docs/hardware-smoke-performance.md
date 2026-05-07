@@ -29,10 +29,13 @@ Collected reports:
 
 ## Sample app modes
 
-The default mode is `smoke`. It is intentionally compact and covers the primary
-on-device regression surface: boot, binary batch, primitives, text, clip
-rects, RGB565 image transfer, best-effort JPEG drawing, color helpers, palette
-sprites when available, and a touch probe when available.
+The current default mode is `moving_icons`. It is the retained-render demo and
+the main hot-loop validation path for on-device animation work.
+
+Use `smoke` for the compact ordinary-call and binary-batch regression surface:
+boot, binary batch, primitives, text, clip rects, RGB565 image transfer,
+best-effort JPEG drawing, color helpers, palette sprites when available, and a
+touch probe when available.
 
 Available modes:
 
@@ -40,12 +43,29 @@ Available modes:
 - `protocol`
 - `boot`
 - `perf`
+- `face`
+- `japanese_text`
+- `moving_icons`
 - `sprites`
 - `touch_calibrate`
 - `all`
 
 Use `all` for the default smoke path plus the sprite protocol smoke. Use `perf`
 only when collecting timing numbers.
+
+Use `moving_icons` when validating the retained native renderer on hardware. The
+current demo config exercises:
+
+- retained object-buffer upload
+- retained render-program creation and exclusive start
+- native-owned bounce updates
+- native strip rendering with periodic Elixir stats polling
+
+Observed log shape:
+
+```text
+moving_icons stats renderer=retained_native obj_count=<n> fps=<n> target_fps=<n> frame_ms=<n> update_ms=<n> draw_ms=<n> present_ms=<n> drawn=<n> culled=<n> strip_h=<n>
+```
 
 ## Perf smoke mode
 

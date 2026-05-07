@@ -22,6 +22,9 @@ defmodule AtomLGFX.GeneratedTest do
 
     assert Generated.opcode(:get_presentation_strip_height) ==
              OpSchema.opcode(:get_presentation_strip_height)
+
+    assert Generated.opcode(:create_object_buffer) == OpSchema.opcode(:create_object_buffer)
+    assert Generated.opcode(:create_render_program) == OpSchema.opcode(:create_render_program)
   end
 
   test "does not resolve LovyanGFX-style camelCase atoms" do
@@ -35,6 +38,7 @@ defmodule AtomLGFX.GeneratedTest do
     assert Generated.target_policy(:create_sprite) == {:ok, :sprite_only}
     assert Generated.state_policy(:ping) == {:ok, :any}
     assert Generated.capability(:push_sprite) == {:ok, :sprite}
+    assert Generated.capability(:create_render_program) == {:ok, :retained_render}
   end
 
   test "marks pixel operations as raw-only foot-guns" do

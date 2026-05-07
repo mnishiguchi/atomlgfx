@@ -31,6 +31,7 @@ defmodule AtomLGFX.Protocol do
   @cap_touch 1 <<< 3
   @cap_palette 1 <<< 4
   @cap_batch 1 <<< 5
+  @cap_retained_render 1 <<< 6
 
   def proto_ver, do: @proto_ver
 
@@ -50,6 +51,7 @@ defmodule AtomLGFX.Protocol do
   def cap_touch, do: @cap_touch
   def cap_palette, do: @cap_palette
   def cap_batch, do: @cap_batch
+  def cap_retained_render, do: @cap_retained_render
 
   def opcode!(op_name), do: OpSchema.opcode!(op_name)
 
@@ -95,6 +97,7 @@ defmodule AtomLGFX.Protocol do
   def supports_touch?(port), do: supports_cap?(port, @cap_touch)
   def supports_palette?(port), do: supports_cap?(port, @cap_palette)
   def supports_batch?(port), do: supports_cap?(port, @cap_batch)
+  def supports_retained_render?(port), do: supports_cap?(port, @cap_retained_render)
 
   def max_binary_bytes(port) do
     case Cache.get_max_binary_bytes(port) do
