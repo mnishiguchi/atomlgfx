@@ -19,6 +19,11 @@ term lgfx_require_proto_ver(Context *ctx, lgfx_port_t *port, const lgfx_request_
     }
 
     if (req->proto_ver != (uint32_t) LGFX_PORT_PROTO_VER) {
+        ESP_LOGW(
+            TAG,
+            "bad_proto: proto_ver mismatch expected=%u actual=%u",
+            (unsigned) LGFX_PORT_PROTO_VER,
+            (unsigned) req->proto_ver);
         return reply_error(ctx, port, req, port->atoms.bad_proto, 0);
     }
 

@@ -54,6 +54,7 @@ static constexpr int CORE2_AXP192_SCL_GPIO = 22;
 static constexpr uint8_t CORE2_AXP192_I2C_ADDR = 0x34;
 static constexpr TickType_t CORE2_AXP192_TIMEOUT_TICKS = pdMS_TO_TICKS(100);
 static constexpr uint8_t CORE2_DEFAULT_BRIGHTNESS = 64;
+static constexpr uint8_t CORES3_DEFAULT_BRIGHTNESS = 112;
 
 #if SOC_I2C_NUM > 1
 static constexpr i2c_port_t CORES3_I2C_PORT = I2C_NUM_1;
@@ -395,28 +396,70 @@ static esp_err_t cores3_write_reg_on_open_bus(uint8_t i2c_addr, uint8_t reg, uin
     return err;
 }
 
-static esp_err_t cores3_aw9523_write_bit_on_open_bus(uint8_t reg, uint8_t bit_mask, bool level)
+static esp_err_t cores3_write_masked_on_open_bus(uint8_t i2c_addr, uint8_t reg, uint8_t value, uint8_t mask)
 {
     uint8_t current = 0;
-    esp_err_t err = cores3_read_reg_on_open_bus(CORES3_AW9523_I2C_ADDR, reg, &current);
+    esp_err_t err = cores3_read_reg_on_open_bus(i2c_addr, reg, &current);
     if (err != ESP_OK) {
         return err;
     }
 
-    const uint8_t next = level
-        ? static_cast<uint8_t>(current | bit_mask)
-        : static_cast<uint8_t>(current & static_cast<uint8_t>(~bit_mask));
-
+    const uint8_t next = static_cast<uint8_t>((current & static_cast<uint8_t>(~mask)) | (value & mask));
     if (next == current) {
         return ESP_OK;
     }
 
-    return cores3_write_reg_on_open_bus(CORES3_AW9523_I2C_ADDR, reg, next);
+    return cores3_write_reg_on_open_bus(i2c_addr, reg, next);
+}
+
+static esp_err_t cores3_aw9523_write_bit_on_open_bus(uint8_t reg, uint8_t bit_mask, bool level)
+{
+    return cores3_write_masked_on_open_bus(
+        CORES3_AW9523_I2C_ADDR,
+        reg,
+        level ? bit_mask : 0u,
+        bit_mask);
 }
 
 static esp_err_t cores3_aw9523_set_lcd_reset_on_open_bus(bool level)
 {
-    return cores3_aw9523_write_bit_on_open_bus(0x03, static_cast<uint8_t>(1u << 5), level);
+    return cores3_aw9523_write_bit_on_open_bus(0x03, static_cast<uint8_t>(1u << 1), level);
+}
+
+static esp_err_t cores3_prepare_aw9523_on_open_bus(void)
+{
+    // Mirror the minimal CoreS3 GPIO-expander setup used by LovyanGFX's own
+    // autodetect path so the LCD reset line is actively driven before toggling it.
+    static constexpr struct
+    {
+        uint8_t reg;
+        uint8_t value;
+    } register_writes[] = {
+        { 0x04, 0x18 },
+        { 0x05, 0x0C },
+        { 0x11, 0x10 },
+        { 0x12, 0xFF },
+        { 0x13, 0xFF },
+    };
+
+    esp_err_t err = cores3_aw9523_write_bit_on_open_bus(0x02, 0x05, true);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    err = cores3_aw9523_write_bit_on_open_bus(0x03, 0x03, true);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    for (const auto &entry : register_writes) {
+        err = cores3_write_reg_on_open_bus(CORES3_AW9523_I2C_ADDR, entry.reg, entry.value);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+
+    return ESP_OK;
 }
 
 static esp_err_t cores3_axp2101_set_backlight_on_open_bus(uint8_t brightness)
@@ -468,6 +511,12 @@ static esp_err_t cores3_prepare_panel_power_and_reset(void)
         return err;
     }
 
+    err = cores3_prepare_aw9523_on_open_bus();
+    if (err != ESP_OK) {
+        cores3_close_bus(installed_here);
+        return err;
+    }
+
     err = cores3_aw9523_set_lcd_reset_on_open_bus(false);
     if (err != ESP_OK) {
         cores3_close_bus(installed_here);
@@ -482,7 +531,7 @@ static esp_err_t cores3_prepare_panel_power_and_reset(void)
     }
     vTaskDelay(pdMS_TO_TICKS(10));
 
-    err = cores3_axp2101_set_backlight_on_open_bus(255);
+    err = cores3_axp2101_set_backlight_on_open_bus(CORES3_DEFAULT_BRIGHTNESS);
     cores3_close_bus(installed_here);
     return err;
 }

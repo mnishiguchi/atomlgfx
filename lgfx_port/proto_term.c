@@ -10,11 +10,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "defaultatoms.h" // ATOM_STR
+#include "esp_log.h"
 #include "memory.h"
 #include "port.h" // port_create_tuple2, etc.
 
 #include "lgfx_port/lgfx_port_internal.h" // atoms, last_error, struct fields
 #include "lgfx_port/proto_term.h"
+
+static const char *const TAG = "lgfx_port";
 
 // -----------------------------------------------------------------------------
 // Request decode
@@ -88,17 +92,20 @@ bool lgfx_term_decode_request(
     }
 
     if (!term_is_tuple(request)) {
+        ESP_LOGW(TAG, "bad_proto: request is not a tuple");
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
     }
 
     int arity = term_get_tuple_arity(request);
     if (arity != 7) {
+        ESP_LOGW(TAG, "bad_proto: tuple arity=%d expected=7", arity);
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
     }
 
     // Tuple shape: {lgfx, ProtoVer, call, OpCode, Target, Flags, Args}
     term tag = term_get_tuple_element(request, 0);
-    if (tag != port->atoms.lgfx) {
+    if (!globalcontext_is_term_equal_to_atom_string(port->global, tag, ATOM_STR("\x04", "lgfx"))) {
+        ESP_LOGW(TAG, "bad_proto: first element is not :lgfx");
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
     }
 
@@ -114,11 +121,13 @@ bool lgfx_term_decode_request(
     term ver_t = term_get_tuple_element(request, 1);
     uint32_t proto_ver = 0;
     if (!lgfx_term_to_u32(ver_t, &proto_ver)) {
+        ESP_LOGW(TAG, "bad_proto: protocol version is not an unsigned integer");
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
     }
 
     term kind = term_get_tuple_element(request, 2);
-    if (kind != port->atoms.call) {
+    if (!globalcontext_is_term_equal_to_atom_string(port->global, kind, ATOM_STR("\x04", "call"))) {
+        ESP_LOGW(TAG, "bad_proto: third element is not :call");
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
     }
 
