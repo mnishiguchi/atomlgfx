@@ -254,6 +254,11 @@ defmodule AtomLGFX.Sprites do
     end
   end
 
+  @doc false
+  def encode_push_rotate_zoom_records(instances) when is_list(instances) do
+    encode_push_rotate_zoom_instances(instances)
+  end
+
   defp encode_push_rotate_zoom_instances(instances) do
     case encode_push_rotate_zoom_instances_i(instances, 0, []) do
       {:ok, 0, _records} -> {:error, :empty_batch}

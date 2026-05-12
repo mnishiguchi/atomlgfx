@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Status
 
-Accepted
+Superseded by [ADR 2026-05-13: Reduce OOM risk in AtomLGFX v2](2026-05-13-reduce-oom-risk-in-v2.md).
 
 ## Context
 

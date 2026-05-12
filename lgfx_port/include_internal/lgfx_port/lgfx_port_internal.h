@@ -47,12 +47,10 @@ typedef struct
     term unsupported;
     term not_initialized;
     term resource_busy;
-    term renderer_running;
 
     term caps;
     term last_error;
     term none;
-    term render_program_stats;
 
 } lgfx_atoms_t;
 
@@ -113,6 +111,7 @@ uint8_t lgfx_port_max_sprites(const lgfx_port_t *port);
 
 // Op registry / dispatch helpers.
 bool lgfx_op_try_from_opcode(uint32_t opcode, lgfx_op_t *out_op);
+bool lgfx_op_try_from_v3_atom(GlobalContext *global, term op_atom, lgfx_op_t *out_op);
 const lgfx_op_meta_t *lgfx_op_meta_lookup_by_op(lgfx_op_t op);
 const char *lgfx_op_name_from_op(lgfx_op_t op);
 lgfx_handler_fn lgfx_dispatch_lookup_by_op(lgfx_port_t *port, lgfx_op_t op);

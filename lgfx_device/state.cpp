@@ -1021,10 +1021,6 @@ esp_err_t lock_ready(ScopedLcdLock &lock)
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (lgfx_dev::retained_renderer_running()) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
     return ESP_OK;
 }
 
@@ -1558,18 +1554,17 @@ extern "C" esp_err_t lgfx_device_presentation_get_strip_height(uint16_t *out_str
         return err;
     }
 
-    if (!lgfx_dev::presentation_enabled_locked()) {
-        err = lgfx_dev::presentation_ensure_buffers_locked();
-        if (err == ESP_ERR_NO_MEM) {
-            return ESP_ERR_NOT_SUPPORTED;
-        }
-
-        if (err != ESP_OK) {
-            return err;
-        }
+    auto *lcd = lgfx_dev::lcd_device_locked();
+    if (!lcd) {
+        return ESP_ERR_INVALID_STATE;
     }
 
-    *out_strip_height = lgfx_dev::presentation_strip_height_locked();
+    const uint16_t lcd_h = static_cast<uint16_t>(lcd->height());
+    const uint16_t configured_strip_h = lgfx_dev::presentation_strip_height_locked();
+
+    // This API is a query. Do not allocate presentation sprites here.
+    // Actual strip allocation belongs to explicit render/prepare paths.
+    *out_strip_height = clamp_requested_strip_height(lcd_h, configured_strip_h);
     return ESP_OK;
 }
 
@@ -1607,11 +1602,6 @@ static esp_err_t lgfx_device_deinit_for_owner(const void *owner_token)
         return snapshot_is_fully_unpublished(snapshot) ? ESP_OK : ESP_ERR_INVALID_STATE;
     }
 
-    esp_err_t stop_err = lgfx_dev::retained_stop_active_renderer();
-    if (stop_err != ESP_OK) {
-        return stop_err;
-    }
-
     // Idempotent teardown for the owning port. Allow close even if begin() never ran.
     ensure_lcd_mutex_created();
     if (!g_lcd_mutex) {
@@ -1631,7 +1621,6 @@ static esp_err_t lgfx_device_deinit_for_owner(const void *owner_token)
     // Keep the held mutex handle so it can be deleted at the end.
     SemaphoreHandle_t mutex_to_delete = g_lcd_mutex;
 
-    lgfx_dev::retained_destroy_all_locked();
     (void) lgfx_dev::presentation_destroy_buffers_locked();
     lgfx_dev::destroy_all_sprites_locked();
 

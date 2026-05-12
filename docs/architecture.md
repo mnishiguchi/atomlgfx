@@ -25,7 +25,8 @@ For the caller-visible protocol contract, see [the protocol spec](protocol.md). 
 ```text
 Elixir / AtomVM
     |
-    | {lgfx, ProtoVer, call, OpCode, Target, Flags, Args}
+    | {lgfx, ProtoVer, Op, ...Args}
+    | {lgfx, ProtoVer, Op, Target, Flags, ...Args}
     v
 +------------------------------+
 | lgfx_port/                   |
@@ -49,18 +50,17 @@ Elixir / AtomVM
 
 ## Design summary
 
-The current architecture uses a call-based protocol for ordinary operations, an explicit binary render-batch path for animation hot loops, and native presentation strips inside `lgfx_device` for buffered LCD presentation.
+The current architecture uses a call-based protocol for ordinary operations and an explicit binary render-batch path for measured drawing bursts.
 
 In short:
 
 - ordinary operations execute immediately
 - ordinary operations return real success or failure immediately
 - binary batching is explicit and opt-in
-- the v2 binary-batch surface is intentionally small and measured
+- the binary-batch surface is intentionally small and measured
 - frame scripts are built in Elixir and executed natively
-- native presentation policy stays in `lgfx_device`
 - `startWrite` / `endWrite` grouping is internal to binary-batch execution
-- target `0` remains the logical LCD target, even when native presentation strips are active
+- target `0` is the LCD; target `1..254` are caller-owned sprites
 
 The goal is to reduce control-plane overhead for grouped rendering without turning the whole API surface into a deferred execution system.
 
@@ -139,7 +139,7 @@ Properties:
 - malformed commands or device/runtime failures can stop execution after earlier commands have run
 - `startWrite` / `endWrite` grouping happens inside batch execution
 - command-local state controls render target and color interpretation
-- speculative compact list commands stay out of the v2 protocol unless measured workloads justify them
+- speculative compact list commands stay out of the protocol unless measured workloads justify them
 
 ## Responsibility split
 
@@ -184,42 +184,14 @@ This layer owns Elixir-facing responsibilities:
 
 It should not redefine the native protocol contract.
 
-## Native presentation model
+## Presentation model
 
-The device layer distinguishes between raw target resolution and logical render-target resolution.
+The device layer keeps target resolution simple:
 
-For drawing:
+- target `0` means the live LCD device
+- target `1..254` means an explicitly created sprite
 
-- raw target resolution
-  - target `0` means the live LCD device
-
-- render-target resolution
-  - target `0` may resolve to an active native presentation strip during strip presentation
-  - otherwise it falls back to the live LCD
-
-This keeps raw LCD control separate from logical LCD drawing and allows native presentation policy to evolve without changing the public target numbering.
-
-The current native presentation path uses:
-
-- lazy allocation
-- adaptive double strip buffers
-- direct-LCD fallback when native strip allocation is unavailable
-- native strip begin/present commands in binary render batches
-- native-reported strip height for Elixir strip loops
-
-A binary-batch strip frame should look like this:
-
-```text
-beginStrip(y0)
-target(0)
-clear(background)
-render commands
-presentStrip()
-```
-
-While the strip is active, logical target `0` resolves to the strip buffer. `presentStrip()` copies the active strip to the live LCD at the matching display `y` coordinate.
-
-Higher-level code may still manage non-binary-batch strip buffers through public sprites. The hot-path binary-batch mode should prefer native presentation strips.
+Higher-level code that needs buffered or strip-based presentation owns those buffers as ordinary sprites. This keeps persistent allocation visible through `create_sprite` / `delete_sprite` and avoids hidden native presentation buffers in query or batch paths.
 
 ## Build defaults and runtime overrides
 

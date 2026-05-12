@@ -36,26 +36,6 @@ typedef enum
     LGFX_FONT_PRESET_JP = 1,
 } lgfx_font_preset_t;
 
-typedef enum
-{
-    LGFX_OBJECT_BUFFER_LAYOUT_SPRITE_TRANSFORM_2D = 1,
-} lgfx_object_buffer_layout_t;
-
-typedef enum
-{
-    LGFX_RENDER_PROGRAM_TYPE_STRIPED_SPRITE_TRANSFORM = 1,
-} lgfx_render_program_type_t;
-
-typedef enum
-{
-    LGFX_RENDER_PROGRAM_UPDATE_NONE = 0,
-    LGFX_RENDER_PROGRAM_UPDATE_BOUNCE = 1,
-} lgfx_render_program_update_policy_t;
-
-typedef enum
-{
-    LGFX_RENDER_PROGRAM_MODE_EXCLUSIVE = 1,
-} lgfx_render_program_mode_t;
 
 #ifdef __cplusplus
 }

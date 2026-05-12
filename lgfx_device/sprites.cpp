@@ -1222,10 +1222,6 @@ extern "C" esp_err_t lgfx_device_sprite_delete(uint8_t handle)
         return ESP_ERR_NOT_FOUND;
     }
 
-    if (lgfx_dev::retained_sprite_in_use_locked(handle)) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
     // Release internal sprite buffers before deleting the object.
     spr->deleteSprite();
     delete spr;

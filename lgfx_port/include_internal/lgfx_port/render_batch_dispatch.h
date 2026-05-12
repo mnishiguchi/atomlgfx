@@ -24,6 +24,7 @@ extern "C" {
 esp_err_t lgfx_render_batch_dispatch_validate(
     const uint8_t *bytes,
     size_t len,
+    uint8_t initial_target,
     uint32_t *out_failed_index,
     uint8_t *out_failed_opcode,
     bool *out_malformed_command);
@@ -38,6 +39,7 @@ esp_err_t lgfx_render_batch_dispatch_validate(
 esp_err_t lgfx_render_batch_dispatch_run(
     const uint8_t *bytes,
     size_t len,
+    uint8_t initial_target,
     uint32_t *out_failed_index,
     uint8_t *out_failed_opcode,
     bool *out_malformed_command);

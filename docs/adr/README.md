@@ -10,20 +10,18 @@ We keep architecture decisions as Markdown ADRs in the repository.
 
 ## Current decision map
 
-Current v2 readers should normally start with these active ADRs:
+Current v3 readers should normally start with these active ADRs:
 
+- [ADR 2026-05-13: Design AtomLGFX v3 as a low-memory LovyanGFX-style protocol](2026-05-13-v3-low-memory-protocol.md)
+  - defines the v3 low-memory call protocol, explicit sprite ownership, and retained-render removal
 - [ADR 2026-04-28: Call-based LovyanGFX port protocol](2026-04-28-call-based-lovyangfx-port-protocol.md)
   - scalar call protocol and generated numeric opcode model
-- [ADR 2026-05-05: Keep BinaryBatch minimal and measured](2026-05-05-keep-binary-batch-minimal-and-measured.md)
-  - active minimal render-batch surface and measured-addition rule
-- [ADR 2026-05-05: Allow native frame render commands for hot animation loops](2026-05-05-native-frame-render-commands-for-hot-animation.md)
-  - native frame-level render commands for measured hot animation loops
 - [ADR 2026-04-29: Flatten native v2 implementation](2026-04-29-flatten-native-v2-implementation.md)
   - native implementation shape for the v2 protocol
 - [ADR 2026-04-07: Controller-first panel and touch support](2026-04-07-controller-first-panel-and-touch-support.md)
   - hardware configuration direction
 
-Earlier binary-batch ADRs, including the broader 2026-05-03 transaction-surface ADR, are preserved as history and should not be read as the active protocol contract.
+Earlier v2 and binary-batch ADRs, including the native-frame and broader 2026-05-03 transaction-surface ADRs, are preserved as history and should not be read as the active protocol contract.
 
 ### Basic rules
 

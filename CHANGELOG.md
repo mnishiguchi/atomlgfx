@@ -18,16 +18,16 @@ This project is still pre-release. Until a versioned release is cut, entries des
 - Added generated operation metadata, protocol reference tables, and Elixir validation metadata derived from `ops.def`.
 - Added explicit binary batching through `AtomLGFX.BinaryBatch` and `AtomLGFX.submit_binary_batch/2`.
 - Added capability discovery for binary batch support.
-- Added retained native render programs with object buffers, lifecycle control, renderer stats, and Elixir helpers.
 
 ### Changed
 
 - Reworked the native port layer around flatter metadata-driven dispatch.
 - Clarified protocol semantics for targets, colors, palettes, sprites, text, JPEG, and image payloads.
-- Simplified the example application around smoke checks, performance checks, and retained native rendering.
+- Simplified the example application around smoke checks, performance checks, and binary frame-strip animation.
 
 ### Removed
 
+- Removed the experimental retained native render-program API to reduce OOM risk.
 - Removed the old tuple/list batch runtime and command-builder modules.
 - Removed the old `AtomLGFX.batch/0`, `AtomLGFX.Batch`, and `AtomLGFX.submit_batch/2` path.
 - Removed the separate native `lgfx_runtime` command-dispatch layer.

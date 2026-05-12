@@ -72,16 +72,7 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     {:set_touch_calibrate, 56},
     {:calibrate_touch, 57},
     {:push_rotate_zoom_list, 58},
-    {:submit_binary_batch, 59},
-    {:get_presentation_strip_height, 60},
-    {:create_object_buffer, 61},
-    {:write_object_buffer, 62},
-    {:delete_object_buffer, 63},
-    {:create_render_program, 64},
-    {:start_render_program, 65},
-    {:stop_render_program, 66},
-    {:get_render_program_stats, 67},
-    {:destroy_render_program, 68}
+    {:submit_binary_batch, 59}
   ]
 
   @hidden_ops [:start_write, :end_write, :draw_pixel]
@@ -129,21 +120,14 @@ defmodule AtomLGFX.ProtocolFreezeTest do
   @binary_batch_render_private_ops %{
     target: 0xF0,
     color_mode: 0xF1,
-    push_sprite_transparent: 0xF2,
-    begin_strip: 0xF3,
-    present_strip: 0xF4,
-    extended: 0xFF
+    push_sprite_transparent: 0xF2
   }
 
-  @binary_batch_render_extended_ops %{
-    push_rotate_zoom_frame_strips: 0x01
-  }
+  @binary_batch_render_extended_ops %{}
 
   @binary_batch_command_sizes %{
     target: 2,
     color_mode: 2,
-    begin_strip: 3,
-    present_strip: 1,
     display: 1,
     fill_screen: 3,
     clear: 3,
@@ -184,9 +168,7 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     push_sprite_transparent: 10,
     push_rotate_zoom: 25,
     push_rotate_zoom_list_header: 15,
-    push_rotate_zoom_list_record: 12,
-    push_rotate_zoom_frame_strips_header: 18,
-    push_rotate_zoom_frame_strips_record: 12
+    push_rotate_zoom_list_record: 12
   }
 
   @capabilities %{
@@ -195,11 +177,10 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     last_error: 1 <<< 2,
     touch: 1 <<< 3,
     palette: 1 <<< 4,
-    batch: 1 <<< 5,
-    retained_render: 1 <<< 6
+    batch: 1 <<< 5
   }
 
-  test "freezes the v2 operation names and opcode order" do
+  test "freezes the v3 operation names and opcode order" do
     actual_ops =
       Enum.map(Generated.ops(), fn {name, meta} ->
         {name, Keyword.fetch!(meta, :opcode)}
@@ -291,8 +272,6 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     actual_sizes = %{
       target: byte_size(BinaryBatch.target(0)),
       color_mode: byte_size(BinaryBatch.color_mode(:rgb565)),
-      begin_strip: byte_size(BinaryBatch.begin_strip(0)),
-      present_strip: byte_size(BinaryBatch.present_strip()),
       display: byte_size(BinaryBatch.display()),
       fill_screen: byte_size(BinaryBatch.fill_screen(0x0000)),
       clear: byte_size(BinaryBatch.clear(0x0000)),
@@ -333,9 +312,7 @@ defmodule AtomLGFX.ProtocolFreezeTest do
       push_sprite_transparent: byte_size(BinaryBatch.push_sprite(1, 0, 0, 0x0000)),
       push_rotate_zoom: byte_size(BinaryBatch.push_rotate_zoom(1, 0, 0, 0, 1)),
       push_rotate_zoom_list_header: push_rotate_zoom_list_header_size(),
-      push_rotate_zoom_list_record: push_rotate_zoom_list_record_size(),
-      push_rotate_zoom_frame_strips_header: push_rotate_zoom_frame_strips_header_size(),
-      push_rotate_zoom_frame_strips_record: push_rotate_zoom_frame_strips_record_size()
+      push_rotate_zoom_list_record: push_rotate_zoom_list_record_size()
     }
 
     assert actual_sizes == @binary_batch_command_sizes
@@ -388,38 +365,6 @@ defmodule AtomLGFX.ProtocolFreezeTest do
 
     double =
       BinaryBatch.push_rotate_zoom_list([{1, 0, 0, 0, 1024, 1024}, {2, 1, 1, 1, 1024, 1024}])
-
-    byte_size(double) - byte_size(single)
-  end
-
-  defp push_rotate_zoom_frame_strips_header_size do
-    single =
-      BinaryBatch.push_rotate_zoom_frame_strips(
-        [{1, 0, 0, 0, 1024, 1024}],
-        frame_height: 1
-      )
-
-    double =
-      BinaryBatch.push_rotate_zoom_frame_strips(
-        [{1, 0, 0, 0, 1024, 1024}, {2, 1, 1, 1, 1024, 1024}],
-        frame_height: 1
-      )
-
-    2 * byte_size(single) - byte_size(double)
-  end
-
-  defp push_rotate_zoom_frame_strips_record_size do
-    single =
-      BinaryBatch.push_rotate_zoom_frame_strips(
-        [{1, 0, 0, 0, 1024, 1024}],
-        frame_height: 1
-      )
-
-    double =
-      BinaryBatch.push_rotate_zoom_frame_strips(
-        [{1, 0, 0, 0, 1024, 1024}, {2, 1, 1, 1, 1024, 1024}],
-        frame_height: 1
-      )
 
     byte_size(double) - byte_size(single)
   end

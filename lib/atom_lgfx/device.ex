@@ -35,10 +35,6 @@ defmodule AtomLGFX.Device do
 
   def display(port), do: Protocol.call_ok(port, :display, 0, 0, [], Protocol.long_timeout())
 
-  def get_presentation_strip_height(port) do
-    Protocol.get_presentation_strip_height(port)
-  end
-
   def set_rotation(port, rotation) when is_integer(rotation) and rotation in 0..7 do
     Protocol.call_ok(port, :set_rotation, 0, 0, [rotation], Protocol.long_timeout())
   end

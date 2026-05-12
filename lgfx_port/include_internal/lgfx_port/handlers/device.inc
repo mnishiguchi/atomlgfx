@@ -54,18 +54,6 @@ term lgfx_handle_height(Context *ctx, lgfx_port_t *port, const lgfx_request_t *r
     return reply_ok(ctx, port, req, term_from_int32((int32_t) h));
 }
 
-term lgfx_handle_getPresentationStripHeight(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
-{
-    uint16_t strip_height = 0;
-    LGFX_RETURN_IF_ESP_ERR(
-        ctx,
-        port,
-        req,
-        lgfx_device_presentation_get_strip_height(&strip_height));
-
-    return reply_ok(ctx, port, req, term_from_int32((int32_t) strip_height));
-}
-
 #define LGFX_DEVICE_BAD_ARGS() reply_error(ctx, port, req, port->atoms.bad_args, 0)
 
 #define LGFX_DEFINE_DEVICE_TARGETLESS_U32_TO_U8_HANDLER(                                    \

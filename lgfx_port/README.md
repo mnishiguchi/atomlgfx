@@ -232,7 +232,7 @@ For ordinary operations:
 
 For explicit binary batching:
 
-- retained payloads must stay inside the current request unless native-owned storage is introduced later
+- batch payloads must stay inside the current request unless native-owned storage is introduced later
 
 ## When changing this layer
 

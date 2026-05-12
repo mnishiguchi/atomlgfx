@@ -9,7 +9,7 @@ defmodule SampleApp.SpriteProtocolSmoke do
 
   @t_short 5_000
 
-  @proto_ver 2
+  @proto_ver 3
   @cap_sprite 1 <<< 0
   @cap_palette 1 <<< 4
 
@@ -104,25 +104,11 @@ defmodule SampleApp.SpriteProtocolSmoke do
   # -----------------------------------------------------------------------------
   defp check_get_caps_sprite_capacity(port, raw_call) do
     case raw_call.(port, :get_caps, 0, 0, [], @t_short) do
-      {:ok, {:caps, proto_ver, _max_binary_bytes, max_sprites, feature_bits}}
-      when is_integer(proto_ver) and is_integer(max_sprites) and is_integer(feature_bits) ->
-        cond do
-          proto_ver != @proto_ver ->
-            {:error, {:proto_ver_mismatch, @proto_ver, proto_ver}}
-
-          (feature_bits &&& @cap_sprite) == 0 ->
-            {:error, {:cap_sprite_missing, feature_bits}}
-
-          max_sprites <= 0 ->
-            {:error, {:sprite_capacity_not_available, max_sprites}}
-
-          true ->
-            {:ok,
-             %{
-               proto_ver: proto_ver,
-               max_sprites: max_sprites,
-               feature_bits: feature_bits
-             }}
+      {:ok, feature_bits} when is_integer(feature_bits) and feature_bits >= 0 ->
+        if (feature_bits &&& @cap_sprite) == 0 do
+          {:error, {:cap_sprite_missing, feature_bits}}
+        else
+          {:ok, %{feature_bits: feature_bits}}
         end
 
       {:ok, payload} ->

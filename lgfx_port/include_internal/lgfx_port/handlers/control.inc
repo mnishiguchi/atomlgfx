@@ -68,10 +68,10 @@ static term lgfx_reply_render_batch_failed(
 term lgfx_handle_submitBinaryBatch(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     /*
-     * Render batch is the multi-target frame-script path for animation hot loops.
+     * Render batch is the multi-target frame-script path for drawing bursts.
      * It accepts exactly one borrowed binary payload and executes it under one
-     * native lock/write session. The command stream owns target selection and
-     * color-mode changes internally; the request target must remain 0.
+     * native lock/write session. The request target seeds the initial batch
+     * target; the command stream can still change targets explicitly.
      */
     const uint8_t *bytes = NULL;
     size_t len = 0u;
@@ -87,6 +87,7 @@ term lgfx_handle_submitBinaryBatch(Context *ctx, lgfx_port_t *port, const lgfx_r
     esp_err_t execute_err = lgfx_render_batch_dispatch_run(
         bytes,
         len,
+        (uint8_t) req->target,
         &failed_index,
         &failed_opcode,
         &malformed_command);
@@ -139,22 +140,7 @@ term lgfx_handle_submitBinaryBatch(Context *ctx, lgfx_port_t *port, const lgfx_r
 term lgfx_handle_getCaps(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     uint32_t feature_bits = lgfx_port_feature_bits(port);
-    uint32_t max_sprites = (uint32_t) lgfx_port_max_sprites(port);
-
-    term elems[5] = {
-        port->atoms.caps,
-        term_from_int32((int32_t) LGFX_PORT_PROTO_VER),
-        term_from_int32((int32_t) LGFX_PORT_MAX_BINARY_BYTES),
-        term_from_int32((int32_t) max_sprites),
-        term_from_int32((int32_t) feature_bits)
-    };
-
-    term payload = lgfx_make_tuple(ctx, 5, elems);
-    if (term_is_invalid_term(payload)) {
-        return reply_error(ctx, port, req, port->atoms.no_memory, (int32_t) ESP_ERR_NO_MEM);
-    }
-
-    return reply_ok(ctx, port, req, payload);
+    return reply_ok(ctx, port, req, term_from_int32((int32_t) feature_bits));
 }
 
 term lgfx_handle_getLastError(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)

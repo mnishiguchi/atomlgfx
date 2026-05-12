@@ -8,9 +8,9 @@ SPDX-License-Identifier: Apache-2.0
 
 `AtomLGFX` は、AtomVM 上の Elixir から `lgfx_port` ドライバーを通じて LovyanGFX 系の表示機能を扱うためのライブラリーです。
 
-基本的な描画の考え方は LovyanGFX に合わせています。一方で、AtomVM から安全に使いやすくするために、開始時設定、返り値、明示的バッチ、保持型ネイティブ描画シーンなどは atomlgfx 独自の仕組みとして整理しています。
+基本的な描画の考え方は LovyanGFX に合わせています。一方で、AtomVM から安全に使いやすくするために、開始時設定、返り値、明示的バッチなどは atomlgfx 独自の仕組みとして整理しています。
 
-最初は通常の API だけを使い、LCD に文字や図形を表示するところから始めるのがおすすめです。その後、必要に応じてスプライト、明示的バッチ、保持型ネイティブ描画シーンへ進んでください。
+最初は通常の API だけを使い、LCD に文字や図形を表示するところから始めるのがおすすめです。その後、必要に応じてスプライトや明示的バッチへ進んでください。
 
 ## この README の読み方
 
@@ -20,7 +20,6 @@ SPDX-License-Identifier: Apache-2.0
 - スプライトや画像も使いたい: `スプライト` → `画像`
 - タッチ入力も使いたい: `タッチ`
 - 1 フレーム分の描画をまとめたい: `明示的バッチ`
-- 高負荷な表示ループをネイティブ側で動かしたい: `保持型ネイティブ描画シーン`
 
 ボード固有の既知設定から始めたい場合は、[M5Stack boards](../docs/boards/m5stack.md) も参照してください。
 
@@ -48,26 +47,22 @@ SPDX-License-Identifier: Apache-2.0
 - 対象番号 `0` を LCD、`1..254` をスプライトとして扱う規則
 - `AtomLGFX.Color` による色補助
 - `AtomLGFX.BinaryBatch` による明示的バッチ
-- `AtomLGFX.RenderScene` による保持型ネイティブ描画シーン
 - `get_caps/1` や `supports_*?/1` による機能確認
 
 通常の描画では、まず LovyanGFX に近い通常 API を使ってください。速度が問題になった段階で、atomlgfx 固有の高速化手段を選びます。
 
 ## 描画経路の選び方
 
-AtomLGFX には、主に 3 つの描画経路があります。
+AtomLGFX には、主に 2 つの描画経路があります。
 
 | 経路 | 使う場面 |
 | --- | --- |
 | 通常 API | 初期化、単発の描画、学習、動作確認 |
 | 明示的バッチ | Elixir 側で 1 フレーム分の描画をまとめたいとき |
-| 保持型ネイティブ描画シーン | 高負荷な表示ループをネイティブ側で継続実行したいとき |
 
 最初は通常 API を使います。`fill_screen/3`, `draw_line/7`, `draw_string/5`, `push_sprite/4` のような公開関数を直接呼ぶ形です。
 
 1 フレーム分の描画命令を Elixir 側でまとめたい場合は、`AtomLGFX.BinaryBatch.render/2` を使います。呼び出し回数を減らしたいときの選択肢です。
-
-毎フレームの重い描画ループをネイティブ側へ寄せたい場合は、`AtomLGFX.RenderScene` を使います。これは最適化向けの機能です。最初の動作確認や UI 試作から使い始める必要はありません。
 
 ## はじめに
 
@@ -117,7 +112,7 @@ AtomLGFX には、主に 3 つの描画経路があります。
     height: 480
   )
 
-{:ok, caps} = AtomLGFX.get_caps(port)
+{:ok, capability_bits} = AtomLGFX.get_caps(port)
 {:ok, w} = AtomLGFX.width(port)
 {:ok, h} = AtomLGFX.height(port)
 ```
@@ -317,20 +312,10 @@ M5Stack 系の既知設定を起点にしたい場合は、[M5Stack boards](../d
 
 ### `get_caps/1`
 
-ドライバーが通知する機能情報を返します。
+ドライバーが通知する機能ビットマスクを返します。
 
 ```elixir
-{:ok, caps} = AtomLGFX.get_caps(port)
-```
-
-### `get_presentation_strip_height/1`
-
-ネイティブ側が確保した表示用ストリップの高さを返します。
-
-`begin_strip/1` と `present_strip/0` を使うバッチや、ストリップ単位のアニメーションでは、固定値を仮定せずこの値を使う方が安全です。
-
-```elixir
-{:ok, strip_height} = AtomLGFX.get_presentation_strip_height(port)
+{:ok, capability_bits} = AtomLGFX.get_caps(port)
 ```
 
 ### `get_last_error/1`
@@ -355,12 +340,11 @@ M5Stack 系の既知設定を起点にしたい場合は、[M5Stack boards](../d
 
 ### 機能確認
 
-機能差があるボードやファームウェアをまたぐ場合は、使う前に機能情報を見て分岐するのが安全です。特に `supports_sprite?/1`, `supports_touch?/1`, `supports_batch?/1`, `supports_retained_render?/1` は動作確認時に便利です。
+機能差があるボードやファームウェアをまたぐ場合は、使う前に機能情報を見て分岐するのが安全です。特に `supports_sprite?/1`, `supports_touch?/1`, `supports_batch?/1` は動作確認時に便利です。
 
 ```elixir
 {:ok, true} = AtomLGFX.supports_sprite?(port)
 {:ok, true} = AtomLGFX.supports_batch?(port)
-{:ok, true} = AtomLGFX.supports_retained_render?(port)
 ```
 
 ### `max_binary_bytes/1`
@@ -381,7 +365,7 @@ message = AtomLGFX.format_error({:bad_text_scale, -1})
 
 ### `raw_call/6`
 
-既知の操作名を数値 opcode に変換し、低水準 call 要求を送ります。疎通確認や低水準の実験向けです。
+既知の操作名を v3 の低水準 call 要求として送ります。疎通確認や低水準の実験向けです。
 
 ```elixir
 {:ok, reply} = AtomLGFX.raw_call(port, :ping, 0, 0, [])
@@ -403,12 +387,12 @@ message = AtomLGFX.format_error({:bad_text_scale, -1})
 
 主なビルダーは次のとおりです。
 
-- 描画先と状態: `target/1`, `color_mode/1`, `begin_strip/1`, `present_strip/0`, `display/0`
+- 描画先と状態: `target/1`, `color_mode/1`, `display/0`
 - 基本描画: `fill_screen/1`, `clear/1`, `draw_pixel/3`, `draw_line/5`, `draw_rect/5`, `fill_rect/5`, `draw_circle/4`, `fill_circle/4`
 - 切り取り: `set_clip_rect/4`, `clear_clip_rect/0`
 - 文字: `set_text_font_preset/1`, `set_text_size/1`, `set_text_color/2`, `set_cursor/2`, `draw_string/3`, `print/1`, `println/1`
 - スプライト: `set_pivot/2`, `push_sprite/3`, `push_sprite/4`, `push_rotate_zoom/5`, `push_rotate_zoom/6`, `push_rotate_zoom/7`
-- 測定済みの高負荷経路: `push_rotate_zoom_list/2`, `push_rotate_zoom_frame_strips/2`
+- 測定済みの高負荷経路: `push_rotate_zoom_list/2`
 
 各ビルダーは 1 命令分のバイナリーを返します。複数命令を送る場合は iodata として組み立て、`batch/1` または `render/2` に渡します。
 
@@ -442,69 +426,26 @@ frame = [
 
 `push_rotate_zoom_list/2` は、同じ描画先へ複数の変換スプライトを描くための compact な命令です。MovingIcons のように、同種の変換描画が多い場合に使います。
 
-`push_rotate_zoom_frame_strips/2` は、変換スプライト一覧をネイティブ側のストリップループで描画する高負荷アニメーション向け命令です。Elixir 側はオブジェクト状態を持ち、ネイティブ側はストリップの消去、描画、転送をまとめて実行します。
-
 `draw_jpg` と `push_image_rgb565` は BinaryBatch には含めません。画像のような大きな payload は通常 API で扱う方針です。
 
-## 保持型ネイティブ描画シーン
+## 高負荷アニメーションの扱い
 
-保持型ネイティブ描画シーンは、高負荷な表示ループをネイティブ側で継続実行するための仕組みです。
+保持型ネイティブ描画シーンは、メモリー使用量とライフサイクルが重くなりやすいため、通常の API から外しました。
 
-これは最適化向けの機能です。最初の動作確認では、通常 API または明示的バッチから始める方が切り分けやすくなります。
-
-Elixir 側は、描画に必要な資源を作成し、初期データを渡し、開始と停止を制御します。開始後の重い描画ループはネイティブ側が所有します。
-
-主な用途は次のとおりです。
-
-- MovingIcons のように同種の変換スプライトを多数描く
-- Elixir 側から毎フレーム描画命令を送ると遅くなる
-- ネイティブ側でインスタンス更新、ストリップ描画、表示反映、統計記録をまとめたい
-
-基本的な流れは次のとおりです。
-
-1. スプライトなどの描画元を作成する
-2. インスタンスバッファーを作成する
-3. 初期インスタンス列を書き込む
-4. 描画シーンを作成する
-5. 描画シーンを開始する
-6. 必要に応じて統計を読む
-7. 描画シーンを停止または破棄する
+MovingIcons のような高負荷アニメーションでは、まずスプライトへ描画してから一度だけ転送する方法を使います。フルフレームスプライトが大きすぎる場合は、Elixir 側で小さなストリップ用スプライトを明示的に作成し、各ストリップを描画してすぐ LCD に転送します。
 
 ```elixir
-with {:ok, true} <- AtomLGFX.supports_retained_render?(port),
-     {:ok, instance_buffer} <-
-       AtomLGFX.create_instance_buffer(port,
-         layout: :sprite_transform_2d,
-         capacity: 50
-       ),
-     :ok <- AtomLGFX.write_instances(port, instance_buffer, objects),
-     {:ok, scene} <-
-       AtomLGFX.RenderScene.create(port,
-         renderer: :sprite_transform,
-         instance_buffer: instance_buffer,
-         sprites: [icon0, icon1, icon2],
-         strip_height: 160,
-         background_color: 0x0000,
-         transparent_color: 0x0000,
-         motion: :bounce,
-         zoom_min: 0.5,
-         zoom_max: 2.0
-       ),
-     :ok <- AtomLGFX.RenderScene.start(port, scene, mode: :exclusive) do
-  {:ok, stats} = AtomLGFX.RenderScene.stats(port, scene)
+commands = [
+  AtomLGFX.BinaryBatch.target(strip_target),
+  AtomLGFX.BinaryBatch.clear(0x0000),
+  AtomLGFX.BinaryBatch.push_rotate_zoom_list(instances, transparent: 0x0000, approx_cull: true),
+  AtomLGFX.BinaryBatch.target(0),
+  AtomLGFX.BinaryBatch.push_sprite(strip_target, 0, y),
+  AtomLGFX.BinaryBatch.display()
+]
 
-  IO.inspect(stats.frame_count, label: "frame_count")
-  IO.inspect(stats.last_frame_us, label: "last_frame_us")
-
-  :ok = AtomLGFX.RenderScene.stop(port, scene)
-  :ok = AtomLGFX.RenderScene.destroy(port, scene)
-  :ok = AtomLGFX.delete_instance_buffer(port, instance_buffer)
-end
+:ok = AtomLGFX.BinaryBatch.render(port, commands)
 ```
-
-`mode: :exclusive` で開始した描画シーンは、実行中の表示をネイティブ側が所有します。その間、通常の描画 API は失敗する場合があります。通常の描画を行う場合は、先に描画シーンを停止してください。
-
-保持型ネイティブ描画シーンは、通常 API や明示的バッチと同じ AtomLGFX API の一部です。ただし、用途は高負荷な表示ループに限定して考えると分かりやすくなります。
 
 ## 表示制御
 

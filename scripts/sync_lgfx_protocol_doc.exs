@@ -457,16 +457,16 @@ defmodule Main do
 
   defp render_operations_matrix(operations) do
     header_lines = [
-      "| Op | Target rule | Flags rule | Arity | State rule | Capability bit | Batch path |",
+      "| Op | Target rule | Flags rule | Args | State rule | Capability bit | Batch path |",
       "| --- | --- | --- | --- | --- | --- | --- |"
     ]
 
     row_lines =
       Enum.map(operations, fn operation ->
-        operation_name = "`#{operation.operation_name}`"
+        operation_name = "`#{elixir_operation_name(operation.operation_name)}`"
         target_rule = "`#{target_rule_label(operation.target_policy)}`"
         flags_rule = "`#{flags_rule_label(operation.allowed_flags_mask)}`"
-        arity = "`#{arity_label(operation.min_arity, operation.max_arity)}`"
+        arity = "`#{args_count_label(operation.min_arity, operation.max_arity)}`"
         state_rule = "`#{state_rule_label(operation.state_policy)}`"
         feature_cap_bit = capability_bit_label(operation.feature_cap_bit)
         batch_path = batch_path_label(operation)
@@ -479,10 +479,18 @@ defmodule Main do
 
   defp target_rule_label("LGFX_OP_TARGET_BAD_TARGET"), do: "T0/bad_target"
   defp target_rule_label("LGFX_OP_TARGET_UNSUPPORTED"), do: "T0/unsupported"
+  defp target_rule_label("LGFX_OP_TARGET_ANY"), do: "Tany"
+  defp target_rule_label("LGFX_OP_TARGET_SPRITE_ONLY"), do: "Tsprite"
   defp target_rule_label(other), do: other
 
   defp flags_rule_label("0"), do: "F0"
   defp flags_rule_label(other), do: "Fmask(#{other})"
+
+  defp args_count_label(min_arity, max_arity) do
+    min_args = String.to_integer(min_arity) - @protocol_tuple_arity
+    max_args = String.to_integer(max_arity) - @protocol_tuple_arity
+    arity_label(Integer.to_string(min_args), Integer.to_string(max_args))
+  end
 
   defp arity_label(min_arity, max_arity) when min_arity == max_arity, do: min_arity
   defp arity_label(min_arity, max_arity), do: "#{min_arity}/#{max_arity}"
@@ -840,7 +848,6 @@ defmodule Main do
   defp generated_capability("LGFX_CAP_TOUCH"), do: :touch
   defp generated_capability("LGFX_CAP_PALETTE"), do: :palette
   defp generated_capability("LGFX_CAP_BATCH"), do: :batch
-  defp generated_capability("LGFX_CAP_RETAINED_RENDER"), do: :retained_render
 
   defp generated_capability(feature_cap_bit) do
     raise "Unknown feature capability in ops.def: #{feature_cap_bit}"

@@ -83,7 +83,7 @@ Protocol operations have one Elixir-facing name:
   - `snake_case` atom
   - used by `AtomLGFX.OpSchema`, `AtomLGFX.Protocol`, public wrapper code, and raw calls
 
-`ops.def` may keep LovyanGFX-style identifiers internally for handler-table generation, but the request tuple carries a numeric opcode. Callers do not pass those internal identifiers over the Elixir-facing API.
+`ops.def` may keep LovyanGFX-style identifiers internally for handler-table generation, but the v3 request tuple carries the canonical `snake_case` operation atom. The decoder also accepts compact numeric opcodes for wrapper-owned raw paths.
 
 Rules:
 
@@ -96,10 +96,16 @@ Rules:
 
 ## Request and response model
 
-All requests use one tuple shape:
+V3 requests use flat tuples. Targetless operations omit target metadata:
 
 ```erlang
-{lgfx, ProtoVer, call, OpCode, Target, Flags, Args}
+{lgfx, ProtoVer, Op, ...Args}
+```
+
+Target-aware operations carry target and flags in the tuple header:
+
+```erlang
+{lgfx, ProtoVer, Op, Target, Flags, ...Args}
 ```
 
 Field meanings:
@@ -111,24 +117,24 @@ Field meanings:
   - integer
   - must equal `LGFX_PORT_PROTO_VER`
 
-- `call`
-  - request kind atom
-
-- `OpCode`
-  - numeric operation code generated from a known Elixir operation atom
+- `Op`
+  - canonical `snake_case` operation atom
+  - compact numeric opcodes are accepted by the native decoder for wrapper-owned raw paths
 
 - `Target`
   - `0` => LCD
   - `1..254` => sprite handle
   - `255` => reserved and invalid
+  - omitted for targetless operations unless a raw test intentionally sends a target
 
 - `Flags`
   - integer bitset
   - `0` when unused
+  - omitted for targetless operations unless a raw test intentionally sends flags
 
 - `Args`
-  - proper list of operation arguments
-  - empty list when unused
+  - operation-specific positional arguments
+  - no nested argument list is used in v3
 
 Responses are always:
 
@@ -146,7 +152,7 @@ Conventions:
 
 ## Execution model at the protocol boundary
 
-The protocol exposes three operation styles:
+The protocol exposes two operation styles:
 
 - ordinary operations
   - execute immediately
@@ -157,11 +163,6 @@ The protocol exposes three operation styles:
   - one binary contains one frame script
   - execution is synchronous
   - success means the script was fully decoded and executed
-
-- retained native render programs
-  - resource creation and updates are explicit and caller-owned
-  - native code owns the hot frame loop after `startRenderProgram`
-  - execution continues in the background until `stopRenderProgram` or `destroyRenderProgram`
 
 This distinction is part of the external contract for `AtomLGFX.submit_binary_batch/2`.
 Internal execution timing and runtime structure are implementation details.
@@ -221,12 +222,6 @@ For explicit batching:
   within the render path
 - callers should not assume that any payload-bearing ordinary op is automatically
   batchable; only documented `AtomLGFX.BinaryBatch` builders are in scope
-
-For retained native render programs:
-
-- `writeObjectBuffer` copies caller bytes into a native retained buffer
-- `createRenderProgram` copies source-handle bytes into native retained state
-- the driver must not retain raw pointers into caller binaries after the request returns
 
 ## Common data and encodings
 
@@ -420,23 +415,14 @@ Request:
 Response:
 
 ```erlang
-{ok, {caps, ProtoVer, MaxBinaryBytes, MaxSprites, FeatureBits}}
+{ok, FeatureBits}
 ```
 
 Fields:
 
-- `ProtoVer`
-  - protocol version returned by the driver
-
-- `MaxBinaryBytes`
-  - maximum accepted size for any binary argument
-
-- `MaxSprites`
-  - maximum concurrently allocated sprites
-  - must be `0` if sprite support is absent
-
 - `FeatureBits`
   - protocol feature bitset only
+  - callers can use the public `supports_*?` helpers for friendly checks
 
 Derivation rules:
 
@@ -471,10 +457,6 @@ Meaning:
   - binary batch submission is available
   - specifically `submitBinaryBatch` / `AtomLGFX.submit_binary_batch/2`
 
-- `CAP_RETAINED_RENDER`
-  - retained native render-program operations are available
-  - specifically object-buffer and render-program lifecycle calls
-
 Touch note:
 
 - `CAP_TOUCH` is advertised only when touch support is enabled in the build and touch is attached
@@ -482,76 +464,28 @@ Touch note:
 
 ## Render batching
 
-`submitBinaryBatch` is the v2 batch submission path.
+`submitBinaryBatch` is the v3 batch submission path.
 
 It is not a scheduler, queue, or general tuple/list batch runtime. It is an explicit binary frame-script entry point for hot rendering work.
 
 Elixir callers should build frame scripts with `AtomLGFX.BinaryBatch` and submit them with `AtomLGFX.submit_binary_batch/2` or `AtomLGFX.BinaryBatch.render/2`.
 
-For generated or experimental frame scripts, `AtomLGFX.BinaryBatch.validate/1` can preflight the stream without calling native code, and `AtomLGFX.BinaryBatch.render_checked/2` validates before submitting. This gives callers an opt-in no-partial-render safety path when native `LGFX_PORT_RENDER_BATCH_PREVALIDATE` is disabled. `AtomLGFX.BinaryBatch.summary/1` reports diagnostic counts such as batch bytes, render-private command count, dynamic payload bytes, fixed overhead bytes, retained packed-list record bytes, retained packed-list command count, retained packed-list instance count, and integer x1000 wire-efficiency ratios without calling native code. `AtomLGFX.BinaryBatch.diagnose/1` returns the same summary information for valid streams and partial context for invalid streams, including failing command index, opcode, best-effort operation name, and last successfully decoded command. `AtomLGFX.BinaryBatch.compare/2` compares a baseline frame script with a candidate frame script using the same summary metrics. `AtomLGFX.BinaryBatch.check_budget/2` validates the same diagnostic metrics against caller-provided limits, which is useful for CI and generated-frame guardrails.
+For generated or experimental frame scripts, `AtomLGFX.BinaryBatch.validate/1` can preflight the stream without calling native code, and `AtomLGFX.BinaryBatch.render_checked/2` validates before submitting. This gives callers an opt-in no-partial-render safety path when native `LGFX_PORT_RENDER_BATCH_PREVALIDATE` is disabled. `AtomLGFX.BinaryBatch.summary/1` reports diagnostic counts such as batch bytes, render-private command count, dynamic payload bytes, fixed overhead bytes, packed-list record bytes, packed-list command count, packed-list instance count, and integer x1000 wire-efficiency ratios without calling native code. `AtomLGFX.BinaryBatch.diagnose/1` returns the same summary information for valid streams and partial context for invalid streams, including failing command index, opcode, best-effort operation name, and last successfully decoded command. `AtomLGFX.BinaryBatch.compare/2` compares a baseline frame script with a candidate frame script using the same summary metrics. `AtomLGFX.BinaryBatch.check_budget/2` validates the same diagnostic metrics against caller-provided limits, which is useful for CI and generated-frame guardrails.
 
-The v2 protocol intentionally keeps the binary-batch surface small. Generic primitive packed-list commands, sprite-region list commands, batch-level JPEG drawing, and batch-level RGB565 image pushing are not part of the retained v2 batch surface.
+The protocol intentionally keeps the binary-batch surface small. Generic primitive packed-list commands, sprite-region list commands, batch-level JPEG drawing, and batch-level RGB565 image pushing are not part of the v3 batch surface.
 
-## Retained native render programs
+## Low-memory batch rendering
 
-Retained render programs are the native hot-loop extension accepted by
-[ADR 2026-05-06](adr/2026-05-06-retained-native-render-programs-for-hot-display-loops.md).
+The retained native render-program API and native presentation-strip batch commands were removed by [ADR 2026-05-13](adr/2026-05-13-v3-low-memory-protocol.md) to reduce OOM risk and simplify the public surface.
 
-Initial scope:
-
-- one object-buffer layout: `sprite_transform_2d`
-- one render-program type: `striped_sprite_transform`
-- two native update policies: `none` and `bounce`
-- one renderer mode: `exclusive`
-
-The retained protocol uses ordinary v2 request tuples. It does not introduce a
-new protocol version or a second outer envelope.
-
-Current retained lifecycle shape:
-
-```text
-createObjectBuffer(layout_id, capacity)
-writeObjectBuffer(handle, RecordsBinary)
-deleteObjectBuffer(handle)
-
-createRenderProgram(type_id, object_buffer_handle, SourceHandlesBinary, strip_height,
-                    background_color, update_policy, has_transparent,
-                    transparent_value, zoom_min_x1024, zoom_max_x1024)
-startRenderProgram(handle, mode_id)
-stopRenderProgram(handle)
-getRenderProgramStats(handle)
-destroyRenderProgram(handle)
-```
-
-Current `sprite_transform_2d` retained object record:
-
-```text
-source_index     u8
-reserved         u8 = 0
-x                i16le
-y                i16le
-vx               i16le
-vy               i16le
-angle_cdeg       u16le
-zoom_x1024       u16le
-dangle_cdeg      i16le
-dzoom_x1024      i16le
-```
-
-Rules:
-
-- `writeObjectBuffer` replaces the full retained object-buffer contents
-- empty object-buffer writes are allowed and clear the retained object count
-- `startRenderProgram(mode=exclusive)` grants native exclusive display ownership while running
-- ordinary drawing calls are rejected while an exclusive retained renderer is active
-- object buffers and source sprites must outlive the render programs that reference them
+MovingIcons-style animation should keep object state in Elixir and render into caller-owned sprites or small strip sprites before pushing completed pixels to the LCD. `BinaryBatch` remains available as an explicit synchronous optimization for bursts of ordinary drawing commands.
 
 ### Wire shape
 
-It uses the normal protocol request envelope:
+It uses the normal v3 flat request shape:
 
 ```erlang
-{lgfx, ProtoVer, call, SubmitBinaryBatchOpCode, 0, 0, [CommandBinary]}
+{lgfx, ProtoVer, submit_binary_batch, 0, 0, CommandBinary}
 ```
 
 Rules:
@@ -585,10 +519,6 @@ Binary render batches keep small command-local state while the frame script exec
   - RGB565 mode interprets scalar color fields as RGB565
   - palette-index mode interprets scalar color fields as palette indices where supported
 
-- native presentation strip state
-  - selected by `beginStrip` / `presentStrip`
-  - when a strip is active, logical target `0` resolves to the active native strip
-
 ### Representative command layouts
 
 ```text
@@ -599,13 +529,6 @@ target:
 colorMode:
   op u8
   mode u8
-
-beginStrip:
-  op u8
-  y0 u16le
-
-presentStrip:
-  op u8
 
 fillScreen / clear:
   op u8
@@ -635,79 +558,11 @@ pushSprite:
 pushRotateZoomList:
   normal operation opcode with one PRZL payload binary
 
-pushRotateZoomFrameStrips:
-  extended op u8 = 0xFF
-  subop u8 = 0x01
-  flags u16le
-  PRZF payload
-
 display:
   op u8
 ```
 
 The generated protocol reference remains the source for numeric operation codes. Render-private command opcodes are internal to the binary render-batch command stream.
-
-### Native transformed-sprite frame command
-
-`pushRotateZoomFrameStrips` is an extended render-private command for hot animation loops that repeatedly draw transformed source sprites through native presentation strips. It is a frame-level command: native code owns the strip loop, strip clearing, strip presentation, and final transformed sprite draw calls. Elixir still owns object state and builds the frame-state payload.
-
-Wire layout:
-
-```text
-extended opcode:
-  op u8 = 0xFF
-  subop u8 = 0x01
-  flags u16le
-
-PRZF payload:
-  magic bytes[4] = "PRZF"
-  version u8 = 1
-  options u8
-  transparent u16le
-  frame_height u16le
-  background u16le
-  instance_count u16le
-  InstanceRecord instance_count * 12 bytes
-
-InstanceRecord:
-  source_target u8
-  reserved u8 = 0
-  x i16le
-  y i16le
-  angle_cdeg u16le
-  zoom_x1024 u16le
-  zoom_y1024 u16le
-```
-
-Rules:
-
-- `options & 0x01` means `transparent` is present
-- `options & 0x02` requests approximate native culling
-- unknown option bits are invalid
-- `flags` may only use `LGFX_F_TRANSPARENT_INDEX`
-- if `LGFX_F_TRANSPARENT_INDEX` is set, `transparent` is a palette index in the low byte
-- `LGFX_F_TRANSPARENT_INDEX` without the transparent option is invalid
-- `frame_height` must be greater than `0`
-- `instance_count` must be greater than `0`
-- `source_target` must be a sprite target
-- `reserved` must be `0`
-- `angle_cdeg` must be `0..35999`
-- `zoom_x1024` and `zoom_y1024` must be positive fixed-point scales where `1024 == 1.0x`
-- this command must not be nested inside an active `beginStrip` / `presentStrip` section
-
-### Native presentation strips
-
-`beginStrip` starts drawing into the native presentation strip at LCD y-coordinate `y0`.
-
-While a strip is active:
-
-- `target(0)` resolves to the active strip buffer for drawing
-- sprite targets still resolve normally
-- callers should clear or fully redraw the strip contents before presenting
-
-`presentStrip` presents the active strip to the live LCD.
-
-The Elixir strip loop must use the native-negotiated strip height. The native presentation layer may allocate a smaller strip than the preferred height when memory is constrained.
 
 ## Diagnostics
 
@@ -1077,23 +932,6 @@ Rules:
 - `reserved` must be `0`
 - payload length must exactly match `12 + instance_count * 12`
 - source and destination existence rules are resolved in the device layer
-
-### `presentationStripHeight`
-
-This reports the current native presentation strip height used by the device layer.
-
-Request args:
-
-- `presentationStripHeight()`
-
-Rules:
-
-- target must be LCD target `0`
-- return value is a non-negative integer
-- `0` means native strip presentation is unavailable
-- positive values should be used by Elixir strip loops instead of hard-coded strip heights
-
-This operation exists so application-level strip orchestration can match the actual native allocation after adaptive strip-buffer fallback.
 
 ## Compatibility rules
 

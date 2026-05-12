@@ -43,7 +43,12 @@ extern "C" {
 // Request decode surface
 // -----------------------------------------------------------------------------
 
-// Decode {lgfx, ProtoVer, call, OpCode, Target, Flags, Args}.
+// Decode the v3 flat tuple request shape:
+//   targetless:             {lgfx, ProtoVer, Op, ...Args}
+//   target-aware, no flags: {lgfx, ProtoVer, Op, Target, ...Args}
+//   explicit flags:         {lgfx, ProtoVer, Op, Target, Flags, ...Args}
+//
+// Op may be a snake_case operation atom or its compact numeric opcode.
 // Structural decode only; policy validation happens in lgfx_port.c.
 bool lgfx_term_decode_request(
     Context *ctx,

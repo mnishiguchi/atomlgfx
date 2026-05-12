@@ -88,7 +88,7 @@ Policy:
 - route logical drawing through a render-target seam when needed
 - keep compatibility scaffolding minimal
 
-The goal is not to mirror all of LovyanGFX. The goal is to provide a small, explicit adapter surface that matches the protocol exposed by this repository while preserving room for native presentation policy.
+The goal is not to mirror all of LovyanGFX. The goal is to provide a small, explicit adapter surface that matches the protocol exposed by this repository while keeping memory ownership predictable.
 
 ## Current model
 
@@ -98,29 +98,17 @@ The native model separates per-port configuration from live device ownership:
 - the live LCD device remains singleton-backed
 - this layer resolves owner-aware init, close, and dimension queries using an opaque owner token
 
-For drawing, the layer distinguishes between:
+For drawing, target resolution is direct:
 
-- raw target resolution
-  - target `0` means the live LCD device
-- render-target resolution
-  - target `0` may resolve to an active native presentation strip during strip presentation
-  - otherwise it falls back to the live LCD
+- target `0` means the live LCD device
+- target `1..254` means an explicitly created sprite
 
-The native presentation path uses:
-
-- lazy, not eager, allocation
-- adaptive double strip buffers
-- direct-LCD fallback when native strip allocation is unavailable
-
-Native strip presentation is available as a device-layer capability without
-requiring the Elixir smoke sample to own strip orchestration.
-
-That means this layer may care about singleton ownership and native presentation state, but it should not care about protocol envelopes or AtomVM terms.
+That means this layer may care about singleton ownership and target semantics, but it should not care about protocol envelopes or AtomVM terms.
 
 ## When changing this layer
 
 When adding or changing device behavior:
 
 - keep protocol tuple rules in `lgfx_port/` and `../docs/protocol.md`
-- keep this layer focused on target resolution, ownership, device semantics, and native presentation behavior
+- keep this layer focused on target resolution, ownership, and device semantics
 - update protocol docs only when the externally visible contract changes

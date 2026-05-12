@@ -26,4 +26,3 @@
 #include "lgfx_port/handlers/clip.inc"
 #include "lgfx_port/handlers/sprites.inc"
 #include "lgfx_port/handlers/touch.inc"
-#include "lgfx_port/handlers/retained.inc"

@@ -26,8 +26,7 @@ defmodule AtomLGFX.OpSchema do
               | :last_error
               | :touch
               | :palette
-              | :batch
-              | :retained_render,
+              | :batch,
             batchable: boolean(),
             needs_owned_payload: boolean(),
             sync_only: boolean(),

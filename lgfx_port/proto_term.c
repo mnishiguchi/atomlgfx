@@ -39,30 +39,56 @@ static inline bool return_decode_error(term *out_error_reply, term reply)
     return false;
 }
 
-static bool lgfx_decode_request_args(term list, int *out_count, term *out_args)
+static inline bool lgfx_arg_count_in_range(int arg_count, const lgfx_op_meta_t *meta)
 {
-    if (out_count == NULL || out_args == NULL) {
+    if (meta == NULL) {
         return false;
     }
 
-    int count = 0;
-    term cursor = list;
+    const int min_args = (int) meta->min_arity - 5;
+    const int max_args = (int) meta->max_arity - 5;
 
-    while (!term_is_nil(cursor)) {
-        if (!term_is_list(cursor)) {
-            return false;
-        }
+    return arg_count >= min_args && arg_count <= max_args;
+}
 
-        if (count >= LGFX_REQ_MAX_INLINE_ARGS || count >= INT_MAX - 5) {
-            return false;
-        }
-
-        out_args[count] = term_get_list_head(cursor);
-        count++;
-        cursor = term_get_list_tail(cursor);
+static bool lgfx_decode_op_term(lgfx_port_t *port, term op_t, uint32_t *out_opcode, lgfx_op_t *out_op)
+{
+    if (port == NULL || out_opcode == NULL || out_op == NULL) {
+        return false;
     }
 
-    *out_count = count;
+    uint32_t opcode = 0;
+    lgfx_op_t op = LGFX_OP_COUNT;
+
+    if (lgfx_term_to_u32(op_t, &opcode)) {
+        if (!lgfx_op_try_from_opcode(opcode, &op)) {
+            return false;
+        }
+    } else if (lgfx_op_try_from_v3_atom(port->global, op_t, &op)) {
+        opcode = (uint32_t) op;
+    } else {
+        return false;
+    }
+
+    *out_opcode = opcode;
+    *out_op = op;
+    return true;
+}
+
+static bool lgfx_copy_tuple_args(term request, int arg_start_index, int arg_count, term *out_args)
+{
+    if (out_args == NULL || arg_start_index < 0 || arg_count < 0) {
+        return false;
+    }
+
+    if (arg_count > LGFX_REQ_MAX_INLINE_ARGS) {
+        return false;
+    }
+
+    for (int i = 0; i < arg_count; i++) {
+        out_args[i] = term_get_tuple_element(request, arg_start_index + i);
+    }
+
     return true;
 }
 
@@ -97,26 +123,20 @@ bool lgfx_term_decode_request(
     }
 
     int arity = term_get_tuple_arity(request);
-    if (arity != 7) {
-        ESP_LOGW(TAG, "bad_proto: tuple arity=%d expected=7", arity);
+    if (arity < 3) {
+        ESP_LOGW(TAG, "bad_proto: tuple arity=%d expected >= 3", arity);
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
     }
 
-    // Tuple shape: {lgfx, ProtoVer, call, OpCode, Target, Flags, Args}
+    // Tuple shape:
+    // - targetless:              {lgfx, ProtoVer, Op, ...Args}
+    // - target-aware, no flags:  {lgfx, ProtoVer, Op, Target, ...Args}
+    // - explicit flags:          {lgfx, ProtoVer, Op, Target, Flags, ...Args}
     term tag = term_get_tuple_element(request, 0);
     if (!globalcontext_is_term_equal_to_atom_string(port->global, tag, ATOM_STR("\x04", "lgfx"))) {
         ESP_LOGW(TAG, "bad_proto: first element is not :lgfx");
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
     }
-
-    // NOTE:
-    // Envelope validation (proto_ver match, arg-count bounds, allowed flags,
-    // target policy, init-state) is centralized in lgfx_port.c using ops.def
-    // metadata.
-    //
-    // Here we only perform minimal structural decode for the fixed request
-    // header. Op-specific payload decode, including float-aligned numeric
-    // payloads, happens later in handlers via handler_decode.h helpers.
 
     term ver_t = term_get_tuple_element(request, 1);
     uint32_t proto_ver = 0;
@@ -125,38 +145,74 @@ bool lgfx_term_decode_request(
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
     }
 
-    term kind = term_get_tuple_element(request, 2);
-    if (!globalcontext_is_term_equal_to_atom_string(port->global, kind, ATOM_STR("\x04", "call"))) {
-        ESP_LOGW(TAG, "bad_proto: third element is not :call");
-        return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_proto));
-    }
-
-    term opcode_t = term_get_tuple_element(request, 3);
+    term opcode_t = term_get_tuple_element(request, 2);
     uint32_t opcode = 0;
-    if (!lgfx_term_to_u32(opcode_t, &opcode)) {
-        return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_op));
-    }
-
     lgfx_op_t op = LGFX_OP_COUNT;
-    if (!lgfx_op_try_from_opcode(opcode, &op)) {
+    if (!lgfx_decode_op_term(port, opcode_t, &opcode, &op)) {
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_op));
     }
 
-    term target_t = term_get_tuple_element(request, 4);
-    uint32_t target = 0;
-    if (!lgfx_term_to_u32(target_t, &target)) {
-        return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_target));
+    const lgfx_op_meta_t *meta = lgfx_op_meta_lookup_by_op(op);
+    if (meta == NULL) {
+        return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_op));
     }
 
-    term flags_t = term_get_tuple_element(request, 5);
+    uint32_t target = 0u;
     uint32_t flags = 0;
-    if (!lgfx_term_to_u32(flags_t, &flags)) {
-        return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_flags));
+    int arg_start = 3;
+    int arg_count = arity - arg_start;
+
+    const bool targetless =
+        meta->target_policy == LGFX_OP_TARGET_BAD_TARGET
+        || meta->target_policy == LGFX_OP_TARGET_UNSUPPORTED;
+
+    if (targetless) {
+        if (!lgfx_arg_count_in_range(arg_count, meta)) {
+            if (arg_count < 2) {
+                return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_args));
+            }
+
+            if (!lgfx_term_to_u32(term_get_tuple_element(request, 3), &target)) {
+                return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_target));
+            }
+            if (!lgfx_term_to_u32(term_get_tuple_element(request, 4), &flags)) {
+                return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_flags));
+            }
+
+            arg_start = 5;
+            arg_count = arity - arg_start;
+        }
+    } else {
+        if (arg_count < 1) {
+            return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_target));
+        }
+
+        if (!lgfx_term_to_u32(term_get_tuple_element(request, 3), &target)) {
+            return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_target));
+        }
+
+        arg_start = 4;
+        arg_count = arity - arg_start;
+
+        if (!lgfx_arg_count_in_range(arg_count, meta)) {
+            if (arg_count < 1) {
+                return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_args));
+            }
+
+            if (!lgfx_term_to_u32(term_get_tuple_element(request, 4), &flags)) {
+                return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_flags));
+            }
+
+            arg_start = 5;
+            arg_count = arity - arg_start;
+        }
     }
 
-    term args_list = term_get_tuple_element(request, 6);
-    int arg_count = 0;
-    if (!lgfx_decode_request_args(args_list, &arg_count, out->args)) {
+    if (arg_count < 0 || !lgfx_arg_count_in_range(arg_count, meta)) {
+        return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_args));
+    }
+
+    if (!lgfx_copy_tuple_args(request, arg_start, arg_count, out->args)) {
         return return_decode_error(out_error_reply, lgfx_reply_error(ctx, port, port->atoms.bad_args));
     }
 
@@ -166,7 +222,7 @@ bool lgfx_term_decode_request(
     out->target = target;
     out->flags = flags;
     out->request_tuple = request;
-    out->args_list = args_list;
+    out->args_list = term_invalid_term();
     out->arity = 5 + arg_count;
     out->arg_count = arg_count;
 

@@ -15,7 +15,7 @@ defmodule AtomLGFX.Raw do
   alias AtomLGFX.Protocol
 
   @doc """
-  Calls a known operation through the raw v2 call protocol.
+  Calls a known operation through the raw v3 call protocol.
   """
   def call(port, op_name, args \\ [], opts \\ [])
 

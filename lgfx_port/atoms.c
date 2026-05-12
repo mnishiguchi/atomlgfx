@@ -38,10 +38,8 @@ void lgfx_atoms_init(GlobalContext *global, lgfx_atoms_t *atoms)
     atoms->unsupported = globalcontext_make_atom(global, ATOM_STR("\x0B", "unsupported"));
     atoms->not_initialized = globalcontext_make_atom(global, ATOM_STR("\x0F", "not_initialized"));
     atoms->resource_busy = globalcontext_make_atom(global, ATOM_STR("\x0D", "resource_busy"));
-    atoms->renderer_running = globalcontext_make_atom(global, ATOM_STR("\x10", "renderer_running"));
 
     atoms->caps = globalcontext_make_atom(global, ATOM_STR("\x04", "caps"));
     atoms->last_error = globalcontext_make_atom(global, ATOM_STR("\x0A", "last_error"));
     atoms->none = globalcontext_make_atom(global, ATOM_STR("\x04", "none"));
-    atoms->render_program_stats = globalcontext_make_atom(global, ATOM_STR("\x14", "render_program_stats"));
 }

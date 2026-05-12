@@ -85,8 +85,8 @@ private:
 // ready (`begin()` completed).
 esp_err_t lock_ready(ScopedLcdLock &lock);
 
-// Same as lock_ready(), but does not reject access while an exclusive retained
-// renderer is active. Retained renderer control paths use this entry point.
+// Same as lock_ready(), but kept as a published-ready helper for code paths
+// that already own higher-level rendering state.
 esp_err_t lock_published_ready_ignoring_exclusive(ScopedLcdLock &lock);
 
 // LovyanGFX-style write session helpers.
@@ -177,11 +177,6 @@ uint32_t sprite_count_locked();
 // Teardown helper: deletes all sprite buffers + objects and resets registry.
 void destroy_all_sprites_locked();
 
-bool retained_renderer_running();
-bool retained_sprite_in_use_locked(uint8_t handle);
-bool retained_object_buffer_in_use_locked(uint8_t handle);
-esp_err_t retained_stop_active_renderer();
-void retained_destroy_all_locked();
 
 // -----------------------------------------------------------------------------
 // Shared scalar color / palette helpers

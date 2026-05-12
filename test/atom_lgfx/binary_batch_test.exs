@@ -17,12 +17,7 @@ defmodule AtomLGFX.BinaryBatchTest do
       assert BinaryBatch.color_mode(:palette_index) == <<0xF1, 1>>
     end
 
-    test "encodes native strip commands" do
-      assert BinaryBatch.begin_strip(0x1234) == <<0xF3, 0x34, 0x12>>
-      assert BinaryBatch.present_strip() == <<0xF4>>
-    end
-
-    test "encodes transparent sprite push through the retained private command" do
+    test "encodes transparent sprite push through the render-private command" do
       assert BinaryBatch.push_sprite(3, -2, 300, {:index, 7}) ==
                <<0xF2, Protocol.transparent_index_flag()::little-16, 3, -2::signed-little-16,
                  300::signed-little-16, 7::little-16>>
@@ -49,7 +44,7 @@ defmodule AtomLGFX.BinaryBatchTest do
     end
   end
 
-  describe "retained transformed-sprite hot paths" do
+  describe "transformed-sprite hot paths" do
     test "encodes and decodes push_rotate_zoom_list" do
       command = BinaryBatch.push_rotate_zoom_list([{1, -2, 300, 9000, 1024, 2048}])
       push_rotate_zoom_list_opcode = OpSchema.opcode!(:push_rotate_zoom_list)
@@ -73,50 +68,6 @@ defmodule AtomLGFX.BinaryBatchTest do
                 }
               ]} = BinaryBatch.decode(command)
     end
-
-    test "encodes and decodes push_rotate_zoom_frame_strips" do
-      command =
-        BinaryBatch.push_rotate_zoom_frame_strips(
-          [{1, -2, 300, 9000, 1024, 2048}],
-          frame_height: 480,
-          background: 0x0000,
-          transparent: 0x0001
-        )
-
-      assert <<0xFF, 0x01, _flags::little-16, "PRZF", _rest::binary>> = command
-
-      assert {:ok,
-              [
-                %{
-                  op: :push_rotate_zoom_frame_strips,
-                  frame_height: 480,
-                  background: 0x0000,
-                  transparent: 0x0001,
-                  instances: [
-                    %{
-                      source_target: 1,
-                      x: -2,
-                      y: 300,
-                      angle_cdeg: 9000,
-                      zoom_x1024: 1024,
-                      zoom_y1024: 2048
-                    }
-                  ]
-                }
-              ]} = BinaryBatch.decode(command)
-    end
-
-    test "rejects native frame command inside an active strip" do
-      command =
-        BinaryBatch.batch([
-          BinaryBatch.begin_strip(0),
-          BinaryBatch.push_rotate_zoom_frame_strips([{1, 0, 0, 0, 1024, 1024}], frame_height: 10),
-          BinaryBatch.present_strip()
-        ])
-
-      assert {:error, {:batch_failed, 1, 0xFF, :strip_already_active}} =
-               BinaryBatch.validate(command)
-    end
   end
 
   describe "removed speculative commands" do
@@ -139,12 +90,15 @@ defmodule AtomLGFX.BinaryBatchTest do
         {:draw_jpg, 3},
         {:draw_jpg, 9},
         {:push_image_rgb565, 5},
-        {:push_image_rgb565, 6}
+        {:push_image_rgb565, 6},
+        {:begin_strip, 1},
+        {:present_strip, 0},
+        {:push_rotate_zoom_frame_strips, 2}
       ]
 
       for {name, arity} <- removed do
         refute function_exported?(BinaryBatch, name, arity),
-               "#{name}/#{arity} should stay outside the v2 protocol BinaryBatch surface"
+               "#{name}/#{arity} should stay outside the v3 protocol BinaryBatch surface"
       end
     end
   end

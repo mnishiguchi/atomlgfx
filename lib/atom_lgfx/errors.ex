@@ -18,10 +18,7 @@ defmodule AtomLGFX.Errors do
     do: "batch must not be empty"
 
   def format_error(:resource_busy),
-    do: "resource is still in use by a retained render program"
-
-  def format_error(:renderer_running),
-    do: "another exclusive retained renderer is already running"
+    do: "resource is busy"
 
   def format_error({:bad_binary_batch, value}),
     do: "bad binary batch #{inspect(value)}"
@@ -82,42 +79,6 @@ defmodule AtomLGFX.Errors do
 
   def format_error({:bad_zoom, value}),
     do: "bad zoom #{inspect(value)}"
-
-  def format_error({:bad_retained_object_buffer_layout, value}),
-    do: "bad retained object-buffer layout #{inspect(value)}"
-
-  def format_error({:bad_retained_object_record, value}),
-    do: "bad retained object record #{inspect(value)}"
-
-  def format_error({:bad_retained_object_buffer_handle, value}),
-    do: "bad retained object-buffer handle #{inspect(value)}"
-
-  def format_error({:bad_retained_object_buffer_capacity, value}),
-    do: "bad retained object-buffer capacity #{inspect(value)}"
-
-  def format_error({:bad_retained_render_program_handle, value}),
-    do: "bad retained render-program handle #{inspect(value)}"
-
-  def format_error({:bad_retained_render_program_type, value}),
-    do: "bad retained render-program type #{inspect(value)}"
-
-  def format_error({:bad_retained_render_program_mode, value}),
-    do: "bad retained render-program mode #{inspect(value)}"
-
-  def format_error({:bad_retained_render_update, value}),
-    do: "bad retained render update policy #{inspect(value)}"
-
-  def format_error({:bad_retained_render_sources, value}),
-    do: "bad retained render source list #{inspect(value)}"
-
-  def format_error({:bad_retained_render_zoom_bounds, min_zoom, max_zoom}),
-    do: "bad retained render zoom bounds min=#{inspect(min_zoom)} max=#{inspect(max_zoom)}"
-
-  def format_error({:bad_retained_render_strip_height, value}),
-    do: "bad retained render strip height #{inspect(value)}"
-
-  def format_error({:bad_render_program_stats_payload, value}),
-    do: "bad retained render-program stats payload #{inspect(value)}"
 
   def format_error({:bad_image_scale, value}),
     do: "bad image scale #{inspect(value)}"

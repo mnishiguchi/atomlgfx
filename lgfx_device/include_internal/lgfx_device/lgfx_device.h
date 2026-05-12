@@ -296,23 +296,6 @@ esp_err_t lgfx_device_set_brightness(uint8_t brightness);
 esp_err_t lgfx_device_display(void);
 
 // ----------------------------------------------------------------------------
-// Optional strip-presentation helpers (LCD-only)
-// ----------------------------------------------------------------------------
-//
-// These are intended for driver-managed strip-buffer presentation.
-//
-// Behavior:
-// - strip buffers may be allocated lazily on first strip use
-// - return ESP_ERR_NOT_SUPPORTED when buffered strip presentation is unavailable
-// - begin_strip(y0) opens the active destination strip for logical LCD target 0
-// - while a strip is open, logical LCD drawing routes to that strip buffer
-// - present_strip() blits the active strip to the live LCD at its configured y
-// - display() remains the final LCD flush for the frame
-esp_err_t lgfx_device_presentation_get_strip_height(uint16_t *out_strip_height);
-esp_err_t lgfx_device_presentation_begin_strip(uint16_t y0);
-esp_err_t lgfx_device_presentation_present_strip(void);
-
-// ----------------------------------------------------------------------------
 // Common ops (LCD or sprite target)
 // ----------------------------------------------------------------------------
 esp_err_t lgfx_device_set_color_depth(uint8_t target, uint8_t depth);
@@ -619,30 +602,6 @@ esp_err_t lgfx_device_sprite_set_palette_color(uint8_t handle, uint8_t palette_i
 #define LGFX_DEVICE_SPRITE_TRANSFORM_RECORD_SIZE ((size_t) 12u)
 
 /*
- * Retained sprite-transform instance record:
- *   source_index:u8, reserved:u8=0,
- *   x:i16, y:i16, dx:i16, dy:i16,
- *   angle_cdeg:u16, zoom_x1024:u16,
- *   dangle_cdeg:i16, dzoom_x1024:i16
- */
-
-#define LGFX_DEVICE_RETAINED_SPRITE_TRANSFORM_2D_RECORD_SIZE ((size_t) 18u)
-
-typedef struct lgfx_retained_render_program_stats_t
-{
-    bool running;
-    uint32_t frame_count;
-    uint16_t object_count;
-    uint16_t drawn_count;
-    uint16_t culled_count;
-    uint16_t strip_height;
-    int32_t last_frame_us;
-    int32_t last_update_us;
-    int32_t last_draw_us;
-    int32_t last_present_us;
-} lgfx_retained_render_program_stats_t;
-
-/*
  * Whole-sprite push to LCD or another sprite.
  *
  * Thin wrapper over pinned LovyanGFX destination-aware overloads.
@@ -714,39 +673,6 @@ esp_err_t lgfx_device_sprite_push_rotate_zoom_list(
     uint32_t transparent_value,
     bool approx_cull);
 
-esp_err_t lgfx_device_retained_object_buffer_create(
-    uint8_t layout_id,
-    uint16_t capacity,
-    uint8_t *out_handle);
-
-esp_err_t lgfx_device_retained_object_buffer_write(
-    uint8_t handle,
-    const uint8_t *records,
-    size_t records_len);
-
-esp_err_t lgfx_device_retained_object_buffer_delete(uint8_t handle);
-
-esp_err_t lgfx_device_retained_render_program_create(
-    uint8_t type_id,
-    uint8_t object_buffer_handle,
-    const uint8_t *source_handles,
-    size_t source_count,
-    uint16_t strip_height,
-    uint32_t background_color,
-    bool has_transparent,
-    uint16_t transparent_value,
-    uint8_t update_policy,
-    uint16_t zoom_min_x1024,
-    uint16_t zoom_max_x1024,
-    uint8_t *out_handle);
-
-esp_err_t lgfx_device_retained_render_program_start(uint8_t handle, uint8_t mode);
-esp_err_t lgfx_device_retained_render_program_stop(uint8_t handle);
-esp_err_t lgfx_device_retained_render_program_stats(
-    uint8_t handle,
-    lgfx_retained_render_program_stats_t *out_stats);
-esp_err_t lgfx_device_retained_render_program_destroy(uint8_t handle);
-bool lgfx_device_retained_renderer_running(void);
 
 #ifdef __cplusplus
 }

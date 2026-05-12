@@ -10,6 +10,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "defaultatoms.h"
 #include "lgfx_port/lgfx_port_internal.h"
 #include "lgfx_port/ops.h"
 #include "lgfx_port/protocol.h"
@@ -224,6 +225,23 @@ bool lgfx_op_try_from_opcode(uint32_t opcode, lgfx_op_t *out_op)
 
     *out_op = (lgfx_op_t) opcode;
     return true;
+}
+
+bool lgfx_op_try_from_v3_atom(GlobalContext *global, term op_atom, lgfx_op_t *out_op)
+{
+    if (global == NULL || out_op == NULL || !term_is_atom(op_atom)) {
+        return false;
+    }
+
+#define X(op_name, _handler_fn, atom_str, ...)                                      \
+    if (globalcontext_is_term_equal_to_atom_string(global, op_atom, atom_str)) {     \
+        *out_op = LGFX_OP_##op_name;                                                \
+        return true;                                                                \
+    }
+#include "lgfx_port/ops.def"
+#undef X
+
+    return false;
 }
 
 const char *lgfx_op_name_from_op(lgfx_op_t op)

@@ -39,9 +39,6 @@ static_assert(LGFX_OP_COUNT <= 240, "render batch protocol opcodes must not over
 static_assert(LGFX_RENDER_OP_TARGET >= 240, "render-private opcodes must stay above protocol opcodes");
 static_assert(LGFX_RENDER_OP_COLOR_MODE >= 240, "render-private opcodes must stay above protocol opcodes");
 static_assert(LGFX_RENDER_OP_PUSH_SPRITE_TRANSPARENT >= 240, "render-private opcodes must stay above protocol opcodes");
-static_assert(LGFX_RENDER_OP_BEGIN_STRIP >= 240, "render-private opcodes must stay above protocol opcodes");
-static_assert(LGFX_RENDER_OP_PRESENT_STRIP >= 240, "render-private opcodes must stay above protocol opcodes");
-static_assert(LGFX_RENDER_OP_EXTENDED >= 240, "render-private opcodes must stay above protocol opcodes");
 
 namespace
 {
@@ -54,9 +51,6 @@ static constexpr uint8_t PRZL_OPTION_HAS_TRANSPARENT = 0x01u;
 static constexpr uint8_t PRZL_OPTION_APPROX_CULL = 0x02u;
 static constexpr size_t PRZL_HEADER_SIZE = 12u;
 static constexpr size_t PRZL_RECORD_SIZE = LGFX_DEVICE_SPRITE_TRANSFORM_RECORD_SIZE;
-static constexpr uint8_t PRZF_OPTION_HAS_TRANSPARENT = 0x01u;
-static constexpr uint8_t PRZF_OPTION_APPROX_CULL = 0x02u;
-static constexpr size_t PRZF_HEADER_SIZE = 14u;
 static constexpr uint16_t TEXT_ALLOWED_FLAGS =
     LGFX_F_TEXT_HAS_BG | LGFX_F_TEXT_FG_INDEX | LGFX_F_TEXT_BG_INDEX;
 
@@ -70,7 +64,6 @@ struct lgfx_render_batch_state_t
 {
     uint8_t target = 0u;
     bool color_is_index = false;
-    bool strip_active = false;
 };
 
 struct lgfx_render_batch_trace_t
@@ -86,16 +79,7 @@ struct lgfx_render_batch_trace_t
     uint32_t przl_instance_count = 0u;
     uint32_t przl_executed_count = 0u;
     uint32_t przl_culled_count = 0u;
-    uint32_t przf_command_count = 0u;
-    uint32_t przf_instance_count = 0u;
-    uint32_t przf_executed_count = 0u;
-    uint32_t przf_culled_count = 0u;
-    uint32_t strip_begin_count = 0u;
-    uint32_t strip_present_count = 0u;
     uint32_t display_count = 0u;
-    int64_t frame_clear_us = 0;
-    int64_t frame_draw_us = 0;
-    int64_t frame_present_us = 0;
     int64_t display_us = 0;
 };
 
@@ -363,144 +347,6 @@ static esp_err_t lgfx_render_batch_parse_or_dispatch_przl(
 }
 
 
-static esp_err_t lgfx_render_batch_parse_or_dispatch_przf(
-    const uint8_t **cursor,
-    const uint8_t *end,
-    bool *out_malformed_command,
-    lgfx_render_batch_mode_t mode,
-    lgfx_render_batch_trace_t *trace)
-{
-    uint16_t flags = 0u;
-    if (!lgfx_render_batch_take_u16(cursor, end, &flags)) {
-        return lgfx_render_batch_malformed(out_malformed_command);
-    }
-
-    if ((flags & ~((uint16_t) LGFX_F_TRANSPARENT_INDEX)) != 0u) {
-        return lgfx_render_batch_malformed(out_malformed_command);
-    }
-
-    if (*cursor > end || (size_t) (end - *cursor) < PRZF_HEADER_SIZE) {
-        return lgfx_render_batch_malformed(out_malformed_command);
-    }
-
-    const uint8_t *header = *cursor;
-    if (header[0] != 'P' || header[1] != 'R' || header[2] != 'Z' || header[3] != 'F') {
-        return lgfx_render_batch_malformed(out_malformed_command);
-    }
-
-    const uint8_t version = header[4];
-    const uint8_t options = header[5];
-    const uint16_t transparent_value = lgfx_render_batch_read_le_u16(header + 6);
-    const uint16_t frame_height = lgfx_render_batch_read_le_u16(header + 8);
-    const uint16_t background_color = lgfx_render_batch_read_le_u16(header + 10);
-    const uint16_t count = lgfx_render_batch_read_le_u16(header + 12);
-
-    if (version != 1u || (options & ~(PRZF_OPTION_HAS_TRANSPARENT | PRZF_OPTION_APPROX_CULL)) != 0u) {
-        return lgfx_render_batch_malformed(out_malformed_command);
-    }
-
-    const bool has_transparent = (options & PRZF_OPTION_HAS_TRANSPARENT) != 0u;
-    const bool approx_cull = (options & PRZF_OPTION_APPROX_CULL) != 0u;
-    const bool transparent_is_index = (flags & LGFX_F_TRANSPARENT_INDEX) != 0u;
-    if (!has_transparent && transparent_value != 0u) {
-        return lgfx_render_batch_malformed(out_malformed_command);
-    }
-    if (transparent_is_index && !has_transparent) {
-        return lgfx_render_batch_malformed(out_malformed_command);
-    }
-    if (transparent_is_index && transparent_value > UINT8_MAX) {
-        return lgfx_render_batch_malformed(out_malformed_command);
-    }
-    if (frame_height == 0u || count == 0u || count > (SIZE_MAX / PRZL_RECORD_SIZE)) {
-        return lgfx_render_batch_malformed(out_malformed_command);
-    }
-
-    const size_t records_len = (size_t) count * PRZL_RECORD_SIZE;
-    const uint8_t *records = header + PRZF_HEADER_SIZE;
-    if (records > end || (size_t) (end - records) < records_len) {
-        return lgfx_render_batch_malformed(out_malformed_command);
-    }
-
-    for (uint16_t i = 0; i < count; i++) {
-        const uint8_t *record = records + ((size_t) i * PRZL_RECORD_SIZE);
-        const uint8_t src_handle = record[0];
-        const uint16_t angle_cdeg = lgfx_render_batch_read_le_u16(record + 6);
-        const uint16_t zoom_x1024 = lgfx_render_batch_read_le_u16(record + 8);
-        const uint16_t zoom_y1024 = lgfx_render_batch_read_le_u16(record + 10);
-
-        if (!lgfx_device_is_sprite_target(src_handle)
-            || record[1] != 0u
-            || angle_cdeg >= 36000u
-            || zoom_x1024 == 0u
-            || zoom_y1024 == 0u) {
-            return lgfx_render_batch_malformed(out_malformed_command);
-        }
-    }
-
-    if (mode == LGFX_RENDER_BATCH_EXECUTE) {
-        lgfx_dev::PushRotateZoomFrameStats stats{};
-        const esp_err_t err = lgfx_dev::push_rotate_zoom_frame_strips_locked(
-            frame_height,
-            (uint32_t) background_color,
-            records,
-            count,
-            has_transparent,
-            transparent_is_index,
-            (uint32_t) transparent_value,
-            approx_cull,
-            &stats);
-        if (err != ESP_OK) {
-            return err;
-        }
-
-        if (trace) {
-            trace->przf_command_count++;
-            trace->przf_instance_count += stats.instance_count;
-            trace->przf_executed_count += stats.executed_count;
-            trace->przf_culled_count += stats.culled_count;
-            trace->strip_begin_count += stats.strip_count;
-            trace->strip_present_count += stats.strip_count;
-            trace->frame_clear_us += stats.clear_us;
-            trace->frame_draw_us += stats.draw_us;
-            trace->frame_present_us += stats.present_us;
-        }
-    }
-
-    *cursor = records + records_len;
-    return ESP_OK;
-}
-
-static esp_err_t lgfx_render_batch_parse_or_dispatch_extended(
-    lgfx_render_batch_state_t *state,
-    const uint8_t **cursor,
-    const uint8_t *end,
-    bool *out_malformed_command,
-    lgfx_render_batch_mode_t mode,
-    lgfx_render_batch_trace_t *trace)
-{
-    uint8_t subop = 0u;
-    if (!lgfx_render_batch_take_u8(cursor, end, &subop)) {
-        return lgfx_render_batch_malformed(out_malformed_command);
-    }
-
-    switch (subop) {
-        case LGFX_RENDER_EXT_OP_PUSH_ROTATE_ZOOM_FRAME_STRIPS:
-            if (state && state->strip_active) {
-                return lgfx_render_batch_malformed(out_malformed_command);
-            }
-            return lgfx_render_batch_parse_or_dispatch_przf(
-                cursor,
-                end,
-                out_malformed_command,
-                mode,
-                trace);
-
-        default:
-            return ESP_ERR_NOT_SUPPORTED;
-    }
-}
-
-
 static esp_err_t lgfx_render_batch_parse_or_dispatch_one(
     lgfx_render_batch_state_t *state,
     uint8_t op,
@@ -559,26 +405,7 @@ static esp_err_t lgfx_render_batch_parse_or_dispatch_one(
 
 
 
-        case LGFX_RENDER_OP_EXTENDED:
-            return lgfx_render_batch_parse_or_dispatch_extended(
-                state,
-                cursor,
-                end,
-                out_malformed_command,
-                mode,
-                trace);
-
-
-
-
-
-
-
         case LGFX_OP_display: {
-            if (state->strip_active) {
-                return lgfx_render_batch_malformed(out_malformed_command);
-            }
-
             if (mode == LGFX_RENDER_BATCH_VALIDATE_ONLY) {
                 return ESP_OK;
             }
@@ -1452,57 +1279,6 @@ static esp_err_t lgfx_render_batch_parse_or_dispatch_one(
                 false);
         }
 
-        case LGFX_RENDER_OP_BEGIN_STRIP: {
-            uint16_t y0 = 0u;
-            if (!lgfx_render_batch_take_u16(cursor, end, &y0)) {
-                return lgfx_render_batch_malformed(out_malformed_command);
-            }
-
-            if (state->strip_active) {
-                return lgfx_render_batch_malformed(out_malformed_command);
-            }
-
-            if (mode == LGFX_RENDER_BATCH_VALIDATE_ONLY) {
-                state->strip_active = true;
-                return ESP_OK;
-            }
-
-            if (trace) {
-                trace->strip_begin_count++;
-            }
-
-            const esp_err_t err = lgfx_dev::presentation_begin_strip_locked(y0);
-            if (err != ESP_OK) {
-                return err;
-            }
-
-            state->strip_active = true;
-            return ESP_OK;
-        }
-
-        case LGFX_RENDER_OP_PRESENT_STRIP: {
-            if (!state->strip_active) {
-                return lgfx_render_batch_malformed(out_malformed_command);
-            }
-
-            if (mode == LGFX_RENDER_BATCH_VALIDATE_ONLY) {
-                state->strip_active = false;
-                return ESP_OK;
-            }
-
-            if (trace) {
-                trace->strip_present_count++;
-            }
-
-            const esp_err_t err = lgfx_dev::presentation_present_strip_locked();
-            if (err != ESP_OK) {
-                return err;
-            }
-
-            state->strip_active = false;
-            return ESP_OK;
-        }
-
         case LGFX_OP_pushRotateZoomList:
             return lgfx_render_batch_parse_or_dispatch_przl(
                 state,
@@ -1520,6 +1296,7 @@ static esp_err_t lgfx_render_batch_parse_or_dispatch_one(
 static esp_err_t lgfx_render_batch_run_stream(
     const uint8_t *bytes,
     size_t len,
+    uint8_t initial_target,
     uint32_t *out_failed_index,
     uint8_t *out_failed_opcode,
     bool *out_malformed_command,
@@ -1534,6 +1311,7 @@ static esp_err_t lgfx_render_batch_run_stream(
     const uint8_t *const end = bytes + len;
     uint32_t command_index = 0u;
     lgfx_render_batch_state_t state{};
+    state.target = initial_target;
 
     while (cursor < end) {
         const uint8_t op = *cursor++;
@@ -1562,16 +1340,6 @@ static esp_err_t lgfx_render_batch_run_stream(
         command_index++;
     }
 
-    if (state.strip_active) {
-        if (out_failed_index) {
-            *out_failed_index = command_index;
-        }
-        if (out_failed_opcode) {
-            *out_failed_opcode = 0u;
-        }
-        return lgfx_render_batch_malformed(out_malformed_command);
-    }
-
     return ESP_OK;
 }
 
@@ -1580,6 +1348,7 @@ static esp_err_t lgfx_render_batch_run_stream(
 extern "C" esp_err_t lgfx_render_batch_dispatch_validate(
     const uint8_t *bytes,
     size_t len,
+    uint8_t initial_target,
     uint32_t *out_failed_index,
     uint8_t *out_failed_opcode,
     bool *out_malformed_command)
@@ -1588,6 +1357,7 @@ extern "C" esp_err_t lgfx_render_batch_dispatch_validate(
     return lgfx_render_batch_run_stream(
         bytes,
         len,
+        initial_target,
         out_failed_index,
         out_failed_opcode,
         out_malformed_command,
@@ -1598,6 +1368,7 @@ extern "C" esp_err_t lgfx_render_batch_dispatch_validate(
 extern "C" esp_err_t lgfx_render_batch_dispatch_run(
     const uint8_t *bytes,
     size_t len,
+    uint8_t initial_target,
     uint32_t *out_failed_index,
     uint8_t *out_failed_opcode,
     bool *out_malformed_command)
@@ -1622,6 +1393,7 @@ extern "C" esp_err_t lgfx_render_batch_dispatch_run(
     err = lgfx_render_batch_dispatch_validate(
         bytes,
         len,
+        initial_target,
         out_failed_index,
         out_failed_opcode,
         out_malformed_command);
@@ -1664,6 +1436,7 @@ extern "C" esp_err_t lgfx_render_batch_dispatch_run(
     err = lgfx_render_batch_run_stream(
         bytes,
         len,
+        initial_target,
         out_failed_index,
         out_failed_opcode,
         out_malformed_command,
@@ -1685,7 +1458,7 @@ extern "C" esp_err_t lgfx_render_batch_dispatch_run(
 
     ESP_LOGI(
         LOG_TAG,
-        "stats batch_bytes=%u prevalidate_us=%lld start_write_us=%lld execute_us=%lld end_write_us=%lld total_us=%lld commands=%u target=%u color_mode=%u scalar=%u clip=%u text=%u sprite_push=%u przl_commands=%u przl_instances=%u przl_executed=%u przl_culled=%u przf_commands=%u przf_instances=%u przf_executed=%u przf_culled=%u strip_begin=%u strip_present=%u display=%u frame_clear_us=%lld frame_draw_us=%lld frame_present_us=%lld display_us=%lld err=%d end_err=%d",
+        "stats batch_bytes=%u prevalidate_us=%lld start_write_us=%lld execute_us=%lld end_write_us=%lld total_us=%lld commands=%u target=%u color_mode=%u scalar=%u clip=%u text=%u sprite_push=%u przl_commands=%u przl_instances=%u przl_executed=%u przl_culled=%u display=%u display_us=%lld err=%d end_err=%d",
         (unsigned) len,
         (long long) prevalidate_us,
         (long long) start_write_us,
@@ -1703,28 +1476,17 @@ extern "C" esp_err_t lgfx_render_batch_dispatch_run(
         (unsigned) trace.przl_instance_count,
         (unsigned) trace.przl_executed_count,
         (unsigned) trace.przl_culled_count,
-        (unsigned) trace.przf_command_count,
-        (unsigned) trace.przf_instance_count,
-        (unsigned) trace.przf_executed_count,
-        (unsigned) trace.przf_culled_count,
-        (unsigned) trace.strip_begin_count,
-        (unsigned) trace.strip_present_count,
         (unsigned) trace.display_count,
-        (long long) trace.frame_clear_us,
-        (long long) trace.frame_draw_us,
-        (long long) trace.frame_present_us,
         (long long) trace.display_us,
         (int) err,
         (int) end_err);
 #endif
 
     if (err != ESP_OK) {
-        (void) lgfx_dev::presentation_cancel_strip_locked();
         return err;
     }
 
     if (end_err != ESP_OK) {
-        (void) lgfx_dev::presentation_cancel_strip_locked();
         return end_err;
     }
 

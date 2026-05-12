@@ -8,7 +8,7 @@ defmodule SampleApp.ProtocolSmoke do
   import Bitwise
 
   @t_short 5_000
-  @proto_ver 2
+  @proto_ver 3
 
   @bg 0x0000
   @fg 0xFFFF
@@ -48,7 +48,7 @@ defmodule SampleApp.ProtocolSmoke do
          :ok <- AtomLGFX.set_text_wrap(port, false, 0),
          :ok <- AtomLGFX.draw_rect(port, 8, 12, panel_w, panel_h, @accent, 0),
          :ok <- AtomLGFX.draw_string_bg(port, 16, 22, @fg, @bg, 2, "PROTOCOL", 0),
-         :ok <- AtomLGFX.draw_string_bg(port, 18, 48, @ok, @bg, 1, "v2 handshake ok", 0),
+         :ok <- AtomLGFX.draw_string_bg(port, 18, 48, @ok, @bg, 1, "v3 handshake ok", 0),
          :ok <-
            AtomLGFX.draw_string_bg(
              port,
@@ -67,8 +67,8 @@ defmodule SampleApp.ProtocolSmoke do
   def run(port, raw_call) when is_function(raw_call, 6) do
     with :ok <- check_local_cap_constants(),
          :ok <- check_write_session_requires_init(port, raw_call),
-         {:ok, caps} <- check_get_caps_metadata_and_required_caps(port, raw_call),
-         :ok <- check_last_error_cap_matches_availability(port, raw_call, caps.feature_bits) do
+         {:ok, feature_bits} <- check_get_caps_feature_bits_and_required_caps(port, raw_call),
+         :ok <- check_last_error_cap_matches_availability(port, raw_call, feature_bits) do
       IO.puts("protocol smoke ok")
       :ok
     else
@@ -145,25 +145,15 @@ defmodule SampleApp.ProtocolSmoke do
   defp expect_not_initialized({:ok, payload}, op), do: {:error, {op, :unexpected_ok, payload}}
 
   # -----------------------------------------------------------------------------
-  # 2) get_caps metadata sanity + required capabilities must be advertised
+  # 2) get_caps feature-bit sanity + required capabilities must be advertised
   # -----------------------------------------------------------------------------
-  defp check_get_caps_metadata_and_required_caps(port, raw_call) do
+  defp check_get_caps_feature_bits_and_required_caps(port, raw_call) do
     case raw_call.(port, :get_caps, 0, 0, [], @t_short) do
-      {:ok, {:caps, proto_ver, max_binary_bytes, max_sprites, feature_bits}}
-      when is_integer(proto_ver) and is_integer(max_binary_bytes) and is_integer(max_sprites) and
-             is_integer(feature_bits) ->
-        with :ok <- check_caps_metadata(proto_ver, max_binary_bytes, max_sprites, feature_bits),
-             :ok <- check_cap_pushimage(feature_bits),
+      {:ok, feature_bits} when is_integer(feature_bits) and feature_bits >= 0 ->
+        with :ok <- check_cap_pushimage(feature_bits),
              :ok <- check_cap_batch(feature_bits) do
           maybe_log_unknown_feature_bits(feature_bits)
-
-          {:ok,
-           %{
-             proto_ver: proto_ver,
-             max_binary_bytes: max_binary_bytes,
-             max_sprites: max_sprites,
-             feature_bits: feature_bits
-           }}
+          {:ok, feature_bits}
         end
 
       {:ok, payload} ->
@@ -171,25 +161,6 @@ defmodule SampleApp.ProtocolSmoke do
 
       {:error, reason} ->
         {:error, {:get_caps_failed, reason}}
-    end
-  end
-
-  defp check_caps_metadata(proto_ver, max_binary_bytes, max_sprites, feature_bits) do
-    cond do
-      proto_ver != @proto_ver ->
-        {:error, {:proto_ver_mismatch, @proto_ver, proto_ver}}
-
-      max_binary_bytes <= 0 ->
-        {:error, {:bad_max_binary_bytes, max_binary_bytes}}
-
-      max_sprites < 0 ->
-        {:error, {:bad_max_sprites, max_sprites}}
-
-      feature_bits < 0 ->
-        {:error, {:bad_feature_bits, feature_bits}}
-
-      true ->
-        :ok
     end
   end
 

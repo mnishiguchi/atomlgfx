@@ -7,17 +7,17 @@ defmodule AtomLGFX.BinaryBatch do
   Packed binary-batch command builders.
 
   The binary-batch path uses scalar render command encodings plus a small set of
-  render-only control commands such as `target/1`, `color_mode/1`, `begin_strip/1`,
-  `present_strip/0`, `display/0`, `set_text_datum/1`, `set_text_wrap/1`,
+  render-only control commands such as `target/1`, `color_mode/1`,
+  `display/0`, `set_text_datum/1`, `set_text_wrap/1`,
   `set_text_wrap_xy/2`, `set_cursor/2`, `set_text_color/2`, `draw_string/3`,
   `print/1`, `println/1`, `set_palette_color/2`, `set_pivot/2`,
   `push_sprite/3`, `push_sprite/4`,
   `push_rotate_zoom/5`, `push_rotate_zoom/6`, `push_rotate_zoom/7`,
   `draw_arc/7`, `fill_arc/7`, `draw_bezier/7`, `draw_bezier/9`,
-  `push_rotate_zoom_list/2`, and `push_rotate_zoom_frame_strips/2`.
+  and `push_rotate_zoom_list/2`.
 
   Speculative packed-list commands for generic primitive shapes were intentionally
-  removed before the v2 protocol freeze. Repeated primitive drawing should use ordinary
+  removed before the protocol freeze. Repeated primitive drawing should use ordinary
   scalar batch commands unless a future measured workload justifies a compact
   list command.
   """
@@ -69,24 +69,14 @@ defmodule AtomLGFX.BinaryBatch do
   @render_op_target 0xF0
   @render_op_color_mode 0xF1
   @render_op_push_sprite_transparent 0xF2
-  @render_op_begin_strip 0xF3
-  @render_op_present_strip 0xF4
-  @render_op_extended 0xFF
-
-  @render_ext_op_push_rotate_zoom_frame_strips 0x01
 
   @render_private_opcodes [
     target: @render_op_target,
     color_mode: @render_op_color_mode,
-    push_sprite_transparent: @render_op_push_sprite_transparent,
-    begin_strip: @render_op_begin_strip,
-    present_strip: @render_op_present_strip,
-    extended: @render_op_extended
+    push_sprite_transparent: @render_op_push_sprite_transparent
   ]
 
-  @render_extended_opcodes [
-    push_rotate_zoom_frame_strips: @render_ext_op_push_rotate_zoom_frame_strips
-  ]
+  @render_extended_opcodes []
 
   @render_private_opcode_values Keyword.values(@render_private_opcodes)
 
@@ -253,25 +243,6 @@ defmodule AtomLGFX.BinaryBatch do
 
   def color_mode(:palette_index) do
     <<@render_op_color_mode, @render_color_mode_palette_index>>
-  end
-
-  @doc """
-  Begins drawing into the native presentation strip at LCD y-coordinate `y0`.
-
-  While a strip is active, render target `0` resolves to the native strip buffer
-  instead of the live LCD. Finish the strip with `present_strip/0`.
-  """
-  @spec begin_strip(non_neg_integer()) :: binary()
-  def begin_strip(y0) when u16(y0) do
-    <<@render_op_begin_strip, y0::little-16>>
-  end
-
-  @doc """
-  Presents the active native presentation strip to the live LCD.
-  """
-  @spec present_strip() :: binary()
-  def present_strip do
-    <<@render_op_present_strip>>
   end
 
   @doc """
@@ -737,37 +708,6 @@ defmodule AtomLGFX.BinaryBatch do
   end
 
   @doc """
-  Pushes many transformed source sprites through native presentation strips.
-
-  This is a frame-level hot-path command: native code owns the strip loop while
-  Elixir supplies compact object state. It is intended for MovingIcons-style
-  animation workloads where the upstream LovyanGFX implementation keeps the
-  inner frame loop in C++.
-
-  `instances` uses the same fixed-point tuple shape as `push_rotate_zoom_list/2`:
-
-      {source_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024}
-
-  Options:
-
-  - `:frame_height` is required and controls the native strip loop limit
-  - `:background` is the RGB565 color used to clear each strip, default `0x0000`
-  - `:transparent` accepts an RGB565 integer or `{:index, n}`
-  - `:approx_cull` asks native code to skip off-target transforms when safe
-  """
-  @spec push_rotate_zoom_frame_strips(list(), keyword()) :: binary()
-  def push_rotate_zoom_frame_strips(instances, opts) when is_list(instances) and is_list(opts) do
-    case encode_push_rotate_zoom_frame_strips_payload(instances, opts) do
-      {:ok, flags, payload} ->
-        <<@render_op_extended, @render_ext_op_push_rotate_zoom_frame_strips, flags::little-16,
-          payload::binary>>
-
-      {:error, reason} ->
-        raise ArgumentError, Errors.format_error(reason)
-    end
-  end
-
-  @doc """
   Decodes a binary-batch command stream into readable command maps.
 
   This helper is intended for tests, logs, and generated-frame debugging. It does
@@ -782,10 +722,7 @@ defmodule AtomLGFX.BinaryBatch do
     if command_binary == <<>> do
       {:error, :empty_batch}
     else
-      with {:ok, decoded_commands} <- decode_commands(command_binary, 0, []),
-           :ok <- validate_strip_lifecycle(decoded_commands) do
-        {:ok, decoded_commands}
-      end
+      decode_commands(command_binary, 0, [])
     end
   end
 
@@ -846,13 +783,7 @@ defmodule AtomLGFX.BinaryBatch do
     else
       case decode_commands_with_partial(command_binary, 0, []) do
         {:ok, decoded_commands} ->
-          case validate_strip_lifecycle(decoded_commands) do
-            :ok ->
-              {:ok, summarize_valid_diagnosis(command_binary, decoded_commands)}
-
-            {:error, reason} ->
-              {:error, build_diagnosis(command_binary, decoded_commands, reason)}
-          end
+          {:ok, summarize_valid_diagnosis(command_binary, decoded_commands)}
 
         {:error, reason, decoded_commands} ->
           {:error, build_diagnosis(command_binary, decoded_commands, reason)}
@@ -1211,10 +1142,6 @@ defmodule AtomLGFX.BinaryBatch do
       push_rotate_zoom_count: 0,
       push_rotate_zoom_list_count: 0,
       push_rotate_zoom_instance_count: 0,
-      push_rotate_zoom_frame_count: 0,
-      push_rotate_zoom_frame_instance_count: 0,
-      strip_begin_count: 0,
-      strip_present_count: 0,
       display_count: 0,
       target_count: 0,
       fixed_overhead_bytes: 0,
@@ -1363,27 +1290,6 @@ defmodule AtomLGFX.BinaryBatch do
     |> accumulate_packed_list(instance_count, @push_rotate_zoom_list_record_size)
   end
 
-  defp accumulate_summary_category(summary, %{
-         op: :push_rotate_zoom_frame_strips,
-         instances: instances
-       }) do
-    instance_count = length(instances)
-
-    summary
-    |> Map.update!(:push_rotate_zoom_frame_count, &(&1 + 1))
-    |> Map.update!(:push_rotate_zoom_frame_instance_count, &(&1 + instance_count))
-    |> Map.update!(:sprite_push_count, &(&1 + instance_count))
-    |> accumulate_packed_list(instance_count, @push_rotate_zoom_list_record_size)
-  end
-
-  defp accumulate_summary_category(summary, %{op: :begin_strip}) do
-    Map.update!(summary, :strip_begin_count, &(&1 + 1))
-  end
-
-  defp accumulate_summary_category(summary, %{op: :present_strip}) do
-    Map.update!(summary, :strip_present_count, &(&1 + 1))
-  end
-
   defp accumulate_summary_category(summary, %{op: :display}) do
     Map.update!(summary, :display_count, &(&1 + 1))
   end
@@ -1456,54 +1362,6 @@ defmodule AtomLGFX.BinaryBatch do
     Map.update(counts, key, 1, &(&1 + 1))
   end
 
-  defp validate_strip_lifecycle(decoded_commands) do
-    validate_strip_lifecycle(decoded_commands, false)
-  end
-
-  defp validate_strip_lifecycle([], false), do: :ok
-
-  defp validate_strip_lifecycle([], true) do
-    {:error, {:batch_failed, :end_of_batch, 0, :strip_not_presented}}
-  end
-
-  defp validate_strip_lifecycle([%{op: :begin_strip, index: index, opcode: opcode} | _rest], true) do
-    {:error, {:batch_failed, index, opcode, :strip_already_active}}
-  end
-
-  defp validate_strip_lifecycle([%{op: :begin_strip} | rest], false) do
-    validate_strip_lifecycle(rest, true)
-  end
-
-  defp validate_strip_lifecycle(
-         [%{op: :present_strip, index: index, opcode: opcode} | _rest],
-         false
-       ) do
-    {:error, {:batch_failed, index, opcode, :strip_not_active}}
-  end
-
-  defp validate_strip_lifecycle([%{op: :present_strip} | rest], true) do
-    validate_strip_lifecycle(rest, false)
-  end
-
-  defp validate_strip_lifecycle(
-         [%{op: :push_rotate_zoom_frame_strips, index: index, opcode: opcode} | _rest],
-         true
-       ) do
-    {:error, {:batch_failed, index, opcode, :strip_already_active}}
-  end
-
-  defp validate_strip_lifecycle([%{op: :display, index: index, opcode: opcode} | _rest], true) do
-    {:error, {:batch_failed, index, opcode, :strip_not_presented}}
-  end
-
-  defp validate_strip_lifecycle([%{op: :display} | rest], false) do
-    validate_strip_lifecycle(rest, false)
-  end
-
-  defp validate_strip_lifecycle([_command | rest], strip_active) do
-    validate_strip_lifecycle(rest, strip_active)
-  end
-
   defp decode_commands(binary, index, acc) do
     case decode_commands_with_partial(binary, index, acc) do
       {:ok, decoded_commands} -> {:ok, decoded_commands}
@@ -1543,14 +1401,6 @@ defmodule AtomLGFX.BinaryBatch do
 
   defp decode_command(@render_op_color_mode, <<_unknown, _rest::binary>>) do
     {:error, :bad_color_mode}
-  end
-
-  defp decode_command(@render_op_begin_strip, <<y0::little-16, rest::binary>>) do
-    {:ok, %{op: :begin_strip, y0: y0}, rest}
-  end
-
-  defp decode_command(@render_op_present_strip, rest) do
-    {:ok, %{op: :present_strip}, rest}
   end
 
   defp decode_command(@op_display, rest) do
@@ -2088,67 +1938,12 @@ defmodule AtomLGFX.BinaryBatch do
     end
   end
 
-  defp decode_command(@render_op_extended, <<subop, rest::binary>>) do
-    decode_extended_command(subop, rest)
-  end
-
   defp decode_command(opcode, _rest) when opcode in @known_batch_opcodes do
     {:error, :truncated}
   end
 
   defp decode_command(_opcode, _rest) do
     {:error, :unsupported_command}
-  end
-
-  defp decode_extended_command(
-         @render_ext_op_push_rotate_zoom_frame_strips,
-         <<flags::little-16, "PRZF", 1, options, transparent::little-16, frame_height::little-16,
-           background::little-16, count::little-16, rest::binary>>
-       ) do
-    records_len = count * @push_rotate_zoom_list_record_size
-
-    with :ok <-
-           validate_push_rotate_zoom_frame_strips_header(
-             flags,
-             options,
-             transparent,
-             frame_height,
-             count
-           ) do
-      case rest do
-        <<records::binary-size(records_len), remaining::binary>> ->
-          case decode_push_rotate_zoom_records(records, []) do
-            {:ok, instances} ->
-              {:ok,
-               %{
-                 opcode: @render_op_extended,
-                 subop: @render_ext_op_push_rotate_zoom_frame_strips,
-                 op: :push_rotate_zoom_frame_strips,
-                 flags: flags,
-                 options: options,
-                 transparent:
-                   decode_push_rotate_zoom_frame_strips_transparent(options, flags, transparent),
-                 frame_height: frame_height,
-                 background: background,
-                 instances: instances
-               }, remaining}
-
-            {:error, reason} ->
-              {:error, reason}
-          end
-
-        _ ->
-          {:error, :truncated}
-      end
-    end
-  end
-
-  defp decode_extended_command(@render_ext_op_push_rotate_zoom_frame_strips, _bad) do
-    {:error, :truncated}
-  end
-
-  defp decode_extended_command(subop, _rest) do
-    {:error, {:unsupported_extended_opcode, subop}}
   end
 
   defp encode_push_rotate_zoom_command(
@@ -2216,41 +2011,6 @@ defmodule AtomLGFX.BinaryBatch do
     end
   end
 
-  defp encode_push_rotate_zoom_frame_strips_payload(instances, opts) do
-    with {:ok, frame_height} <- normalize_frame_height(Keyword.fetch(opts, :frame_height)),
-         {:ok, background} <- normalize_background(Keyword.get(opts, :background, 0)),
-         {:ok, flags,
-          <<?P, ?R, ?Z, ?L, 1, options, transparent::little-16, _y_offset::little-signed-16,
-            count::little-16, records::binary>>} <-
-           Sprites.encode_push_rotate_zoom_list_payload(
-             instances,
-             opts
-             |> Keyword.delete(:frame_height)
-             |> Keyword.delete(:background)
-             |> Keyword.delete(:y_offset)
-           ) do
-      payload =
-        [
-          <<?P, ?R, ?Z, ?F, 1, options, transparent::little-16, frame_height::little-16,
-            background::little-16, count::little-16>>,
-          records
-        ]
-        |> :erlang.iolist_to_binary()
-
-      {:ok, flags, payload}
-    end
-  end
-
-  defp normalize_frame_height({:ok, frame_height}) when u16(frame_height) and frame_height >= 1 do
-    {:ok, frame_height}
-  end
-
-  defp normalize_frame_height({:ok, other}), do: {:error, {:bad_frame_height, other}}
-  defp normalize_frame_height(:error), do: {:error, :missing_frame_height}
-
-  defp normalize_background(background) when u16(background), do: {:ok, background}
-  defp normalize_background(other), do: {:error, {:bad_background_color, other}}
-
   defp normalize_image_scale(value)
        when is_integer(value) and value > 0 and value <= @max_f32 do
     {:ok, value * 1.0}
@@ -2307,18 +2067,6 @@ defmodule AtomLGFX.BinaryBatch do
     {:ok, %{op: :set_text_color, flags: flags, fg: fg_color}, rest}
   end
 
-  defp decode_push_rotate_zoom_frame_strips_transparent(options, flags, value) do
-    if flag_set?(options, 0x01) do
-      if flag_set?(flags, Protocol.transparent_index_flag()) do
-        {:index, value}
-      else
-        value
-      end
-    else
-      nil
-    end
-  end
-
   defp validate_push_rotate_zoom_header(flags, options, transparent) do
     has_transparent = flag_set?(options, 0x01)
     transparent_is_index = flag_set?(flags, Protocol.transparent_index_flag())
@@ -2363,43 +2111,6 @@ defmodule AtomLGFX.BinaryBatch do
 
       transparent_is_index and transparent > 0xFF ->
         {:error, {:bad_transparent_color, {:index, transparent}}}
-
-      count == 0 ->
-        {:error, :empty_batch}
-
-      true ->
-        :ok
-    end
-  end
-
-  defp validate_push_rotate_zoom_frame_strips_header(
-         flags,
-         options,
-         transparent,
-         frame_height,
-         count
-       ) do
-    has_transparent = flag_set?(options, 0x01)
-    transparent_is_index = flag_set?(flags, Protocol.transparent_index_flag())
-
-    cond do
-      (flags &&& bnot(Protocol.transparent_index_flag())) != 0 ->
-        {:error, {:bad_flags, flags}}
-
-      (options &&& bnot(0x03)) != 0 ->
-        {:error, {:bad_options, options}}
-
-      not has_transparent and transparent != 0 ->
-        {:error, {:bad_transparent_color, transparent}}
-
-      transparent_is_index and not has_transparent ->
-        {:error, {:bad_flags, flags}}
-
-      transparent_is_index and transparent > 0xFF ->
-        {:error, {:bad_transparent_color, {:index, transparent}}}
-
-      frame_height == 0 ->
-        {:error, {:bad_frame_height, frame_height}}
 
       count == 0 ->
         {:error, :empty_batch}

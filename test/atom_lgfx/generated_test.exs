@@ -9,8 +9,30 @@ defmodule AtomLGFX.GeneratedTest do
   alias AtomLGFX.Protocol
   alias AtomLGFX.OpSchema
 
-  test "protocol version is v2" do
-    assert Protocol.proto_ver() == 2
+  test "protocol version is v3" do
+    assert Protocol.proto_ver() == 3
+  end
+
+  test "encodes ordinary requests as v3 flat tuples" do
+    assert Protocol.__encode_v3_request__(:ping, 0, 0, []) == {:lgfx, 3, :ping}
+
+    assert Protocol.__encode_v3_request__(:fill_rect, 0, 0, [1, 2, 3, 4, 0xFFFF]) ==
+             {:lgfx, 3, :fill_rect, 0, 1, 2, 3, 4, 0xFFFF}
+
+    assert Protocol.__encode_v3_request__(:create_sprite, 1, 0, [320, 240, 4]) ==
+             {:lgfx, 3, :create_sprite, 1, 320, 240, 4}
+
+    assert Protocol.__encode_v3_request__(:fill_rect, 1, Protocol.color_index_flag(), [
+             1,
+             2,
+             3,
+             4,
+             5
+           ]) ==
+             {:lgfx, 3, :fill_rect, 1, Protocol.color_index_flag(), 1, 2, 3, 4, 5}
+
+    assert Protocol.__encode_v3_request__(:submit_binary_batch, 0, 0, [<<1, 2, 3>>]) ==
+             {:lgfx, 3, :submit_binary_batch, 0, 0, <<1, 2, 3>>}
   end
 
   test "maps snake_case operation names to stable opcodes" do
@@ -19,12 +41,6 @@ defmodule AtomLGFX.GeneratedTest do
     assert Generated.opcode(:fill_rect) == OpSchema.opcode(:fill_rect)
     assert Generated.opcode(:set_rotation) == OpSchema.opcode(:set_rotation)
     assert Generated.opcode(:push_rotate_zoom_list) == OpSchema.opcode(:push_rotate_zoom_list)
-
-    assert Generated.opcode(:get_presentation_strip_height) ==
-             OpSchema.opcode(:get_presentation_strip_height)
-
-    assert Generated.opcode(:create_object_buffer) == OpSchema.opcode(:create_object_buffer)
-    assert Generated.opcode(:create_render_program) == OpSchema.opcode(:create_render_program)
   end
 
   test "does not resolve LovyanGFX-style camelCase atoms" do
@@ -38,7 +54,6 @@ defmodule AtomLGFX.GeneratedTest do
     assert Generated.target_policy(:create_sprite) == {:ok, :sprite_only}
     assert Generated.state_policy(:ping) == {:ok, :any}
     assert Generated.capability(:push_sprite) == {:ok, :sprite}
-    assert Generated.capability(:create_render_program) == {:ok, :retained_render}
   end
 
   test "marks pixel operations as raw-only foot-guns" do

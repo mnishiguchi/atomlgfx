@@ -52,7 +52,7 @@
 // -----------------------------------------------------------------------------
 
 #ifndef LGFX_PORT_PROTO_VER
-#define LGFX_PORT_PROTO_VER 2u
+#define LGFX_PORT_PROTO_VER 3u
 #endif
 
 #ifndef LGFX_PORT_MAX_BINARY_BYTES
@@ -206,11 +206,10 @@ static inline bool lgfx_validate_positive_f32(float value)
 #define LGFX_CAP_TOUCH (1u << 3)
 #define LGFX_CAP_PALETTE (1u << 4)
 #define LGFX_CAP_BATCH (1u << 5)
-#define LGFX_CAP_RETAINED_RENDER (1u << 6)
 
 #define LGFX_CAP_KNOWN_MASK                                                      \
     (LGFX_CAP_SPRITE | LGFX_CAP_PUSHIMAGE | LGFX_CAP_LAST_ERROR | LGFX_CAP_TOUCH \
-        | LGFX_CAP_PALETTE | LGFX_CAP_BATCH | LGFX_CAP_RETAINED_RENDER)
+        | LGFX_CAP_PALETTE | LGFX_CAP_BATCH)
 
 // -----------------------------------------------------------------------------
 // Build / advertised capability mask
@@ -221,7 +220,7 @@ static inline bool lgfx_validate_positive_f32(float value)
 // LGFX_CAP_BATCH is the multi-target frame-script path used by animation workloads.
 #define LGFX_BUILD_CAP_MASK                                                 \
     ((uint32_t) (LGFX_CAP_SPRITE | LGFX_CAP_PUSHIMAGE | LGFX_CAP_LAST_ERROR \
-        | LGFX_CAP_PALETTE | LGFX_CAP_BATCH | LGFX_CAP_RETAINED_RENDER      \
+        | LGFX_CAP_PALETTE | LGFX_CAP_BATCH                                    \
         | (LGFX_PORT_SUPPORTS_TOUCH ? LGFX_CAP_TOUCH : 0u)))
 
 // -----------------------------------------------------------------------------
@@ -241,11 +240,6 @@ static inline bool lgfx_validate_positive_f32(float value)
 #define LGFX_RENDER_OP_TARGET ((uint8_t) 0xF0u)
 #define LGFX_RENDER_OP_COLOR_MODE ((uint8_t) 0xF1u)
 #define LGFX_RENDER_OP_PUSH_SPRITE_TRANSPARENT ((uint8_t) 0xF2u)
-#define LGFX_RENDER_OP_BEGIN_STRIP ((uint8_t) 0xF3u)
-#define LGFX_RENDER_OP_PRESENT_STRIP ((uint8_t) 0xF4u)
-#define LGFX_RENDER_OP_EXTENDED ((uint8_t) 0xFFu)
-
-#define LGFX_RENDER_EXT_OP_PUSH_ROTATE_ZOOM_FRAME_STRIPS ((uint8_t) 0x01u)
 
 #define LGFX_RENDER_COLOR_MODE_RGB565 ((uint8_t) 0u)
 #define LGFX_RENDER_COLOR_MODE_PALETTE_INDEX ((uint8_t) 1u)

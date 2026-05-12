@@ -8,7 +8,9 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Status
 
-Accepted
+Superseded for v3 by [ADR 2026-05-13: Design AtomLGFX v3 as a low-memory LovyanGFX-style protocol](2026-05-13-v3-low-memory-protocol.md).
+
+Accepted for the v2 protocol history.
 
 Supersedes:
 

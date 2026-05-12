@@ -72,7 +72,6 @@ defmodule AtomLGFX do
     - Use `set_text_size/3` or `set_text_size_xy/4` to control rendered size.
   - `push_rotate_zoom_to/7`, `/8`, and `/9` use direct degree and zoom values.
   - `push_rotate_zoom_list_to/4` is the compact fixed-point hot path for many transformed sprite instances.
-  - `get_presentation_strip_height/1` returns the negotiated native strip-buffer height for render batches.
   - `push_image_rgb565/8` expects ordinary RGB565 pixel data encoded as
     little-endian 16-bit words.
   - `set_swap_bytes/3` controls target-specific byte swapping for raw image upload.
@@ -84,7 +83,6 @@ defmodule AtomLGFX do
   alias AtomLGFX.Errors
   alias AtomLGFX.OpSchema
   alias AtomLGFX.Images
-  alias AtomLGFX.InstanceBuffer
   alias AtomLGFX.OpenConfig
   alias AtomLGFX.Primitives
   alias AtomLGFX.Protocol
@@ -127,7 +125,7 @@ defmodule AtomLGFX do
   def normalize_open_config(options), do: OpenConfig.normalize_open_config(options)
 
   @doc """
-  Sends a low-level v2 call request to the driver.
+  Sends a low-level v3 call request to the driver.
 
   This is mainly useful for smoke tests and protocol-level experiments.
   """
@@ -139,7 +137,7 @@ defmodule AtomLGFX do
   end
 
   @doc """
-  Calls a curated LovyanGFX operation through the v2 numeric opcode protocol.
+  Calls a curated LovyanGFX operation through the v3 protocol.
 
   Operation names are `snake_case` atoms such as `:fill_rect` or `:set_rotation`.
   Unsafe raw operations such as `:draw_pixel` are intentionally rejected here.
@@ -170,6 +168,17 @@ defmodule AtomLGFX do
   end
 
   @doc """
+  Submits a binary batch with an explicit default target.
+
+  The current command stream can still override targets with
+  `AtomLGFX.BinaryBatch.target/1`.
+  """
+  def submit_binary_batch(port, target, command_binary)
+      when is_integer(target) and target >= 0 and target <= 254 and is_binary(command_binary) do
+    Protocol.submit_binary_batch(port, target, command_binary, Protocol.long_timeout())
+  end
+
+  @doc """
   Verifies basic protocol reachability.
   """
   def ping(port), do: Protocol.ping(port)
@@ -178,14 +187,6 @@ defmodule AtomLGFX do
   Returns the driver's advertised protocol capabilities.
   """
   def get_caps(port), do: Protocol.get_caps(port)
-
-  @doc """
-  Returns the negotiated native presentation strip height.
-
-  The native driver may reduce the requested strip height during allocation.
-  Animation examples should use this value instead of assuming the seed height.
-  """
-  def get_presentation_strip_height(port), do: Device.get_presentation_strip_height(port)
 
   @doc """
   Returns the remembered open-time configuration for this port.
@@ -240,7 +241,6 @@ defmodule AtomLGFX do
   Returns whether multi-target binary-batch frame scripts are advertised by the driver.
   """
   def supports_batch?(port), do: Protocol.supports_batch?(port)
-  def supports_retained_render?(port), do: Protocol.supports_retained_render?(port)
 
   @doc """
   Returns the maximum accepted binary payload size for this driver instance.
@@ -448,54 +448,6 @@ defmodule AtomLGFX do
   Deletes the sprite at the given handle.
   """
   def delete_sprite(port, target), do: Sprites.delete_sprite(port, target)
-
-  @doc """
-  Allocates a retained native instance buffer.
-  """
-  def create_instance_buffer(port, opts) when is_list(opts) do
-    InstanceBuffer.create(port, opts)
-  end
-
-  @doc """
-  Replaces the contents of a retained native instance buffer.
-  """
-  def write_instances(port, handle, instances) do
-    InstanceBuffer.write(port, handle, instances)
-  end
-
-  @doc """
-  Deletes a retained native instance buffer.
-  """
-  def delete_instance_buffer(port, handle) do
-    InstanceBuffer.delete(port, handle)
-  end
-
-  @doc """
-  Allocates a retained native object buffer.
-
-  Prefer `create_instance_buffer/2` for new code.
-  """
-  def create_object_buffer(port, opts) when is_list(opts) do
-    create_instance_buffer(port, opts)
-  end
-
-  @doc """
-  Replaces the contents of a retained native object buffer.
-
-  Prefer `write_instances/3` for new code.
-  """
-  def write_object_buffer(port, handle, objects) do
-    write_instances(port, handle, objects)
-  end
-
-  @doc """
-  Deletes a retained native object buffer.
-
-  Prefer `delete_instance_buffer/2` for new code.
-  """
-  def delete_object_buffer(port, handle) do
-    delete_instance_buffer(port, handle)
-  end
 
   @doc """
   Creates palette backing for an existing paletted sprite target.

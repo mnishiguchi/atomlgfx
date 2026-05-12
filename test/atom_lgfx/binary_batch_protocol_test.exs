@@ -12,32 +12,22 @@ defmodule AtomLGFX.BinaryBatchProtocolTest do
   @expected_render_private_defines %{
     "LGFX_RENDER_OP_TARGET" => {:target, 0xF0},
     "LGFX_RENDER_OP_COLOR_MODE" => {:color_mode, 0xF1},
-    "LGFX_RENDER_OP_PUSH_SPRITE_TRANSPARENT" => {:push_sprite_transparent, 0xF2},
-    "LGFX_RENDER_OP_BEGIN_STRIP" => {:begin_strip, 0xF3},
-    "LGFX_RENDER_OP_PRESENT_STRIP" => {:present_strip, 0xF4},
-    "LGFX_RENDER_OP_EXTENDED" => {:extended, 0xFF}
+    "LGFX_RENDER_OP_PUSH_SPRITE_TRANSPARENT" => {:push_sprite_transparent, 0xF2}
   }
 
-  @expected_render_extended_defines %{
-    "LGFX_RENDER_EXT_OP_PUSH_ROTATE_ZOOM_FRAME_STRIPS" => {:push_rotate_zoom_frame_strips, 0x01}
-  }
+  @expected_render_extended_defines %{}
 
   describe "render-private opcode drift checks" do
     test "Elixir keeps the minimal render-private opcode registry explicit" do
       assert BinaryBatch.__render_private_opcodes__() == [
                target: 0xF0,
                color_mode: 0xF1,
-               push_sprite_transparent: 0xF2,
-               begin_strip: 0xF3,
-               present_strip: 0xF4,
-               extended: 0xFF
+               push_sprite_transparent: 0xF2
              ]
     end
 
     test "Elixir keeps extended render sub-opcodes explicit" do
-      assert BinaryBatch.__render_extended_opcodes__() == [
-               push_rotate_zoom_frame_strips: 0x01
-             ]
+      assert BinaryBatch.__render_extended_opcodes__() == []
     end
 
     test "known batch opcode registry has no duplicate opcode values" do

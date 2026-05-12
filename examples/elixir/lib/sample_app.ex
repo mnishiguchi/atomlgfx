@@ -13,7 +13,7 @@ defmodule SampleApp do
   alias SampleApp.Smoke
   alias SampleApp.SpriteProtocolSmoke
 
-  @default_mode :moving_icons
+  @default_mode :face
 
   @valid_modes [
     :smoke,
@@ -33,9 +33,6 @@ defmodule SampleApp do
 
   @sample_open_options [
     rgb_order: false,
-
-    # MovingIcons is presentation-heavy. Use an explicit high LCD write clock
-    # while keeping DMA enabled so native logs show the effective bus path.
     lcd_freq_write_hz: 60_000_000,
     lcd_dma_channel: :spi_dma_ch_auto,
     lcd_spi_host: :spi2_host,
@@ -63,7 +60,7 @@ defmodule SampleApp do
   end
 
   def start(mode, open_options) when is_atom(mode) and is_list(open_options) do
-    effective_open_options = @sample_open_options ++ open_options
+    effective_open_options = default_open_options(mode) ++ open_options
     {:ok, port} = AtomLGFX.open(effective_open_options)
 
     log_info("AtomLGFX opened open_options=#{inspect(effective_open_options)}")
@@ -81,6 +78,13 @@ defmodule SampleApp do
       safe_close_port(port)
     end
   end
+
+  # Use the ESP32-S3 + ILI9488 sample wiring by default for every mode.
+  #
+  # The face example is the primary v3 smoke target, but it should not force an
+  # M5Stack Core2 preset. Board-specific options can still be passed by the
+  # caller when testing a different display.
+  defp default_open_options(_mode), do: @sample_open_options
 
   defp run_mode(port, :protocol) do
     run_protocol_only(port)
