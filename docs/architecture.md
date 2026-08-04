@@ -86,11 +86,13 @@ The goal is to reduce control-plane overhead for grouped rendering without turni
 - `lib/`
   - root Elixir wrapper package
   - high-level `AtomLGFX` API
-  - `AtomLGFX.BinaryBatch` command builders
+  - internal render encode/submit flow and normalized command encoder
+  - `AtomLGFX.BinaryBatch` public facade
+  - internal binary-batch codec, submission, validation, and diagnostics modules
 
 - `examples/elixir/`
   - example application that consumes the root package
-  - benchmark-oriented workloads such as MovingIcons
+  - benchmark-oriented workloads such as MovingIcons, isolated behind an example-local advanced renderer
 
 ## Execution model
 
@@ -124,8 +126,8 @@ At a high level:
 ```text
 submitBinaryBatch request
   -> lgfx_port validates submitBinaryBatch
-  -> lgfx_port validates the binary frame script
-  -> lgfx_port dispatches supported commands in order
+  -> lgfx_port validates the binary stream envelope
+  -> lgfx_port walks the binary frame script once
   -> lgfx_device performs the final LovyanGFX calls
 ```
 
@@ -272,14 +274,8 @@ Policy:
 - [`docs/protocol-reference.md`](protocol-reference.md)
   - generated operation, capability, and error tables
 
-- [`docs/adr/2026-05-05-keep-binary-batch-minimal-and-measured.md`](adr/2026-05-05-keep-binary-batch-minimal-and-measured.md)
-  - active minimal BinaryBatch surface decision
-
-- [`docs/adr/2026-05-05-native-frame-render-commands-for-hot-animation.md`](adr/2026-05-05-native-frame-render-commands-for-hot-animation.md)
-  - native frame render commands for measured hot animation loops
-
-- [`docs/2026-05-02-v2-render-batch-performance-work-log.md`](2026-05-02-v2-render-batch-performance-work-log.md)
-  - benchmark notes and follow-up measurements
+- [`docs/adr/2026-07-08-render-first-low-memory-api.md`](adr/2026-07-08-render-first-low-memory-api.md)
+  - active public API direction
 
 - [`docs/esp-idf-component.md`](esp-idf-component.md)
   - native component build and usage guide

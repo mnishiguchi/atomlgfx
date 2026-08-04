@@ -9,6 +9,10 @@ SPDX-License-Identifier: Apache-2.0
 This repository provides an ESP-IDF component that exposes a native AtomVM port
 driver backed by LovyanGFX.
 
+The component implements wire protocol v3 for the current AtomLGFX v3 API. It is
+distributed from this repository rather than as part of the Hex package. Build
+it from the same Git commit as the `atomlgfx` Elixir dependency.
+
 The component is intended for AtomVM firmware on ESP32-class boards. It
 implements the native side of the `AtomLGFX` API used by the Elixir package in
 this repository.
@@ -79,7 +83,7 @@ Selected values may also be overridden at port open time by the host
 application.
 
 For the ownership model, execution model, and configuration flow, see
-[the architecture document](architecture.md).
+[the architecture document](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/architecture.md).
 
 ## Protocol and capabilities
 
@@ -87,7 +91,7 @@ This component implements the native side of the tuple protocol used by
 `AtomLGFX`.
 
 For request and response semantics, validation rules, data encodings, and
-batching behavior, see [the protocol document](protocol.md).
+batching behavior, see [the protocol document](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/protocol.md).
 
 For the generated operation matrix, error reasons, and capability vocabulary,
 see [the protocol reference](protocol-reference.md).
@@ -98,8 +102,8 @@ These documents are mainly for maintainers of the native layer:
 
 - [Port layer](../lgfx_port/README.md)
 - [Device adapter layer](../lgfx_device/README.md)
-- [Architecture](architecture.md)
-- [Protocol](protocol.md)
+- [Architecture](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/architecture.md)
+- [Protocol](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/protocol.md)
 - [Protocol reference](protocol-reference.md)
 
 ## Notes for contributors

@@ -6,6 +6,10 @@ SPDX-License-Identifier: Apache-2.0
 
 # Migrating from v1 to v2
 
+> Historical document: this describes the superseded v2 API and is retained for
+> repository history. For current applications, use the
+> [v3 migration guide](migration-to-v3.md).
+
 This guide summarizes the practical changes needed when moving code from the v1
 `v1` branch to the v2 `main` branch.
 
@@ -111,9 +115,11 @@ The v2 binary batch path is intentionally explicit.
 It is suitable for building one compact frame script that executes
 synchronously.
 
-Binary batches may include render-time payload commands such as text, JPEG
-drawing, RGB565 image payloads, sprite push/rotate/zoom commands, and palette
-color writes when represented by `AtomLGFX.BinaryBatch` builders.
+Binary batches may include render-time commands such as text, sprite
+push/rotate/zoom commands, and palette color writes when represented by
+`AtomLGFX.BinaryBatch` builders. JPEG drawing and RGB565 image upload remain on
+the ordinary API because their payloads are intentionally excluded from the
+binary-batch format.
 
 Keep these on the ordinary call path:
 
