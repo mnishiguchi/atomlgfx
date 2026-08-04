@@ -22,18 +22,13 @@
 #include "lgfx_port/protocol.h" // protocol constants / limits
 
 // -----------------------------------------------------------------------------
-// AtomVM compatibility
+// AtomVM term helpers
 // -----------------------------------------------------------------------------
 
-// AtomVM deprecated term_from_int32() (unsafe on some targets). In this port we
-// only encode small integers that fit in avm_int_t, so use term_from_int().
-// Keep call sites unchanged by shadowing the deprecated function name.
-#ifndef LGFX_PORT_ALLOW_DEPRECATED_TERM_FROM_INT32
-#ifdef term_from_int32
-#undef term_from_int32
-#endif
-#define term_from_int32(v) term_from_int((avm_int_t) (v))
-#endif
+static inline term lgfx_term_from_i32(int32_t value)
+{
+    return term_from_int((avm_int_t) value);
+}
 
 #ifdef __cplusplus
 extern "C" {

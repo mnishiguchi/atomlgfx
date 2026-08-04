@@ -25,7 +25,7 @@
 term lgfx_handle_width(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     if (req->target == 0u) {
-        return reply_ok(ctx, port, req, term_from_int32((int32_t) port->width));
+        return reply_ok(ctx, port, req, lgfx_term_from_i32((int32_t) port->width));
     }
 
     uint16_t w = 0;
@@ -35,13 +35,13 @@ term lgfx_handle_width(Context *ctx, lgfx_port_t *port, const lgfx_request_t *re
         port,
         req,
         lgfx_device_get_target_dims((uint8_t) req->target, &w, &h));
-    return reply_ok(ctx, port, req, term_from_int32((int32_t) w));
+    return reply_ok(ctx, port, req, lgfx_term_from_i32((int32_t) w));
 }
 
 term lgfx_handle_height(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     if (req->target == 0u) {
-        return reply_ok(ctx, port, req, term_from_int32((int32_t) port->height));
+        return reply_ok(ctx, port, req, lgfx_term_from_i32((int32_t) port->height));
     }
 
     uint16_t w = 0;
@@ -51,7 +51,7 @@ term lgfx_handle_height(Context *ctx, lgfx_port_t *port, const lgfx_request_t *r
         port,
         req,
         lgfx_device_get_target_dims((uint8_t) req->target, &w, &h));
-    return reply_ok(ctx, port, req, term_from_int32((int32_t) h));
+    return reply_ok(ctx, port, req, lgfx_term_from_i32((int32_t) h));
 }
 
 #define LGFX_DEVICE_BAD_ARGS() reply_error(ctx, port, req, port->atoms.bad_args, 0)

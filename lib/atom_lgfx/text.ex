@@ -9,6 +9,7 @@ defmodule AtomLGFX.Text do
   import AtomLGFX.Guards
 
   alias AtomLGFX.Cache
+  alias AtomLGFX.Command
   alias AtomLGFX.Protocol
 
   @font_preset_ascii 0
@@ -52,8 +53,10 @@ defmodule AtomLGFX.Text do
   end
 
   def set_text_datum(port, datum, target \\ 0)
-      when u8(datum) and target_any(target) do
-    Protocol.call_ok(port, :set_text_datum, target, 0, [datum], Protocol.long_timeout())
+      when target_any(target) do
+    with {:ok, datum} <- Command.normalize_text_datum(datum) do
+      Protocol.call_ok(port, :set_text_datum, target, 0, [datum], Protocol.long_timeout())
+    end
   end
 
   def set_text_wrap(port, wrap, target \\ 0)

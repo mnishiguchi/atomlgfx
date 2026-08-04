@@ -61,7 +61,8 @@ The protocol contract is defined by these sources:
 - `lib/atom_lgfx/generated.ex`
   - generated Elixir operation-name to opcode mapping
   - generated public/raw/batch exposure metadata
-  - generated arity, flag, target, state, and capability metadata consumed by `AtomLGFX.OpSchema`
+  - generated arity, flag, target, state, and capability metadata consumed by
+    the wrapper schema
 
 Important invariants:
 
@@ -81,7 +82,7 @@ Protocol operations have one Elixir-facing name:
 
 - canonical Elixir name
   - `snake_case` atom
-  - used by `AtomLGFX.OpSchema`, `AtomLGFX.Protocol`, public wrapper code, and raw calls
+  - used by the generated schema, protocol encoder, public wrapper, and raw calls
 
 `ops.def` may keep LovyanGFX-style identifiers internally for handler-table generation, but the v3 request tuple carries the canonical `snake_case` operation atom. The decoder also accepts compact numeric opcodes for wrapper-owned raw paths.
 
@@ -476,9 +477,16 @@ The protocol intentionally keeps the binary-batch surface small. Generic primiti
 
 ## Low-memory batch rendering
 
-The retained native render-program API and native presentation-strip batch commands were removed by [ADR 2026-05-13](adr/2026-05-13-v3-low-memory-protocol.md) to reduce OOM risk and simplify the public surface.
+The retained native render-program API and native presentation-strip batch
+commands were removed by the
+[v3 low-memory protocol ADR](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/adr/2026-05-13-v3-low-memory-protocol.md)
+to reduce OOM risk and simplify the public surface.
 
-MovingIcons-style animation should keep object state in Elixir and render into caller-owned sprites or small strip sprites before pushing completed pixels to the LCD. `BinaryBatch` remains available as an explicit synchronous optimization for bursts of ordinary drawing commands.
+MovingIcons-style animation should keep object state in Elixir and isolate
+measured hot-loop optimizations in an application renderer. `BinaryBatch`
+remains available as an explicit synchronous optimization; the current example
+uses its generic transformed-sprite list without adding scene-specific protocol
+state or hidden display buffers.
 
 ### Wire shape
 

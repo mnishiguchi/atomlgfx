@@ -75,8 +75,8 @@ defmodule AtomLGFX.ProtocolFreezeTest do
     {:submit_binary_batch, 59}
   ]
 
-  @hidden_ops [:start_write, :end_write, :draw_pixel]
-  @raw_ops [:start_write, :end_write, :draw_pixel]
+  @hidden_ops [:start_write, :end_write]
+  @raw_ops [:start_write, :end_write]
 
   @binary_batch_public_ops %{
     display: 13,

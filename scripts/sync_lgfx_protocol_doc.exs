@@ -20,8 +20,7 @@ defmodule Main do
 
   @raw_operation_names [
     "startWrite",
-    "endWrite",
-    "drawPixel"
+    "endWrite"
   ]
 
   @flag_values %{
@@ -34,8 +33,7 @@ defmodule Main do
 
   @hidden_operation_names [
     "startWrite",
-    "endWrite",
-    "drawPixel"
+    "endWrite"
   ]
 
   @script_path "scripts/#{Path.basename(__ENV__.file)}"

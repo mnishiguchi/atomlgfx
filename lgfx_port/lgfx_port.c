@@ -199,7 +199,7 @@ void lgfx_port_handle_mailbox_message(Context *ctx, lgfx_port_t *port, term msg)
 
     if (term_is_invalid_term(reply)) {
         int32_t esp_err = 0;
-        term last_op = term_from_int32((int32_t) req.opcode);
+        term last_op = lgfx_term_from_i32((int32_t) req.opcode);
 
         if (port->last_error.last_op == last_op) {
             esp_err = port->last_error.esp_err;

@@ -92,6 +92,23 @@ static inline esp_err_t lgfx_render_batch_malformed(bool *out_malformed_command)
     return ESP_ERR_INVALID_ARG;
 }
 
+static inline esp_err_t lgfx_render_batch_check_stream_args(
+    const uint8_t *bytes,
+    size_t len,
+    uint8_t initial_target,
+    bool *out_malformed_command)
+{
+    if (bytes == nullptr
+        || len == 0u
+        || len > (size_t) LGFX_PORT_MAX_BINARY_BYTES
+        || len > (size_t) PTRDIFF_MAX
+        || !lgfx_dev::protocol_valid_target(initial_target)) {
+        return lgfx_render_batch_malformed(out_malformed_command);
+    }
+
+    return ESP_OK;
+}
+
 static inline void lgfx_render_batch_init_result(
     uint32_t *out_failed_index,
     uint8_t *out_failed_opcode,
@@ -1293,7 +1310,7 @@ static esp_err_t lgfx_render_batch_parse_or_dispatch_one(
     }
 }
 
-static esp_err_t lgfx_render_batch_run_stream(
+static esp_err_t lgfx_render_batch_run_checked_stream(
     const uint8_t *bytes,
     size_t len,
     uint8_t initial_target,
@@ -1303,10 +1320,6 @@ static esp_err_t lgfx_render_batch_run_stream(
     lgfx_render_batch_mode_t mode,
     lgfx_render_batch_trace_t *trace)
 {
-    if (bytes == nullptr || len == 0u) {
-        return lgfx_render_batch_malformed(out_malformed_command);
-    }
-
     const uint8_t *cursor = bytes;
     const uint8_t *const end = bytes + len;
     uint32_t command_index = 0u;
@@ -1354,7 +1367,16 @@ extern "C" esp_err_t lgfx_render_batch_dispatch_validate(
     bool *out_malformed_command)
 {
     lgfx_render_batch_init_result(out_failed_index, out_failed_opcode, out_malformed_command);
-    return lgfx_render_batch_run_stream(
+    esp_err_t err = lgfx_render_batch_check_stream_args(
+        bytes,
+        len,
+        initial_target,
+        out_malformed_command);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    return lgfx_render_batch_run_checked_stream(
         bytes,
         len,
         initial_target,
@@ -1375,12 +1397,6 @@ extern "C" esp_err_t lgfx_render_batch_dispatch_run(
 {
     lgfx_render_batch_init_result(out_failed_index, out_failed_opcode, out_malformed_command);
 
-    if (bytes == nullptr || len == 0u) {
-        return lgfx_render_batch_malformed(out_malformed_command);
-    }
-
-    esp_err_t err = ESP_OK;
-
 #if LGFX_PORT_ENABLE_RENDER_BATCH_TRACE
     int64_t prevalidate_us = 0;
 #endif
@@ -1390,7 +1406,7 @@ extern "C" esp_err_t lgfx_render_batch_dispatch_run(
     const int64_t prevalidate_started_at_us = esp_timer_get_time();
 #endif
 
-    err = lgfx_render_batch_dispatch_validate(
+    esp_err_t err = lgfx_render_batch_dispatch_validate(
         bytes,
         len,
         initial_target,
@@ -1402,6 +1418,15 @@ extern "C" esp_err_t lgfx_render_batch_dispatch_run(
     prevalidate_us = esp_timer_get_time() - prevalidate_started_at_us;
 #endif
 
+    if (err != ESP_OK) {
+        return err;
+    }
+#else
+    esp_err_t err = lgfx_render_batch_check_stream_args(
+        bytes,
+        len,
+        initial_target,
+        out_malformed_command);
     if (err != ESP_OK) {
         return err;
     }
@@ -1433,7 +1458,7 @@ extern "C" esp_err_t lgfx_render_batch_dispatch_run(
     lgfx_render_batch_trace_t *trace_ptr = nullptr;
 #endif
 
-    err = lgfx_render_batch_run_stream(
+    err = lgfx_render_batch_run_checked_stream(
         bytes,
         len,
         initial_target,

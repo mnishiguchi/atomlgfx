@@ -19,6 +19,129 @@ defmodule AtomLGFX.Color do
   @type palette_descriptor :: {:rgb888, rgb888_value}
   @type index_descriptor :: {:index, palette_index_value}
 
+  @named_rgb565_colors %{
+    black: 0x0000,
+    navy: 0x000F,
+    dark_green: 0x03E0,
+    dark_cyan: 0x03EF,
+    maroon: 0x7800,
+    purple: 0x780F,
+    olive: 0x7BE0,
+    light_grey: 0xC618,
+    light_gray: 0xC618,
+    dark_grey: 0x7BEF,
+    dark_gray: 0x7BEF,
+    blue: 0x001F,
+    green: 0x07E0,
+    cyan: 0x07FF,
+    red: 0xF800,
+    magenta: 0xF81F,
+    yellow: 0xFFE0,
+    white: 0xFFFF,
+    orange: 0xFD20,
+    green_yellow: 0xAFE5,
+    pink: 0xFE19,
+    brown: 0x9A60,
+    gold: 0xFEA0,
+    silver: 0xC618,
+    sky_blue: 0x867D,
+    violet: 0x915C,
+    transparent: 0x0120
+  }
+
+  @doc """
+  Returns the RGB565 value for a named color.
+  """
+  @spec named_rgb565(atom()) :: {:ok, rgb565_value()} | {:error, term()}
+  def named_rgb565(name) when is_atom(name) do
+    case Map.fetch(@named_rgb565_colors, name) do
+      {:ok, color} -> {:ok, color}
+      :error -> {:error, {:unknown_color_name, name}}
+    end
+  end
+
+  @doc """
+  Returns the packed RGB888 value for a named color.
+  """
+  @spec named_rgb888(atom()) :: {:ok, rgb888_value()} | {:error, term()}
+  def named_rgb888(name) when is_atom(name) do
+    with {:ok, color} <- named_rgb565(name) do
+      {:ok, color16to24(color)}
+    end
+  end
+
+  @doc """
+  Normalizes a user-facing display color to RGB565.
+
+  Accepted values are:
+
+  - an RGB565 integer
+  - a named color atom, such as `:black`, `:white`, or `:red`
+  - `{:rgb565, value}`
+  - `{:rgb565, r, g, b}`
+  - `{:rgb888, value}`
+  - `{:rgb888, r, g, b}`
+  - `{:rgb, r, g, b}`
+  """
+  @spec normalize_display(term()) :: {:ok, rgb565_value()} | {:error, term()}
+  def normalize_display(color) when rgb565(color), do: {:ok, color}
+  def normalize_display({:rgb565, color}) when rgb565(color), do: {:ok, color}
+
+  def normalize_display({:rgb565, r, g, b}) when u8(r) and u8(g) and u8(b) do
+    {:ok, color565(r, g, b)}
+  end
+
+  def normalize_display({:rgb888, color}) when color888(color) do
+    {:ok, color24to16(color)}
+  end
+
+  def normalize_display({:rgb888, r, g, b}) when u8(r) and u8(g) and u8(b) do
+    {:ok, color565(r, g, b)}
+  end
+
+  def normalize_display({:rgb, r, g, b}) when u8(r) and u8(g) and u8(b) do
+    {:ok, color565(r, g, b)}
+  end
+
+  def normalize_display(name) when is_atom(name), do: named_rgb565(name)
+  def normalize_display(color), do: {:error, {:bad_display_color, color}}
+
+  @doc """
+  Normalizes a user-facing palette color to packed RGB888.
+
+  Accepted values are:
+
+  - a packed RGB888 integer
+  - a named color atom, such as `:black`, `:white`, or `:red`
+  - `{:rgb888, value}`
+  - `{:rgb888, r, g, b}`
+  - `{:rgb, r, g, b}`
+  - `{:rgb565, value}`
+  - `{:rgb565, r, g, b}`
+  """
+  @spec normalize_palette(term()) :: {:ok, rgb888_value()} | {:error, term()}
+  def normalize_palette(color) when color888(color), do: {:ok, color}
+  def normalize_palette({:rgb888, color}) when color888(color), do: {:ok, color}
+
+  def normalize_palette({:rgb888, r, g, b}) when u8(r) and u8(g) and u8(b) do
+    {:ok, color888(r, g, b)}
+  end
+
+  def normalize_palette({:rgb, r, g, b}) when u8(r) and u8(g) and u8(b) do
+    {:ok, color888(r, g, b)}
+  end
+
+  def normalize_palette({:rgb565, color}) when rgb565(color) do
+    {:ok, color16to24(color)}
+  end
+
+  def normalize_palette({:rgb565, r, g, b}) when u8(r) and u8(g) and u8(b) do
+    {:ok, color888(r, g, b)}
+  end
+
+  def normalize_palette(name) when is_atom(name), do: named_rgb888(name)
+  def normalize_palette(color), do: {:error, {:bad_palette_color, color}}
+
   @doc """
   Packs 8-bit RGB channels into an RGB332 color.
   """

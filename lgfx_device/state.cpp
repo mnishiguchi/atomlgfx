@@ -118,64 +118,6 @@ static void core2_axp192_close_bus(bool installed_here)
     }
 }
 
-static esp_err_t core2_axp192_read_reg(uint8_t reg, uint8_t *out_value)
-{
-    if (out_value == nullptr) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    bool installed_here = false;
-    esp_err_t err = core2_axp192_open_bus(&installed_here);
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    if (cmd == nullptr) {
-        core2_axp192_close_bus(installed_here);
-        return ESP_ERR_NO_MEM;
-    }
-
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, static_cast<uint8_t>((CORE2_AXP192_I2C_ADDR << 1) | I2C_MASTER_WRITE), true);
-    i2c_master_write_byte(cmd, reg, true);
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, static_cast<uint8_t>((CORE2_AXP192_I2C_ADDR << 1) | I2C_MASTER_READ), true);
-    i2c_master_read_byte(cmd, out_value, I2C_MASTER_NACK);
-    i2c_master_stop(cmd);
-
-    err = i2c_master_cmd_begin(CORE2_AXP192_I2C_PORT, cmd, CORE2_AXP192_TIMEOUT_TICKS);
-    i2c_cmd_link_delete(cmd);
-    core2_axp192_close_bus(installed_here);
-    return err;
-}
-
-static esp_err_t core2_axp192_write_reg(uint8_t reg, uint8_t value)
-{
-    bool installed_here = false;
-    esp_err_t err = core2_axp192_open_bus(&installed_here);
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    if (cmd == nullptr) {
-        core2_axp192_close_bus(installed_here);
-        return ESP_ERR_NO_MEM;
-    }
-
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, static_cast<uint8_t>((CORE2_AXP192_I2C_ADDR << 1) | I2C_MASTER_WRITE), true);
-    i2c_master_write_byte(cmd, reg, true);
-    i2c_master_write_byte(cmd, value, true);
-    i2c_master_stop(cmd);
-
-    err = i2c_master_cmd_begin(CORE2_AXP192_I2C_PORT, cmd, CORE2_AXP192_TIMEOUT_TICKS);
-    i2c_cmd_link_delete(cmd);
-    core2_axp192_close_bus(installed_here);
-    return err;
-}
-
 static esp_err_t core2_axp192_read_reg_on_open_bus(uint8_t reg, uint8_t *out_value)
 {
     if (out_value == nullptr) {
@@ -252,19 +194,6 @@ static esp_err_t core2_axp192_set_backlight_on_open_bus(uint8_t brightness)
     }
 
     return core2_axp192_write_masked_on_open_bus(0x27, level, 0x80);
-}
-
-static esp_err_t core2_axp192_set_backlight(uint8_t brightness)
-{
-    bool installed_here = false;
-    esp_err_t err = core2_axp192_open_bus(&installed_here);
-    if (err != ESP_OK) {
-        return err;
-    }
-
-    err = core2_axp192_set_backlight_on_open_bus(brightness);
-    core2_axp192_close_bus(installed_here);
-    return err;
 }
 
 static esp_err_t core2_axp192_prepare_panel_power_and_reset(void)

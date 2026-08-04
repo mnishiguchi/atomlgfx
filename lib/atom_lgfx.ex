@@ -78,6 +78,8 @@ defmodule AtomLGFX do
   """
 
   alias AtomLGFX.Cache
+  alias AtomLGFX.Color
+  alias AtomLGFX.Command
   alias AtomLGFX.Clip
   alias AtomLGFX.Device
   alias AtomLGFX.Errors
@@ -86,11 +88,21 @@ defmodule AtomLGFX do
   alias AtomLGFX.OpenConfig
   alias AtomLGFX.Primitives
   alias AtomLGFX.Protocol
+  alias AtomLGFX.RenderBatch
   alias AtomLGFX.Sprites
   alias AtomLGFX.Text
   alias AtomLGFX.Touch
 
   @port_name "lgfx_port"
+
+  @typedoc "An open AtomVM port handle for the native `lgfx_port` driver."
+  @type port_handle :: port()
+
+  @typedoc "LCD target `0` or a sprite handle in `1..254`."
+  @type target :: 0..254
+
+  @typedoc "RGB565 display color or a palette index descriptor."
+  @type display_color :: Color.rgb565_value() | Color.index_descriptor()
 
   @doc """
   Opens the `lgfx_port` driver with optional open-time configuration.
@@ -140,7 +152,7 @@ defmodule AtomLGFX do
   Calls a curated LovyanGFX operation through the v3 protocol.
 
   Operation names are `snake_case` atoms such as `:fill_rect` or `:set_rotation`.
-  Unsafe raw operations such as `:draw_pixel` are intentionally rejected here.
+  Internal write-session operations remain intentionally unavailable here.
   """
   def call(port, op_name, args \\ [], opts \\ [])
 
@@ -176,6 +188,132 @@ defmodule AtomLGFX do
   def submit_binary_batch(port, target, command_binary)
       when is_integer(target) and target >= 0 and target <= 254 and is_binary(command_binary) do
     Protocol.submit_binary_batch(port, target, command_binary, Protocol.long_timeout())
+  end
+
+  @doc """
+  Renders a LovyanGFX-style command list through the binary-batch path.
+
+  This is the preferred API for ordinary drawing work because many small
+  primitive and text operations can cross the AtomVM port boundary as one
+  render transaction.
+
+      AtomLGFX.render(port, [
+        {:fill_screen, :black},
+        {:set_text_color, :white},
+        {:set_cursor, 10, 10},
+        {:println, "Hello AtomLGFX"},
+        {:draw_line, 0, 40, 200, 40, :red},
+        :display
+      ])
+
+  Options:
+
+    * `:target` - default render target. Defaults to `0` for the LCD.
+    * `:display` - appends `:display` when no display command is present.
+    * `:validate` - validates the encoded batch before native submission.
+
+  Payload-heavy operations such as JPEG drawing and raw image upload remain
+  explicit APIs for now so memory ownership stays clear.
+  """
+  @spec render(port(), [Command.command()], keyword()) :: :ok | {:error, term()}
+  def render(port, commands, opts \\ [])
+
+  def render(port, commands, opts) when is_list(commands) and is_list(opts) do
+    RenderBatch.render(port, commands, opts)
+  end
+
+  def render(_port, commands, opts) when is_list(commands) do
+    {:error, {:bad_render_options, opts}}
+  end
+
+  def render(_port, commands, _opts) do
+    {:error, {:bad_render_commands, commands}}
+  end
+
+  @doc """
+  Renders a command list to an explicit target.
+
+  This single-target helper keeps target selection at the call site and rejects
+  embedded `{:target, id}` commands. Target `0` is the LCD. Targets `1..254`
+  are sprites. Use `render/3` directly for an intentional multi-target batch.
+  """
+  @spec render_to(port(), :lcd | 0..254, [Command.command()], keyword()) :: :ok | {:error, term()}
+  def render_to(port, target, commands, opts \\ [])
+
+  def render_to(port, :lcd, commands, opts) when is_list(commands) and is_list(opts) do
+    with :ok <- reject_render_target_overrides(commands) do
+      render(port, commands, Keyword.put(opts, :target, :lcd))
+    end
+  end
+
+  def render_to(port, target, commands, opts)
+      when is_integer(target) and target >= 0 and target <= 254 and is_list(commands) and
+             is_list(opts) do
+    with :ok <- reject_render_target_overrides(commands) do
+      render(port, commands, Keyword.put(opts, :target, target))
+    end
+  end
+
+  def render_to(_port, target, commands, _opts)
+      when (target == :lcd or (is_integer(target) and target >= 0 and target <= 254)) and
+             not is_list(commands) do
+    {:error, {:bad_render_commands, commands}}
+  end
+
+  def render_to(_port, target, _commands, opts)
+      when target == :lcd or (is_integer(target) and target >= 0 and target <= 254) do
+    {:error, {:bad_render_options, opts}}
+  end
+
+  def render_to(_port, target, _commands, _opts) do
+    {:error, {:bad_render_target, target}}
+  end
+
+  @doc """
+  Renders a command list to the LCD target.
+  """
+  @spec render_lcd(port(), [Command.command()], keyword()) :: :ok | {:error, term()}
+  def render_lcd(port, commands, opts \\ [])
+
+  def render_lcd(port, commands, opts) when is_list(commands) and is_list(opts) do
+    render_to(port, 0, commands, opts)
+  end
+
+  def render_lcd(_port, commands, opts) when is_list(commands) do
+    {:error, {:bad_render_options, opts}}
+  end
+
+  def render_lcd(_port, commands, _opts) do
+    {:error, {:bad_render_commands, commands}}
+  end
+
+  @doc """
+  Renders a command list to a sprite target.
+
+  This helper intentionally accepts only sprite handles `1..254` and rejects
+  embedded target switches, so accidental LCD rendering is caught at the public
+  API boundary.
+  """
+  @spec render_sprite(port(), 1..254, [Command.command()], keyword()) :: :ok | {:error, term()}
+  def render_sprite(port, sprite_target, commands, opts \\ [])
+
+  def render_sprite(port, sprite_target, commands, opts)
+      when is_integer(sprite_target) and sprite_target >= 1 and sprite_target <= 254 do
+    render_to(port, sprite_target, commands, opts)
+  end
+
+  def render_sprite(_port, sprite_target, _commands, _opts) do
+    {:error, {:bad_sprite_target, sprite_target}}
+  end
+
+  defp reject_render_target_overrides([]), do: :ok
+
+  defp reject_render_target_overrides([{:target, target} | _commands]) do
+    {:error, {:render_target_override, target}}
+  end
+
+  defp reject_render_target_overrides([_command | commands]) do
+    reject_render_target_overrides(commands)
   end
 
   @doc """
@@ -325,6 +463,18 @@ defmodule AtomLGFX do
   Indexed color mode is valid only on palette-backed sprite targets.
   """
   def clear(port, color, target \\ 0), do: Primitives.clear(port, color, target)
+
+  @doc """
+  Draws one pixel using the given display color.
+
+  This mirrors LovyanGFX `drawPixel`. For pixel loops or generated imagery,
+  prefer `render/3`, `render_lcd/3`, or `render_sprite/4` so many pixels cross
+  the AtomVM port boundary in one transaction.
+  """
+  @spec draw_pixel(port_handle(), integer(), integer(), display_color(), target()) ::
+          :ok | {:error, term()}
+  def draw_pixel(port, x, y, color, target \\ 0),
+    do: Primitives.draw_pixel(port, x, y, color, target)
 
   @doc """
   Draws a fast vertical line using the given scalar color.
@@ -604,9 +754,10 @@ defmodule AtomLGFX do
   def set_text_size_xy(port, sx, sy, target \\ 0), do: Text.set_text_size_xy(port, sx, sy, target)
 
   @doc """
-  Sets the text datum as a raw driver-facing `u8` passthrough.
+  Sets the text datum for the selected target.
 
-  Accepted range is `0..255`. This API does not define a smaller stable subset.
+  Common datum atoms such as `:top_left`, `:middle_center`, and `:bottom_right`
+  are accepted in addition to raw LovyanGFX numeric values in `0..255`.
   """
   def set_text_datum(port, datum, target \\ 0), do: Text.set_text_datum(port, datum, target)
 

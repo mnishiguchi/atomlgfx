@@ -10,16 +10,16 @@ SPDX-License-Identifier: Apache-2.0
 
 基本的な描画の考え方は LovyanGFX に合わせています。一方で、AtomVM から安全に使いやすくするために、開始時設定、返り値、明示的バッチなどは atomlgfx 独自の仕組みとして整理しています。
 
-最初は通常の API だけを使い、LCD に文字や図形を表示するところから始めるのがおすすめです。その後、必要に応じてスプライトや明示的バッチへ進んでください。
+通常の描画では、最初に `AtomLGFX.render_lcd/3` を使うのがおすすめです。LovyanGFX に近い命令を Elixir のリストでまとめ、1 回の port 呼び出しで実行できます。初期化、問い合わせ、タッチ、大きな画像転送には通常の直接 API を使い、計測済みの高負荷処理だけで `AtomLGFX.BinaryBatch` を直接使ってください。
 
 ## この README の読み方
 
 目的ごとのおすすめ順は次のとおりです。
 
-- 最初の 1 画面を表示したい: `はじめに` → `基本事項` → `開始と終了` → `表示制御` → `基本図形` → `文字`
+- 最初の 1 画面を表示したい: `はじめに` → `描画経路の選び方` → `開始と終了` → `基本図形` → `文字`
 - スプライトや画像も使いたい: `スプライト` → `画像`
 - タッチ入力も使いたい: `タッチ`
-- 1 フレーム分の描画をまとめたい: `明示的バッチ`
+- wire-level の描画を調整したい: `明示的バッチ`
 
 ボード固有の既知設定から始めたい場合は、[M5Stack boards](../docs/boards/m5stack.md) も参照してください。
 
@@ -46,23 +46,37 @@ SPDX-License-Identifier: Apache-2.0
 - `:ok`, `{:ok, value}`, `{:error, reason}` の返り値
 - 対象番号 `0` を LCD、`1..254` をスプライトとして扱う規則
 - `AtomLGFX.Color` による色補助
-- `AtomLGFX.BinaryBatch` による明示的バッチ
+- `AtomLGFX.render_lcd/3` と `render_sprite/4` による render-first 描画
+- 上級者向けの `AtomLGFX.BinaryBatch` 明示的バッチ
 - `get_caps/1` や `supports_*?/1` による機能確認
 
-通常の描画では、まず LovyanGFX に近い通常 API を使ってください。速度が問題になった段階で、atomlgfx 固有の高速化手段を選びます。
+通常の描画では、LovyanGFX に近い命令を `render_lcd/3` または `render_sprite/4` にまとめます。単発操作には同名の直接 API も使えます。速度が問題になった場合だけ、計測した上で atomlgfx 固有の低レベル経路を選びます。
 
 ## 描画経路の選び方
 
-AtomLGFX には、主に 2 つの描画経路があります。
+AtomLGFX には、主に 3 つの描画経路があります。
 
 | 経路 | 使う場面 |
 | --- | --- |
-| 通常 API | 初期化、単発の描画、学習、動作確認 |
-| 明示的バッチ | Elixir 側で 1 フレーム分の描画をまとめたいとき |
+| render-first API | 通常の図形、文字、スプライト描画 |
+| 直接 API | 初期化、問い合わせ、タッチ、画像転送、単発の描画 |
+| `BinaryBatch` | 診断、性能測定、計測済みの hot loop |
 
-最初は通常 API を使います。`fill_screen/3`, `draw_line/7`, `draw_string/5`, `push_sprite/4` のような公開関数を直接呼ぶ形です。
+最初は `render_lcd/3` を使います。命令名は `fill_screen`, `draw_pixel`, `draw_line`, `draw_string`, `push_sprite` のように LovyanGFX と対応する `snake_case` です。
 
-1 フレーム分の描画命令を Elixir 側でまとめたい場合は、`AtomLGFX.BinaryBatch.render/2` を使います。呼び出し回数を減らしたいときの選択肢です。
+```elixir
+:ok =
+  AtomLGFX.render_lcd(port, [
+    {:fill_screen, :black},
+    {:set_text_color, :white},
+    {:set_cursor, 8, 8},
+    {:println, "Hello AtomLGFX"},
+    {:draw_line, 0, 32, 160, 32, :red},
+    :display
+  ])
+```
+
+`draw_pixel/4`, `draw_line/7`, `fill_rect/7` などの直接関数も、単発の操作や動作確認に利用できます。多数の命令を loop で直接呼ぶ代わりに、1 回の render transaction にまとめてください。
 
 ## はじめに
 
@@ -88,12 +102,16 @@ AtomLGFX には、主に 2 つの描画経路があります。
 :ok = AtomLGFX.ping(port)
 :ok = AtomLGFX.init(port)
 
-:ok = AtomLGFX.fill_screen(port, 0x0000)
 :ok = AtomLGFX.set_text_font_preset(port, :jp)
 :ok = AtomLGFX.set_text_size(port, 2)
-:ok = AtomLGFX.set_text_color(port, 0xFFFF, 0x0000)
-:ok = AtomLGFX.draw_string(port, 16, 16, "こんにちは")
-:ok = AtomLGFX.display(port)
+
+:ok =
+  AtomLGFX.render_lcd(port, [
+    {:fill_screen, :black},
+    {:set_text_color, :white, :black},
+    {:draw_string, "こんにちは", 16, 16},
+    :display
+  ])
 
 :ok = AtomLGFX.close(port)
 ```
@@ -375,9 +393,9 @@ message = AtomLGFX.format_error({:bad_text_scale, -1})
 
 より明示的な逃げ道として、`AtomLGFX.Raw.call/4` も使えます。
 
-## 明示的バッチ
+## 明示的バッチ（上級者向け）
 
-通常 API は、その場で同期的に実行されます。明示的バッチは、Elixir 側で 1 フレーム分の描画を組み立て、1 回の native 呼び出しで実行するための仕組みです。
+通常は `render_lcd/3` または `render_sprite/4` を使ってください。これらは命令の正規化と target 管理を行い、内部で低メモリーの binary batch に変換します。明示的バッチは、wire-level の命令を直接組み立てる上級者向けの仕組みです。
 
 呼び出し回数を減らしたい描画経路に限定して使います。初期化、問い合わせ、大きな画像転送、タッチ操作には通常 API を使ってください。
 
@@ -432,15 +450,13 @@ frame = [
 
 保持型ネイティブ描画シーンは、メモリー使用量とライフサイクルが重くなりやすいため、通常の API から外しました。
 
-MovingIcons のような高負荷アニメーションでは、まずスプライトへ描画してから一度だけ転送する方法を使います。フルフレームスプライトが大きすぎる場合は、Elixir 側で小さなストリップ用スプライトを明示的に作成し、各ストリップを描画してすぐ LCD に転送します。
+MovingIcons のような計測済みの高負荷アニメーションでは、通常 API から分離したアプリケーション固有 renderer で compact な変換スプライトリストを使います。通常の描画 API にデモ固有の概念や hidden buffer は追加しません。
 
 ```elixir
 commands = [
-  AtomLGFX.BinaryBatch.target(strip_target),
-  AtomLGFX.BinaryBatch.clear(0x0000),
-  AtomLGFX.BinaryBatch.push_rotate_zoom_list(instances, transparent: 0x0000, approx_cull: true),
   AtomLGFX.BinaryBatch.target(0),
-  AtomLGFX.BinaryBatch.push_sprite(strip_target, 0, y),
+  AtomLGFX.BinaryBatch.fill_rect(old_x, old_y, old_w, old_h, 0x0000),
+  AtomLGFX.BinaryBatch.push_rotate_zoom_list(instances, transparent: 0x0000, approx_cull: true),
   AtomLGFX.BinaryBatch.display()
 ]
 
@@ -518,6 +534,7 @@ LCD とスプライトは、それぞれ独立した切り取り状態を持ち�
 
 - `fill_screen/3`
 - `clear/3`
+- `draw_pixel/4` と `draw_pixel/5`
 
 ```elixir
 :ok = AtomLGFX.fill_screen(port, 0x0000)

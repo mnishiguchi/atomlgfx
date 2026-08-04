@@ -56,10 +56,10 @@ defmodule AtomLGFX.GeneratedTest do
     assert Generated.capability(:push_sprite) == {:ok, :sprite}
   end
 
-  test "marks pixel operations as raw-only foot-guns" do
-    refute Generated.public?(:draw_pixel)
-    refute Keyword.has_key?(Keyword.fetch!(Generated.ops(), :draw_pixel), :batch)
-    assert Generated.raw?(:draw_pixel)
+  test "exposes draw_pixel as a normal LovyanGFX operation" do
+    assert Generated.public?(:draw_pixel)
+    assert Keyword.fetch!(Keyword.fetch!(Generated.ops(), :draw_pixel), :batchable)
+    refute Generated.raw?(:draw_pixel)
   end
 
   test "marks write-session operations as raw-only" do

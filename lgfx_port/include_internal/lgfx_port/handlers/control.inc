@@ -41,8 +41,8 @@ static term lgfx_reply_render_batch_failed(
     int32_t esp_err)
 {
     term detail_elems[3];
-    detail_elems[0] = term_from_int32((int32_t) failed_index);
-    detail_elems[1] = term_from_int32((int32_t) failed_opcode);
+    detail_elems[0] = lgfx_term_from_i32((int32_t) failed_index);
+    detail_elems[1] = lgfx_term_from_i32((int32_t) failed_opcode);
     detail_elems[2] = mapped_reason;
 
     term detail = lgfx_make_tuple(ctx, 3, detail_elems);
@@ -52,7 +52,7 @@ static term lgfx_reply_render_batch_failed(
             port,
             req,
             port->atoms.no_memory,
-            term_from_int32((int32_t) ESP_ERR_NO_MEM),
+            lgfx_term_from_i32((int32_t) ESP_ERR_NO_MEM),
             (int32_t) ESP_ERR_NO_MEM);
     }
 
@@ -140,7 +140,7 @@ term lgfx_handle_submitBinaryBatch(Context *ctx, lgfx_port_t *port, const lgfx_r
 term lgfx_handle_getCaps(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
 {
     uint32_t feature_bits = lgfx_port_feature_bits(port);
-    return reply_ok(ctx, port, req, term_from_int32((int32_t) feature_bits));
+    return reply_ok(ctx, port, req, lgfx_term_from_i32((int32_t) feature_bits));
 }
 
 term lgfx_handle_getLastError(Context *ctx, lgfx_port_t *port, const lgfx_request_t *req)
@@ -151,9 +151,9 @@ term lgfx_handle_getLastError(Context *ctx, lgfx_port_t *port, const lgfx_reques
         port->atoms.last_error,
         e.last_op,
         e.reason,
-        term_from_int32((int32_t) e.flags),
-        term_from_int32((int32_t) e.target),
-        term_from_int32((int32_t) e.esp_err)
+        lgfx_term_from_i32((int32_t) e.flags),
+        lgfx_term_from_i32((int32_t) e.target),
+        lgfx_term_from_i32((int32_t) e.esp_err)
     };
 
     term payload = lgfx_make_tuple(ctx, 6, elems);

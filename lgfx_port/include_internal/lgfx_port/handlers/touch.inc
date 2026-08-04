@@ -31,9 +31,9 @@ static term make_touch_tuple_or_none(
     }
 
     term elems[3] = {
-        term_from_int32((int32_t) x),
-        term_from_int32((int32_t) y),
-        term_from_int32((int32_t) size),
+        lgfx_term_from_i32((int32_t) x),
+        lgfx_term_from_i32((int32_t) y),
+        lgfx_term_from_i32((int32_t) size),
     };
 
     return lgfx_make_tuple(ctx, 3, elems);
@@ -42,14 +42,14 @@ static term make_touch_tuple_or_none(
 static term make_u16_tuple_8(Context *ctx, const uint16_t params[8])
 {
     term elems[8] = {
-        term_from_int32((int32_t) params[0]),
-        term_from_int32((int32_t) params[1]),
-        term_from_int32((int32_t) params[2]),
-        term_from_int32((int32_t) params[3]),
-        term_from_int32((int32_t) params[4]),
-        term_from_int32((int32_t) params[5]),
-        term_from_int32((int32_t) params[6]),
-        term_from_int32((int32_t) params[7]),
+        lgfx_term_from_i32((int32_t) params[0]),
+        lgfx_term_from_i32((int32_t) params[1]),
+        lgfx_term_from_i32((int32_t) params[2]),
+        lgfx_term_from_i32((int32_t) params[3]),
+        lgfx_term_from_i32((int32_t) params[4]),
+        lgfx_term_from_i32((int32_t) params[5]),
+        lgfx_term_from_i32((int32_t) params[6]),
+        lgfx_term_from_i32((int32_t) params[7]),
     };
 
     return lgfx_make_tuple(ctx, 8, elems);

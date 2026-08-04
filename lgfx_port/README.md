@@ -32,6 +32,10 @@ See [the protocol spec](../docs/protocol.md) for wire-level rules and
   - request and reply term helpers
   - request-envelope validation helpers
 
+- `include_internal/lgfx_port/proto_term.h`
+  - small AtomVM term conversion helpers
+  - request decode and reply helper declarations
+
 - `open_config.c`
   - `open_port/2` option parsing and validation
 
@@ -114,10 +118,11 @@ This path is responsible for:
 
 - validating `submitBinaryBatch`
 - accepting exactly one non-empty binary command stream
+- validating the stream envelope at the public dispatch boundary
 - rejecting malformed command bytes as `bad_args`
 - rejecting unsupported binary command opcodes as `bad_op`
 - optionally prevalidating the full stream before device mutation
-- validating and dispatching supported render commands synchronously
+- walking supported render commands synchronously
 
 Batch dispatch remains inside `lgfx_port/` and routes decoded commands to
 `lgfx_device_*`. It keeps wire-protocol render script handling separate from
@@ -174,6 +179,9 @@ Properties:
 - ordinary operations do not implicitly flow through the batch path
 - binary-batch command execution happens outside the ordinary handler path
 - command execution is synchronous and stops at the first malformed or failed command
+- native batch execution uses one explicit `startWrite` / `endWrite` pair around command execution
+- oversized streams, empty streams, null streams, and invalid initial targets are rejected before drawing starts
+- the public dispatchers validate the stream envelope once before the inner stream walker parses commands
 - with `LGFX_PORT_RENDER_BATCH_PREVALIDATE=ON`, malformed streams are rejected before any command mutates the device
 - with the default prevalidation-off build, malformed commands are detected while executing to avoid an extra hot-path pass
 

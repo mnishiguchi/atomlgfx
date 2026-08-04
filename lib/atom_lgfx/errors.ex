@@ -23,6 +23,33 @@ defmodule AtomLGFX.Errors do
   def format_error({:bad_binary_batch, value}),
     do: "bad binary batch #{inspect(value)}"
 
+  def format_error({:bad_render_commands, value}),
+    do: "bad render commands #{inspect(value)}"
+
+  def format_error({:bad_render_command, value}),
+    do: "bad render command #{inspect(value)}"
+
+  def format_error({:bad_render_options, value}),
+    do: "bad render options #{inspect(value)}"
+
+  def format_error({:bad_render_color, value}),
+    do: "bad render color #{inspect(value)}"
+
+  def format_error({:bad_rgb565_render_color, value}),
+    do: "bad RGB565 render color #{inspect(value)}"
+
+  def format_error({:bad_render_target, value}),
+    do: "bad render target #{inspect(value)}"
+
+  def format_error({:render_target_override, value}),
+    do: "single-target render helper cannot switch to target #{inspect(value)}"
+
+  def format_error({:bad_render_display_option, value}),
+    do: "bad render display option #{inspect(value)}"
+
+  def format_error({:bad_render_batch, value}),
+    do: "bad render batch #{inspect(value)}"
+
   def format_error(:strip_already_active),
     do: "presentation strip is already active"
 

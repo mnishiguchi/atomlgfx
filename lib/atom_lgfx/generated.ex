@@ -235,8 +235,8 @@ defmodule AtomLGFX.Generated do
     ],
     draw_pixel: [
       opcode: 16,
-      public: false,
-      raw: true,
+      public: true,
+      raw: false,
       arg_range: 3..3,
       allowed_flags: 2,
       target_policy: :any,

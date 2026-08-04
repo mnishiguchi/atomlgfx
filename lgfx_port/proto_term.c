@@ -325,7 +325,7 @@ term lgfx_reply_from_esp_err(Context *ctx, lgfx_port_t *port, esp_err_t err)
             return lgfx_reply_error(ctx, port, port->atoms.bad_target);
         default:
             // Optional detail form: {error, {internal, EspErr}}
-            return lgfx_reply_error_detail(ctx, port, port->atoms.internal, term_from_int32((int32_t) err));
+            return lgfx_reply_error_detail(ctx, port, port->atoms.internal, lgfx_term_from_i32((int32_t) err));
     }
 }
 
@@ -333,7 +333,7 @@ static inline void encode_oom_last_error(lgfx_port_t *port, const lgfx_request_t
 {
     lgfx_last_error_set(
         port,
-        term_from_int32((int32_t) req->opcode),
+        lgfx_term_from_i32((int32_t) req->opcode),
         port->atoms.no_memory,
         req->flags,
         req->target,
@@ -358,7 +358,7 @@ term lgfx_reply_from_esp_err_req(Context *ctx, lgfx_port_t *port, const lgfx_req
     if (lgfx_is_error_reply(ctx, port, reply, &reason)) {
         lgfx_last_error_set(
             port,
-            term_from_int32((int32_t) req->opcode),
+            lgfx_term_from_i32((int32_t) req->opcode),
             reason,
             req->flags,
             req->target,
@@ -366,7 +366,7 @@ term lgfx_reply_from_esp_err_req(Context *ctx, lgfx_port_t *port, const lgfx_req
     } else {
         lgfx_last_error_set(
             port,
-            term_from_int32((int32_t) req->opcode),
+            lgfx_term_from_i32((int32_t) req->opcode),
             port->atoms.internal,
             req->flags,
             req->target,
@@ -392,7 +392,7 @@ term lgfx_reply_error_req(Context *ctx, lgfx_port_t *port, const lgfx_request_t 
 {
     lgfx_last_error_set(
         port,
-        term_from_int32((int32_t) req->opcode),
+        lgfx_term_from_i32((int32_t) req->opcode),
         reason,
         req->flags,
         req->target,
@@ -418,7 +418,7 @@ term lgfx_reply_error_detail_req(
 {
     lgfx_last_error_set(
         port,
-        term_from_int32((int32_t) req->opcode),
+        lgfx_term_from_i32((int32_t) req->opcode),
         reason,
         req->flags,
         req->target,
