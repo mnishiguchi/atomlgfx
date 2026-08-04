@@ -4,79 +4,79 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# V2 render-batch performance work log
+# v2 描画バッチ性能作業記録
 
-## Context
+## 背景
 
-This note records MovingIcons performance work that followed [ADR 0009: Standardize v2 hot rendering on binary render batches](../adr/0009-binary-batch-for-native-like-animation.md).
+本記録は、[ADR 0009: v2 の高頻度描画をバイナリー描画バッチへ統一する](../adr/0009-binary-batch-for-native-like-animation.md) に続いて実施した MovingIcons の性能改善作業をまとめたものです。
 
-The ADR decision remains unchanged: v2 hot rendering should use binary render batches so animation frames can be submitted once and executed natively.
+ADR の判断は変わりません。v2 の高頻度描画では、アニメーションの1フレームを1回で送信し、ネイティブ側で実行できるよう、バイナリー描画バッチを使用します。
 
-The benchmark results below clarify what render batches fixed and what still needs rendering-strategy work.
+以下の測定結果は、描画バッチによって解消できた問題と、描画方式として引き続き改善が必要な点を明確にします。
 
-## Benchmark setup
+## 測定条件
 
-Observed log shape:
+確認した記録の形式は次のとおりです。
 
 ```text
 moving_icons stats obj_count=50 render_mode=... submit_mode=binary_batch draw_mode=... fps=... frame_ms=... batch_bytes=... strip_count=...
 ```
 
-Unless otherwise noted, the logs used:
+特記がない限り、記録には次の値を使用しました。
 
 - `obj_count=50`
 - `submit_mode=binary_batch`
 
-## Timeline
+## 経過
 
-| Step | Render mode | Draw mode | Frame time | Batch bytes | Strip count | Notes |
+| 段階 | 描画方式 | 描画命令 | フレーム時間 | バッチ容量 | 帯数 | 補足 |
 | --- | --- | --- | ---: | ---: | ---: | --- |
-| Initial render batch | `strip_buffers` | `push_rotate_zoom_list` | 758-760 ms | 1289 | 2 | One-submit-per-frame worked, but all records were still submitted for each strip. |
-| Strip pre-cull | `strip_buffers` | `push_rotate_zoom_list` | 653-683 ms | 845-929 | 2 | Elixir-side strip pre-culling reduced submitted records and improved frame time. |
-| Native PRZL fast executor | `strip_buffers` | `push_rotate_zoom_list` | 659-684 ms | 881-941 | 2 | Resolving destination once and caching source lookup did not materially improve runtime. |
-| Draw-mode benchmark baseline | `strip_buffers` | `push_rotate_zoom_list` | 642-658 ms | 833-881 | 2 | Baseline after adding explicit draw-mode logging. |
-| Whole-sprite list blit | `strip_buffers` | `push_sprite_list` | 529-533 ms | 445-457 | 2 | Faster than dynamic transform, but still not near native-like FPS. |
-| Source-region list blit | `strip_buffers` | `push_sprite_region_list` | 576-581 ms | 1067-1081 | 2 | Useful atlas-oriented primitive, but initially slower than whole-sprite list blits. |
-| Region contiguous fast path | `strip_buffers` | `push_sprite_region_list` | 565-572 ms | 1025-1067 | 2 | Row-blit overhead was reduced, but it was not the main bottleneck. |
-| Whole-source region fast path | `strip_buffers` | `push_sprite_region_list` | 552-563 ms | 955-1011 | 2 | Full-source records now approach whole-sprite list behavior, but strip-buffer cost remains visible. |
-| Direct LCD comparison | `direct_lcd` | `push_rotate_zoom_list` | 637 ms | 653 | 1 | Not a useful performance baseline because direct LCD clears the visible display every frame. |
-| Direct LCD comparison | `direct_lcd` | `push_sprite_list` | 455 ms | 345 | 1 | Useful only to show that full-screen direct drawing is still not native-like. |
-| Direct LCD comparison | `direct_lcd` | `push_sprite_region_list` | 484 ms | 745 | 1 | Useful only as a diagnostic comparison. |
-| Public strip-buffer comparison | `strip_buffers` | `push_rotate_zoom_list` | 641 ms | 833 | 2 | Before native presentation strips. |
-| Public strip-buffer comparison | `strip_buffers` | `push_sprite_list` | 539 ms | 487 | 2 | Before native presentation strips. |
-| Public strip-buffer comparison | `strip_buffers` | `push_sprite_region_list` | 564 ms | 1025 | 2 | Before native presentation strips. |
+| 最初の描画バッチ | `strip_buffers` | `push_rotate_zoom_list` | 758-760 ms | 1289 | 2 | 1フレーム1送信は実現したが、各帯に全レコードを送っていた。 |
+| 帯単位の事前除外 | `strip_buffers` | `push_rotate_zoom_list` | 653-683 ms | 845-929 | 2 | Elixir 側で帯に不要なレコードを除外し、送信量とフレーム時間を削減した。 |
+| ネイティブ PRZL 高速実行 | `strip_buffers` | `push_rotate_zoom_list` | 659-684 ms | 881-941 | 2 | 描画先を1回だけ解決し、描画元の検索結果を保持しても、実行時間はほぼ改善しなかった。 |
+| 描画命令別測定の基準 | `strip_buffers` | `push_rotate_zoom_list` | 642-658 ms | 833-881 | 2 | 描画命令を明示的に記録するようにした後の基準値。 |
+| スプライト全体の一覧転送 | `strip_buffers` | `push_sprite_list` | 529-533 ms | 445-457 | 2 | 動的変形より高速だが、ネイティブ相当の FPS には届かなかった。 |
+| 描画元領域の一覧転送 | `strip_buffers` | `push_sprite_region_list` | 576-581 ms | 1067-1081 | 2 | 画像集向けの基本命令として有用だが、当初はスプライト全体の一覧転送より遅かった。 |
+| 連続領域の高速経路 | `strip_buffers` | `push_sprite_region_list` | 565-572 ms | 1025-1067 | 2 | 行単位転送の負荷を減らしたが、主なボトルネックではなかった。 |
+| 描画元全体の高速経路 | `strip_buffers` | `push_sprite_region_list` | 552-563 ms | 955-1011 | 2 | 描画元全体のレコードはスプライト全体の一覧転送に近づいたが、帯バッファーの費用は残った。 |
+| LCD 直接描画との比較 | `direct_lcd` | `push_rotate_zoom_list` | 637 ms | 653 | 1 | 毎フレーム表示全体を消去するため、性能基準としては不適切。 |
+| LCD 直接描画との比較 | `direct_lcd` | `push_sprite_list` | 455 ms | 345 | 1 | 全画面への直接描画でもネイティブ相当にならないことを示す比較に限り有用。 |
+| LCD 直接描画との比較 | `direct_lcd` | `push_sprite_region_list` | 484 ms | 745 | 1 | 診断用の比較に限り有用。 |
+| 公開帯バッファーとの比較 | `strip_buffers` | `push_rotate_zoom_list` | 641 ms | 833 | 2 | ネイティブ帯表示の導入前。 |
+| 公開帯バッファーとの比較 | `strip_buffers` | `push_sprite_list` | 539 ms | 487 | 2 | ネイティブ帯表示の導入前。 |
+| 公開帯バッファーとの比較 | `strip_buffers` | `push_sprite_region_list` | 564 ms | 1025 | 2 | ネイティブ帯表示の導入前。 |
 
-## Findings
+## 分かったこと
 
-- Render batches removed repeated AtomVM port calls from the frame loop. That remains necessary for v2.
-- Submitting fewer transform records helped, so strip pre-culling is useful.
-- Optimizing source and destination lookup inside `push_rotate_zoom_list` did not materially help, so repeated lookup/dispatch was not the main bottleneck.
-- `push_sprite_list` is faster than `push_rotate_zoom_list`, confirming that dynamic transform cost matters.
-- The improvement from `push_sprite_list` is modest, which suggests that strip presentation, sprite blits, memory bandwidth, or display transfer volume is also significant.
-- `push_sprite_region_list` is useful for atlas-style rendering, but it needs careful layout and native fast paths to compete with whole-sprite blits.
-- `direct_lcd` currently clears the visible display every frame. Treat it as a correctness/debug mode, not as the primary animation-performance baseline.
+- 描画バッチにより、フレーム処理内で繰り返していた AtomVM ポート呼び出しを除去できた。これは v2 に引き続き必要である
+- 変形レコードの送信数を減らすと改善したため、帯単位の事前除外は有効である
+- `push_rotate_zoom_list` 内で描画元と描画先の検索を最適化しても大きな改善はなく、検索や命令振り分けの繰り返しは主なボトルネックではなかった
+- `push_sprite_list` は `push_rotate_zoom_list` より高速であり、動的変形の費用が無視できないことを確認できた
+- `push_sprite_list` の改善幅は限定的であり、帯の表示、スプライト転送、メモリー帯域、または表示器への転送量も重要だと考えられる
+- `push_sprite_region_list` は画像集形式の描画に有用だが、スプライト全体の転送と競合するには、配置の工夫とネイティブ高速経路が必要である
+- `direct_lcd` は現在、毎フレーム表示全体を消去する。アニメーション性能の主基準ではなく、正しさの確認や診断用として扱う
 
-## Validation polish pass
+## 検証の改善
 
-This pass focused on making the binary-batch wire contract stricter and more observable.
+この作業では、バイナリーバッチの通信契約を厳格にし、状態を観測しやすくすることに注力しました。
 
-Completed items:
+完了した項目:
 
-- malformed binary-batch tests for truncated commands
-- malformed binary-batch tests for unknown opcodes
-- malformed binary-batch tests for bad color mode
-- malformed binary-batch tests for invalid sprite list flags
-- malformed binary-batch tests for invalid region-list payloads
-- malformed binary-batch tests for invalid rotate/zoom-list payloads
-- decode/summary tests for render-batch commands
-- summary counters for list and strip command categories
-- binary fast path for already-built batch binaries
+- 途中で切れた命令に対する不正バイナリーバッチ検証
+- 未知の操作コードに対する不正バイナリーバッチ検証
+- 不正な色形式に対する検証
+- 不正なスプライト一覧フラグに対する検証
+- 不正な領域一覧データに対する検証
+- 不正な回転・拡大縮小一覧データに対する検証
+- 描画バッチ命令の復号・概要検証
+- 一覧命令と帯命令の概要件数
+- すでに構築済みのバッチバイナリーを直接扱う高速経路
 
-## Native presentation strip pass
+## ネイティブ帯表示
 
-The next optimization direction is to remove public frame-buffer sprite blits from `strip_buffers + binary_batch` mode.
+次の最適化では、`strip_buffers + binary_batch` 方式から、公開フレームバッファー用スプライトの転送を除きます。
 
-Desired frame shape:
+想定するフレームの形は次のとおりです。
 
 ```elixir
 [
@@ -89,48 +89,47 @@ Desired frame shape:
 ]
 ```
 
-The important validation point is strip height. Native presentation may allocate a smaller strip height than the preferred value when memory is constrained. The Elixir strip loop must use the native-negotiated strip height, not a hard-coded value.
+重要な検証項目は帯の高さです。メモリーが不足する場合、ネイティブ側は希望値より小さな帯を確保する可能性があります。Elixir 側の帯処理は固定値ではなく、ネイティブ側と合意した帯の高さを使用しなければなりません。
 
-## Next benchmark matrix
+## 次回の測定組み合わせ
 
-After native presentation strips are wired in, rerun only the useful strip-buffer matrix:
+ネイティブ帯表示を接続した後は、有用な帯バッファーの組み合わせだけを再測定します。
 
-| Render mode | Submit mode | Draw mode |
+| 描画方式 | 送信方式 | 描画命令 |
 | --- | --- | --- |
 | `strip_buffers` | `binary_batch` | `push_rotate_zoom_list` |
 | `strip_buffers` | `binary_batch` | `push_sprite_list` |
 | `strip_buffers` | `binary_batch` | `push_sprite_region_list` |
 
-Record:
+記録する値:
 
 - `fps`
 - `frame_ms`
 - `batch_bytes`
 - `strip_count`
-- native strip height
+- ネイティブ側の帯の高さ
 
-## Next diagnostic step
+## 次の診断
 
-If frame time remains high after native strips, add native timing trace around:
+ネイティブ帯表示の導入後もフレーム時間が長い場合は、次の箇所へネイティブ時間計測を追加します。
 
-- total render-batch dispatch
-- preflight validation
-- strip clear
-- sprite-list draw
-- rotate/zoom-list draw
-- strip presentation
-- `startWrite` / `endWrite` scope
+- 描画バッチ振り分け全体
+- 事前検証
+- 帯の消去
+- スプライト一覧描画
+- 回転・拡大縮小一覧描画
+- 帯の表示
+- `startWrite` / `endWrite` の範囲
 
-The goal is to identify whether the next bottleneck is command decode, LovyanGFX drawing, memory movement, or LCD transfer.
+次のボトルネックが命令の復号、LovyanGFX の描画、メモリー転送、LCD 転送のどこにあるかを特定することが目的です。
 
-## Later conclusion
+## 後日の結論
 
-This work log is preserved as the measurement trail for the primitive render-batch work.
-The active v2 hot-rendering decisions are now:
+本記録は、基本命令による描画バッチ改善の測定経過として残します。現在の v2 高頻度描画に関する判断は次のとおりです。
 
-- [ADR 0011: Keep BinaryBatch minimal and measured](../adr/0011-keep-binary-batch-minimal-and-measured.md)
-- [ADR 0012: Allow native frame render commands for hot animation loops](../adr/0012-native-frame-render-commands-for-hot-animation.md)
+- [ADR 0011: BinaryBatch を小さく保ち、測定に基づいて拡張する](../adr/0011-keep-binary-batch-minimal-and-measured.md)
+- [ADR 0012: 高頻度アニメーション処理にネイティブのフレーム描画命令を認める](../adr/0012-native-frame-render-commands-for-hot-animation.md)
 
-Later benchmarking showed that primitive render batches are necessary but not always sufficient for the hottest animation loops. For MovingIcons-style workloads, the accepted direction is to keep animation state in Elixir while allowing selected generic native frame render commands to own the tight strip-rendering loop.
+その後の測定から、基本命令の描画バッチは必要である一方、最も高頻度なアニメーション処理では、それだけで十分とは限らないことが分かりました。MovingIcons のような処理では、アニメーション状態を Elixir 側に保ちつつ、選択した汎用ネイティブ描画命令が帯描画の密な繰り返し処理を担当する方針を採用しました。
 
-Before the v2 protocol freeze, speculative packed-list commands such as whole-sprite list blits, sprite-region list blits, and generic primitive shape lists were removed from the active batch surface. Their measurements remain useful history, but they are not part of the retained v2 protocol.
+v2 プロトコルを固定する前に、スプライト全体の一覧転送、スプライト領域の一覧転送、汎用基本図形一覧などの試験的な圧縮一覧命令は、現行バッチ API から削除しました。測定値は経緯として有用ですが、維持する v2 プロトコルには含まれません。

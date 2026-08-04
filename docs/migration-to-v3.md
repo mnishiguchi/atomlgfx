@@ -4,21 +4,17 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Migrating to the v3 API
+# v3 API への移行
 
-The current pre-release work is v3 because it implements wire protocol v3.
-There is no separate package or API version. The wire contract is the maintained
-versioned boundary between the Elixir wrapper and native driver.
+現在の公開前実装は、ワイヤープロトコル v3 を実装するため v3 と呼びます。独立したパッケージ版や API 版はありません。版付きで維持する境界は、Elixir ラッパーとネイティブドライバー間のワイヤー契約です。
 
-## Update both deliverables
+## 二つの成果物を同時に更新する
 
-Use the Elixir wrapper and native ESP-IDF component from the same Git commit.
-Do not mix the current wrapper with a v1 or v2 native driver, or with a native
-driver from a different development revision.
+Elixir ラッパーとネイティブ ESP-IDF 部品は、同じ Git コミットから取得してください。現在のラッパーを v1、v2、または別の開発リビジョンのネイティブドライバーと組み合わせないでください。
 
-## Prefer render-first drawing
+## 描画優先 API を使う
 
-Group ordinary drawing commands into one transaction:
+通常の描画命令は、一つの処理単位へまとめます。
 
 ```elixir
 :ok =
@@ -33,43 +29,30 @@ Group ordinary drawing commands into one transaction:
   ])
 ```
 
-Use `AtomLGFX.render_sprite/4` when drawing into a sprite. Direct functions
-remain appropriate for initialization, queries, touch, sprite lifecycle, JPEG
-drawing, raw RGB565 upload, and occasional individual operations.
+スプライトへ描画する場合は `AtomLGFX.render_sprite/4` を使います。初期化、照会、タッチ、スプライトのライフサイクル、JPEG 描画、生 RGB565 転送、単発操作には直接関数が適しています。
 
-## Replace old batch APIs
+## 旧バッチ API を置き換える
 
-Remove uses of the former tuple/list batch builder, its batch module, the old
-batch submission function, and retained native render programs.
+旧来の組・一覧バッチ構築器、旧バッチモジュール、旧送信関数、保持型ネイティブ描画プログラムの利用を削除してください。
 
-Use the friendly `AtomLGFX.render/3`, `render_lcd/3`, and `render_sprite/4`
-functions first. `AtomLGFX.BinaryBatch` remains available as an advanced API for
-diagnostics and measured hot loops.
+まず、使いやすい `AtomLGFX.render/3`、`render_lcd/3`、`render_sprite/4` を使います。`AtomLGFX.BinaryBatch` は、診断や計測対象の高負荷処理向け上級 API として引き続き利用できます。
 
-## Use canonical Elixir names
+## 正規の Elixir 名を使う
 
-Public function and low-level operation names use `snake_case`. LovyanGFX C++
-names such as `fillRect` map to Elixir names such as `fill_rect`.
+公開関数と低水準操作名には `snake_case` を使います。LovyanGFX C++ の `fillRect` は、Elixir では `fill_rect` に対応します。
 
-Render commands accept friendly colors including `:black`, `:white`,
-`{:rgb, r, g, b}`, and `{:index, n}` for palette-backed sprites. Text datum
-commands accept atoms such as `:top_left`, `:middle_center`, and
-`:bottom_right`.
+描画命令では、`:black`、`:white`、`{:rgb, r, g, b}` などの扱いやすい色を指定できます。パレット付きスプライトでは `{:index, n}` を使います。文字基準位置には `:top_left`、`:middle_center`、`:bottom_right` などを指定できます。
 
-## Keep large payloads explicit
+## 大きなデータを明示的に扱う
 
-JPEG and RGB565 image data are deliberately not embedded in render batches.
-Continue using `AtomLGFX.draw_jpg/5` or `/11` and
-`AtomLGFX.push_image_rgb565/8` so allocation and payload ownership remain
-visible.
+JPEG と RGB565 の画像データは、意図的に描画バッチへ埋め込みません。確保とデータ所有権を見える状態に保つため、`AtomLGFX.draw_jpg/5` または `/11`、`AtomLGFX.push_image_rgb565/8` を引き続き使います。
 
-## Migration checklist
+## 移行確認表
 
-- Pin the Elixir dependency and native component to the same Git commit.
-- Replace removed tuple/list and retained-render APIs.
-- Group ordinary primitives and text with the render-first helpers.
-- Keep setup, queries, allocation, touch, JPEG, and raw image upload direct.
-- Use canonical `snake_case` names.
-- Check optional capabilities before using sprites, palettes, touch, or binary
-  batches.
-- Run `SAMPLE_APP_MODE=all` on the target device after upgrading.
+- Elixir 依存とネイティブ部品を同じ Git コミットへ固定する
+- 削除済みの組・一覧バッチと保持描画 API を置き換える
+- 通常の基本図形と文字を描画優先関数でまとめる
+- 初期設定、照会、確保、タッチ、JPEG、生画像転送は直接呼び出しのままにする
+- 正規の `snake_case` 名を使う
+- スプライト、パレット、タッチ、バイナリーバッチを使う前に任意機能の有無を確認する
+- 更新後に対象機器で `SAMPLE_APP_MODE=all` を実行する

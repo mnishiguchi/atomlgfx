@@ -133,10 +133,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Combines packed binary command fragments into one command stream.
-
-  Prebuilt binaries are returned directly so callers that already built the
-  command stream do not pay another conversion cost on the render hot path.
+  圧縮バイナリー命令の断片を1つの命令列へまとめます。
   """
   @spec batch(iodata()) :: binary()
   def batch(commands) when is_binary(commands) do
@@ -148,7 +145,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Selects the current render target for following binary-batch commands.
+  後続のバイナリーバッチ命令で使用する描画対象を選択します。
   """
   @spec target(integer()) :: binary()
   def target(target) when target_any(target) do
@@ -156,7 +153,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Selects how following scalar color fields are interpreted.
+  後続の色値をどの形式として解釈するかを選択します。
   """
   @spec color_mode(:rgb565 | :palette_index) :: binary()
   def color_mode(:rgb565) do
@@ -168,7 +165,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Presents the current frame.
+  現在のフレームを表示へ反映します。
   """
   @spec display() :: binary()
   def display do
@@ -359,11 +356,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Sets a clip rectangle on the current render target.
-
-  The clip state belongs to the current target, following LovyanGFX semantics.
-  Use `clear_clip_rect/0` before leaving a batch section when later commands
-  should not inherit the clip rectangle.
+  現在の描画対象に切り抜き長方形を設定します。
   """
   @spec set_clip_rect(integer(), integer(), integer(), integer()) :: binary()
   def set_clip_rect(x, y, width, height)
@@ -373,7 +366,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Clears the clip rectangle on the current render target.
+  現在の描画対象の切り抜き長方形を解除します。
   """
   @spec clear_clip_rect() :: binary()
   def clear_clip_rect do
@@ -381,9 +374,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Selects a text font preset for the current render target.
-
-  Supported presets are `:ascii` and `:jp`.
+  現在の描画対象に文字書体のプリセットを選択します。
   """
   @spec set_text_font_preset(:ascii | :jp) :: binary()
   def set_text_font_preset(:ascii) do
@@ -395,9 +386,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Sets text size for the current render target.
-
-  Scale values use x1024 fixed-point encoding inside the render batch.
+  現在の描画対象の文字倍率を設定します。
   """
   @spec set_text_size(number()) :: binary()
   def set_text_size(scale) when is_number(scale) and scale > 0 do
@@ -405,9 +394,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Sets independent X/Y text size for the current render target.
-
-  Scale values use x1024 fixed-point encoding inside the render batch.
+  現在の描画対象の文字倍率を X 軸と Y 軸で個別に設定します。
   """
   @spec set_text_size_xy(number(), number()) :: binary()
   def set_text_size_xy(scale_x, scale_y)
@@ -421,7 +408,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Sets text datum for the current render target.
+  現在の描画対象の文字基準位置を設定します。
   """
   @spec set_text_datum(non_neg_integer()) :: binary()
   def set_text_datum(datum) when u8(datum) do
@@ -429,10 +416,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Sets text wrapping for the current render target.
-
-  This follows the scalar `set_text_wrap/3` semantics: the single boolean controls
-  X wrapping and leaves Y wrapping disabled.
+  現在の描画対象の文字折り返しを設定します。
   """
   @spec set_text_wrap(boolean()) :: binary()
   def set_text_wrap(wrap) when is_boolean(wrap) do
@@ -440,7 +424,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Sets independent X/Y text wrapping for the current render target.
+  現在の描画対象の文字折り返しを X 軸と Y 軸で個別に設定します。
   """
   @spec set_text_wrap_xy(boolean(), boolean()) :: binary()
   def set_text_wrap_xy(wrap_x, wrap_y) when is_boolean(wrap_x) and is_boolean(wrap_y) do
@@ -448,7 +432,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Sets text cursor position for the current render target.
+  現在の描画対象の文字カーソル位置を設定します。
   """
   @spec set_cursor(integer(), integer()) :: binary()
   def set_cursor(x, y) when i16(x) and i16(y) do
@@ -456,9 +440,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Sets text color for the current render target.
-
-  Colors accept RGB565 integers, `{:rgb565, value}`, or `{:index, value}`.
+  現在の描画対象の文字色を設定します。
   """
   @spec set_text_color(
           integer() | {:rgb565, integer()} | {:index, integer()},
@@ -478,7 +460,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Draws a UTF-8 string at `{x, y}` on the current render target.
+  現在の描画対象の `{x, y}` に UTF-8 文字列を描画します。
   """
   @spec draw_string(integer(), integer(), binary()) :: binary()
   def draw_string(x, y, text) when i16(x) and i16(y) and is_binary(text) do
@@ -495,7 +477,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Prints UTF-8 text at the current cursor position on the current render target.
+  現在の描画対象のカーソル位置へ UTF-8 文字列を出力します。
   """
   @spec print(binary()) :: binary()
   def print(text) when is_binary(text) do
@@ -503,7 +485,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Prints UTF-8 text plus a trailing newline at the current cursor position.
+  現在のカーソル位置へ UTF-8 文字列と末尾の改行を出力します。
   """
   @spec println(binary()) :: binary()
   def println(text \\ "") when is_binary(text) do
@@ -511,7 +493,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Sets one palette color on a palette-backed sprite target.
+  配色表を持つスプライト対象に1つの配色表色を設定します。
   """
   @spec set_palette_color(integer(), integer()) :: binary()
   def set_palette_color(palette_index, rgb888)
@@ -520,7 +502,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Sets the sprite pivot used by transformed sprite drawing.
+  変形スプライト描画で使用する基準点を設定します。
   """
   @spec set_pivot(integer(), integer()) :: binary()
   def set_pivot(x, y) when i16(x) and i16(y) do
@@ -528,7 +510,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Pushes a source sprite to the current render target.
+  描画元スプライトを現在の描画対象へ転送します。
   """
   @spec push_sprite(integer(), integer(), integer()) :: binary()
   def push_sprite(source_target, x, y) when sprite_handle(source_target) and i16(x) and i16(y) do
@@ -536,10 +518,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Pushes a source sprite to the current render target using a transparent key.
-
-  The transparent key accepts an RGB565 integer, `{:rgb565, value}`, or
-  `{:index, value}` for palette-backed source sprites.
+  透明色を使用して描画元スプライトを現在の描画対象へ転送します。
   """
   @spec push_sprite(
           integer(),
@@ -560,10 +539,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Pushes a transformed source sprite with uniform zoom.
-
-  This is the one-off BinaryBatch form of `pushRotateZoom`. Use
-  `push_rotate_zoom_list/2` for many transformed sprites in the same frame.
+  一様な倍率で変形した描画元スプライトを転送します。
   """
   @spec push_rotate_zoom(integer(), integer(), integer(), number(), number()) :: binary()
   def push_rotate_zoom(source_target, x, y, angle_deg, zoom)
@@ -573,7 +549,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Pushes a transformed source sprite with independent X/Y zoom.
+  X 軸と Y 軸で倍率を分けて変形した描画元スプライトを転送します。
   """
   @spec push_rotate_zoom(integer(), integer(), integer(), number(), number(), number()) ::
           binary()
@@ -584,10 +560,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Pushes a transformed source sprite using a transparent key.
-
-  The transparent key accepts an RGB565 integer, `{:rgb565, value}`, or
-  `{:index, value}` for palette-backed source sprites.
+  透明色を使用して変形した描画元スプライトを転送します。
   """
   @spec push_rotate_zoom(
           integer(),
@@ -605,18 +578,17 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Pushes many transformed source sprites to the current render target.
+  多数の変形済み描画元スプライトを現在の描画対象へ転送します。
 
-  `instances` uses the same fixed-point tuple shape as
-  `AtomLGFX.push_rotate_zoom_list_to/4`:
+  `instances` は `AtomLGFX.push_rotate_zoom_list_to/4` と同じ固定小数点形式です。
 
       {source_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024}
 
-  Options:
+  選択肢:
 
-  - `:transparent` accepts an RGB565 integer or `{:index, n}`
-  - `:y_offset` is subtracted from each y coordinate natively
-  - `:approx_cull` asks native code to skip off-target transforms when safe
+  - `:transparent` - RGB565 整数または `{:index, n}`
+  - `:y_offset` - 各 Y 座標からネイティブ側で差し引く値
+  - `:approx_cull` - 安全な場合に対象外の変形をネイティブ側で省く
   """
   @spec push_rotate_zoom_list(list(), keyword()) :: binary()
   def push_rotate_zoom_list(instances, opts \\ []) when is_list(instances) and is_list(opts) do
@@ -630,12 +602,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Decodes a binary-batch command stream into readable command maps.
-
-  This helper is intended for tests, logs, and generated-frame debugging. It does
-  not call the native driver. The returned command maps include the command
-  index and wire opcode so native `{:batch_failed, index, opcode, reason}`
-  errors can be inspected against the original frame script.
+  バイナリーバッチ命令列を読みやすい命令マップへ復号します。
   """
   @spec decode(iodata()) :: {:ok, [map()]} | {:error, term()}
   def decode(commands) do
@@ -649,7 +616,7 @@ defmodule AtomLGFX.BinaryBatch.Codec do
   end
 
   @doc """
-  Decodes a binary-batch command stream or raises `ArgumentError`.
+  バイナリーバッチ命令列を復号し、不正な場合は `ArgumentError` を送出します。
   """
   @spec decode!(iodata()) :: [map()]
   def decode!(commands) do

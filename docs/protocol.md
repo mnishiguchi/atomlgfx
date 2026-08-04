@@ -4,300 +4,282 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# LovyanGFX AtomVM Port Protocol
+# LovyanGFX AtomVM ポートプロトコル
 
-This document defines the tuple protocol between an AtomVM host application and the native `lgfx_port` driver.
+この文書は、AtomVM のホストアプリケーションとネイティブ `lgfx_port` ドライバーの間で使う組プロトコルを定義します。
 
-See [the architecture overview](architecture.md) for the repository map,
-[the `lgfx_port` README](../lgfx_port/README.md) for port-layer details,
-and [the protocol reference](protocol-reference.md) for generated operation,
-capability, and error tables.
+リポジトリ全体は [構成](architecture.md)、ポート層の詳細は [`lgfx_port` README](../lgfx_port/README.md)、生成された操作・機能・エラー表は [プロトコル参照](protocol-reference.md) を参照してください。
 
-## Scope
+## 対象範囲
 
-This document covers:
+この文書で定義する内容:
 
-- request and response shapes
-- protocol-visible validation rules
-- data encodings
-- flags and capability bits
-- operation semantics that are part of the external contract
+- 要求と応答の形
+- 外部から見える検証規則
+- データ表現
+- フラグと機能ビット
+- 外部契約に含まれる操作の意味
 
-This document does not define:
+この文書で定義しない内容:
 
-- open-time config passed through `open_port/2`
-- internal port-layer or device-layer implementation details
-- non-contract execution structure inside the native component
-- maintainer-only testing or sync checklists
+- `open_port/2` へ渡す開始時設定
+- ポート層または装置層の内部実装
+- ネイティブ部品内の契約に影響しない実行構造
+- 保守者だけが使う試験・同期確認手順
 
-## Source of truth
+## 正式な定義元
 
-The protocol contract is defined by these sources:
+プロトコル契約は、次の情報から定義します。
 
 - `lgfx_port/include_internal/lgfx_port/ops.def`
-  - operation surface
-  - numeric opcode order
-  - arity
-  - allowed flags
-  - target policy
-  - state policy
-  - capability linkage
-
+  - 操作面
+  - 操作番号の順序
+  - 引数数
+  - 許可するフラグ
+  - 対象規則
+  - 状態規則
+  - 機能との関連付け
 - `lgfx_port/include_internal/lgfx_port/protocol.h`
-  - protocol constants
-  - capability bits
-  - wire-level limits
-
-- build-generated `lgfx_port/lgfx_port_config.h`
-  - generated from `lgfx_port/cmake/lgfx_port_config.h.in`
-  - build-derived gates used by the component
-
-- this document
-  - human-readable contract
-
+  - プロトコル定数
+  - 機能ビット
+  - ワイヤー単位の上限
+- 構築時に生成する `lgfx_port/lgfx_port_config.h`
+  - `lgfx_port/cmake/lgfx_port_config.h.in` から生成
+  - 部品が使う構築条件
+- この文書
+  - 人が読む契約
 - `docs/protocol-reference.md`
-  - generated reference tables synchronized from source metadata
-
+  - ソース情報から同期生成する参照表
 - `lib/atom_lgfx/generated.ex`
-  - generated Elixir operation-name to opcode mapping
-  - generated public/raw/batch exposure metadata
-  - generated arity, flag, target, state, and capability metadata consumed by
-    the wrapper schema
+  - Elixir 操作名から操作番号への生成済み対応
+  - 公開・生呼び出し・バッチでの公開方針
+  - ラッパーのスキーマが使う引数数、フラグ、対象、状態、機能情報
 
-Important invariants:
+重要な不変条件:
 
-- if an op is not declared in `ops.def`, it is not part of the protocol
-- `getCaps` derives `FeatureBits` from metadata plus the active dispatch surface
-- `FeatureBits` contains protocol bits only
-- touch is advertised only when touch ops are both compiled in and effectively attached
-- generated reference tables and implementation must agree
-- canonical Elixir operation names are `snake_case` atoms
-- LovyanGFX-style `camelCase` atoms are not part of the Elixir-facing protocol
-- existing numeric opcode order is stable within one protocol version
-- new operations must be appended unless the protocol version is bumped
+- `ops.def` に宣言されていない操作はプロトコルに含まれない
+- `getCaps` は、情報と有効な振り分け面から `FeatureBits` を導出する
+- `FeatureBits` にはプロトコル機能ビットだけを含める
+- タッチ操作を構築し、実際にタッチ装置が接続された場合だけタッチ対応を通知する
+- 生成参照表と実装は一致する
+- 正規の Elixir 操作名は `snake_case` アトム
+- LovyanGFX 風の `camelCase` アトムは Elixir 向けプロトコルに含めない
+- 同じプロトコル版では、既存操作の数値順序を固定する
+- プロトコル版を上げない限り、新しい操作は末尾へ追加する
 
-## Operation naming contract
+## 操作名の契約
 
-Protocol operations have one Elixir-facing name:
+プロトコル操作には、Elixir 側で使う名前が一つあります。
 
-- canonical Elixir name
-  - `snake_case` atom
-  - used by the generated schema, protocol encoder, public wrapper, and raw calls
+- 正規の Elixir 名
+  - `snake_case` アトム
+  - 生成スキーマ、プロトコル符号化器、公開ラッパー、生呼び出しで使用
 
-`ops.def` may keep LovyanGFX-style identifiers internally for handler-table generation, but the v3 request tuple carries the canonical `snake_case` operation atom. The decoder also accepts compact numeric opcodes for wrapper-owned raw paths.
+`ops.def` はハンドラー表生成のため内部で LovyanGFX 風識別子を保持できますが、v3 の要求組には正規の `snake_case` 操作アトムを入れます。ラッパーが所有する生経路向けに、小さな数値操作番号もネイティブ解析器が受け入れます。
 
-Rules:
+規則:
 
-- public and raw Elixir-facing calls must use canonical `snake_case` names
-- LovyanGFX-style `camelCase` atoms such as `:fillRect` are unknown operations
-- opcode values are derived only from `ops.def` order
-- generated files must be refreshed with `elixir scripts/sync_lgfx_protocol_doc.exs`
-- generated drift must be caught by `mix lgfx.generated.check`
-- protocol freeze checks must pass before changing operation names or opcode order
+- 公開呼び出しと生呼び出しでは正規の `snake_case` 名を使う
+- `:fillRect` などの LovyanGFX 風 `camelCase` アトムは未知の操作として扱う
+- 操作番号は `ops.def` の順序だけから導出する
+- `elixir scripts/sync_lgfx_protocol_doc.exs` で生成ファイルを更新する
+- `mix lgfx.generated.check` で生成差分を検出する
+- 操作名または操作番号順を変更する前に、プロトコル固定試験へ合格する
 
-## Request and response model
+## 要求と応答
 
-V3 requests use flat tuples. Targetless operations omit target metadata:
+v3 要求は平坦な組です。対象を持たない操作では対象情報を省略します。
 
 ```erlang
 {lgfx, ProtoVer, Op, ...Args}
 ```
 
-Target-aware operations carry target and flags in the tuple header:
+対象を持つ操作では、対象とフラグを組の先頭側へ含めます。
 
 ```erlang
 {lgfx, ProtoVer, Op, Target, Flags, ...Args}
 ```
 
-Field meanings:
+各欄の意味:
 
 - `lgfx`
-  - tag atom
-
+  - 識別用アトム
 - `ProtoVer`
-  - integer
-  - must equal `LGFX_PORT_PROTO_VER`
-
+  - 整数
+  - `LGFX_PORT_PROTO_VER` と一致する必要がある
 - `Op`
-  - canonical `snake_case` operation atom
-  - compact numeric opcodes are accepted by the native decoder for wrapper-owned raw paths
-
+  - 正規の `snake_case` 操作アトム
+  - ラッパーが所有する生経路向けに数値操作番号も受け入れる
 - `Target`
-  - `0` => LCD
-  - `1..254` => sprite handle
-  - `255` => reserved and invalid
-  - omitted for targetless operations unless a raw test intentionally sends a target
-
+  - `0`: LCD
+  - `1..254`: スプライト番号
+  - `255`: 予約済みで無効
+  - 対象を持たない操作では省略する。ただし生試験が意図的に対象を送る場合を除く
 - `Flags`
-  - integer bitset
-  - `0` when unused
-  - omitted for targetless operations unless a raw test intentionally sends flags
-
+  - 整数のビット集合
+  - 未使用時は `0`
+  - 対象を持たない操作では省略する。ただし生試験が意図的に送る場合を除く
 - `Args`
-  - operation-specific positional arguments
-  - no nested argument list is used in v3
+  - 操作固有の位置引数
+  - v3 では入れ子の引数一覧を使わない
 
-Responses are always:
+応答は常に次の形です。
 
 ```erlang
 {ok, Result}
 {error, Reason}
 ```
 
-Conventions:
+慣例:
 
-- void operations return `{ok, ok}`
-- getters return `{ok, Value}`
-- structured returns use tuples
-- `Reason` is an atom or detail tuple
+- 返り値のない操作は `{ok, ok}`
+- 取得操作は `{ok, Value}`
+- 構造化した返り値は組を使う
+- `Reason` はアトムまたは詳細組
 
-## Execution model at the protocol boundary
+## プロトコル境界の実行方式
 
-The protocol exposes two operation styles:
+外部から見える操作方式は二つです。
 
-- ordinary operations
-  - execute immediately
-  - return real success or failure immediately
+- 通常操作
+  - 直ちに実行する
+  - 実際の成功または失敗を直ちに返す
+- `submitBinaryBatch` によるバイナリーバッチ送信
+  - 命令構築は明示的で、呼び出し側が所有する
+  - 一つのバイナリーが一つのフレーム命令列を表す
+  - 同期的に実行する
+  - 成功は、命令列全体の解析と実行が完了したことを示す
 
-- binary batch submission through `submitBinaryBatch`
-  - command construction is explicit and caller-owned
-  - one binary contains one frame script
-  - execution is synchronous
-  - success means the script was fully decoded and executed
+この区別は `AtomLGFX.submit_binary_batch/2` の外部契約です。内部の実行時期や実行構造は実装詳細です。
 
-This distinction is part of the external contract for `AtomLGFX.submit_binary_batch/2`.
-Internal execution timing and runtime structure are implementation details.
+## 検証方式
 
-## Validation model
+共通の失敗対応:
 
-Common failure mapping:
+- 組の識別子またはプロトコル版が不正: `bad_proto`
+- 未知の操作番号: `bad_op`
+- 引数数または型が不正: `bad_args`
+- 値がワイヤー範囲外: `bad_args`
+- 対象が不正: `bad_target`
+- 許可されない非零フラグ: `bad_flags`
 
-- wrong tuple tag or protocol version => `bad_proto`
-- unknown opcode => `bad_op`
-- wrong arity or types => `bad_args`
-- value out of wire range => `bad_args`
-- invalid target => `bad_target`
-- invalid non-zero flags => `bad_flags`
+検証は層ごとに行います。
 
-Validation is layered:
+- ポート層は要求包絡と操作情報を検証する
+- ハンドラーは操作固有のワイヤー値を解析する
+- 装置側の意味については装置層を正式な判断元とする
 
-- port-level validation handles request envelope and op metadata
-- handlers perform op-specific wire decode
-- device-layer code is authoritative for device-facing semantics
+装置側で検証する例:
 
-Examples of device-facing semantic checks:
+- 転送元・転送先スプライトの存在
+- 番号指定色に必要なパレット付きスプライト
+- `push_image` の行幅正規化と必要バイト数
+- `drawJpg` の復号・描画動作
+- 回転と拡大縮小の妥当性
+- 決定的なスプライト確保規則
 
-- source or destination sprite existence
-- palette-backed sprite requirements for indexed scalar colors
-- `push_image` stride normalization and required byte count
-- `drawJpg` decode and render behavior
-- rotate and zoom semantic validity
-- deterministic sprite allocation rules
+バイナリーバッチ送信では、さらに次を検証します。
 
-Binary-batch submission adds one more validation layer:
+- `submit_binary_batch` が外側の要求包絡を検証する
+- バイナリーバッチ解析器が各描画命令を解析・検証してから実行する
 
-- `submit_binary_batch` validates the outer request envelope
-- each render command is decoded and validated by the binary batch decoder before execution
+## バイナリーデータの寿命
 
-## Binary payload lifetime
+呼び出し側のバイナリーデータを指す生ポインターは、要求の間だけ有効です。
 
-Raw pointers into caller binaries are request-scoped.
+規則:
 
-Rule:
+- 寿命を明示的に管理しない限り、要求境界を越えて呼び出し側のバイナリーデータへのポインターを保持しない
 
-- the driver must not retain pointers into caller binaries past the request boundary unless lifetime is explicitly managed
+現在の通常操作:
 
-Current ordinary-operation model:
+- ハンドラーは要求のバイナリーデータへのポインターを借用し、同じ要求内で `lgfx_device_*` へ直接渡す
+- 現在の文字・画像装置呼び出しは同期的
+- 装置コードは戻る前にバイト列を完全に消費し、呼び出し後にポインターを保持しない
 
-- handlers borrow request binary pointers and pass them directly to `lgfx_device_*` within the same request
-- text and image device calls are synchronous in the current design
-- device code must fully consume those bytes before returning and must not retain the pointer after the call
+特に `draw_string`、`print`、`println`、`draw_jpg`、`push_image` で重要です。
 
-That matters especially for `draw_string`, `print`, `println`, `draw_jpg`, and `push_image`.
+明示的バッチ:
 
-For explicit batching:
+- `submitBinaryBatch` は同期要求の間だけバイナリーを借用する
+- 描画解析器は呼び出し側のバイナリーへのポインターを保持しない
+- データを伴うバイナリーバッチ命令は、描画経路内で同期的に解析・消費する
+- データを伴う通常操作が自動的にバッチ対応すると仮定しない。文書化された `AtomLGFX.BinaryBatch` 構築器だけを対象とする
 
-- `submitBinaryBatch` borrows its binary only for the synchronous request boundary
-- the render decoder must not retain pointers into the caller binary
-- payload-bearing binary-batch commands are decoded and consumed synchronously
-  within the render path
-- callers should not assume that any payload-bearing ordinary op is automatically
-  batchable; only documented `AtomLGFX.BinaryBatch` builders are in scope
+## 共通データと表現
 
-## Common data and encodings
+### 整数範囲
 
-### Integer ranges
-
-Driver-enforced ranges:
+ドライバーが検証する範囲:
 
 - `i16`: `-32768..32767`
 - `i32`: `-2147483648..2147483647`
 - `u16`: `0..65535`
 - `u32`: `0..4294967295`
 
-Common usage:
+一般的な用途:
 
-- `x`, `y` => `i16`
-- `w`, `h` => `u16`
+- `x`, `y`: `i16`
+- `w`, `h`: `u16`
 
-### LovyanGFX-like numeric values
+### LovyanGFX 風の数値
 
-Some numeric arguments use LovyanGFX-like float semantics on the wire.
+一部の数値引数は、ワイヤー上で LovyanGFX 風の浮動小数意味を持ちます。
 
-Current paths:
+現在の対象:
 
 - `setTextSize`
-- `drawJpg` extended scaling
+- `drawJpg` の拡大縮小指定
 - `pushRotateZoom`
 
-Rules:
+規則:
 
-- integer and float terms are both accepted on the wire
-- values are decoded to native `float` in the handler layer
-- values must be finite
-- scale values must be positive
+- ワイヤーでは整数項と浮動小数項の両方を受け入れる
+- ハンドラー層でネイティブ `float` へ変換する
+- 値は有限でなければならない
+- 倍率は正でなければならない
 
-Examples:
+例:
 
-- `1` => `1.0`
-- `1.5` => `1.5`
-- `90` => `90.0`
+- `1` は `1.0`
+- `1.5` は `1.5`
+- `90` は `90.0`
 
-### Strings
+### 文字列
 
-- text arguments are UTF-8 binaries
-- no trailing NUL is required
-- embedded NUL may be rejected for ops that call C-string APIs
+- 文字引数は UTF-8 バイナリー
+- 末尾 NUL は不要
+- C 文字列 API を使う操作では、埋め込み NUL を拒否する場合がある
 
-### Colors
+### 色
 
-This protocol distinguishes four related color domains:
+プロトコルでは、関連する次の四つの色領域を区別します。
 
-- display colors used by primitive and text operations
-- palette lifecycle colors
-- palette indices
-- `push_image` pixel blobs
+- 基本図形と文字で使う表示色
+- パレットのライフサイクル色
+- パレット番号
+- `push_image` の画素データを格納したバイナリー
 
-#### Display colors used by primitive, text, and non-index transparent sprite operations
+#### 基本図形、文字、番号指定でない透過スプライト操作の表示色
 
-Non-index display colors use RGB565 on the wire.
+番号指定でない表示色は、ワイヤー上で RGB565 を使います。
 
-- wire format is RGB565 in `u16`
-- the handler forwards that value as the display color used by the device-facing primitive or text path
-- this contract is the same regardless of target color depth
-- `setColorDepth(Target, 24)` changes the destination target depth but does not change the display-color wire format
-- `setColorDepth(Target, 24)` does not by itself imply palette-index semantics
+- ワイヤー形式は `u16` の RGB565
+- ハンドラーは、装置側の基本図形または文字経路で使う表示色として値を渡す
+- 対象の色深度にかかわらず、この契約は同じ
+- `setColorDepth(Target, 24)` は転送先対象の色深度を変えるが、表示色のワイヤー形式は変えない
+- `setColorDepth(Target, 24)` だけではパレット番号の意味を有効にしない
 
-Indexed palette mode:
+パレット番号モード:
 
-- enabled only by op-specific flags
-- the corresponding scalar argument is interpreted as a palette index
-- the palette index is carried in the low 8 bits of the decoded scalar value
-- indexed mode is invalid on LCD target for primitive and text color arguments
-- indexed mode on a sprite target requires actual palette backing
-- target color depth alone does not implicitly enable indexed semantics
+- 操作固有フラグだけで有効にする
+- 対応する数値引数をパレット番号として解釈する
+- 解析した数値の下位8ビットをパレット番号として使う
+- LCD 対象の基本図形・文字色では無効
+- スプライト対象では、実際にパレット領域が必要
+- 対象の色深度だけでは番号指定の意味を暗黙に有効にしない
 
-This applies to non-index display-color arguments used by operations such as:
+対象となる操作例:
 
 - `fillScreen`
 - `clear`
@@ -319,215 +301,199 @@ This applies to non-index display-color arguments used by operations such as:
 - `drawTriangle`
 - `fillTriangle`
 - `setTextColor`
-- `pushSprite` optional transparent value
-- `pushRotateZoom` optional transparent value
+- `pushSprite` の任意透過値
+- `pushRotateZoom` の任意透過値
 
-#### Palette lifecycle colors
+#### パレットのライフサイクル色
 
-Palette lifecycle operations use RGB888 directly on the wire.
+パレット操作は、ワイヤー上で RGB888 を直接使います。
 
-- `setPaletteColor` takes `0x00RRGGBB` packed RGB888 in `u32`
-- palette lifecycle arguments are not reinterpreted as RGB565 display colors
-- `createPalette` establishes palette backing for an existing paletted sprite target
-- `setPaletteColor` writes one palette entry on that palette-backed sprite
+- `setPaletteColor` は `u32` の `0x00RRGGBB` 詰め込み RGB888 を受け取る
+- パレット操作の引数を RGB565 表示色として再解釈しない
+- `createPalette` は既存のパレット色深度スプライトへパレット領域を作る
+- `setPaletteColor` は、そのスプライトのパレット項目を一つ書き換える
 
-#### Palette indices
+#### パレット番号
 
-Palette indices are explicit, flag-selected argument interpretations.
+パレット番号は、フラグで明示的に選ぶ引数解釈です。
 
-- indexed primitive color uses `LGFX_F_COLOR_INDEX`
-- indexed text foreground uses `LGFX_F_TEXT_FG_INDEX`
-- indexed text background uses `LGFX_F_TEXT_BG_INDEX`
-- indexed transparent sprite color uses `LGFX_F_TRANSPARENT_INDEX`
-- indexed semantics require actual palette backing where documented
-- indexed semantics are never implied by color depth alone
+- 基本図形の番号指定色は `LGFX_F_COLOR_INDEX`
+- 文字前景の番号指定色は `LGFX_F_TEXT_FG_INDEX`
+- 文字背景の番号指定色は `LGFX_F_TEXT_BG_INDEX`
+- スプライト透過番号は `LGFX_F_TRANSPARENT_INDEX`
+- 文書で指定する箇所では、番号指定の意味に実際のパレット領域が必要
+- 色深度だけでは番号指定の意味を有効にしない
 
-#### `push_image` pixel blobs
+#### `push_image` の画素データを格納したバイナリー
 
-- RGB565 only
-- little-endian per pixel (`lo hi`) as ordinary 16-bit RGB565 words
-- unaffected by `setColorDepth`
-- target-side byte swapping remains controlled separately by `setSwapBytes`
+- RGB565 のみ
+- 各画素は通常の16ビット RGB565 語としてリトルエンディアン `lo hi`
+- `setColorDepth` の影響を受けない
+- 対象側のバイト入れ替えは、別途 `setSwapBytes` で制御する
 
-## Error reasons
+## エラー理由
 
-Canonical protocol error atoms and detail tags are listed in
-[the generated error reference](protocol-reference.md#generated-error-reasons).
+正規のプロトコルエラーアトムと詳細タグは、[生成エラー参照](protocol-reference.md#生成されたエラー理由) にあります。
 
-Optional detail forms:
+任意の詳細形式:
 
 - `{error, {bad_args, Detail}}`
 - `{error, {internal, EspErr}}`
 
-Client rule:
+利用側の規則:
 
-- match `{error, Reason}` and treat `Reason` as opaque
+- `{error, Reason}` に一致させ、`Reason` は不透明な値として扱う
 
-## Operation policy notation
+## 操作規則の表記
 
-This notation mirrors `ops.def`.
+この表記は `ops.def` と対応します。
 
-### Target rule
+### 対象規則
 
 - `T0/bad_target`
-  - require `Target == 0`, else `{error, bad_target}`
-
+  - `Target == 0` を要求し、それ以外は `{error, bad_target}`
 - `T0/unsupported`
-  - require `Target == 0`, else `{error, unsupported}`
-
+  - `Target == 0` を要求し、それ以外は `{error, unsupported}`
 - `LGFX_OP_TARGET_ANY`
-  - accept LCD or sprite targets
-  - `255` remains invalid
-
+  - LCD またはスプライト対象を受け入れる
+  - `255` は無効
 - `LGFX_OP_TARGET_SPRITE_ONLY`
-  - require sprite target `1..254`
+  - スプライト対象 `1..254` を要求する
 
-### Flags rule
+### フラグ規則
 
 - `F0`
-  - require `Flags == 0`
-
+  - `Flags == 0` を要求する
 - `Fmask(X)`
-  - require `(Flags & ~X) == 0`
+  - `(Flags & ~X) == 0` を要求する
 
-### State rule
+### 状態規則
 
 - `any`
-  - callable before `init`
-
+  - `init` 前にも呼び出せる
 - `requires_init`
-  - requires initialized display state
+  - 初期化済み表示状態を要求する
 
-## Implemented operation matrix
+## 実装済み操作表
 
-The generated implemented operation matrix lives in
-[the protocol reference](protocol-reference.md#implemented-operation-matrix).
+生成された実装済み操作表は [プロトコル参照](protocol-reference.md#実装済み操作表) にあります。
 
-If an operation is not listed there, it is not implemented and must return `{error, bad_op}`.
+表にない操作は未実装であり、`{error, bad_op}` を返す必要があります。
 
-## Capabilities
+## 機能情報
 
 ### `getCaps()`
 
-Request:
+要求:
 
-- `getCaps()` with `Target == 0`
+- `Target == 0` の `getCaps()`
 
-Response:
+応答:
 
 ```erlang
 {ok, FeatureBits}
 ```
 
-Fields:
+`FeatureBits`:
 
-- `FeatureBits`
-  - protocol feature bitset only
-  - callers can use the public `supports_*?` helpers for friendly checks
+- プロトコル機能のビット集合だけを含む
+- 利用側は公開 `supports_*?` 補助関数で分かりやすく確認できる
 
-Derivation rules:
+導出規則:
 
-- start from `0`
-- walk operations declared in `ops.def`
-- if an op has a non-zero `feature_cap_bit` and is enabled in the built dispatch surface, OR that bit into `FeatureBits`
-- apply real build and runtime gates
-- mask to known protocol bits before returning
+- `0` から開始する
+- `ops.def` に宣言された操作を走査する
+- 操作の `feature_cap_bit` が非零で、構築済み振り分け面で有効なら、そのビットを `FeatureBits` へ加える
+- 実際の構築条件と実行時条件を適用する
+- 既知のプロトコルビットだけに制限して返す
 
-Generated capability vocabulary is listed in
-[the protocol reference](protocol-reference.md#generated-capability-vocabulary).
+生成された機能語彙は [プロトコル参照](protocol-reference.md#生成された機能語彙) にあります。
 
-Meaning:
+意味:
 
-- `CAP_SPRITE`
-  - sprite operations are available
+- `CAP_SPRITE`: スプライト操作を利用できる
+- `CAP_PUSHIMAGE`: `push_image` を利用できる
+- `CAP_LAST_ERROR`: `getLastError` を利用できる
+- `CAP_TOUCH`: タッチ操作を利用できる
+- `CAP_PALETTE`: `createPalette` と `setPaletteColor` を利用できる
+- `CAP_BATCH`: `submitBinaryBatch` / `AtomLGFX.submit_binary_batch/2` を利用できる
 
-- `CAP_PUSHIMAGE`
-  - `push_image` is available
+タッチに関する注意:
 
-- `CAP_LAST_ERROR`
-  - `getLastError` is available
+- 構築時にタッチ対応を有効にし、実際に接続されている場合だけ `CAP_TOUCH` を通知する
+- `LGFX_PORT_TOUCH_CS_GPIO = -1` で構築すると、タッチは未接続として機能通知しない
 
-- `CAP_TOUCH`
-  - touch operations are available
+## 描画バッチ
 
-- `CAP_PALETTE`
-  - palette lifecycle operations are available
-  - specifically `createPalette` and `setPaletteColor`
+`submitBinaryBatch` は v3 のバッチ送信経路です。
 
-- `CAP_BATCH`
-  - binary batch submission is available
-  - specifically `submitBinaryBatch` / `AtomLGFX.submit_binary_batch/2`
+スケジューラー、待ち行列、汎用の組・一覧バッチ実行系ではありません。高負荷描画向けに、バイナリーフレーム命令列を明示的に送る入口です。
 
-Touch note:
+Elixir 側は `AtomLGFX.BinaryBatch` でフレーム命令列を構築し、`AtomLGFX.submit_binary_batch/2` または `AtomLGFX.BinaryBatch.render/2` で送信します。
 
-- `CAP_TOUCH` is advertised only when touch support is enabled in the build and touch is attached
-- compiling touch support with `LGFX_PORT_TOUCH_CS_GPIO = -1` keeps touch unattached and unadvertised
+生成または試験的な命令列では、次の補助を利用できます。
 
-## Render batching
+- `AtomLGFX.BinaryBatch.validate/1`
+  - ネイティブコードを呼ばずに命令列を事前検証する
+- `AtomLGFX.BinaryBatch.render_checked/2`
+  - 検証してから送信する
+  - ネイティブの `LGFX_PORT_RENDER_BATCH_PREVALIDATE` が無効でも、部分描画を避ける任意経路になる
+- `AtomLGFX.BinaryBatch.summary/1`
+  - バッチバイト数、描画専用命令数、動的データ量、固定負担、詰め込み一覧記録量、一覧命令数、一覧要素数、1000倍整数のワイヤー効率比などをネイティブ呼び出しなしで集計する
+- `AtomLGFX.BinaryBatch.diagnose/1`
+  - 正しい命令列では同じ集計を返し、不正な命令列では失敗命令番号、操作番号、推定操作名、最後に解析成功した命令などの途中情報も返す
+- `AtomLGFX.BinaryBatch.compare/2`
+  - 基準命令列と候補命令列を同じ指標で比較する
+- `AtomLGFX.BinaryBatch.check_budget/2`
+  - 呼び出し側が指定した上限に対して診断値を検証し、継続的検証や生成フレームの防護に使う
 
-`submitBinaryBatch` is the v3 batch submission path.
+バイナリーバッチの操作面は意図的に小さく保ちます。汎用基本図形一覧、スプライト領域一覧、バッチ内 JPEG 描画、バッチ内 RGB565 画像転送は v3 のバッチ面に含めません。
 
-It is not a scheduler, queue, or general tuple/list batch runtime. It is an explicit binary frame-script entry point for hot rendering work.
+## 低メモリーのバッチ描画
 
-Elixir callers should build frame scripts with `AtomLGFX.BinaryBatch` and submit them with `AtomLGFX.submit_binary_batch/2` or `AtomLGFX.BinaryBatch.render/2`.
+メモリー不足の危険を下げ、公開面を簡素化するため、保持型ネイティブ描画プログラム API とネイティブ表示短冊バッチ命令は [v3 低メモリープロトコル ADR](adr/0015-v3-low-memory-protocol.md) で削除しました。
 
-For generated or experimental frame scripts, `AtomLGFX.BinaryBatch.validate/1` can preflight the stream without calling native code, and `AtomLGFX.BinaryBatch.render_checked/2` validates before submitting. This gives callers an opt-in no-partial-render safety path when native `LGFX_PORT_RENDER_BATCH_PREVALIDATE` is disabled. `AtomLGFX.BinaryBatch.summary/1` reports diagnostic counts such as batch bytes, render-private command count, dynamic payload bytes, fixed overhead bytes, packed-list record bytes, packed-list command count, packed-list instance count, and integer x1000 wire-efficiency ratios without calling native code. `AtomLGFX.BinaryBatch.diagnose/1` returns the same summary information for valid streams and partial context for invalid streams, including failing command index, opcode, best-effort operation name, and last successfully decoded command. `AtomLGFX.BinaryBatch.compare/2` compares a baseline frame script with a candidate frame script using the same summary metrics. `AtomLGFX.BinaryBatch.check_budget/2` validates the same diagnostic metrics against caller-provided limits, which is useful for CI and generated-frame guardrails.
+MovingIcons のようなアニメーションは、物体状態を Elixir 側に保持し、計測した高負荷処理だけをアプリケーション固有の描画器へ隔離します。`BinaryBatch` は明示的な同期最適化として残し、現在の例では場面固有のプロトコル状態や隠れ表示バッファを追加せず、汎用の変形スプライト一覧を使います。
 
-The protocol intentionally keeps the binary-batch surface small. Generic primitive packed-list commands, sprite-region list commands, batch-level JPEG drawing, and batch-level RGB565 image pushing are not part of the v3 batch surface.
+### ワイヤー形式
 
-## Low-memory batch rendering
-
-The retained native render-program API and native presentation-strip batch
-commands were removed by the
-[v3 low-memory protocol ADR](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/adr/0015-v3-low-memory-protocol.md)
-to reduce OOM risk and simplify the public surface.
-
-MovingIcons-style animation should keep object state in Elixir and isolate
-measured hot-loop optimizations in an application renderer. `BinaryBatch`
-remains available as an explicit synchronous optimization; the current example
-uses its generic transformed-sprite list without adding scene-specific protocol
-state or hidden display buffers.
-
-### Wire shape
-
-It uses the normal v3 flat request shape:
+通常の v3 平坦要求を使います。
 
 ```erlang
 {lgfx, ProtoVer, submit_binary_batch, 0, 0, CommandBinary}
 ```
 
-Rules:
+規則:
 
-- `Flags` must be `0`
-- `CommandBinary` must be non-empty
-- `CommandBinary` must not exceed `LGFX_PORT_MAX_BINARY_BYTES`
-- target and color interpretation are command-local through binary-batch state
-- execution is synchronous and stops at the first malformed or failed command
-- success returns `{ok, ok}`
-- failure returns `{error, Reason}`
+- `Flags` は `0`
+- `CommandBinary` は空でない
+- `CommandBinary` は `LGFX_PORT_MAX_BINARY_BYTES` 以下
+- 対象と色の解釈は、バイナリーバッチ内状態として命令ごとに管理する
+- 同期的に実行し、最初の不正命令または失敗で停止する
+- 成功は `{ok, ok}`
+- 失敗は `{error, Reason}`
 
-Each command is:
+各命令:
 
 ```text
-opcode u8 + opcode-specific payload
+opcode u8 + 操作番号固有データ
 ```
 
-Malformed render commands return `bad_args`. Unsupported render command opcodes return `bad_op`.
+不正な描画命令は `bad_args`、未対応の描画命令番号は `bad_op` を返します。
 
-### Command-local render state
+### 命令内の描画状態
 
-Binary render batches keep small command-local state while the frame script executes:
+バイナリー描画バッチは、フレーム命令列実行中に小さな状態を保持します。
 
-- current target
-  - selected by `target`
-  - defaults to LCD target `0`
+- 現在の対象
+  - `target` で選ぶ
+  - 既定値は LCD 対象 `0`
+- 現在の色モード
+  - `colorMode` で選ぶ
+  - RGB565 モードは数値色欄を RGB565 として解釈する
+  - パレット番号モードは、対応箇所で数値色欄をパレット番号として解釈する
 
-- current color mode
-  - selected by `colorMode`
-  - RGB565 mode interprets scalar color fields as RGB565
-  - palette-index mode interprets scalar color fields as palette indices where supported
-
-### Representative command layouts
+### 代表的な命令配置
 
 ```text
 target:
@@ -564,185 +530,171 @@ pushSprite:
   y i16le
 
 pushRotateZoomList:
-  normal operation opcode with one PRZL payload binary
+  一つの PRZL データを格納したバイナリーを持つ通常操作番号
 
 display:
   op u8
 ```
 
-The generated protocol reference remains the source for numeric operation codes. Render-private command opcodes are internal to the binary render-batch command stream.
+数値操作番号の正式な参照元は生成プロトコル参照です。描画専用命令番号は、バイナリー描画バッチの命令列の内部だけで使います。
 
-## Diagnostics
+## 診断
 
 ### `getLastError()`
 
-Request:
+要求:
 
-- `getLastError()` with `Target == 0`
+- `Target == 0` の `getLastError()`
 
-Response:
+応答:
 
 ```erlang
 {ok, {last_error, LastOp, Reason, LastFlags, LastTarget, EspErr}}
 ```
 
-Fields:
+各欄:
 
-- `LastOp`
-  - last failing op atom, or `none`
+- `LastOp`: 最後に失敗した操作アトム。ない場合は `none`
+- `Reason`: 最後のエラー理由。ない場合は `none`
+- `LastFlags`: 失敗要求のフラグ
+- `LastTarget`: 失敗要求の対象
+- `EspErr`: `esp_err_t` 整数。ない場合は `0`
 
-- `Reason`
-  - last error reason, or `none`
+動作:
 
-- `LastFlags`
-  - flags from the failing request
+- ドライバーは最後のエラー状態を写し取り、返す
+- 成功時は、応答データの符号化後に最後のエラー状態を消去する
 
-- `LastTarget`
-  - target from the failing request
+バッチに関する注意:
 
-- `EspErr`
-  - `esp_err_t` integer, or `0`
+- 現在の実装面には、後からバッチ状態を取得する専用操作がない
+- `submit_binary_batch` は同期的なため、後続の状態確認は不要
 
-Behavior:
+## 文字種
 
-- the driver snapshots the last-error state and returns it
-- on success, the last-error state is cleared after the response payload is encoded
-
-Batch note:
-
-- there is currently no dedicated protocol operation in the implemented surface for batch status lookup
-- `submit_binary_batch` is synchronous; no later batch-status polling is required
-
-## Fonts
-
-Stable protocol-owned font selection is exposed through:
+プロトコルが所有する安定した文字種選択は、次で公開します。
 
 - `setTextFontPreset(PresetIdU8)`
 
-Font preset and text size are separate concerns:
+文字種プリセットと文字倍率は別の関心です。
 
-- `setTextFontPreset` chooses the glyph source
-- `setTextSize` controls the rendered size
-- selecting a preset normalizes text scale to `1.0x`
+- `setTextFontPreset` は字形元を選ぶ
+- `setTextSize` は描画倍率を制御する
+- プリセット選択時に文字倍率を `1.0x` へ正規化する
 
 ### `setTextSize`
 
-Args:
+引数:
 
 - `setTextSize(ScaleF32)`
 - `setTextSize(ScaleXF32, ScaleYF32)`
 
-Rules:
+規則:
 
-- integer and float terms are both accepted on the wire
-- one-argument form applies the same scale to both axes
-- two-argument form sets both axes explicitly
-- scale values must be positive
-- handler decode normalizes the wire value to native `float`
-- device code validates and forwards the final value to the pinned LovyanGFX call surface
+- ワイヤーでは整数項と浮動小数項を受け入れる
+- 1引数形は両軸へ同じ倍率を適用する
+- 2引数形は両軸を個別に設定する
+- 倍率は正でなければならない
+- ハンドラーがワイヤー値をネイティブ `float` へ正規化する
+- 装置コードが最終値を検証し、固定版 LovyanGFX 呼び出し面へ渡す
 
-Errors:
+エラー:
 
-- zero, negative, non-finite, or wrong-type value => `{error, bad_args}`
+- 零、負、非有限、型不正: `{error, bad_args}`
 
 ### `setTextDatum`
 
-Args:
+引数:
 
 - `setTextDatum(DatumU8)`
 
-Rules:
+規則:
 
-- `DatumU8` must be an integer in `0..255`
-- forwarded as a raw numeric passthrough to the pinned LovyanGFX text-datum API
+- `DatumU8` は `0..255` の整数
+- 固定版 LovyanGFX の文字基準位置 API へ生の数値として渡す
 
-Errors:
+エラー:
 
-- out-of-range value => `{error, bad_args}`
+- 範囲外: `{error, bad_args}`
 
 ### `setTextWrap`
 
-Args:
+引数:
 
 - `setTextWrap(WrapXBool)`
 - `setTextWrap(WrapXBool, WrapYBool)`
 
-Rules:
+規則:
 
-- booleans are accepted as atom `true` / `false`
-- numeric `0` / `1` are also accepted by the handler decode path
-- one-argument form means `wrap_x = WrapXBool`, `wrap_y = false`
-- two-argument form sets both axes explicitly
+- アトム `true` / `false` を受け入れる
+- ハンドラー解析経路では数値 `0` / `1` も受け入れる
+- 1引数形は `wrap_x = WrapXBool`, `wrap_y = false`
+- 2引数形は両軸を明示する
 
 ### `setTextFontPreset`
 
-Preset IDs:
+プリセット番号:
 
 - `0` = `ascii`
-  - selects the pinned default ASCII font internally
-  - normalizes text scale to `1.0`
-
+  - 固定版の既定 ASCII 文字種を選ぶ
+  - 文字倍率を `1.0` へ正規化する
 - `1` = `jp`
-  - selects the built-in Japanese-capable preset internally
-  - normalizes text scale to `1.0`
+  - 組み込みの日本語対応プリセットを選ぶ
+  - 文字倍率を `1.0` へ正規化する
 
-Errors:
+エラー:
 
-- unknown preset => `{error, bad_args}`
-- preset compiled out => `{error, unsupported}`
+- 未知のプリセット: `{error, bad_args}`
+- 構築から除外されたプリセット: `{error, unsupported}`
 
-## Flags
+## フラグ
 
-`Flags` is op-specific unless documented otherwise.
+特記がない限り、`Flags` の意味は操作ごとに異なります。
 
-Defined protocol flags:
+定義済みプロトコルフラグ:
 
 - `LGFX_F_TEXT_HAS_BG = 1 bsl 0`
-  - `setTextColor` includes a background scalar argument
-
+  - `setTextColor` が背景色引数を含む
 - `LGFX_F_COLOR_INDEX = 1 bsl 1`
-  - primitive op color argument is interpreted as a palette index instead of a non-index display color
-
+  - 基本図形の色引数を表示色ではなくパレット番号として解釈する
 - `LGFX_F_TEXT_FG_INDEX = 1 bsl 2`
-  - `setTextColor` foreground scalar argument is interpreted as a palette index
-
+  - `setTextColor` の前景色引数をパレット番号として解釈する
 - `LGFX_F_TEXT_BG_INDEX = 1 bsl 3`
-  - `setTextColor` background scalar argument is interpreted as a palette index
-
+  - `setTextColor` の背景色引数をパレット番号として解釈する
 - `LGFX_F_TRANSPARENT_INDEX = 1 bsl 4`
-  - `pushSprite` or `pushRotateZoom` transparent scalar argument is interpreted as a palette index
+  - `pushSprite` または `pushRotateZoom` の透過値引数をパレット番号として解釈する
 
-General rules:
+一般規則:
 
-- a flag is valid only for operations whose `ops.def` mask allows it
-- indexed color flags select argument interpretation; they do not create palette backing
-- `LGFX_F_TEXT_BG_INDEX` is invalid unless `LGFX_F_TEXT_HAS_BG` is also set
+- フラグは `ops.def` の許可マスクに含まれる操作でだけ有効
+- 番号指定色フラグは引数解釈を選ぶだけで、パレット領域を作らない
+- `LGFX_F_TEXT_BG_INDEX` は `LGFX_F_TEXT_HAS_BG` も設定されている場合だけ有効
 
 ### `setTextColor`
 
-Args:
+引数:
 
 - `setTextColor(FgColor)`
-- `setTextColor(FgColor, BgColor)` when `LGFX_F_TEXT_HAS_BG` is set
+- `LGFX_F_TEXT_HAS_BG` 設定時の `setTextColor(FgColor, BgColor)`
 
-Semantics:
+意味:
 
-- foreground and background scalar colors independently support non-index display-color mode or indexed palette mode
-- foreground indexed mode is selected by `LGFX_F_TEXT_FG_INDEX`
-- background indexed mode is selected by `LGFX_F_TEXT_BG_INDEX`
-- background presence is selected by `LGFX_F_TEXT_HAS_BG`
-- indexed scalar mode on LCD is invalid
-- indexed scalar mode on a sprite target requires a palette-backed sprite target
+- 前景色と背景色は、それぞれ表示色またはパレット番号を選べる
+- 前景番号モードは `LGFX_F_TEXT_FG_INDEX`
+- 背景番号モードは `LGFX_F_TEXT_BG_INDEX`
+- 背景引数の有無は `LGFX_F_TEXT_HAS_BG`
+- LCD の番号指定色は無効
+- スプライトの番号指定色にはパレット付きスプライトが必要
 
-## Important op semantics
+## 重要な操作の意味
 
 ### `setColorDepth`
 
-Args:
+引数:
 
 - `setColorDepth(DepthU8)`
 
-Allowed values:
+許可値:
 
 - `1`
 - `2`
@@ -751,162 +703,161 @@ Allowed values:
 - `16`
 - `24`
 
-Semantics:
+意味:
 
-- changes the destination target color depth
-- does not change the wire format used by non-index display colors
-- does not by itself enable indexed scalar-color semantics
-- does not by itself create palette backing for a sprite
-- `push_image` remains RGB565-only regardless of target color depth
+- 転送先対象の色深度を変更する
+- 番号指定でない表示色のワイヤー形式は変えない
+- 番号指定数値色の意味を単独では有効にしない
+- スプライトのパレット領域を単独では作らない
+- 対象の色深度にかかわらず `push_image` は RGB565 だけを扱う
 
 ### `drawJpg`
 
-Request args:
+要求引数:
 
 - `drawJpg(Xi16, Yi16, JpegBinary)`
 - `drawJpg(Xi16, Yi16, MaxWu16, MaxHu16, OffXi16, OffYi16, ScaleXF32, ScaleYF32, JpegBinary)`
 
-Rules:
+規則:
 
-- the final argument must be a binary
-- the short form implies `MaxW = 0`, `MaxH = 0`, `OffX = 0`, `OffY = 0`, `ScaleX = 1.0`, `ScaleY = 1.0`
-- integer and float terms are both accepted for extended-form scale values
-- extended-form scale values must be finite and positive
-- the selected target may be LCD `0` or sprite `1..254`
+- 最後の引数はバイナリー
+- 短縮形は `MaxW = 0`, `MaxH = 0`, `OffX = 0`, `OffY = 0`, `ScaleX = 1.0`, `ScaleY = 1.0`
+- 拡張形の倍率は整数項と浮動小数項を受け入れる
+- 倍率は有限かつ正
+- 対象は LCD `0` またはスプライト `1..254`
 
 ### `push_image`
 
-Request args:
+要求引数:
 
 - `push_image(Xi16, Yi16, Wu16, Hu16, StridePixelsU16, DataRgb565Binary)`
 
-Rules:
+規則:
 
 - `W > 0`
 - `H > 0`
-- the final argument must be a binary
-- if `StridePixelsU16 == 0`, effective stride becomes `W`
-- effective stride must be `>= W`
-- payload byte size must be even
-- payload must be large enough for the requested image
-- trailing bytes beyond the required minimum are ignored
+- 最後の引数はバイナリー
+- `StridePixelsU16 == 0` の場合、有効行幅を `W` とする
+- 有効行幅は `W` 以上
+- データのバイト数は偶数
+- 要求画像を格納できる大きさが必要
+- 必要最小量を越える末尾バイトは無視する
 
 ### `createSprite`
 
-Request-header `Target` is the sprite handle to allocate:
+要求ヘッダーの `Target` が確保するスプライト番号です。
 
-- `1..254` => candidate sprite handle
-- `0` => invalid
+- `1..254`: 候補番号
+- `0`: 無効
 
-Args:
+引数:
 
 - `createSprite(Wu16, Hu16)`
 - `createSprite(Wu16, Hu16, ColorDepthU8)`
 
-Rules:
+規則:
 
-- allocation happens at the requested handle
-- `W` and `H` must be non-zero
-- optional color depth must be valid when provided
-- creation fails if the handle is already in use
-- creation fails if the configured maximum concurrent sprite count is exhausted
-- paletted depths are `1`, `2`, `4`, and `8`
-- true-color depths are `16` and `24`
-- paletted depth alone does not create palette backing
+- 指定番号へ確保する
+- `W` と `H` は非零
+- 任意の色深度は有効値でなければならない
+- 指定番号が使用中なら失敗する
+- 同時スプライト上限へ達している場合は失敗する
+- パレット色深度は `1`, `2`, `4`, `8`
+- 真彩色色深度は `16`, `24`
+- パレット色深度だけではパレット領域を作らない
 
-### `createPalette` and `setPaletteColor`
+### `createPalette` と `setPaletteColor`
 
-These operations manage palette backing for a sprite target.
+スプライト対象のパレット領域を管理します。
 
-Request-header `Target` is the sprite handle:
+要求ヘッダーの `Target` はスプライト番号です。
 
-- `1..254` => candidate sprite handle
-- `0` => invalid
+- `1..254`: 候補番号
+- `0`: 無効
 
-`createPalette` args:
+`createPalette` の引数:
 
-- none
+- なし
 
-`setPaletteColor` args:
+`setPaletteColor` の引数:
 
 - `setPaletteColor(PaletteIndexU8, Rgb888U32)`
 
-Rules:
+規則:
 
-- both operations are sprite-only
-- the target sprite must already exist
-- `createPalette` requires paletted depth `1`, `2`, `4`, or `8`
-- `createPalette` establishes palette backing for that sprite
-- indexed scalar-color semantics require actual palette backing
-- `setPaletteColor` requires an existing palette-backed sprite
-- `Rgb888U32` uses `0x00RRGGBB`
-- valid palette index range depends on sprite depth
+- どちらもスプライト専用
+- 対象スプライトは作成済みでなければならない
+- `createPalette` は色深度 `1`, `2`, `4`, `8` を要求する
+- `createPalette` は対象スプライトへパレット領域を作る
+- 番号指定数値色には実際のパレット領域が必要
+- `setPaletteColor` はパレット付きスプライトを要求する
+- `Rgb888U32` は `0x00RRGGBB`
+- 有効なパレット番号範囲はスプライトの色深度による
 
 ### `pushSprite`
 
-This is a destination-aware whole-sprite blit.
+転送先を指定するスプライト全体の転送です。
 
-Request-header `Target` is the source sprite handle:
+要求ヘッダーの `Target` は転送元スプライト番号です。
 
-- `1..254` => valid source sprite domain
-- `0` => invalid
+- `1..254`: 有効
+- `0`: 無効
 
-Args:
+引数:
 
 - `pushSprite(DstTargetU8, DstXi16, DstYi16)`
 - `pushSprite(DstTargetU8, DstXi16, DstYi16, TransparentValue)`
 
-Rules:
+規則:
 
-- `DstTargetU8 == 0` => LCD destination
-- `DstTargetU8 in 1..254` => destination sprite
-- source and destination existence are resolved in the device layer
-- optional transparent scalar uses the non-index display-color contract by default
-- `LGFX_F_TRANSPARENT_INDEX` interprets the transparent scalar as a palette index
-- indexed transparent mode requires palette backing on the source sprite
-- edge clipping is allowed
+- `DstTargetU8 == 0`: LCD へ転送
+- `DstTargetU8 in 1..254`: スプライトへ転送
+- 転送元と転送先の存在は装置層で解決する
+- 任意の透過値は既定で番号指定でない表示色契約を使う
+- `LGFX_F_TRANSPARENT_INDEX` は透過値をパレット番号として解釈する
+- 透過番号モードには転送元スプライトのパレット領域が必要
+- 端での切り取りを許可する
 
-There is no region-based sprite blit op in this protocol.
+領域指定のスプライト転送操作はありません。
 
 ### `pushRotateZoom`
 
-This draws a source sprite to a destination target with rotation and scaling.
+転送元スプライトを回転・拡大縮小して転送先へ描画します。
 
-Request-header `Target` is the source sprite handle.
+要求ヘッダーの `Target` は転送元スプライト番号です。
 
-Args:
+引数:
 
 - `pushRotateZoom(DstTargetU8, DstXi16, DstYi16, AngleDegF32, ZoomXF32, ZoomYF32)`
 - `pushRotateZoom(DstTargetU8, DstXi16, DstYi16, AngleDegF32, ZoomXF32, ZoomYF32, TransparentValue)`
 
-Rules:
+規則:
 
-- destination target rules are the same as `pushSprite`
-- rotation uses the source sprite pivot set by `setPivot`
-- source and destination existence rules are resolved in the device layer
-- integer and float terms are both accepted for angle and zoom values
-- angle and zoom values must be finite
-- zoom values must be positive
-- optional transparent scalar uses the non-index display-color contract by default
-- `LGFX_F_TRANSPARENT_INDEX` interprets the transparent scalar as a palette index
-- indexed transparent mode requires palette backing on the source sprite
-- edge clipping is allowed
+- 転送先対象の規則は `pushSprite` と同じ
+- `setPivot` で設定した転送元スプライトの基準点を使う
+- 転送元と転送先の存在は装置層で解決する
+- 角度と倍率は整数項と浮動小数項を受け入れる
+- 角度と倍率は有限
+- 倍率は正
+- 任意の透過値は既定で番号指定でない表示色契約を使う
+- `LGFX_F_TRANSPARENT_INDEX` は透過値をパレット番号として解釈する
+- 透過番号モードには転送元スプライトのパレット領域が必要
+- 端での切り取りを許可する
 
 ### `pushRotateZoomList`
 
-This is the compact binary hot path for many transformed sprite blits to one
-destination target.
+多数の変形スプライトを一つの転送先へ描画する、小さな高負荷向けバイナリー経路です。
 
-Request-header `Target` is the destination target:
+要求ヘッダーの `Target` は転送先です。
 
-- `0` => LCD destination
-- `1..254` => destination sprite
+- `0`: LCD
+- `1..254`: スプライト
 
-Args:
+引数:
 
 - `pushRotateZoomList(PayloadBinary)`
 
-Payload layout is little-endian:
+データ配置はリトルエンディアンです。
 
 ```text
 magic             bytes[4] = "PRZL"
@@ -927,43 +878,43 @@ InstanceRecord:
   zoom_y1024      u16
 ```
 
-Rules:
+規則:
 
-- `options & 0x01` means `transparent` is present
-- unknown option bits are invalid
-- if `LGFX_F_TRANSPARENT_INDEX` is set, `transparent` is a palette index in the low byte
-- `LGFX_F_TRANSPARENT_INDEX` without the transparent option is invalid
-- `x` and `y` are destination coordinates before native `y_offset` adjustment
-- native code subtracts `y_offset` from each instance `y`
-- `angle_cdeg` is centidegrees and must be `0..35999`
-- `zoom_x1024` and `zoom_y1024` are positive fixed-point scales where `1024 == 1.0x`
-- `reserved` must be `0`
-- payload length must exactly match `12 + instance_count * 12`
-- source and destination existence rules are resolved in the device layer
+- `options & 0x01` は `transparent` が存在することを示す
+- 未知の選択ビットは無効
+- `LGFX_F_TRANSPARENT_INDEX` 設定時、`transparent` の下位バイトをパレット番号として使う
+- 透過選択なしの `LGFX_F_TRANSPARENT_INDEX` は無効
+- `x` と `y` はネイティブの `y_offset` 調整前の転送先座標
+- ネイティブコードは各要素の `y` から `y_offset` を引く
+- `angle_cdeg` は100分の1度で、`0..35999`
+- `zoom_x1024` と `zoom_y1024` は正の固定小数倍率で、`1024 == 1.0x`
+- `reserved` は `0`
+- データ長は `12 + instance_count * 12` と完全に一致する
+- 転送元と転送先の存在は装置層で解決する
 
-## Compatibility rules
+## 互換性規則
 
-Treat these changes as protocol-affecting and bump `LGFX_PORT_PROTO_VER` when they occur:
+次の変更はプロトコルへ影響するため、変更時に `LGFX_PORT_PROTO_VER` を上げます。
 
-- changing request tuple shape
-- changing response shape
-- changing operation meaning
-- changing numeric opcode order for existing operations
-- changing argument order
-- changing argument interpretation
-- changing flag meaning
-- changing accepted wire encoding
-- changing canonical error reason for an existing contract violation
-- removing an implemented op from the protocol surface
+- 要求組の形を変える
+- 応答の形を変える
+- 操作の意味を変える
+- 既存操作の数値順序を変える
+- 引数順を変える
+- 引数解釈を変える
+- フラグの意味を変える
+- 受け入れるワイヤー表現を変える
+- 既存契約違反に対する正規エラー理由を変える
+- 実装済み操作をプロトコル面から削除する
 
-Changes that normally do not require a protocol bump:
+通常、プロトコル版を上げない変更:
 
-- internal refactors that preserve the external contract
-- implementation changes behind an unchanged request and response surface
-- documentation clarifications that do not alter semantics
-- adding new operations guarded by normal capability discovery
-- adding new internal detail while preserving existing opaque error matching
-- `lib/atom_lgfx/generated.ex`
-  - Elixir `snake_case` operation names
-  - Elixir operation-name to opcode mapping
-  - public/raw/batch exposure policy
+- 外部契約を維持する内部整理
+- 要求・応答面を変えない実装変更
+- 意味を変えない文書の明確化
+- 通常の機能照会で保護した新しい操作の追加
+- 既存の不透明エラー一致を維持した内部詳細の追加
+- `lib/atom_lgfx/generated.ex` の再生成
+  - Elixir `snake_case` 操作名
+  - Elixir 操作名から操作番号への対応
+  - 公開・生呼び出し・バッチでの公開方針

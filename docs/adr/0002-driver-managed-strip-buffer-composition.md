@@ -4,134 +4,134 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 0002: Driver-managed strip-buffer composition for smooth LCD animation
+# ADR 0002: 滑らかな LCD アニメーションのため、ドライバー管理の帯バッファー合成を使用する
 
-## Status
+## 状態
 
-Accepted
+採用
 
-## Context
+## 背景
 
-`atomlgfx` already adopted explicit batching to reduce Elixir/native control-plane overhead while preserving the simple synchronous mental model for ordinary operations.
+`atomlgfx` は、通常操作の単純な同期実行モデルを維持しながら Elixir とネイティブ間の制御負荷を減らすため、すでに明示的バッチを採用しています。
 
-The accepted direction keeps ordinary operations direct, keeps batching explicit, and confines runtime concerns to explicit batch execution.
+採用済みの方向では、通常操作を直接実行し、バッチを明示的に扱い、実行基盤の責務を明示的バッチ実行に限定します。
 
-That batching model improves grouped native execution, but it does not by itself guarantee flicker-free animation on the live LCD. In the current Elixir `MovingIcons` sample, the direct-LCD frame path clears the LCD and then redraws all objects on the visible target each frame. This is simple, but it exposes frame rebuild on the live panel.
+このバッチモデルは、ネイティブ側でまとめて実行する性能を改善しますが、それだけでは実際の LCD 上でちらつきのないアニメーションを保証できません。現在の Elixir `MovingIcons` 見本では、LCD 直接描画経路が毎フレーム LCD を消去し、表示中の対象へすべての物体を描き直します。構成は単純ですが、実際の表示器上でフレームの再構築過程が見えます。
 
-A reference LovyanGFX-based C++ app demonstrates a smoother 50-object path using two strip-buffer sprites. For each frame, it:
+LovyanGFX を使用する参考 C++ アプリケーションでは、2つの帯バッファー用スプライトを使い、50個の物体をより滑らかに表示しています。各フレームでは次を行います。
 
-- moves objects
-- iterates vertical strips
-- clears the current strip sprite
-- renders all objects into that strip sprite with `pushRotateZoom`
-- pushes the finished strip sprite to the LCD
-- calls `lcd.display()` after the frame
+- 物体を移動する
+- 垂直方向の帯を順に処理する
+- 現在の帯スプライトを消去する
+- `pushRotateZoom` ですべての物体をその帯スプライトへ描画する
+- 完成した帯スプライトを LCD へ転送する
+- フレームの最後に `lcd.display()` を呼び出す
 
-That app keeps object logic simple and delegates composition to LovyanGFX sprite rendering instead of app-side dirty-rectangle logic.
+このアプリケーションは物体の処理を単純に保ち、アプリケーション側で変更領域を管理する代わりに、LovyanGFX のスプライト描画へ合成を委ねています。
 
-This creates a design question for `atomlgfx`:
+これにより、`atomlgfx` には次の設計上の問いが生じます。
 
-- should animation smoothness be pursued by making application code smarter,
-  or should the port driver own buffered composition so the public API and app logic remain simple?
+- アプリケーションコードを賢くすることでアニメーションを滑らかにすべきか
+- それとも公開 API とアプリケーション処理を単純に保つため、ポートドライバーがバッファー合成を所有すべきか
 
-## Decision
+## 決定
 
-`atomlgfx` adopts the following direction for smooth animation workloads such as 50-object `MovingIcons`:
+`atomlgfx` は、50物体の `MovingIcons` のような滑らかなアニメーション処理について、次の方向を採用します。
 
-1. Buffered composition becomes a driver concern.
-   - The port driver will own strip-buffer composition for LCD presentation-oriented workloads.
-   - Application code should not manage strip sprites, strip iteration, or buffer flipping directly.
+1. バッファー合成をドライバーの責務とします。
+   - LCD への表示を目的とする処理では、ポートドライバーが帯バッファー合成を所有します。
+   - アプリケーションコードは、帯スプライト、帯の繰り返し、バッファーの切り替えを直接管理しません。
 
-2. `lgfx_device` remains the LovyanGFX-facing composition layer.
-   - Internal strip sprites are managed inside the device layer.
-   - LovyanGFX sprite operations remain the primary rendering mechanism.
-   - We continue to delegate heavy lifting to upstream LovyanGFX rather than introducing scene-specific drawing engines.
+2. `lgfx_device` を LovyanGFX と接する合成層として維持します。
+   - 内部の帯スプライトを機器層で管理します。
+   - LovyanGFX のスプライト操作を主な描画手段として維持します。
+   - 場面専用の描画機構を導入せず、重い処理を上流 LovyanGFX へ引き続き委ねます。
 
-3. The public API remains generic.
-   - Logical LCD target `0` continues to represent “the LCD” from the caller’s perspective.
-   - We do not introduce a scene-specific API such as `render_moving_icons_frame`.
-   - Application code should still feel like:
-     - clear frame
-     - draw objects
-     - display frame
+3. 公開 API を汎用のまま維持します。
+   - 呼び出し側から見た論理 LCD 対象 `0` は、引き続き「LCD」を表します。
+   - `render_moving_icons_frame` のような場面専用 API は導入しません。
+   - アプリケーションコードの考え方は、引き続き次の形にします。
+     - フレームを消去する
+     - 物体を描画する
+     - フレームを表示する
 
-4. Smooth animation does not require smarter app-side redraw policy.
-   - We do not add app-side dirty rectangles.
-   - We do not add app-side previous-frame bookkeeping.
-   - We do not make `MovingIcons` responsible for composition strategy.
+4. 滑らかなアニメーションのために、アプリケーション側の再描画方針を複雑にしません。
+   - アプリケーション側へ変更領域管理を追加しません。
+   - アプリケーション側へ前フレームの状態管理を追加しません。
+   - `MovingIcons` に合成方式の責任を持たせません。
 
-5. Direct-LCD rendering remains useful, but not the primary smooth-animation target.
-   - Direct-LCD mode may remain for comparison, bring-up, and diagnostics.
-   - The primary path for smooth 50-object animation becomes buffered composition.
+5. LCD 直接描画は引き続き有用ですが、滑らかなアニメーションの主要経路にはしません。
+   - LCD 直接描画方式は、比較、初期動作確認、診断用として残せます。
+   - 滑らかな50物体アニメーションの主要経路には、バッファー合成を使用します。
 
-6. Batching remains complementary, not a replacement for buffering.
-   - Explicit batching continues to reduce control-plane overhead.
-   - Buffered composition addresses visible frame rebuild on the live LCD.
-   - These concerns are related but distinct.
+6. バッチ処理はバッファー処理を置き換えるものではなく、相互補完するものとします。
+   - 明示的バッチは、引き続き制御面の負荷を減らします。
+   - バッファー合成は、実際の LCD 上でフレーム再構築が見える問題に対応します。
+   - これらは関連しますが、別の問題です。
 
-## Rationale
+## 理由
 
-The reference app is strong evidence that smooth multi-object animation can be achieved with:
+参考アプリケーションは、次の組み合わせで複数物体の滑らかなアニメーションを実現できる有力な根拠です。
 
-- buffered composition
-- LovyanGFX sprite rendering
-- simple object logic
-- no app-side dirty-region complexity
+- バッファー合成
+- LovyanGFX のスプライト描画
+- 単純な物体処理
+- アプリケーション側の変更領域管理を使わない
 
-This matches the broader `atomlgfx` goal of keeping the API and application model simple while pushing implementation complexity downward into the native layers. The earlier batching ADR already established that runtime and native execution machinery should serve performance without distorting the ordinary API model. Driver-managed strip buffers follow the same philosophy.
+これは、API とアプリケーションの考え方を単純に保ちながら、実装上の複雑さをネイティブ層へ下げる `atomlgfx` の広い目標に合います。以前のバッチ ADR では、通常 API の考え方を歪めずに性能を高めるため、実行基盤とネイティブ実行機構を使う方針を定めました。ドライバー管理の帯バッファーも同じ考え方に従います。
 
-Keeping buffering inside the driver has several advantages:
+バッファー処理をドライバー内部に置く利点は次のとおりです。
 
-- the application remains easy to read and reason about
-- the public API remains a generic LovyanGFX-style wrapper
-- composition strategy can evolve without changing Elixir sample logic
-- the solution stays closer to the proven reference rendering model
+- アプリケーションを読みやすく、理解しやすく保てる
+- 公開 API を汎用 LovyanGFX ラッパーとして維持できる
+- Elixir の見本処理を変更せずに、合成方式を発展させられる
+- 実績のある参考描画モデルに近い解決策を維持できる
 
-A direct-LCD full-frame clear-and-redraw path is simpler internally, but it exposes frame rebuild on the live panel. Buffered composition is a better fit for the stated goal: smooth 50-object animation with dumb app logic.
+全画面を消去して描き直す LCD 直接経路は内部的には単純ですが、実際の表示器上でフレーム再構築が見えます。単純なアプリケーション処理で50物体を滑らかに動かすという目標には、バッファー合成の方が適しています。
 
-## Consequences
+## 影響
 
-### Positive
+### 利点
 
-- Keeps `MovingIcons` and similar apps simple
-- Preserves the generic public AtomLGFX API
-- Delegates composition work to upstream LovyanGFX sprite operations
-- Aligns with the proven reference architecture for smooth 50-object animation
-- Allows buffering policy to evolve inside the native driver without forcing Elixir-side redesign
+- `MovingIcons` と同様のアプリケーションを単純に保てる
+- 汎用の公開 AtomLGFX API を維持できる
+- 合成処理を上流 LovyanGFX のスプライト操作へ委ねられる
+- 滑らかな50物体アニメーションで実績のある参考構成に沿える
+- Elixir 側の再設計を強いず、ネイティブドライバー内でバッファー方針を発展させられる
 
-### Negative
+### 欠点
 
-- Increases complexity inside `lgfx_device`
-- Requires internal buffer lifecycle and strip-height allocation logic
-- Consumes memory for hidden strip sprites
-- Introduces another internal presentation mode that must be documented and tested carefully
-- May require additional tuning of bus speed, DMA, and lock behavior to achieve full benefit
+- `lgfx_device` 内部の複雑さが増える
+- 内部バッファーのライフサイクルと帯の高さを決める処理が必要になる
+- 非公開の帯スプライト用メモリーを消費する
+- 文書化と慎重な検証が必要な内部表示方式が増える
+- 十分な効果を得るため、バス速度、DMA、ロック動作を追加調整する可能性がある
 
-## Rejected alternatives
+## 却下した案
 
-### Alternative 1: make `MovingIcons` smarter with dirty rectangles
+### 案1: 変更領域管理によって `MovingIcons` を賢くする
 
-Rejected.
+却下しました。
 
-This would push complexity into application code, make the demo less representative of a simple user-facing rendering model, and move responsibility away from the native layer where composition policy belongs.
+アプリケーションコードへ複雑さを押し上げ、見本が単純な利用者向け描画モデルを表しにくくなり、本来ネイティブ層が持つべき合成方針の責務を移してしまいます。
 
-### Alternative 2: keep only direct-LCD full-frame redraw and rely on batching alone
+### 案2: 全画面を直接描き直す方式だけを維持し、バッチ処理だけに頼る
 
-Rejected.
+却下しました。
 
-Batching reduces control-plane overhead, but it does not by itself hide visible rebuild of the live LCD surface during full-frame clear-and-redraw rendering. Buffered composition addresses a different problem.
+バッチ処理は制御面の負荷を減らしますが、全画面を消去して描き直す間に、実際の LCD 表面で再構築が見える問題は単独では隠せません。バッファー合成は別の問題を解決します。
 
-### Alternative 3: add scene-specific native rendering APIs
+### 案3: 場面専用のネイティブ描画 API を追加する
 
-Rejected.
+却下しました。
 
-This would weaken the goal of keeping `atomlgfx` a generic LovyanGFX wrapper and would couple the driver too tightly to one demo pattern.
+`atomlgfx` を汎用 LovyanGFX ラッパーとして維持する目標を弱め、ドライバーを1つの見本処理へ過度に結び付けます。
 
-## Follow-up implications
+## 今後への影響
 
-- Add internal strip-buffer state and lifecycle management in `lgfx_device`.
-- Implement adaptive strip-height allocation similar in spirit to the reference approach.
-- Keep logical LCD rendering generic from the caller’s perspective.
-- Preserve direct-LCD mode only as an optional comparison or bring-up path.
-- Benchmark smoothness and throughput at 10, 25, and 50 objects.
-- After correctness, tune LCD bus write speed and related transport settings using the reference app as one practical comparison point.
+- `lgfx_device` に内部帯バッファーの状態とライフサイクル管理を追加する
+- 参考方式と同じ考え方で、利用可能なメモリーに応じて帯の高さを決める
+- 呼び出し側から見た論理 LCD 描画を汎用のまま維持する
+- LCD 直接描画方式は、任意の比較または初期動作確認用としてだけ維持する
+- 10個、25個、50個の物体で滑らかさと処理量を測定する
+- 正しさを確認した後、参考アプリケーションを実用的な比較対象の1つとして、LCD バス書き込み速度と関連転送設定を調整する

@@ -4,63 +4,48 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 0006: Flatten native v2 implementation
+# ADR 0006: v2 ネイティブ実装を平坦化する
 
-## Status
+## 状態
 
-Accepted
+採用
 
-This ADR remains active for the native implementation shape.
+この ADR は、ネイティブ実装の構成に関する現行の判断です。
 
-Batching language should be read with [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md): current v2 has an explicit binary frame-script path through `submitBinaryBatch`, not a public tuple/list batch runtime.
+一括実行に関する記述は、[ADR 0010: BinaryBatch を標準の描画トランザクション API とする](0010-binary-batch-as-render-transaction-api.md)と併せて読んでください。現在の v2 には、公開タプル／一覧方式の一括実行環境ではなく、`submitBinaryBatch` を通じた明示的なバイナリーフレームスクリプト経路があります。
 
-## Context
+## 背景
 
-`atomlgfx` v2 already has the desired external protocol direction:
+`atomlgfx` v2 は、外部プロトコルについて、すでに望ましい方向性を備えています。
 
-- one request tuple shape
-- numeric opcodes before crossing into native code
-- `ops.def` as the protocol-visible operation metadata source
-- ordinary operations on a direct synchronous path
-- explicit batching as an opt-in grouped control-plane path
-- binary operations reserved for repeated hot-path data-plane workloads
+- 要求タプルの形式は1つ
+- ネイティブコードへ渡す前に数値操作コードへ変換
+- プロトコルから見える操作情報の定義元は `ops.def`
+- 通常操作は直接かつ同期的に実行
+- 明示的な一括実行は、選択式の制御面経路
+- バイナリー操作は、繰り返しの多い高頻度データ処理向けに限定
 
-The current native implementation is correct in shape but larger than ideal for
-a thin LovyanGFX wrapper. The native tree is split across separate files for
-AtomVM atoms, request validation, protocol term helpers, operation registry,
-batch decoding, batch builders, many category-specific ordinary handlers,
-runtime state, runtime command dispatch, open config, and device adapters.
+現在のネイティブ実装は構造として正しいものの、薄い LovyanGFX 包みとしては理想より大きくなっています。ネイティブ側は、AtomVM アトム、要求検証、プロトコル項補助、操作登録、一括実行復号、一括実行生成、多数の分類別通常処理、実行状態、実行時命令振り分け、開始設定、機器接続層など、別々のファイルへ分割されています。
 
-That split made the v2 rewrite easier to stage, but it now creates navigation
-and maintenance overhead. Many ordinary handlers are mostly wire decoding plus
-one call into `lgfx_device_*`. The batch runtime was also intentionally narrow:
-ordered execution, no general scheduler, and no requirement that ordinary
-operations become queue-backed.
+この分割は v2 の書き直しを段階的に進めるうえで役立ちましたが、現在は探索と保守の負担になっています。多くの通常処理は、通信データを復号して `lgfx_device_*` を1回呼ぶだけです。一括実行環境も、意図的に狭く設計されていました。順序どおりに実行し、汎用の実行順制御機構を持たず、通常操作を待ち行列経由にする必要もありません。
 
-The design question is whether the v2 protocol should keep this native layering
-or collapse it into a flatter implementation that better reflects the actual
-scope of the driver.
+設計上の問いは、v2 プロトコルのために現在のネイティブ階層を維持すべきか、それとも、ドライバーの実際の範囲に合う、より平坦な実装へまとめるべきかという点です。
 
-## Decision
+## 判断
 
-Flatten the handwritten native v2 implementation around the existing protocol
-model.
+既存のプロトコルモデルを維持したまま、手書きの v2 ネイティブ実装を平坦化します。
 
-Keep these protocol and ownership rules:
+次のプロトコル規則と所有権規則は維持します。
 
-- Elixir API names are mapped to generated numeric opcodes before native calls.
-- Native dispatch uses numeric opcodes and never receives API-name strings or
-  dynamically created atoms on the hot path.
-- `ops.def` remains the source of truth for opcode order, arity, flags, target
-  policy, state policy, capability linkage, and batch eligibility.
-- Ordinary operations remain direct and synchronous.
-- Packed scalar batch remains explicit, opt-in, and narrower than the ordinary surface.
-- Specialized binary operations remain the preferred path for repeated homogeneous animation
-  data where packed scalar batch decode cost is measurable.
-- Borrowed binary payloads remain request-scoped unless explicitly copied into
-  native-owned storage.
+- Elixir API 名は、ネイティブ呼び出しの前に生成済みの数値操作コードへ変換する。
+- ネイティブ振り分けは数値操作コードを使用し、高頻度経路では API 名の文字列や動的生成アトムを受け取らない。
+- `ops.def` は、操作コード順、引数個数、フラグ、対象方針、状態方針、機能との関連、一括実行可否の正本として維持する。
+- 通常操作は直接かつ同期的に実行する。
+- 詰め込み数値一括実行は明示的な選択機能とし、通常操作の範囲より狭く保つ。
+- 同種のアニメーションデータを繰り返す場合、詰め込み数値一括実行の復号費用が実測できる箇所では、専用バイナリー操作を優先する。
+- 借用バイナリーデータは、ネイティブ所有領域へ明示的に複製しない限り、要求の生存期間内だけ有効とする。
 
-Prefer this target shape for the native implementation:
+ネイティブ実装の目標構成は、次を推奨します。
 
 ```text
 include/
@@ -69,49 +54,43 @@ include/
     ops.h
 
 lgfx_port/
-  lgfx_port.c        # port lifecycle, mailbox drain, request/reply flow
-  protocol.c         # term decode/encode and common validation
-  ops.c              # ops.def metadata and dispatch
-  handlers.c         # ordinary op handlers
-  binary_batch_dispatch.cpp # submit_binary_batch stream preflight and execution
-  open_config.c      # open_port options only
+  lgfx_port.c        # ポートの生存期間、メールボックス処理、要求／応答の流れ
+  protocol.c         # 項の復号／符号化と共通検証
+  ops.c              # ops.def の付随情報と振り分け
+  handlers.c         # 通常操作の処理
+  binary_batch_dispatch.cpp # submit_binary_batch 列の事前検証と実行
+  open_config.c      # open_port の設定だけ
 
 lgfx_device/
   lgfx_device.h
-  device.cpp         # state, init, close, target resolution
-  drawing.cpp        # primitives and clip
+  device.cpp         # 状態、初期化、終了、対象解決
+  drawing.cpp        # 図形と切り抜き
   text.cpp
   images.cpp
   sprites.cpp
-  touch.cpp          # optional; fold into device.cpp if it stays tiny
+  touch.cpp          # 任意。小さいままなら device.cpp へ統合
 ```
 
-This is an implementation target, not a new public protocol. The exact file
-names may vary if measurement or C/C++ boundaries justify it, but the native
-shape should stay flatter than the current staged rewrite layout.
+これは実装上の目標であり、新しい公開プロトコルではありません。実測や C/C++ 境界によって妥当であれば、正確なファイル名は変更して構いません。ただし、ネイティブ構成は、現在の段階的書き直し構成より平坦に保ちます。
 
-## Rationale
+## 理由
 
-The v2 value is the protocol model, not a large native framework around it.
+v2 の価値はプロトコルモデルにあり、その周囲に大きなネイティブ実行基盤を作ることではありません。
 
-The hot path should stay simple:
+高頻度経路は、次のように単純であるべきです。
 
 ```text
-decode request envelope
-lookup op metadata
-validate arity, flags, target, and init state
-decode op-specific args
-call lgfx_device_*
-reply
+要求包絡を復号
+操作情報を取得
+引数個数、フラグ、対象、初期化状態を検証
+操作固有引数を復号
+lgfx_device_* を呼び出し
+応答
 ```
 
-Splitting every operation family into a separate ordinary handler file is not
-buying much isolation when the handlers mostly decode scalars and forward to the
-device layer. A single `handlers.c` is easier to search and review while the
-surface remains modest.
+各操作分類を通常処理用の別ファイルへ分割しても、処理の大半が数値を復号して機器層へ転送するだけであれば、十分な分離効果は得られません。対応範囲が小さいうちは、単一の `handlers.c` の方が検索と確認が容易です。
 
-Similarly, request validation should remain metadata-driven but does not need a
-separate mini-framework. A small protocol helper layer is enough:
+同様に、要求検証は付随情報に基づく形を保ちますが、独立した小規模な枠組みにする必要はありません。小さなプロトコル補助層で十分です。
 
 ```c
 bool lgfx_decode_request(Context *ctx, term input, lgfx_request_t *request);
@@ -120,82 +99,59 @@ term lgfx_reply_ok(Context *ctx, term value);
 term lgfx_reply_error(Context *ctx, term reason);
 ```
 
-The dispatch mechanism should be chosen by measured code size and clarity. A
-generated metadata table is still useful. A generated `switch` may be better
-than a handler function-pointer table if it reduces flash size or lets the
-compiler inline tiny handlers. If the function-pointer table is smaller, keep
-it.
+振り分け方式は、実測したコード寸法と分かりやすさで選びます。生成済み付随情報表は引き続き有用です。一方、小さな処理をコンパイラーが展開できる場合や、フラッシュ使用量を減らせる場合は、処理関数ポインター表より生成済み `switch` が適する可能性があります。関数ポインター表の方が小さければ、そのまま使用します。
 
-For batch execution, the main simplification goal is to avoid pretending there
-is a broader runtime than the driver actually needs. The implementation may
-execute packed scalar batches synchronously on the port thread if that preserves
-the documented `submit_binary_batch` behavior. The current public contract is
-completion-reporting: success means the packed stream was decoded and executed.
+一括実行では、実際には存在しない広い実行環境があるように見せないことが、主な単純化目標です。文書化済みの `submit_binary_batch` 動作を維持できるのであれば、AtomVM ポート処理スレッド上で詰め込み数値一括実行を同期的に実行して構いません。現在の公開契約は完了報告方式であり、成功は詰め込み列の復号と実行が完了したことを意味します。
 
-## Consequences
+## 影響
 
-### Positive
+### 良い影響
 
-- Reduces native file count and navigation overhead
-- Keeps the protocol metadata while deleting staged rewrite scaffolding
-- Makes ordinary handler flow easier to audit
-- Keeps the C hot path focused on compact numeric dispatch
-- Removes the runtime-shaped batch layer instead of growing it into a general
-  job system
-- Makes future code-size measurement easier because fewer layers are involved
+- ネイティブファイル数と探索負担を減らせる
+- プロトコル付随情報を維持しながら、段階的書き直し用の足場を削除できる
+- 通常処理の流れを確認しやすくなる
+- C 側の高頻度経路を、小さな数値振り分けへ集中できる
+- 一括実行を汎用仕事処理基盤へ育てず、実行環境らしい層を削除できる
+- 関与する層が減るため、今後のコード寸法測定が容易になる
 
-### Negative
+### 悪い影響
 
-- Larger combined files may need clear sectioning to stay readable
-- Some merge history and blame granularity will be less category-specific
-- Collapsing runtime pieces requires care around batch failure reporting
-- Changing `submit_binary_batch` completion semantics would be externally visible and
-  cannot be treated as a private refactor
-- A generated switch may not improve code size on every compiler/configuration
+- 統合後の大きなファイルでは、読みやすさを保つため明確な区切りが必要になる
+- 統合履歴と変更追跡の粒度が、操作分類単位ではなくなる場合がある
+- 実行時構成要素の統合では、一括実行の失敗報告を慎重に扱う必要がある
+- `submit_binary_batch` の完了意味を変えると外部から見えるため、内部整理として扱えない
+- 生成済み `switch` が、すべてのコンパイラーや構成でコード寸法を改善するとは限らない
 
-## Rejected alternatives
+## 採用しなかった代替案
 
-### Alternative 1: keep the current staged native layout indefinitely
+### 代替案1: 現在の段階的ネイティブ構成を無期限に維持する
 
-Rejected.
+採用しません。
 
-The current layout is clean but too structured for the amount of real behavior
-in a thin LovyanGFX wrapper. It preserves staging boundaries that are no longer
-all useful after the v2 model is understood.
+現在の構成は整理されていますが、薄い LovyanGFX 包みが持つ実際の動作量に対して構造化しすぎています。v2 モデルが理解された後も、すべての段階境界を維持する必要はありません。
 
-### Alternative 2: pass operation names into C and dispatch by strings or atoms
+### 代替案2: 操作名を C へ渡し、文字列またはアトムで振り分ける
 
-Rejected.
+採用しません。
 
-The v2 protocol intentionally maps Elixir operation names to numeric opcodes
-before crossing the port boundary. Native dispatch should not compare API-name
-strings or atoms on the hot path.
+v2 プロトコルでは、Elixir 操作名をポート境界の手前で数値操作コードへ変換します。ネイティブ側の高頻度経路で、API 名の文字列やアトムを比較してはいけません。
 
-### Alternative 3: widen packed batch into a general graphics VM
+### 代替案3: 詰め込み一括実行を汎用描画仮想機械へ広げる
 
-Rejected.
+採用しません。
 
-Packed scalar batch is useful for grouped control-plane work, but repeated
-homogeneous animation data should use fixed-layout binary operations where
-measurement justifies it. Broadening packed batch would increase decode
-complexity in the wrong representation.
+詰め込み数値一括実行は、制御面の処理をまとめる用途では有用です。しかし、同種のアニメーションデータを繰り返す場合は、実測で妥当な箇所に固定配置バイナリー操作を使用すべきです。詰め込み一括実行を広げると、不適切な表現方式の復号複雑性が増えます。
 
-### Alternative 4: remove `lgfx_runtime` without preserving batch semantics
+### 代替案4: 一括実行の意味を維持せずに `lgfx_runtime` を削除する
 
-Rejected.
+採用しません。
 
-Runtime removal is acceptable only if the externally documented batch contract
-is preserved or deliberately changed through a separate protocol decision.
-Implementation flattening must not accidentally change caller-visible
-`submit_binary_batch` behavior.
+外部向けに文書化した一括実行契約を維持するか、別のプロトコル判断として意図的に変更する場合だけ、実行環境の削除を許可します。実装の平坦化によって、呼び出し側から見える `submit_binary_batch` の動作を偶発的に変えてはいけません。
 
-## Follow-up implications
+## 今後への影響
 
-- Measure function-pointer dispatch against generated `switch` dispatch before
-  choosing one permanently.
-- Keep `submit_binary_batch` completion-reporting unless a later protocol ADR changes it.
-- Keep packed scalar batch limited to scalar/no-payload control-plane commands.
-- Add focused protocol tests for bad opcode, bad flags, bad target, bad args,
-  uninitialized drawing ops, and malformed batch commands.
-- Update `docs/architecture.md` and `lgfx_port/README.md` as the implementation
-  is flattened.
+- 関数ポインター振り分けと生成済み `switch` 振り分けを測定してから、恒久的な方式を選ぶ。
+- 後続のプロトコル ADR で変更しない限り、`submit_binary_batch` の完了報告方式を維持する。
+- 詰め込み数値一括実行は、データを伴わない数値制御命令に限定する。
+- 不正な操作コード、フラグ、対象、引数、未初期化時の描画操作、不正な一括命令について、対象を絞ったプロトコル試験を追加する。
+- 実装の平坦化に合わせて、`docs/architecture.md` と `lgfx_port/README.md` を更新する。

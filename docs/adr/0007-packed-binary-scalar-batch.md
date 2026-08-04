@@ -4,83 +4,83 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 0007: Packed binary scalar batch path
+# ADR 0007: 詰め込みバイナリーによる数値一括実行経路
 
-## Status
+## 状態
 
-Superseded
+置換済み
 
-Superseded by [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md).
+[ADR 0010: BinaryBatch を標準の描画トランザクション API とする](0010-binary-batch-as-render-transaction-api.md)によって置き換えられました。
 
-## Context
+## 背景
 
-This ADR recorded the first `submitBinaryBatch` decision for `atomlgfx` v2.
+この ADR は、`atomlgfx` v2 で初めて `submitBinaryBatch` を採用した判断を記録したものです。
 
-At that time, v2 already used one call-shaped protocol request:
+当時の v2 は、すでに単一の呼び出し形式プロトコルを使用していました。
 
 ```elixir
 {lgfx, 2, :call, op_code, target, flags, args}
 ```
 
-That ordinary call path was still appropriate for setup, configuration, text, sprite lifecycle, touch, image payloads, and ordinary drawing calls. However, drawing-heavy workloads paid too much control-plane overhead when many small scalar drawing calls crossed the AtomVM/native boundary individually.
+通常の呼び出し経路は、初期設定、構成、文字列、スプライトの生存期間、タッチ、画像データ、通常描画に引き続き適していました。しかし、多数の小さな数値描画呼び出しが AtomVM／ネイティブ境界を個別に越えると、描画量の多い処理では制御負荷が大きくなります。
 
-The initial goal was narrow: add a packed scalar drawing path without turning v2 into a general LovyanGFX job runtime.
+初期目標は限定的でした。v2 を汎用 LovyanGFX 仕事処理基盤へ変えずに、詰め込み数値描画経路を追加することです。
 
-## Superseded decision
+## 置き換えられた判断
 
-The original decision added `submitBinaryBatch` as a normal v2 operation in `ops.def`.
+当初の判断では、`ops.def` の通常 v2 操作として `submitBinaryBatch` を追加しました。
 
-The outer protocol shape stayed unchanged:
+外側のプロトコル形式は変更しませんでした。
 
 ```elixir
 {lgfx, 2, :call, OpCode.submitBinaryBatch, target, 0, [command_binary]}
 ```
 
-The command binary was defined as an atomlgfx-specific byte stream, not Erlang external term format:
+命令を格納したバイナリーは Erlang 外部項形式ではなく、atomlgfx 固有のバイト列として定義しました。
 
 ```text
-ordinary opcode u8 + opcode-specific little-endian scalar arguments
+通常操作コード u8 + 操作コード固有のリトルエンディアン数値引数
 ```
 
-The initial path was intentionally limited:
+初期経路は意図的に次へ限定しました。
 
-- single target
-- RGB565 colors
-- fixed-size scalar drawing commands
-- synchronous, completion-reporting execution
-- stop on the first malformed or failed command
+- 単一対象
+- RGB565 色
+- 固定寸法の数値描画命令
+- 同期的な完了報告実行
+- 最初の不正命令または失敗命令で停止
 
-That narrow scalar-batch framing is now superseded by the general binary render-batch strategy.
+この狭い数値一括実行の位置付けは、一般化されたバイナリー描画一括実行方針によって置き換えられました。
 
-## Current interpretation
+## 現在の解釈
 
-The important surviving decision is `submitBinaryBatch` itself:
+現在も有効な重要な判断は、`submitBinaryBatch` 自体です。
 
-- it remains the explicit binary frame-script entry point
-- it remains synchronous and completion-reporting
-- it remains inside the normal protocol envelope
-- it still avoids repeated AtomVM/native crossings
-- it still avoids tuple/list traversal for hot rendering work
+- 明示的なバイナリーフレームスクリプトの入口として維持する
+- 同期的な完了報告方式を維持する
+- 通常のプロトコル包絡内で使用する
+- AtomVM／ネイティブ境界を繰り返し越えることを避ける
+- 高頻度描画におけるタプル／一覧走査を避ける
 
-The active design is no longer only a packed scalar drawing batch. It now covers a reusable render command stream for animation-oriented work, including target selection, color-mode state, sprite lists, region lists, rotate/zoom lists, native presentation strips, and simple overlays.
+現行設計は、詰め込み数値描画だけに限定されません。対象選択、色形式状態、スプライト一覧、領域一覧、回転拡大一覧、ネイティブ表示帯、単純な重ね描画を含む、アニメーション向けの再利用可能な描画命令列を対象とします。
 
-For the active rendering strategy, read the later render-batch ADR.
+現在の描画方針については、後続の描画一括実行 ADR を参照してください。
 
-## Consequences
+## 影響
 
-### Positive
+### 良い影響
 
-- Keeps the historical reason for adding `submitBinaryBatch`.
-- Preserves the compatibility and error-handling intent of the original decision.
-- Makes the later render-batch ADR the single active rendering decision.
+- `submitBinaryBatch` を追加した歴史的理由を残せる。
+- 当初の互換性とエラー処理の意図を維持できる。
+- 後続の描画一括実行 ADR を、現行描画判断の単一の参照先にできる。
 
-### Negative
+### 悪い影響
 
-- This ADR no longer describes the full current binary-batch surface.
-- Readers must follow the later ADR for the current architecture.
+- この ADR だけでは、現在のバイナリー一括実行範囲を完全には説明できない。
+- 現行構成を理解するには、後続 ADR を参照する必要がある。
 
-## Related documents
+## 関連文書
 
-- [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md)
-- [Protocol](../protocol.md)
-- [V2 render-batch performance work log](../worklog/20260502-v2-render-batch-performance-work-log.md)
+- [ADR 0010: BinaryBatch を標準の描画トランザクション API とする](0010-binary-batch-as-render-transaction-api.md)
+- [プロトコル](../protocol.md)
+- [v2 描画一括実行の性能作業記録](../worklog/20260502-v2-render-batch-performance-work-log.md)

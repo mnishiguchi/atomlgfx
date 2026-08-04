@@ -4,50 +4,41 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Migrating from v1 to v2
+# v1 から v2 への移行
 
-> Historical document: this describes the superseded v2 API and is retained for
-> repository history. For current applications, use the
-> [v3 migration guide](migration-to-v3.md).
+> 過去資料: この文書は、すでに置き換えられた v2 API を説明する履歴資料です。現在のアプリケーションでは [v3 への移行](migration-to-v3.md) を参照してください。
 
-This guide summarizes the practical changes needed when moving code from the v1
-`v1` branch to the v2 `main` branch.
+この文書は、`v1` ブランチの v1 から、当時 `main` にあった v2 へ移行する際の実務上の変更をまとめたものです。
 
-v2 keeps the same project goal: an AtomVM-facing LovyanGFX wrapper for
-ESP32-class boards. The main change is the protocol and batching model.
+v2 も、ESP32 系基板上で AtomVM から使う LovyanGFX ラッパーという目的は同じです。主な変更点はプロトコルとバッチ方式です。
 
-## Summary
+## 概要
 
-v1 used a tuple-based protocol with a higher-level tuple/list batch path.
+v1 は組プロトコルと、高水準の組・一覧バッチ経路を使っていました。
 
-v2 uses:
+v2 は次を使います。
 
-- synchronous tuple calls for ordinary operations
-- canonical `snake_case` operation names for public low-level Elixir calls
-- an explicit binary batch path for grouped frame submission
-- generated metadata to keep the native protocol, Elixir wrapper, and docs
-  synchronized
+- 通常操作には同期的な組呼び出し
+- 公開低水準 Elixir 呼び出しには正規の `snake_case` 操作名
+- 描画処理をまとめる明示的なバイナリーバッチ経路
+- ネイティブプロトコル、Elixir ラッパー、文書を同期する生成情報
 
-The native component and Elixir package should be updated together.
+ネイティブ部品と Elixir パッケージは同時に更新します。
 
-## Native component and Elixir wrapper compatibility
+## ネイティブ部品と Elixir ラッパーの互換性
 
-Update the ESP-IDF component and the Elixir package at the same time.
+ESP-IDF 部品と Elixir パッケージを同時に更新してください。
 
-Do not mix:
+次の組み合わせは使用しません。
 
-- v1 native driver with v2 Elixir wrapper
-- v2 native driver with v1 Elixir wrapper
+- v1 ネイティブドライバーと v2 Elixir ラッパー
+- v2 ネイティブドライバーと v1 Elixir ラッパー
 
-The protocol surface, operation metadata, and capability bits are designed to
-move together during the pre-release period.
+公開前期間は、プロトコル面、操作情報、機能ビットを一体として変更します。
 
-## Ordinary calls
+## 通常の呼び出し
 
-Most normal drawing and control calls should continue to use the public
-`AtomLGFX` API.
-
-Typical v2 usage:
+一般的な描画と制御は、公開 `AtomLGFX` API を使います。
 
 ```elixir
 {:ok, port} = AtomLGFX.open(panel_driver: :ili9488, width: 320, height: 480)
@@ -63,24 +54,19 @@ Typical v2 usage:
 :ok = AtomLGFX.display(port)
 ```
 
-Low-level public Elixir calls use canonical `snake_case` operation atoms.
-
-For example:
+低水準の公開 Elixir 呼び出しでは、正規の `snake_case` 操作アトムを使います。
 
 ```elixir
 AtomLGFX.call(port, :fill_rect, [20, 20, 80, 40, 0x07E0])
 ```
 
-LovyanGFX-style `camelCase` atoms such as `:fillRect` are not supported in v2.
-Use canonical `snake_case` names in application and raw-call code.
+LovyanGFX 風の `:fillRect` などの `camelCase` アトムは v2 では対応しません。アプリケーションと生呼び出しでは `snake_case` を使います。
 
-## Batch migration
+## バッチの移行
 
-The biggest source-level change is batch usage.
+最も大きいソース変更はバッチ利用です。
 
-### v1 style
-
-v1 code may look like this:
+### v1 の書き方
 
 ```elixir
 batch =
@@ -92,85 +78,73 @@ batch =
 {:ok, _} = AtomLGFX.submit_batch(port, batch)
 ```
 
-### v2 style
+### v2 の書き方
 
-In v2, build one explicit render script with `AtomLGFX.BinaryBatch`.
+v2 では、`AtomLGFX.BinaryBatch` で一つの明示的な描画命令列を構築します。
 
 ```elixir
 frame = [
-    AtomLGFX.BinaryBatch.target(0),
-    AtomLGFX.BinaryBatch.fill_screen(0x0000),
-    AtomLGFX.BinaryBatch.draw_rect(8, 8, 120, 80, 0xFFFF),
-    AtomLGFX.BinaryBatch.draw_line(8, 8, 127, 87, 0x07E0),
-    AtomLGFX.BinaryBatch.display()
-  ]
+  AtomLGFX.BinaryBatch.target(0),
+  AtomLGFX.BinaryBatch.fill_screen(0x0000),
+  AtomLGFX.BinaryBatch.draw_rect(8, 8, 120, 80, 0xFFFF),
+  AtomLGFX.BinaryBatch.draw_line(8, 8, 127, 87, 0x07E0),
+  AtomLGFX.BinaryBatch.display()
+]
 
 :ok = AtomLGFX.BinaryBatch.render(port, frame)
 ```
 
-## Batch scope
+## バッチの範囲
 
-The v2 binary batch path is intentionally explicit.
+v2 のバイナリーバッチ経路は意図的に明示します。一つの小さなフレーム命令列を同期実行する用途に適しています。
 
-It is suitable for building one compact frame script that executes
-synchronously.
+`AtomLGFX.BinaryBatch` が構築器を提供する場合、文字、スプライト転送、回転・拡大縮小、パレット色書き込みなどの描画時命令を含められます。JPEG 描画と RGB565 画像転送は、意図的にバイナリーバッチ形式から除外しているため、通常 API に残します。
 
-Binary batches may include render-time commands such as text, sprite
-push/rotate/zoom commands, and palette color writes when represented by
-`AtomLGFX.BinaryBatch` builders. JPEG drawing and RGB565 image upload remain on
-the ordinary API because their payloads are intentionally excluded from the
-binary-batch format.
+次は通常呼び出し経路へ残します。
 
-Keep these on the ordinary call path:
+- 初期設定、照会、確保、補正
+- スプライトのライフサイクル
+- パレット作成
+- タッチ操作
 
-- setup, queries, allocation, and calibration
-- sprite lifecycle operations
-- palette creation
-- touch operations
+高負荷経路を明示したまま、汎用の遅延 LovyanGFX API へ不用意に拡大することを防ぎます。
 
-This keeps the hot path explicit while avoiding accidental expansion into a
-general-purpose deferred LovyanGFX API.
+## 機能確認
 
-## Capability check
-
-Use capability discovery before relying on optional behavior.
+任意機能へ依存する前に、対応状況を確認します。
 
 ```elixir
 {:ok, true} = AtomLGFX.supports_batch?(port)
 {:ok, max_bytes} = AtomLGFX.max_binary_bytes(port)
 ```
 
-If batch support is unavailable, fall back to ordinary drawing calls.
+バイナリーバッチに対応していない場合は、通常の描画呼び出しへ切り替えます。
 
-## Error handling
+## エラー処理
 
-v2 ordinary operations return immediate success or failure.
+v2 の通常操作は、成功または失敗を直ちに返します。
 
-Typical return values are:
+代表的な返り値:
 
 - `:ok`
 - `{:ok, value}`
 - `{:error, reason}`
 
-For binary batches:
+バイナリーバッチでは次の意味になります。
 
-- success means the frame script was decoded and executed synchronously
-- malformed render commands return protocol errors such as `bad_args`
-- unsupported render command opcodes return `bad_op`
+- 成功は、フレーム命令列が同期的に解析・実行されたことを示す
+- 不正な描画命令は `bad_args` などのプロトコルエラーを返す
+- 未対応の描画命令番号は `bad_op` を返す
 
-Treat error reasons as protocol-level values and avoid matching overly detailed
-internal forms unless the protocol document explicitly defines them.
+エラー理由はプロトコル単位の値として扱い、プロトコル文書で明示されていない内部詳細へ過度に一致させないでください。
 
-## Migration checklist
+## 移行確認表
 
-- Update the native ESP-IDF component to v2.
-- Replace `AtomLGFX.batch/0`, `AtomLGFX.Batch`, and `AtomLGFX.submit_batch/2`.
-- Use `AtomLGFX.BinaryBatch` frame builders plus `AtomLGFX.submit_binary_batch/2`
-  or `AtomLGFX.BinaryBatch.render/2`.
-- Use public `AtomLGFX` wrappers for ordinary operations.
-- Use `snake_case` atoms for low-level `AtomLGFX.call/4`.
-- Keep setup, queries, allocation, calibration, sprite lifecycle, palette
-  creation, and touch operations outside binary batches.
-- Run protocol smoke tests on hardware.
-- Run performance smoke tests for rendering paths that matter to the
-  application.
+- ネイティブ ESP-IDF 部品を v2 へ更新する
+- `AtomLGFX.batch/0`、`AtomLGFX.Batch`、`AtomLGFX.submit_batch/2` を置き換える
+- `AtomLGFX.BinaryBatch` のフレーム構築器と `AtomLGFX.submit_binary_batch/2` または `AtomLGFX.BinaryBatch.render/2` を使う
+- 通常操作には公開 `AtomLGFX` ラッパーを使う
+- 低水準 `AtomLGFX.call/4` では `snake_case` アトムを使う
+- 初期設定、照会、確保、補正、スプライトのライフサイクル、パレット作成、タッチ操作をバイナリーバッチへ入れない
+- 実機でプロトコル動作確認を行う
+- アプリケーション上重要な描画経路で性能動作確認を行う

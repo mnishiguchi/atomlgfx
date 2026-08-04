@@ -9,11 +9,7 @@ defmodule AtomLGFX.BinaryBatch.Validation do
   alias AtomLGFX.Errors
 
   @doc """
-  Validates a binary-batch command stream without submitting it.
-
-  This performs the same Elixir-side structural decode used by `decode/1`, but
-  returns only `:ok` or `{:error, reason}`. Use this for tests, generated-frame
-  guardrails, and optional preflight checks around risky frame construction.
+  バイナリーバッチ命令列を送信せずに検証します。
   """
   @spec validate(iodata()) :: :ok | {:error, term()}
   def validate(commands) do
@@ -24,7 +20,7 @@ defmodule AtomLGFX.BinaryBatch.Validation do
   end
 
   @doc """
-  Validates a binary-batch command stream or raises `ArgumentError`.
+  バイナリーバッチ命令列を検証し、不正な場合は `ArgumentError` を送出します。
   """
   @spec validate!(iodata()) :: :ok
   def validate!(commands) do

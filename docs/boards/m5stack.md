@@ -4,40 +4,40 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# M5Stack boards
+# M5Stack 基板
 
-This document records the M5Stack boards currently relevant to `atomlgfx`.
+この文書は、現在 `atomlgfx` に関係する M5Stack 基板を記録します。
 
-`atomlgfx` is controller-first. Shared LCD and touch controller support lives in the generic controller layer, while board-specific power, reset, and backlight behavior is layered on top through `board_preset`.
+`atomlgfx` は制御器を中心に設計しています。LCD とタッチ制御器の共通対応は汎用制御器層へ置き、基板固有の電源、リセット、バックライト処理は `board_preset` で重ねます。
 
-## Shared controller family
+## 共通する制御器群
 
-The following boards currently matter for the shared `ILI9342C` + `FT6336U` controller family:
+現在、`ILI9342C` と `FT6336U` の組み合わせに関係する基板は次のとおりです。
 
 - M5Stack Core2
 - M5Stack Core2 for AWS
 - M5Stack CoreS3
 
-Shared hardware characteristics:
+共通するハードウェア:
 
 - LCD: `ILI9342C`
-- touch: `FT6336U`
-- display size: `320x240`
+- タッチ: `FT6336U`
+- 表示寸法: `320x240`
 
-These boards share the same LCD and touch controller family, but they do not share identical board-level bring-up behavior.
+LCD とタッチ制御器は共通ですが、基板単位の起動処理は同一ではありません。
 
-## Supported board presets
+## 対応する基板プリセット
 
-Current board-preset support in the codebase:
+現在のコードは、次の `board_preset` に対応します。
 
 - `:m5stack_core2`
 - `:m5stack_cores3`
 
-These presets are layered on top of the generic controller path.
+これらは汎用制御器経路の上に重ねる設定です。
 
-## Core2 baseline
+## Core2 の基準設定
 
-The following open config is a known-good baseline for Core2 bring-up:
+次の開始設定は、Core2 の動作確認済み基準です。
 
 ```elixir
 [
@@ -69,15 +69,15 @@ The following open config is a known-good baseline for Core2 bring-up:
 ]
 ```
 
-Initial runtime rotation target:
+実行時の初期回転:
 
 ```elixir
 AtomLGFX.set_rotation(port, 1)
 ```
 
-## CoreS3 baseline
+## CoreS3 の基準設定
 
-The following open config is the first validation baseline for CoreS3 bring-up:
+次の開始設定は、CoreS3 の初回検証基準です。
 
 ```elixir
 [
@@ -106,16 +106,16 @@ The following open config is the first validation baseline for CoreS3 bring-up:
 ]
 ```
 
-Initial runtime rotation target:
+実行時の初期回転:
 
 ```elixir
 AtomLGFX.set_rotation(port, 1)
 ```
 
-## Notes
+## 注意事項
 
-- Core2 board control is handled through `AXP192`.
-- CoreS3 board control is handled through `AXP2101` and `AW9523B`.
-- Matching LCD and touch controllers do not imply identical board bring-up.
-- For CoreS3, LCD reset and touch-side board control belong in the board-preset layer rather than being modeled as ordinary ESP GPIO wiring.
-- Core2 is currently the validated baseline. CoreS3 should be treated as a bring-up target until verified on hardware.
+- Core2 の基板制御には `AXP192` を使う
+- CoreS3 の基板制御には `AXP2101` と `AW9523B` を使う
+- LCD とタッチ制御器が同じでも、基板起動処理が同じとは限らない
+- CoreS3 の LCD リセットやタッチ側の基板制御は、通常の ESP GPIO 配線ではなく基板プリセット層で扱う
+- 現在の動作確認済み基準は Core2 であり、CoreS3 は実機確認が完了するまで立ち上げ対象として扱う

@@ -4,23 +4,19 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Pre-release validation checklist
+# 公開前検証の確認表
 
-AtomLGFX has not assigned a package release version. This checklist validates a
-development milestone without implying a SemVer release. The Elixir wrapper
-and native ESP-IDF component must come from the same Git revision and implement
-the same wire-protocol version.
+AtomLGFX には、まだパッケージの公開版を割り当てていません。この確認表は、SemVer の公開版を示さずに開発上の節目を検証するためのものです。Elixir ラッパーとネイティブ ESP-IDF 部品は、同じ Git リビジョンから取得し、同じワイヤープロトコル版を実装する必要があります。
 
-## Prepare the milestone
+## 節目の準備
 
-- Confirm the current API milestone and wire-protocol version are documented.
-- Keep user-facing work under the changelog's `Unreleased` heading.
-- Treat the `0.1.0` value required by Mix as placeholder metadata, not a
-  published project version.
-- Confirm generated protocol files are synchronized.
-- Confirm the worktree is clean and CI is green.
+- 現在の API 節目とワイヤープロトコル版が文書化されていることを確認する
+- 利用者向け変更は、変更履歴の `未公開` 見出しへ置く
+- Mix が要求する `0.1.0` を、公開版ではなく仮の記録値として扱う
+- 生成されたプロトコルファイルが同期していることを確認する
+- 作業ツリーが空で、継続的検証が成功していることを確認する
 
-## Validate the Elixir package
+## Elixir パッケージの検証
 
 ```bash
 mix deps.get
@@ -31,8 +27,7 @@ mix docs --warnings-as-errors
 mix hex.build
 ```
 
-Run the example gates independently because the example project has its own
-formatter and dependencies:
+例示アプリケーションは独自の整形設定と依存関係を持つため、別に確認します。
 
 ```bash
 cd examples/elixir
@@ -41,15 +36,11 @@ mix format --check-formatted
 mix compile --warnings-as-errors
 ```
 
-Inspect the locally built Hex archive as a packaging smoke test. It should
-contain the Elixir source, README, changelog, licenses, and current user
-documentation. It must not imply that the native component is embedded in the
-archive or that the package has been released.
+包装の動作確認として、ローカルで構築した Hex 書庫を調べます。Elixir ソース、README、変更履歴、ライセンス、現在の利用者向け文書を含む必要があります。ネイティブ部品が書庫に内包される、またはパッケージがすでに公開済みであると誤解させてはいけません。
 
-## Validate the native component
+## ネイティブ部品の検証
 
-Initialize the pinned LovyanGFX source and build a complete AtomVM firmware
-image. A wrapper-only application flash does not validate native changes.
+固定した LovyanGFX ソースを初期化し、完全な AtomVM ファームウェア画像を構築します。ラッパーだけを含むアプリケーション書き込みでは、ネイティブ変更を検証できません。
 
 ```bash
 git submodule sync --recursive
@@ -57,48 +48,36 @@ git submodule update --init --recursive
 ./scripts/atomvm_esp32.exs build --target esp32s3 --component .
 ```
 
-The helper defaults to an exact AtomVM `release-0.7` commit, not the moving
-branch head. Update that pin deliberately and repeat the complete native and
-hardware gates whenever the AtomVM revision changes. On dual-core Xtensa
-targets, the helper also selects ESP-IDF's software-backed `stdatomic`
-implementation so AtomVM SMP remains enabled with the ESP-IDF 5.5 toolchain.
-The component's `sdkconfig.defaults` raises the scheduler stack to 8 KB; the
-ESP-IDF default overflows in the pinned AtomVM build before the application
-starts on the tested dual-core ESP32-S3.
+補助スクリプトの既定値は、移動するブランチ先頭ではなく、AtomVM `release-0.7` の特定コミットです。AtomVM リビジョンを変更する場合は意図的に固定値を更新し、ネイティブと実機の全確認を再実行してください。
 
-Use the board-specific target and configuration for the validation device. Review
-native compiler warnings and confirm the generated configuration includes the
-expected panel, bus, touch, and PSRAM settings.
+二核 Xtensa 対象では、ESP-IDF 5.5 環境でも AtomVM の SMP を有効に保つため、ESP-IDF のソフトウェア実装 `stdatomic` を選びます。部品の `sdkconfig.defaults` はスケジューラースタックを 8 KB へ増やします。確認済みの二核 ESP32-S3 では、ESP-IDF の既定値だとアプリケーション開始前に固定版 AtomVM がスタックを使い切ります。
 
-## Validate hardware
+検証機器に合う対象と設定を使います。ネイティブコンパイラーの警告を確認し、生成設定に想定するパネル、バス、タッチ、PSRAM の値が含まれることを確認してください。
 
-Flash the newly built native firmware before flashing the example application.
-Run at least:
+## 実機の検証
+
+例示アプリケーションを書き込む前に、新しく構築したネイティブファームウェアを書き込みます。少なくとも次を実行します。
 
 - `SAMPLE_APP_MODE=all`
 - `SAMPLE_APP_MODE=moving_icons`
 
-Record:
+記録する内容:
 
-- exact Git commit
-- AtomVM revision and ESP-IDF version
-- board, panel, resolution, and wiring/config profile
-- PSRAM availability and whether native sprite PSRAM support is enabled
-- smoke-test results and any capability-based skips
-- MovingIcons object count, target FPS, measured FPS, and visual result
-- known limitations such as a JPEG decoder or panel-specific issue
+- 正確な Git コミット
+- AtomVM リビジョンと ESP-IDF 版
+- 基板、パネル、解像度、配線・設定の組み合わせ
+- PSRAM の有無とネイティブスプライト PSRAM 対応の有効・無効
+- 動作確認結果と、機能不足による省略
+- MovingIcons の物体数、目標 FPS、実測 FPS、見た目の結果
+- JPEG 復号器やパネル固有問題などの既知の制約
 
-## Preserve the pre-release model
+## 公開前モデルを維持する
 
-After all gates pass:
+すべての確認に成功した後、次を行います。
 
-1. Commit the validation report without dating the `Unreleased` changelog
-   heading.
-2. Push the development branch when desired and confirm CI on the exact commit.
-3. Keep Git dependencies pinned to that commit for both the wrapper and native
-   component.
-4. Do not create a SemVer tag or publish Hex until the project adopts an
-   explicit package-version policy.
+1. 変更履歴の `未公開` 見出しへ日付を付けず、検証報告を記録する
+2. 必要に応じて開発ブランチを送信し、正確なコミットで継続的検証が成功することを確認する
+3. ラッパーとネイティブ部品の Git 依存を同じコミットへ固定する
+4. 明示的なパッケージ版方針を採用するまで、SemVer タグを作らず Hex へ公開しない
 
-Historical date tags may continue to identify snapshots, but they are not
-package releases and do not assign an API version.
+過去の日付タグは引き続きスナップショットを識別できますが、パッケージ公開版ではなく API 版も割り当てません。

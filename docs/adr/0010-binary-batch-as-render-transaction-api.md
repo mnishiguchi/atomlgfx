@@ -4,167 +4,167 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 0010: Treat BinaryBatch as the standard render transaction API
+# ADR 0010: BinaryBatch を標準の描画トランザクション API とする
 
-## Status
+## 状態
 
-Superseded
+置換済み
 
-Superseded by:
+次の ADR によって置き換えられました。
 
-- [ADR 0011: Keep BinaryBatch minimal and measured](0011-keep-binary-batch-minimal-and-measured.md)
+- [ADR 0011: BinaryBatch を小さく保ち、実測に基づいて拡張する](0011-keep-binary-batch-minimal-and-measured.md)
 
-Supersedes:
+次の ADR を置き換えます。
 
-- [ADR 0005: Binary batch and instance streaming for animation hot paths](0005-binary-batch-and-instance-streaming.md)
-- [ADR 0007: Packed binary scalar batch path](0007-packed-binary-scalar-batch.md)
-- [ADR 0008: Expand BinaryBatch for paletted sprite workloads](0008-expand-binary-batch-for-paletted-sprite-workloads.md)
-- [ADR 0009: Standardize v2 hot rendering on binary render batches](0009-binary-batch-for-native-like-animation.md)
+- [ADR 0005: アニメーションの高頻度処理向けバイナリー一括実行と個体列](0005-binary-batch-and-instance-streaming.md)
+- [ADR 0007: 詰め込みバイナリーによる数値一括実行経路](0007-packed-binary-scalar-batch.md)
+- [ADR 0008: パレット式スプライト処理向けに BinaryBatch を拡張する](0008-expand-binary-batch-for-paletted-sprite-workloads.md)
+- [ADR 0009: v2 の高頻度描画をバイナリー描画一括実行へ統一する](0009-binary-batch-for-native-like-animation.md)
 
-## Context
+## 背景
 
-`atomlgfx` v2 uses one call-based AtomVM port protocol. Elixir maps operation names to generated numeric opcodes, then sends a single request tuple to the native port.
+`atomlgfx` v2 は、単一の呼び出し方式 AtomVM ポートプロトコルを使用します。Elixir が操作名を生成済みの数値操作コードへ変換し、1つの要求タプルをネイティブポートへ送ります。
 
-This keeps the native wrapper smaller than the v1 one-function-per-operation style, but scalar port calls still have unavoidable overhead. Animation-heavy examples such as MovingIcons and Stack-chan need many drawing operations per frame, so one native call per primitive is too expensive.
+これにより、操作ごとに1関数を作る v1 形式よりネイティブ包みを小さくできます。一方、数値ポート呼び出しには避けられない負荷があります。MovingIcons や ｽﾀｯｸﾁｬﾝ のようなアニメーション量の多い見本は、フレームごとに多数の描画操作を必要とするため、図形ごとに1回ネイティブ呼び出しを行う方式は高コストです。
 
-LovyanGFX already has an efficient rendering model through `startWrite` / `endWrite`. Drawing operations inside that transaction can share setup and teardown costs. `BinaryBatch` gives v2 the same shape at the AtomVM boundary: Elixir builds one compact binary frame script, native code decodes it, and LovyanGFX executes the drawing work in one native transaction.
+LovyanGFX は、`startWrite` / `endWrite` を通じて、すでに効率的な描画モデルを備えています。その区間内の描画操作は、準備と終了の費用を共有できます。`BinaryBatch` は、AtomVM 境界に同じ形をもたらします。Elixir が小さなバイナリーフレームスクリプトを1つ構築し、ネイティブコードが復号し、LovyanGFX が1回のネイティブトランザクションで描画を実行します。
 
-Earlier ADRs explored packed scalar batches, paletted sprite workloads, instance streams, and native-like animation. Those ideas are now folded into one rule: `BinaryBatch` is the v2 render transaction API.
+以前の ADR では、詰め込み数値一括実行、パレット式スプライト処理、個体列、ネイティブに近いアニメーションを検討しました。これらの考え方を、`BinaryBatch` を v2 の描画トランザクション API とする単一規則へ統合しました。
 
-## Decision
+## 判断
 
-This decision has been superseded by [ADR 0011: Keep BinaryBatch minimal and measured](0011-keep-binary-batch-minimal-and-measured.md).
+この判断は、[ADR 0011: BinaryBatch を小さく保ち、実測に基づいて拡張する](0011-keep-binary-batch-minimal-and-measured.md)によって置き換えられました。
 
-The original decision was that anything normally useful inside a LovyanGFX `startWrite` / `endWrite` drawing transaction should be expressible in `BinaryBatch`.
+当初の判断は、LovyanGFX の `startWrite` / `endWrite` 描画トランザクション内で通常役立つものを、`BinaryBatch` で表現可能にするというものでした。
 
-Scalar calls remain the preferred mechanism for:
+数値呼び出しは、次の用途における推奨手段として維持します。
 
-- setup
-- configuration
-- queries
-- allocation
-- calibration
-- touch input
-- low-frequency control operations
+- 初期設定
+- 構成
+- 問い合わせ
+- 割り当て
+- 補正
+- タッチ入力
+- 低頻度の制御操作
 
-`BinaryBatch` is the standard API for frame rendering and animation workloads.
+`BinaryBatch` は、フレーム描画とアニメーション処理の標準 API とします。
 
-The preferred frame shape is:
+推奨するフレーム処理の形は次のとおりです。
 
 ```text
-Elixir frame construction
-  -> one BinaryBatch payload
-    -> one native port call
-      -> one native lock
-        -> one LovyanGFX startWrite / endWrite transaction
-          -> many LovyanGFX drawing operations
+Elixir でフレームを構築
+  -> 1つの BinaryBatch データ
+    -> 1回のネイティブポート呼び出し
+      -> 1回のネイティブ排他制御
+        -> 1組の LovyanGFX startWrite / endWrite トランザクション
+          -> 多数の LovyanGFX 描画操作
 ```
 
-## Design rules
+## 設計規則
 
-### BinaryBatch owns the render transaction
+### BinaryBatch が描画トランザクションを所有する
 
-Callers should not manually include `startWrite` or `endWrite` commands in a batch. Native code owns the LovyanGFX transaction boundary for the whole submitted frame script.
+呼び出し側は、一括実行内へ `startWrite` や `endWrite` 命令を手動で含めません。ネイティブコードが、送信されたフレームスクリプト全体に対する LovyanGFX トランザクション境界を管理します。
 
-In this ADR, "transaction" means one native lock and one LovyanGFX write session. It does not imply rollback semantics. With native prevalidation disabled, a malformed command may fail after earlier commands in the same batch have already rendered.
+この ADR における「トランザクション」は、1回のネイティブ排他制御と1回の LovyanGFX 書き込み区間を意味します。巻き戻しを意味しません。ネイティブ側の事前検証が無効な場合、不正な命令で失敗する前に、同じ一括実行内の先行命令がすでに描画されている可能性があります。
 
-### Scalar calls remain valid
+### 数値呼び出しは引き続き有効
 
-Not every LovyanGFX operation belongs in `BinaryBatch`.
+LovyanGFX のすべての操作が `BinaryBatch` に属するわけではありません。
 
-Scalar calls remain the right API for operations that are not part of the hot frame-rendering path, such as sprite creation, sprite deletion, display setup, dimension queries, touch polling, touch calibration, and one-off control operations.
+スプライト作成、スプライト削除、ディスプレー設定、寸法問い合わせ、タッチ取得、タッチ補正、一度だけの制御操作など、高頻度フレーム描画に含まれない操作には、数値呼び出しが適しています。
 
-### Batch coverage follows LovyanGFX rendering semantics
+### 一括実行の対応範囲は LovyanGFX の描画上の意味に従う
 
-If an operation is commonly useful between `startWrite` and `endWrite`, it should be considered batchable.
+`startWrite` と `endWrite` の間で通常役立つ操作は、一括実行対応の候補とします。
 
-Examples include:
+例:
 
-- pixel, line, rectangle, circle, ellipse, triangle, arc, and Bézier drawing
-- clipping and text drawing state
-- small text drawing
-- sprite push operations
-- packed primitive-list operations
-- RGB565 image pushing
-- explicit native presentation strip operations
-- final display presentation
+- 画素、線、長方形、円、楕円、三角形、円弧、ベジェ曲線の描画
+- 切り抜きと文字描画状態
+- 小さな文字列描画
+- スプライト転送操作
+- 詰め込み図形一覧操作
+- RGB565 画像転送
+- 明示的なネイティブ表示帯操作
+- 最終表示
 
-Payload-heavy operations such as image pushing and JPEG drawing are batchable only when their binary framing and lifetime rules are explicit.
+画像転送や JPEG 描画のようにデータ量の多い操作は、バイナリーの区切り方と生存期間規則が明確な場合だけ、一括実行対応にします。
 
-### Native strips are explicit
+### ネイティブ表示帯は明示的に扱う
 
-Native strip presentation is explicit inside `BinaryBatch`.
+ネイティブ表示帯は、`BinaryBatch` 内で明示的に扱います。
 
-Callers use `begin_strip/1`, draw into the active strip, then call `present_strip/0`. `display/0` presents the frame, but it does not implicitly present an active strip.
+呼び出し側は `begin_strip/1` で開始し、有効な表示帯へ描画してから、`present_strip/0` を呼び出します。`display/0` はフレームを表示しますが、有効な表示帯を暗黙に表示しません。
 
-While a native strip is active, logical target `0` resolves to the active native strip. Outside an active strip, target `0` resolves to the live LCD.
+ネイティブ表示帯が有効な間、論理対象 `0` は有効なネイティブ表示帯へ解決されます。表示帯が有効でないとき、対象 `0` は実際の LCD へ解決されます。
 
-## Consequences
+## 影響
 
-### Positive
+### 良い影響
 
-- Frame rendering can be submitted as one compact payload instead of many scalar port calls.
-- Animation-heavy examples avoid most AtomVM-to-native call overhead during rendering.
-- The native wrapper remains small because v2 does not reintroduce a broad v1-style binding surface.
-- MovingIcons and Stack-chan use the same generic rendering architecture instead of demo-specific native APIs.
-- Palette-index drawing remains part of the general render-batch model instead of a separate batch architecture.
-- Generated metadata, protocol docs, native decoder tests, and protocol freeze tests can describe one active render path.
+- 多数の数値ポート呼び出しではなく、小さな1つのデータとしてフレーム描画を送信できる。
+- アニメーション量の多い見本で、描画中の AtomVM からネイティブへの呼び出し負荷の大半を避けられる。
+- v2 で v1 形式の広い結合範囲を再導入しないため、ネイティブ包みを小さく保てる。
+- MovingIcons と ｽﾀｯｸﾁｬﾝ が、見本固有のネイティブ API ではなく、同じ汎用描画構成を使用できる。
+- パレット番号描画を別の一括実行構成ではなく、一般描画一括実行モデルの一部として維持できる。
+- 生成付随情報、プロトコル文書、ネイティブ復号試験、プロトコル固定化試験で、1つの現行描画経路を記述できる。
 
-### Negative
+### 悪い影響
 
-- `BinaryBatch` is a real protocol surface, not only an optimization detail.
-- The binary decoder and Elixir encoders must stay synchronized.
-- Malformed payload handling matters because native rendering may partially mutate the display when prevalidation is disabled.
-- Payload-heavy commands require careful framing to avoid ambiguous lengths, excessive copying, or unsafe borrowed memory.
-- New render-private command space is limited, so future expansion may require multiplexed command families or a follow-up wire-format ADR.
+- `BinaryBatch` は単なる最適化詳細ではなく、実際のプロトコル範囲になる。
+- バイナリー復号器と Elixir 符号化器を同期させる必要がある。
+- 事前検証を無効にすると、失敗までに表示が部分的に変更される場合があるため、不正データ処理が重要になる。
+- データ量の多い命令では、曖昧な長さ、過剰な複製、危険な借用メモリーを避けるため、慎重な区切りが必要になる。
+- 描画専用の新規命令空間には限りがあるため、将来の拡張では多重化した命令群または後続の通信形式 ADR が必要になる可能性がある。
 
-## Current implementation notes
+## 現在の実装メモ
 
-The current implementation includes:
+当時の実装には、次が含まれていました。
 
-- `AtomLGFX.BinaryBatch.render/2` for the default hot path
-- `AtomLGFX.BinaryBatch.render_checked/2` for opt-in Elixir-side preflight validation
-- `AtomLGFX.BinaryBatch.validate/1` and `validate!/1`
+- 既定の高頻度経路となる `AtomLGFX.BinaryBatch.render/2`
+- Elixir 側の事前検証を明示的に選ぶ `AtomLGFX.BinaryBatch.render_checked/2`
+- `AtomLGFX.BinaryBatch.validate/1` と `validate!/1`
 - `AtomLGFX.BinaryBatch.summary/1`
 - `AtomLGFX.BinaryBatch.diagnose/1`
-- `AtomLGFX.BinaryBatch.compare/2` and `compare!/2`
-- `AtomLGFX.BinaryBatch.check_budget/2` and `check_budget!/2`
-- protocol drift checks for generated metadata and render-private opcodes
-- malformed input tests for binary-batch decoding
-- fixed-size and payload-bearing render commands
-- native presentation strip commands
+- `AtomLGFX.BinaryBatch.compare/2` と `compare!/2`
+- `AtomLGFX.BinaryBatch.check_budget/2` と `check_budget!/2`
+- 生成付随情報と描画専用操作コードのプロトコルずれ検査
+- バイナリー一括実行復号の不正入力試験
+- 固定寸法命令とデータを伴う描画命令
+- ネイティブ表示帯命令
 
-Detailed wire layouts belong in [the protocol document](../protocol.md) and generated tables belong in [the protocol reference](../protocol-reference.md), not in this ADR.
+詳細な通信配置は[プロトコル文書](../protocol.md)へ、生成表は[プロトコル参照](../protocol-reference.md)へ記載し、この ADR には置きません。
 
-## v2 baseline acceptance criteria
+## v2 基準の受け入れ条件
 
-The v2 baseline can be treated as accepted when:
+次を満たしたとき、v2 基準を受け入れ済みとみなせます。
 
-- `mix test` passes on the host development machine
-- `elixir scripts/sync_lgfx_protocol_doc.exs --check` passes
-- the MovingIcons example runs correctly on hardware
-- the BinaryBatch hot path remains one Elixir payload, one native call, one lock, and one LovyanGFX write session
-- `ops.def` batch metadata, generated Elixir metadata, native render-private opcodes, and protocol freeze tests agree
-- scalar APIs remain the preferred path for setup, allocation, query, touch, calibration, and low-frequency control operations
+- 開発用計算機で `mix test` が成功する
+- `elixir scripts/sync_lgfx_protocol_doc.exs --check` が成功する
+- MovingIcons の見本が実機で正しく動作する
+- BinaryBatch の高頻度経路が、1つの Elixir データ、1回のネイティブ呼び出し、1回の排他制御、1回の LovyanGFX 書き込み区間を維持する
+- `ops.def` の一括実行情報、生成済み Elixir 情報、ネイティブ描画専用操作コード、プロトコル固定化試験が一致する
+- 初期設定、割り当て、問い合わせ、タッチ、補正、低頻度制御では、数値 API が推奨経路のままである
 
-Follow-up work should be driven by measured examples and ergonomics rather than expanding the wire format by default.
+今後の作業は、既定で通信形式を拡張するのではなく、実測した見本と使いやすさに基づいて決めます。
 
-## Non-goals
+## 対象外
 
-This ADR does not require every LovyanGFX operation to be batchable.
+この ADR は、LovyanGFX のすべての操作を一括実行対応にすることを求めません。
 
-This ADR does not replace scalar calls.
+この ADR は、数値呼び出しを置き換えません。
 
-This ADR does not introduce public manual `startWrite` / `endWrite` batch commands.
+この ADR は、公開の手動 `startWrite` / `endWrite` 一括命令を導入しません。
 
-This ADR does not define every binary command layout. Those details are protocol contract, not decision history.
+この ADR は、すべてのバイナリー命令配置を定義しません。それらは判断履歴ではなく、プロトコル契約に属します。
 
-## Decision summary
+## 判断の要約
 
-`BinaryBatch` is the standard rendering transaction API for v2.
+`BinaryBatch` を v2 の標準描画トランザクション API とします。
 
-Scalar calls remain for setup, queries, allocation, calibration, input, and low-frequency control.
+数値呼び出しは、初期設定、問い合わせ、割り当て、補正、入力、低頻度制御に使用します。
 
-The simple rule is:
+単純な規則は次のとおりです。
 
-> If it belongs inside a LovyanGFX `startWrite` / `endWrite` drawing transaction, it should eventually be expressible in `BinaryBatch`.
+> LovyanGFX の `startWrite` / `endWrite` 描画トランザクション内に属するものは、最終的に `BinaryBatch` で表現可能にする。

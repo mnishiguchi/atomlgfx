@@ -6,298 +6,268 @@ SPDX-License-Identifier: Apache-2.0
 
 # lgfx_port
 
-`lgfx_port/` is the AtomVM-facing native layer.
+`lgfx_port/` は、AtomVM に面するネイティブ層です。
 
-It owns:
+担当範囲:
 
-- request tuple handling
-- defensive envelope and native-state validation
-- handler dispatch for ordinary operations
-- reply mapping
-- explicit binary batch submission decode and validation
-- render command validation and dispatch for the batch path
+- 要求組の処理
+- 包絡とネイティブ状態の防御的検証
+- 通常操作のハンドラー振り分け
+- 応答への変換
+- 明示的なバイナリーバッチ送信の解析と検証
+- バッチ経路の描画命令検証と振り分け
 
-See [the protocol spec](../docs/protocol.md) for wire-level rules and
-[the architecture overview](../docs/architecture.md) for the top-level repository map.
+ワイヤー単位の規則は [プロトコル](../docs/protocol.md)、リポジトリ全体の構成は [構成](../docs/architecture.md) を参照してください。
 
-## File map
+## ファイル構成
 
 - `lgfx_port.c`
-  - port entrypoint
-  - mailbox drain
-  - per-port lifecycle
-  - request dispatch
-
+  - ポートの入口
+  - メールボックスの排出
+  - ポート単位のライフサイクル
+  - 要求の振り分け
 - `proto_term.c`
-  - request and reply term helpers
-  - request-envelope validation helpers
-
+  - 要求・応答の項補助
+  - 要求包絡の検証補助
 - `include_internal/lgfx_port/proto_term.h`
-  - small AtomVM term conversion helpers
-  - request decode and reply helper declarations
-
+  - 小さな AtomVM 項変換補助
+  - 要求解析と応答補助の宣言
 - `open_config.c`
-  - `open_port/2` option parsing and validation
-
+  - `open_port/2` 設定の解析と検証
 - `op_registry.c`
-  - `ops.def`-driven op metadata lookup
-  - opcode dispatch-surface lookup
-  - capability derivation
-
+  - `ops.def` に基づく操作情報検索
+  - 操作番号の振り分け面検索
+  - 機能情報の導出
 - `render_batch_dispatch.cpp`
-  - multi-target render script validation for `submitBinaryBatch`
-  - batch-local target and color-mode state
-  - sprite push, transform-list, scalar drawing, and display dispatch under one native write window
-
+  - `submitBinaryBatch` 用の複数対象描画命令列検証
+  - バッチ内の対象状態と色モード状態
+  - 一つのネイティブ書き込み区間内でのスプライト転送、変形一覧、基本図形、表示命令の振り分け
 - `handlers.c`
-  - op-specific wire decode for ordinary operations
-  - direct calls into `lgfx_device_*`
-  - includes small section files from `include_internal/lgfx_port/handlers/`
-
+  - 通常操作の操作別ワイヤー解析
+  - `lgfx_device_*` の直接呼び出し
+  - `include_internal/lgfx_port/handlers/` 配下の小さな区分ファイルを取り込む
 - `include_internal/lgfx_port/handler_decode.h`
-  - tiny shared decode helpers for handlers
-  - cached LCD dimension refresh helper
-
+  - ハンドラーで共有する小さな解析補助
+  - LCD 寸法の記憶更新補助
 - `include_internal/lgfx_port/ops.def`
-  - native safety metadata
-  - allowed flags
-  - target and state policy
-  - capability linkage
-  - internal execution classification for binary batch support
+  - ネイティブ安全性情報
+  - 許可するフラグ
+  - 対象と状態の規則
+  - 機能との関連付け
+  - バイナリーバッチ対応の内部実行分類
 
-## Responsibility split
+## 責務の分離
 
-### Port thread
+### ポートスレッド
 
-The port thread owns all AtomVM-facing work:
+AtomVM に面するすべての処理を担当します。
 
-- mailbox handling
-- tuple decoding
-- crash-safety and native-state validation
-- handler dispatch
-- reply encoding
-- protocol-visible error state such as `last_error`
+- メールボックス処理
+- 組の解析
+- 異常終了を避ける検証とネイティブ状態検証
+- ハンドラー振り分け
+- 応答の符号化
+- `last_error` など外部から見えるエラー状態
 
-### Ordinary direct call path
+### 通常の直接呼び出し経路
 
-The ordinary path is synchronous and intentionally boring:
-
-```text
-request tuple
-  -> structural decode
-  -> `ops.def` metadata validation
-  -> one handler
-  -> one `lgfx_device_*` adapter call
-  -> one protocol reply
-```
-
-Handlers stay wire-oriented and small.
-
-They are responsible for:
-
-- decoding request payload fields
-- translating wire values into the native call shape
-- calling `lgfx_device_*`
-- mapping native results to protocol replies
-
-Handlers should not duplicate device semantics. They should also not depend on
-binary-batch dispatch state.
-
-Payload-bearing scalar operations such as `drawString`, `print`, `println`,
-`drawJpg`, and `pushImage` remain valid on this direct synchronous path;
-borrowed binary pointers must be consumed before the handler returns. The
-render-batch path may also support explicitly framed payload operations, such as
-BinaryBatch `drawJpg` and `pushImage`, when the native decoder owns the full
-command stream.
-
-### Render-batch path
-
-Explicit binary batch submission is also owned by `lgfx_port/`.
-
-This path is responsible for:
-
-- validating `submitBinaryBatch`
-- accepting exactly one non-empty binary command stream
-- validating the stream envelope at the public dispatch boundary
-- rejecting malformed command bytes as `bad_args`
-- rejecting unsupported binary command opcodes as `bad_op`
-- optionally prevalidating the full stream before device mutation
-- walking supported render commands synchronously
-
-Batch dispatch remains inside `lgfx_port/` and routes decoded commands to
-`lgfx_device_*`. It keeps wire-protocol render script handling separate from
-the LovyanGFX adapter logic in `../lgfx_device/`.
-
-### Device layer
-
-Detailed device semantics belong in `../lgfx_device/`, not here.
-
-Examples:
-
-- sprite existence and allocation rules
-- target resolution
-- palette-backed behavior
-- `pushImage` payload semantics
-- rotate/zoom semantic validity
-
-## Request flow
-
-`lgfx_port/` has two request flows.
-
-### Ordinary operations
+通常経路は同期的で、意図的に単純です。
 
 ```text
-AtomVM message
-  -> port thread decodes and validates
-  -> handler decodes wire args
-  -> handler calls lgfx_device_*
-  -> handler maps result to protocol reply
+要求組
+  -> 構造の解析
+  -> `ops.def` 情報による検証
+  -> 一つのハンドラー
+  -> 一つの `lgfx_device_*` 適合関数
+  -> 一つのプロトコル応答
 ```
 
-This is the default execution path.
+ハンドラーはワイヤー処理へ集中し、小さく保ちます。
 
-Properties:
+担当すること:
 
-- immediate execution
-- immediate success or failure
-- no batch involvement
+- 要求データ欄の解析
+- ワイヤー値からネイティブ呼び出し形への変換
+- `lgfx_device_*` の呼び出し
+- ネイティブ結果からプロトコル応答への変換
 
-### Explicit binary batch submission
+装置意味を重複して実装せず、バイナリーバッチの振り分け状態にも依存しません。
+
+`drawString`、`print`、`println`、`drawJpg`、`pushImage` など、データを伴う単発操作も直接同期経路で有効です。借用したバイナリーデータへのポインターは、ハンドラーが戻る前に完全に消費します。
+
+バイナリーバッチ側は、ネイティブ解析器が命令列全体を所有する場合に限り、BinaryBatch の `drawJpg` や `pushImage` のような明示的に区切られたデータ命令へ対応できます。
+
+### 描画バッチ経路
+
+明示的なバイナリーバッチ送信も `lgfx_port/` が担当します。
+
+担当すること:
+
+- `submitBinaryBatch` の検証
+- 空でないバイナリー命令列を一つだけ受け入れる
+- 公開振り分け境界で命令列包絡を検証する
+- 不正な命令バイト列を `bad_args` として拒否する
+- 未対応のバイナリー命令番号を `bad_op` として拒否する
+- 任意設定時に、装置変更前に命令列全体を事前検証する
+- 対応する描画命令を同期的に順番どおり実行する
+
+バッチ振り分けは `lgfx_port/` 内に置き、解析した命令を `lgfx_device_*` へ渡します。ワイヤープロトコルの描画命令列処理と、`../lgfx_device/` の LovyanGFX 適合処理を分けます。
+
+### 装置層
+
+詳細な装置意味は `../lgfx_device/` に置き、この層へ置きません。
+
+例:
+
+- スプライトの存在と確保規則
+- 描画対象の解決
+- パレット付き動作
+- `pushImage` データの意味
+- 回転・拡大縮小の意味の妥当性
+
+## 要求の流れ
+
+`lgfx_port/` には二つの要求経路があります。
+
+### 通常操作
 
 ```text
-submitBinaryBatch message
-  -> port thread decodes and validates submitBinaryBatch
-  -> render script is validated
-  -> supported render commands are dispatched in order
+AtomVM メッセージ
+  -> ポートスレッドが解析・検証
+  -> ハンドラーがワイヤー引数を解析
+  -> ハンドラーが lgfx_device_* を呼び出す
+  -> ハンドラーが結果をプロトコル応答へ変換
 ```
 
-This path is used only for explicit binary batching.
+既定の実行経路です。
 
-Properties:
+特徴:
 
-- batching is opt-in
-- ordinary operations do not implicitly flow through the batch path
-- binary-batch command execution happens outside the ordinary handler path
-- command execution is synchronous and stops at the first malformed or failed command
-- native batch execution uses one explicit `startWrite` / `endWrite` pair around command execution
-- oversized streams, empty streams, null streams, and invalid initial targets are rejected before drawing starts
-- the public dispatchers validate the stream envelope once before the inner stream walker parses commands
-- with `LGFX_PORT_RENDER_BATCH_PREVALIDATE=ON`, malformed streams are rejected before any command mutates the device
-- with the default prevalidation-off build, malformed commands are detected while executing to avoid an extra hot-path pass
+- 即時実行
+- 即時の成功または失敗
+- バッチを介さない
 
-## Core rules
+### 明示的なバイナリーバッチ送信
 
-- AtomVM terms stay in `lgfx_port/`.
-- `lgfx_device/` stays free of AtomVM term handling.
-- Handlers decode wire arguments, but should not duplicate device semantics.
-- Elixir owns public API policy and friendly validation.
-- Native metadata in `ops.def` is limited to safety, capability, and execution guardrails.
-- Shared handler-side decode helpers live in `handler_decode.h`.
-- Externally visible protocol changes must be reflected in `../docs/protocol.md`.
-- Generated protocol reference tables must stay synchronized with `ops.def` and protocol constants.
+```text
+submitBinaryBatch メッセージ
+  -> ポートスレッドが submitBinaryBatch を解析・検証
+  -> 描画命令列を検証
+  -> 対応する描画命令を順番どおり振り分け
+```
 
-## Design intent
+明示的なバイナリーバッチだけが使う経路です。
 
-This layer should stay small and explicit.
+特徴:
 
-Policy:
+- バッチ処理は明示的に選ぶ
+- 通常操作は暗黙にバッチ経路へ流れない
+- バイナリーバッチ命令は通常ハンドラー経路の外側で実行する
+- 命令は同期的に実行し、最初の不正命令または失敗で停止する
+- 一つの明示的な `startWrite` / `endWrite` 区間で命令を実行する
+- 大きすぎる命令列、空の命令列、無効なポインター、無効な初期対象は描画開始前に拒否する
+- 公開振り分け側が命令列包絡を一度検証し、内側の走査器は命令の解析または実行だけを行う
+- `LGFX_PORT_RENDER_BATCH_PREVALIDATE=ON` では、不正な命令列を装置変更前に拒否する
+- 既定の事前検証無効構成では、高負荷経路の追加走査を避けるため実行中に不正命令を検出する
 
-- keep AtomVM-facing protocol work in `lgfx_port/`
-- keep ordinary operations on the direct synchronous handler path
-- keep batching explicit rather than implicit
-- keep batch dispatch out of ordinary handlers
-- keep request decoding close to the code that uses it
-- keep device truth in `../lgfx_device/`
+## 基本規則
 
-The goal is not to build another abstraction tower. The goal is to keep the protocol boundary easy to read, easy to change, and hard to misunderstand.
+- AtomVM の項は `lgfx_port/` の中だけで扱う
+- `lgfx_device/` へ AtomVM の項処理を持ち込まない
+- ハンドラーはワイヤー引数を解析するが、装置意味を重複させない
+- 公開 API 方針と使いやすい検証は Elixir 側が担当する
+- `ops.def` のネイティブ情報は、安全性、機能、実行上の防護に限定する
+- ハンドラー側で共有する解析補助は `handler_decode.h` に置く
+- 外部から見えるプロトコル変更は `../docs/protocol.md` へ反映する
+- 生成プロトコル参照表を `ops.def` とプロトコル定数へ同期する
 
-## Relationship to batch dispatch
+## 設計方針
 
-`lgfx_port/` is protocol-facing and owns explicit batch dispatch.
+この層は、小さく明示的に保ちます。
 
-The split is:
+- AtomVM に面するプロトコル処理を `lgfx_port/` に置く
+- 通常操作を直接同期ハンドラー経路へ置く
+- バッチ処理を暗黙ではなく明示的にする
+- バッチ振り分けを通常ハンドラーへ混ぜない
+- 要求解析を利用箇所の近くへ置く
+- 装置の真実を `../lgfx_device/` に置く
+
+抽象層をさらに積み重ねることが目的ではありません。プロトコル境界を読みやすく、変更しやすく、誤解しにくく保つことが目的です。
+
+## バッチ振り分けとの関係
+
+`lgfx_port/` はプロトコル側に位置し、明示的なバッチ振り分けを担当します。
 
 - `lgfx_port/`
-  - accepts and validates explicit binary batch submission
-  - validates render scripts
-  - dispatches render commands in order
-
+  - 明示的なバイナリーバッチ送信を受け入れて検証する
+  - 描画命令列を検証する
+  - 描画命令を順番どおり振り分ける
 - `lgfx_device/`
-  - owns the final LovyanGFX-facing behavior
+  - 最終的な LovyanGFX 側の動作を担当する
 
-This keeps binary batching explicit and prevents it from becoming the default execution
-path for the whole API surface.
+バイナリーバッチを明示的に保ち、API 全体の既定経路にならないようにします。
 
-## Binary payload rule
+## バイナリーデータの規則
 
-Borrowed request payloads are request-scoped.
+借用した要求データは、その要求の間だけ有効です。
 
-For ordinary operations:
+通常操作:
 
-- handlers may borrow request binary pointers only for the duration of the current request
-- device calls must fully consume borrowed payloads before returning
-- borrowed payload pointers must not survive the request boundary
+- ハンドラーは現在の要求中だけ要求のバイナリーデータへのポインターを借用できる
+- 装置呼び出しは戻る前に借用データを完全に消費する
+- 借用ポインターを要求境界の外へ持ち出さない
 
-For explicit binary batching:
+明示的バイナリーバッチ:
 
-- batch payloads must stay inside the current request unless native-owned storage is introduced later
+- 将来ネイティブ所有領域を導入しない限り、バッチデータは現在の要求内に留める
 
-## When changing this layer
+## この層を変更する場合
 
-When adding or changing a protocol-visible operation:
+外部から見える操作を追加または変更する場合:
 
-- add or update one row in `ops.def`
-- add the handler declaration via `ops.h` when needed
-- implement the ordinary handler in the relevant `handlers.c` section when the op has a direct path
-- update `render_batch_dispatch.cpp` when the op participates in binary batching
-- keep AtomVM decoding in `lgfx_port/`
-- keep detailed device semantics in `../lgfx_device/`
-- update protocol docs when the externally visible contract changes
-- resync generated protocol reference tables
+- `ops.def` の行を追加または更新する
+- 必要な場合は `ops.h` 経由でハンドラー宣言を追加する
+- 直接経路を持つ操作は、該当する `handlers.c` 区分へ通常ハンドラーを実装する
+- バイナリーバッチへ参加する操作は `render_batch_dispatch.cpp` を更新する
+- AtomVM の解析を `lgfx_port/` に置く
+- 詳細な装置意味を `../lgfx_device/` に置く
+- 外部契約が変わる場合はプロトコル文書を更新する
+- 生成プロトコル参照表を再同期する
 
-## Render-batch prevalidation
+## 描画バッチの事前検証
 
-`LGFX_PORT_RENDER_BATCH_PREVALIDATE=ON` enables a full syntax/support pass before
-starting the native write session. This preserves the strict no-partial-mutation
-behavior for malformed batches, but it parses each batch twice.
+`LGFX_PORT_RENDER_BATCH_PREVALIDATE=ON` は、ネイティブ書き込み区間の開始前に構文と対応状況を完全に検証します。不正なバッチによる部分変更を防げますが、各バッチを二度解析します。
 
-The default is `OFF` so animation hot loops validate commands while executing
-and avoid the extra pass. Keep it off for performance demos; enable it while
-debugging native render-batch encoding issues.
-
-Example CMake override:
+既定値は `OFF` です。アニメーションの高負荷処理では実行中に命令を検証し、追加走査を避けます。性能例では無効のままにし、ネイティブ描画バッチの符号化問題を調べる場合に有効にしてください。
 
 ```sh
 -DLGFX_PORT_RENDER_BATCH_PREVALIDATE=ON
 ```
 
-## Render-batch trace logging
+## 描画バッチの追跡記録
 
-`LGFX_PORT_ENABLE_RENDER_BATCH_TRACE=ON` enables native binary-batch execution counters.
+`LGFX_PORT_ENABLE_RENDER_BATCH_TRACE=ON` は、ネイティブバイナリーバッチ実行の計数を有効にします。
 
-This is intended for temporary animation-performance diagnosis. It logs one line per
-`submitBinaryBatch` execution with timing and counters such as:
+一時的なアニメーション性能調査用です。各 `submitBinaryBatch` 実行について、次のような値を1行で記録します。
 
-- batch bytes
-- prevalidation time, when `LGFX_PORT_RENDER_BATCH_PREVALIDATE=ON`
-- native write-session start time
-- binary-batch execution time
-- native write-session end time
-- total measured native batch time
-- command count
-- scalar command count
-- text command count
-- sprite push count, including `pushSprite` and one-off `pushRotateZoom`
-- `pushRotateZoomList` command count
-- total transform-list instances
-- executed transform instances
-- approximately culled transform instances
-- display command count
-
-Example CMake override:
+- バッチのバイト数
+- 事前検証時間
+- ネイティブ書き込み区間の開始時間
+- バイナリーバッチ実行時間
+- ネイティブ書き込み区間の終了時間
+- 計測したネイティブバッチ合計時間
+- 命令数
+- 基本命令数
+- 文字命令数
+- `pushSprite` と単発 `pushRotateZoom` を含むスプライト転送数
+- `pushRotateZoomList` 命令数
+- 変形一覧の総要素数
+- 実行した変形要素数
+- おおよその除外要素数
+- 表示命令数
 
 ```sh
 -DLGFX_PORT_ENABLE_RENDER_BATCH_TRACE=ON
 ```
 
-Keep this disabled for normal demos to avoid serial log overhead in hot animation loops.
+高負荷アニメーションで直列記録の負担を避けるため、通常の例では無効にしてください。

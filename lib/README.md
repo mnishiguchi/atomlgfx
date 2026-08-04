@@ -10,7 +10,7 @@ SPDX-License-Identifier: Apache-2.0
 
 基本的な描画の考え方は LovyanGFX に合わせています。一方で、AtomVM から安全に使いやすくするために、開始時設定、返り値、明示的バッチなどは atomlgfx 独自の仕組みとして整理しています。
 
-通常の描画では、最初に `AtomLGFX.render_lcd/3` を使うのがおすすめです。LovyanGFX に近い命令を Elixir のリストでまとめ、1 回の port 呼び出しで実行できます。初期化、問い合わせ、タッチ、大きな画像転送には通常の直接 API を使い、計測済みの高負荷処理だけで `AtomLGFX.BinaryBatch` を直接使ってください。
+通常の描画では、最初に `AtomLGFX.render_lcd/3` を使うのがおすすめです。LovyanGFX に近い命令を Elixir のリストでまとめ、1回のポート呼び出しで実行できます。初期化、問い合わせ、タッチ、大きな画像転送には通常の直接 API を使い、計測済みの高負荷処理だけで `AtomLGFX.BinaryBatch` を直接使ってください。
 
 ## この README の読み方
 
@@ -19,9 +19,9 @@ SPDX-License-Identifier: Apache-2.0
 - 最初の 1 画面を表示したい: `はじめに` → `描画経路の選び方` → `開始と終了` → `基本図形` → `文字`
 - スプライトや画像も使いたい: `スプライト` → `画像`
 - タッチ入力も使いたい: `タッチ`
-- wire-level の描画を調整したい: `明示的バッチ`
+- 通信形式に近い低水準描画を調整したい: `明示的バッチ`
 
-ボード固有の既知設定から始めたい場合は、[M5Stack boards](../docs/boards/m5stack.md) も参照してください。
+ボード固有の既知設定から始めたい場合は、[M5Stack 基板](../docs/boards/m5stack.md) も参照してください。
 
 ## LovyanGFX に沿う部分と atomlgfx 固有の部分
 
@@ -46,7 +46,7 @@ SPDX-License-Identifier: Apache-2.0
 - `:ok`, `{:ok, value}`, `{:error, reason}` の返り値
 - 対象番号 `0` を LCD、`1..254` をスプライトとして扱う規則
 - `AtomLGFX.Color` による色補助
-- `AtomLGFX.render_lcd/3` と `render_sprite/4` による render-first 描画
+- `AtomLGFX.render_lcd/3` と `render_sprite/4` による 描画優先の処理
 - 上級者向けの `AtomLGFX.BinaryBatch` 明示的バッチ
 - `get_caps/1` や `supports_*?/1` による機能確認
 
@@ -58,9 +58,9 @@ AtomLGFX には、主に 3 つの描画経路があります。
 
 | 経路 | 使う場面 |
 | --- | --- |
-| render-first API | 通常の図形、文字、スプライト描画 |
+| 描画優先 API | 通常の図形、文字、スプライト描画 |
 | 直接 API | 初期化、問い合わせ、タッチ、画像転送、単発の描画 |
-| `BinaryBatch` | 診断、性能測定、計測済みの hot loop |
+| `BinaryBatch` | 診断、性能測定、計測済みの高頻度処理 |
 
 最初は `render_lcd/3` を使います。命令名は `fill_screen`, `draw_pixel`, `draw_line`, `draw_string`, `push_sprite` のように LovyanGFX と対応する `snake_case` です。
 
@@ -70,13 +70,13 @@ AtomLGFX には、主に 3 つの描画経路があります。
     {:fill_screen, :black},
     {:set_text_color, :white},
     {:set_cursor, 8, 8},
-    {:println, "Hello AtomLGFX"},
+    {:println, "こんにちは AtomLGFX"},
     {:draw_line, 0, 32, 160, 32, :red},
     :display
   ])
 ```
 
-`draw_pixel/4`, `draw_line/7`, `fill_rect/7` などの直接関数も、単発の操作や動作確認に利用できます。多数の命令を loop で直接呼ぶ代わりに、1 回の render transaction にまとめてください。
+`draw_pixel/4`, `draw_line/7`, `fill_rect/7` などの直接関数も、単発の操作や動作確認に利用できます。多数の命令を繰り返し直接呼ぶ代わりに、1回の描画処理へまとめてください。
 
 ## はじめに
 
@@ -120,7 +120,7 @@ AtomLGFX には、主に 3 つの描画経路があります。
 
 - `normalize_open_config/1` が成功すること
 - `width/2` と `height/2` が想定どおりの寸法を返すこと
-- `get_caps/1` で sprite, touch, batch などの利用可否を確認できること
+- `get_caps/1` で `sprite`、`touch`、`batch` などの利用可否を確認できること
 
 ```elixir
 {:ok, normalized} =
@@ -262,7 +262,7 @@ options = [
 
 ピン設定を動的に組み立てる場合や、ボードの動作確認中に設定を切り分けたい場合は、先に `normalize_open_config/1` を通す方が安全です。
 
-M5Stack 系の既知設定を起点にしたい場合は、[M5Stack boards](../docs/boards/m5stack.md) を参照してください。
+M5Stack 系の既知設定を起点にしたい場合は、[M5Stack 基板](../docs/boards/m5stack.md) を参照してください。
 
 ### `normalize_open_config/1`
 
@@ -383,7 +383,7 @@ message = AtomLGFX.format_error({:bad_text_scale, -1})
 
 ### `raw_call/6`
 
-既知の操作名を v3 の低水準 call 要求として送ります。疎通確認や低水準の実験向けです。
+既知の操作名を v3 の低水準呼び出し要求として送ります。疎通確認や低水準の実験向けです。
 
 ```elixir
 {:ok, reply} = AtomLGFX.raw_call(port, :ping, 0, 0, [])
@@ -395,9 +395,9 @@ message = AtomLGFX.format_error({:bad_text_scale, -1})
 
 ## 明示的バッチ（上級者向け）
 
-通常は `render_lcd/3` または `render_sprite/4` を使ってください。これらは命令の正規化と target 管理を行い、内部で低メモリーの binary batch に変換します。明示的バッチは、wire-level の命令を直接組み立てる上級者向けの仕組みです。
+通常は `render_lcd/3` または `render_sprite/4` を使ってください。これらは命令の正規化と描画対象の管理を行い、内部で低メモリーのバイナリーバッチに変換します。明示的バッチは、通信形式に近い低水準命令を直接組み立てる上級者向けの仕組みです。
 
-呼び出し回数を減らしたい描画経路に限定して使います。初期化、問い合わせ、大きな画像転送、タッチ操作には通常 API を使ってください。
+呼び出し回数を減らしたい描画経路に限定して使います。初期化、問い合わせ、大きな画像転送、タッチ操作には通常の API を使ってください。
 
 ### `AtomLGFX.BinaryBatch`
 
@@ -431,7 +431,7 @@ frame = [
 
 生成した描画指示列を確認したい場合は、次の補助関数を使えます。
 
-- `decode/1`: 命令列を読みやすい map の列に変換する
+- `decode/1`: 命令列を読みやすいマップの列に変換する
 - `summary/1`: 命令数やバイト数を集計する
 - `compare/2`: 2 つの命令列を比較する
 - `check_budget/2`: バイト数や命令数の上限を確認する
@@ -442,15 +442,15 @@ frame = [
 {:ok, summary} = AtomLGFX.BinaryBatch.summary(frame)
 ```
 
-`push_rotate_zoom_list/2` は、同じ描画先へ複数の変換スプライトを描くための compact な命令です。MovingIcons のように、同種の変換描画が多い場合に使います。
+`push_rotate_zoom_list/2` は、同じ描画先へ複数の変換スプライトを描くための 小さな命令です。MovingIcons のように、同種の変換描画が多い場合に使います。
 
-`draw_jpg` と `push_image_rgb565` は BinaryBatch には含めません。画像のような大きな payload は通常 API で扱う方針です。
+`draw_jpg` と `push_image_rgb565` は `BinaryBatch` には含めません。画像のような大きなデータ は通常の API で扱う方針です。
 
 ## 高負荷アニメーションの扱い
 
 保持型ネイティブ描画シーンは、メモリー使用量とライフサイクルが重くなりやすいため、通常の API から外しました。
 
-MovingIcons のような計測済みの高負荷アニメーションでは、通常 API から分離したアプリケーション固有 renderer で compact な変換スプライトリストを使います。通常の描画 API にデモ固有の概念や hidden buffer は追加しません。
+MovingIcons のような計測済みの高負荷アニメーションでは、通常の API から分離した、アプリケーション固有の描画器 で 小さな変形スプライト一覧を使います。通常の描画 API にデモ固有の概念や 隠れたバッファー は追加しません。
 
 ```elixir
 commands = [
@@ -633,8 +633,8 @@ LCD とスプライトは、それぞれ独立した切り取り状態を持ち�
 
 ```elixir
 :ok = AtomLGFX.set_cursor(port, 16, 48)
-:ok = AtomLGFX.print(port, "Line 1")
-:ok = AtomLGFX.println(port, " Line 2")
+:ok = AtomLGFX.print(port, "1行目")
+:ok = AtomLGFX.println(port, " 2行目")
 ```
 
 ### 直接描画
@@ -750,9 +750,9 @@ JPEG 関連の関数は次のとおりです。
 
 ### RGB565 画像転送
 
-`push_image_rgb565/8` は、RGB565 の画素バイナリーを対象へ転送します。
+`push_image_rgb565/8` は、RGB565 の画素データを格納したバイナリーを対象へ転送します。
 
-この画素バイナリーは、RGB565 データをリトルエンディアン 16 ビット語として並べたものです。
+このバイナリーは、RGB565 データをリトルエンディアン 16 ビット語として並べたものです。
 
 ```elixir
 :ok = AtomLGFX.push_image_rgb565(port, 0, 0, width, height, pixels)
@@ -761,7 +761,7 @@ JPEG 関連の関数は次のとおりです。
 
 必要に応じて、対象側の設定として `set_swap_bytes/3` を使います。
 
-大きい画素バイナリーは、必要に応じて Elixir 側で行単位に分けて送られます。
+大きい画素データのバイナリーは、必要に応じて Elixir 側で行単位に分けて送られます。
 
 ## タッチ
 

@@ -4,43 +4,33 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Hardware smoke and performance validation
+# 実機の動作確認と性能検証
 
-This guide records the minimal on-device checks for the AtomLGFX LovyanGFX
-AtomVM port.
+この文書は、AtomLGFX の LovyanGFX AtomVM ポートに対して実機で行う最小限の確認手順を記録します。
 
-The goal is not a precise benchmark suite. The goal is to catch obvious
-regressions and compare the ordinary call path with the binary batch path on
-real hardware.
+精密な性能測定一式を作ることが目的ではありません。明らかな退行を見つけ、実機上で通常の呼び出し経路とバイナリーバッチ経路を比較することが目的です。
 
-Collected reports:
+既存の報告:
 
-- [2026-08-04 v3 hardware validation report](worklog/20260804-v3-hardware-validation-report.md)
-- [2026-05-01 hardware performance smoke report](worklog/20260501-hardware-performance-smoke-report.md)
+- [2026-08-04 v3 実機検証報告](worklog/20260804-v3-hardware-validation-report.md)
+- [2026-05-01 実機性能動作確認報告](worklog/20260501-hardware-performance-smoke-report.md)
 
-## What this validates
+## 確認する内容
 
-- The driver boots and initializes the panel.
-- Basic direct drawing calls still work.
-- `submitBinaryBatch` accepts a valid render script.
-- Sprite and palette paths can be checked separately when the board supports
-  them.
-- Render-batch rendering is measurably different from many ordinary port
-  calls.
-- The output gives stable enough numbers to compare branches and boards.
+- ドライバーが起動し、パネルを初期化できる
+- 基本的な直接描画が引き続き動く
+- `submitBinaryBatch` が正しい描画命令列を受け入れる
+- 対応基板では、スプライトとパレット経路を個別に確認できる
+- 多数の通常ポート呼び出しと描画バッチの性能差を実機で確認できる
+- ブランチや基板間で比較できる程度に安定した数値を得られる
 
-## Sample app modes
+## 例示アプリケーションのモード
 
-The current default mode is `face`, the practical low-memory application smoke
-target. `moving_icons` uses a separate advanced renderer and remains the main
-hot-loop validation path for on-device animation work.
+現在の既定値は `face` です。低メモリーで実用的なアプリケーション動作確認として使います。`moving_icons` は独立した上級者向け描画器を使い、実機アニメーションの高負荷経路を確認する主なモードです。
 
-Use `smoke` for the compact ordinary-call and binary-batch regression surface:
-boot, binary batch, primitives, text, clip rects, RGB565 image transfer,
-best-effort JPEG drawing, color helpers, palette sprites when available, and a
-touch probe when available.
+通常呼び出しとバイナリーバッチの小さな退行確認には `smoke` を使います。起動、バイナリーバッチ、基本図形、文字、クリップ矩形、RGB565 画像転送、可能な範囲での JPEG 描画、色補助、対応時のパレットスプライト、対応時のタッチ確認を実行します。
 
-Available modes:
+利用可能なモード:
 
 - `smoke`
 - `protocol`
@@ -56,100 +46,93 @@ Available modes:
 - `touch_calibrate`
 - `all`
 
-Use `all` for the default smoke path plus the sprite protocol smoke. Use `perf`
-only when collecting timing numbers.
+既定の動作確認にスプライトプロトコル確認を加える場合は `all`、計時値を収集する場合だけ `perf` を使います。
 
-Use `moving_icons` when validating animation on hardware. The current demo config exercises:
+実機アニメーションの検証には `moving_icons` を使います。現在の例では次を確認します。
 
-- icon sprite upload
-- Elixir-owned object updates
-- one compact transformed-sprite list per frame
-- dynamic dirty-bound clearing without a full-frame sprite
-- immediate erase/redraw for isolated icons and safe grouping for intersections
+- アイコン用スプライトへの画像転送
+- Elixir が所有する物体状態の更新
+- 1フレームにつき一つの小さな変形スプライト一覧
+- 全画面スプライトを使わない動的な変更領域消去
+- 単独アイコンの即時消去・再描画と、交差アイコンの安全なグループ化
 
-Observed log shape:
+ログ例:
 
 ```text
 moving_icons stats renderer=transformed_sprite_list obj_count=<n> fps=<n> target_fps=<n>
 ```
 
-On the connected 480x320 ESP32-S3 device, six rotating and zooming icons
-sustained 4-5 FPS with a 5 FPS target. Visual comparison confirmed that
-overlap-aware immediate redraw substantially reduces flicker and keeps crossing
-icons intact. The render-first strip path needed a
-480x20 buffer to avoid AtomVM heap exhaustion and measured about 0.2 FPS; the
-direct-operation 480x40 strip path was stable but similarly slow.
+接続した 480x320 の ESP32-S3 では、回転と拡大縮小を行う6個のアイコンが、目標5 FPSに対して4〜5 FPSを維持しました。目視比較では、重なりを考慮した即時再描画により、ちらつきが大きく減り、交差するアイコンも欠けませんでした。
 
-## Perf smoke mode
+描画優先の短冊経路は、AtomVM のヒープ枯渇を避けるため 480x20 のバッファを必要とし、約0.2 FPSでした。直接操作の 480x40 短冊経路は安定していましたが、同様に低速でした。
 
-`SampleApp.PerfSmoke` emits one-line records:
+## 性能動作確認モード
+
+`SampleApp.PerfSmoke` は、次の1行形式を出力します。
 
 ```text
 PERF label=<name> commands=<n> bytes=<n> elapsed_us=<n> per_command_us=<n> commands_per_sec=<n>
 ```
 
-Current measurements:
+現在の測定項目:
 
 - `build_fill_rect_binary_batch`
-  - Elixir-side command binary construction cost
+  - Elixir 側で矩形塗りつぶし命令のバイナリーを構築する費用
 - `build_draw_line_binary_batch`
-  - Elixir-side command binary construction cost
+  - Elixir 側で線描画命令のバイナリーを構築する費用
 - `direct_fill_rect`
-  - many ordinary `fill_rect` calls
+  - 多数の通常 `fill_rect` 呼び出し
 - `binary_batch_fill_rect`
-  - one binary batch containing equivalent `fill_rect` commands
+  - 同等の `fill_rect` 命令を一つのバイナリーバッチへまとめた場合
 - `direct_draw_line`
-  - many ordinary `draw_line` calls
+  - 多数の通常 `draw_line` 呼び出し
 - `binary_batch_draw_line`
-  - one binary batch containing equivalent `draw_line` commands
+  - 同等の `draw_line` 命令を一つのバイナリーバッチへまとめた場合
 
-## Run on ESP32
+## ESP32 での実行
 
-From `examples/elixir`:
+`examples/elixir` から実行します。
 
 ```sh
 mix clean
 mix atomvm.esp32.flash --port /dev/ttyACM0
 ```
 
-Use the serial port that matches the board, for example:
+基板に合う直列ポートを指定します。
 
 ```sh
 SAMPLE_APP_MODE=perf mix clean
 SAMPLE_APP_MODE=perf mix atomvm.esp32.flash --port /dev/ttyUSB0
 ```
 
-The sample app reads `SAMPLE_APP_MODE` at compile time. Re-run `mix clean` when
-switching modes.
+例示アプリケーションは構築時に `SAMPLE_APP_MODE` を読み取ります。モードを変更する場合は `mix clean` を再実行してください。
 
-## Optional local round count
+## 任意の繰り返し回数
 
-The default is intentionally small enough for repeated smoke testing.
+既定値は、繰り返し動作確認に使いやすい小さな値です。
 
-To change the count for ad-hoc experiments, set the process dictionary before
-running the perf module manually:
+一時的な実験で回数を変える場合は、性能モジュールを手動実行する前にプロセス辞書へ設定します。
 
 ```elixir
 :erlang.put(:sample_app_perf_rounds, 300)
 SampleApp.start(:perf)
 ```
 
-For normal firmware flashing, keep the default first. Increase the count only
-after the basic smoke run succeeds.
+通常のファームウェア書き込みでは、まず既定値を使います。基本動作確認に成功してから回数を増やしてください。
 
-## Suggested board matrix
+## 推奨する基板一覧
 
-Record the same output for each board:
+各基板で同じ出力を記録します。
 
-| Board | Port | Notes |
+| 基板 | ポート | 備考 |
 | --- | --- | --- |
-| XIAO ESP32S3 | `/dev/ttyACM0` or `/dev/ttyUSB0` | current known-good baseline |
-| ESP32 DevKit | `/dev/ttyUSB0` | compare against S3 results |
-| XIAO ESP32C3 | TBD | lower-cost comparison |
-| XIAO ESP32C5 | TBD | Wi-Fi 6 class comparison |
-| XIAO ESP32C6 | TBD | RISC-V comparison |
+| XIAO ESP32S3 | `/dev/ttyACM0` または `/dev/ttyUSB0` | 現在の動作確認済み基準 |
+| ESP32 DevKit | `/dev/ttyUSB0` | S3 結果との比較 |
+| XIAO ESP32C3 | 未定 | 低価格機との比較 |
+| XIAO ESP32C5 | 未定 | Wi-Fi 6 世代との比較 |
+| XIAO ESP32C6 | 未定 | RISC-V 機との比較 |
 
-## What to copy into a report
+## 報告へ記録する内容
 
 ```text
 board=
@@ -165,25 +148,23 @@ PERF label=direct_draw_line ...
 PERF label=binary_batch_draw_line ...
 ```
 
-## Interpretation
+## 結果の読み方
 
-Expected shape:
+期待する傾向:
 
-- direct ordinary calls should be slower when many small primitives are issued
-- packed binary batch should reduce per-command overhead
-- build cost should be visible, but it should usually be much lower than many
-  separate port calls
-- if binary batch is not faster, inspect:
-  - double decode cost from strict binary preflight
-  - SPI/display flush behavior
-  - whether the benchmark is dominated by drawing work rather than port-call
-    overhead
-  - whether the panel or bus configuration differs between boards
+- 小さな基本図形を多数送る場合、通常の直接呼び出しは遅くなる
+- 詰め込んだバイナリーバッチは、命令ごとの負担を減らす
+- 構築費用は観測できるが、多数の個別ポート呼び出しより通常は十分小さい
+- バイナリーバッチが速くない場合は、次を確認する
+  - 厳格な事前検証による二重解析
+  - SPI または表示更新の動作
+  - ポート呼び出し負担ではなく描画そのものが支配的になっていないか
+  - 基板間でパネルやバス設定が異なっていないか
 
-## Keep comparisons fair
+## 公平に比較するための条件
 
-- Use the same branch and commit.
-- Use the same panel configuration.
-- Use the same display rotation.
-- Run once after a fresh flash, then repeat once more after reset.
-- Compare integer output lines, not visual smoothness alone.
+- 同じブランチとコミットを使う
+- 同じパネル設定を使う
+- 同じ表示回転を使う
+- 新しく書き込んだ直後に1回、再起動後にもう1回実行する
+- 見た目の滑らかさだけでなく、整数の出力行を比較する

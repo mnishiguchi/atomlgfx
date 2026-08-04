@@ -4,19 +4,19 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 0012: Allow native frame render commands for hot animation loops
+# ADR 0012: 高頻度アニメーションループ向けネイティブフレーム描画命令を許可する
 
-## Status
+## 状態
 
-Accepted
+採用
 
-## Context
+## 背景
 
-`atomlgfx` v2 replaces the broad v1-style native wrapper surface with a smaller call-based protocol around LovyanGFX operations. This keeps ordinary drawing, setup, query, and control operations maintainable.
+`atomlgfx` v2 は、v1 形式の広いネイティブ包みを、LovyanGFX 操作を扱う小さな呼び出し方式プロトコルへ置き換えます。これにより、通常描画、初期設定、問い合わせ、制御操作を保守しやすくできます。
 
-For animation-heavy workloads, v2 introduced `BinaryBatch` so Elixir can submit one compact frame script instead of many ordinary port calls. This reduces AtomVM/native crossing overhead and gives animation code an explicit render-transaction path.
+アニメーション量の多い処理に対して、v2 は `BinaryBatch` を導入しました。Elixir は多数の通常ポート呼び出しではなく、小さなフレームスクリプトを1つ送信できます。これにより AtomVM／ネイティブ境界越えの負荷を減らし、アニメーションコードへ明示的な描画トランザクション経路を提供します。
 
-However, the MovingIcons workload showed that reducing port-call overhead is not enough by itself. The upstream LovyanGFX `MovingIcons` example keeps the core frame-render loop entirely in C++:
+しかし、MovingIcons の処理から、ポート呼び出し負荷を減らすだけでは不十分であることが分かりました。上流 LovyanGFX の `MovingIcons` 見本は、フレーム描画の中心ループをすべて C++ 内に置いています。
 
 ```cpp
 for (int_fast16_t y = 0; y < lcd_height; y += sprite_height) {
@@ -34,292 +34,292 @@ for (int_fast16_t y = 0; y < lcd_height; y += sprite_height) {
 lcd.display();
 ```
 
-The primitive v2 render-batch path can express equivalent behavior, but it does so through a more generic command stream:
+v2 の図形単位の描画一括実行経路でも同等の動作を表現できますが、より汎用的な命令列を使用します。
 
 ```text
-begin strip
-clear strip
-push rotate zoom list
-present strip
-repeat for each strip
-display
+表示帯を開始
+表示帯を消去
+回転拡大一覧を転送
+表示帯を表示
+各表示帯について繰り返し
+画面を表示
 ```
 
-This preserves protocol flexibility, but it still leaves extra work inside the native hot path:
+これによりプロトコルの柔軟性は保てますが、ネイティブの高頻度経路内には次の追加処理が残ります。
 
-- render command dispatch
-- target resolution
-- sprite handle lookup
-- command-local validation
-- fixed-point conversion
-- optional culling
-- presentation-strip state transitions
+- 描画命令の振り分け
+- 対象解決
+- スプライト識別子の検索
+- 命令単位の検証
+- 固定小数点変換
+- 任意の描画対象外判定
+- 表示帯状態の切り替え
 
-These costs are small individually, but they happen inside the frame-critical path. For workloads like MovingIcons, the goal is to get closer to the upstream native LovyanGFX loop while still allowing Elixir to own animation state.
+個々の費用は小さくても、フレーム時間に直結する経路内で発生します。MovingIcons のような処理では、Elixir がアニメーション状態を所有する形を保ちながら、上流のネイティブ LovyanGFX ループへ近づけることが目標です。
 
-Benchmarking confirmed this direction:
+性能測定によって、この方向性を確認しました。
 
-- A native transformed-sprite frame command reduced MovingIcons frame time from roughly `746–815 ms` to roughly `628–629 ms`.
-- Raising the LCD write clock to `40 MHz` with DMA enabled reduced the frame time further to roughly `547–565 ms`.
-- Directly encoding the native transform-frame command from the MovingIcons object list reduced Elixir-side frame construction and brought the measured frame time to roughly `484 ms`.
-- Storing source sprite handles directly in animation state reduced frame construction further, bringing the measured frame time to roughly `403–421 ms`.
-- Raising the LCD write clock to `60 MHz` was visually stable and brought the measured frame time to roughly `396 ms`.
-- Raising the LCD write clock to `80 MHz` improved measured frame time, but rendering was visually incorrect, so it was rejected.
-- A trace run showed native execution dominated by strip presentation, with `frame_present_us` significantly larger than draw and clear time.
-- Full-height native strips reduced strip count from `2` to `1` but did not improve total frame time.
-- Per-object dirty-region presentation was rejected after causing instability and increasing presentation complexity.
-- Direct native strip presentation with `pushImageDMA()` did not improve frame time compared with the existing sprite presentation path.
-- Waiting for frame DMA completion did not resolve the low-object-count crash observed during later experiments, so that issue is treated as follow-up stability work rather than part of the accepted performance direction.
+- ネイティブ変換付きスプライトフレーム命令により、MovingIcons のフレーム時間は約 `746〜815 ms` から約 `628〜629 ms` へ短縮した。
+- DMA を有効にして LCD 書き込みクロックを `40 MHz` へ上げると、フレーム時間はさらに約 `547〜565 ms` へ短縮した。
+- MovingIcons の物体一覧からネイティブ変換フレーム命令を直接符号化すると、Elixir 側のフレーム構築が減り、測定フレーム時間は約 `484 ms` になった。
+- 元スプライト識別子をアニメーション状態へ直接保持すると、フレーム構築がさらに減り、測定フレーム時間は約 `403〜421 ms` になった。
+- LCD 書き込みクロックを `60 MHz` へ上げても表示は安定し、測定フレーム時間は約 `396 ms` になった。
+- LCD 書き込みクロックを `80 MHz` へ上げると測定フレーム時間は改善したが、表示が不正になったため採用しなかった。
+- 計時記録では、ネイティブ実行の大半を表示帯の転送が占め、`frame_present_us` は描画時間や消去時間より明確に大きかった。
+- 全高のネイティブ表示帯により帯数は `2` から `1` へ減ったが、総フレーム時間は改善しなかった。
+- 物体単位の変更領域表示は、不安定性を引き起こし、表示処理を複雑にしたため採用しなかった。
+- `pushImageDMA()` によるネイティブ表示帯の直接転送は、既存のスプライト表示経路と比べてフレーム時間を改善しなかった。
+- フレーム DMA 完了を待っても、その後の実験で観測した物体数が少ない場合の異常終了は解消しなかった。この問題は、採用する性能方針ではなく、今後の安定性作業として扱う。
 
-These findings support native frame render commands as the right v2 hot-animation direction. They also show that further work should focus on presentation efficiency, allocation-light Elixir frame construction, and embedded stack safety, not on ordinary batch dispatch or write transaction overhead.
+これらの結果は、高頻度アニメーションにおける v2 の適切な方向として、ネイティブフレーム描画命令を支持します。また、今後は通常の一括実行振り分けや書き込みトランザクション負荷ではなく、表示効率、割り当ての少ない Elixir フレーム構築、組み込み環境のスタック安全性に重点を置くべきことも示しています。
 
-## Decision
+## 判断
 
-Allow `BinaryBatch` to include native frame render commands for selected hot animation patterns.
+選定した高頻度アニメーションパターンについて、`BinaryBatch` 内へネイティブフレーム描画命令を含めることを許可します。
 
-A native frame render command may represent a complete reusable rendering pattern, not just one LovyanGFX primitive.
+ネイティブフレーム描画命令は、LovyanGFX の1図形だけでなく、再利用可能な完全な描画パターンを表しても構いません。
 
-For MovingIcons-style workloads, Elixir sends compact frame state such as:
+MovingIcons 形式の処理では、Elixir が次のような小さなフレーム状態を送ります。
 
 ```text
-source sprite id
+元スプライト識別子
 x
 y
-angle
-zoom
+角度
+拡大率
 ```
 
-Native code owns the full frame render loop:
+ネイティブコードが、フレーム描画ループ全体を管理します。
 
 ```text
-for each native presentation strip:
-  clear strip
-  for each object:
-    push transformed source sprite to strip
-  present strip
+各ネイティブ表示帯について:
+  表示帯を消去
+  各物体について:
+    変換した元スプライトを表示帯へ転送
+  表示帯を表示
 
-display
+画面を表示
 ```
 
-The architectural boundary is:
+構成上の境界は次のとおりです。
 
 ```text
-Elixir owns animation state.
-Native owns hot frame rendering.
-LovyanGFX owns drawing.
+Elixir がアニメーション状態を所有する。
+ネイティブが高頻度フレーム描画を所有する。
+LovyanGFX が描画を所有する。
 ```
 
-Native frame render commands must remain generic. They must not encode application-specific concepts such as `MovingIcons`, `StackChan`, demo object names, physics, or scene rules.
+ネイティブフレーム描画命令は、汎用的でなければなりません。`MovingIcons`、`StackChan`、見本固有の物体名、物理処理、場面規則など、アプリケーション固有の概念を符号化してはいけません。
 
-Acceptable command names are generic, for example:
+許容できる命令名は、次のように汎用的なものです。
 
 ```text
 push_transform_list_frame
 render_transform_list_strips
 ```
 
-Unacceptable command names are demo-specific, for example:
+次のような見本固有の命令名は許容しません。
 
 ```text
 moving_icons_frame
 stackchan_face_frame
 ```
 
-## Relationship to primitive BinaryBatch operations
+## 図形単位の BinaryBatch 操作との関係
 
-Native frame render commands do not replace primitive `BinaryBatch` operations.
+ネイティブフレーム描画命令は、図形単位の `BinaryBatch` 操作を置き換えません。
 
-The expected layering is:
+想定する階層は次のとおりです。
 
 ```text
-ordinary calls
-  setup, queries, allocation, calibration, low-frequency control
+通常呼び出し
+  初期設定、問い合わせ、割り当て、補正、低頻度制御
 
-primitive BinaryBatch operations
-  generic render scripts and reusable LovyanGFX-like drawing operations
+図形単位の BinaryBatch 操作
+  汎用描画スクリプトと再利用可能な LovyanGFX 形式の描画操作
 
-native frame render commands
-  compact frame-state payloads executed by tight native loops
+ネイティブフレーム描画命令
+  小さなフレーム状態データを密なネイティブループで実行
 ```
 
-Primitive `BinaryBatch` operations remain the standard way to express ordinary render scripts, mixed drawing work, smoke tests, text overlays, scalar primitives, sprite pushes, and presentation-strip experiments.
+図形単位の `BinaryBatch` 操作は、通常描画スクリプト、異種混在の描画処理、簡易動作確認、文字の重ね描画、数値図形、スプライト転送、表示帯の実験を表現する標準手段として維持します。
 
-Native frame render commands are an additional hot-path option for repeated animation patterns where the performance-critical structure is the loop itself, not only the individual drawing primitive.
+ネイティブフレーム描画命令は、性能上重要なのが個別図形だけではなくループ構造そのものである、繰り返しアニメーションパターン向けの追加選択肢です。
 
-A native frame command should be added only when primitive batch operations are a measured bottleneck and the command remains reusable beyond a single demo.
+図形単位の一括操作が実測上のボトルネックであり、かつ単一の見本を超えて再利用できる場合だけ、ネイティブフレーム命令を追加します。
 
-## Opcode-space policy
+## 操作コード空間の方針
 
-The render-private opcode space is intentionally small.
+描画専用操作コード空間は、意図的に小さくしています。
 
-To avoid spending scarce private opcode values on every new frame-level command, `0xFF` may be used as an extended render opcode. Extended render commands should use a sub-opcode inside the extended command payload.
+新しいフレーム単位命令ごとに希少な専用操作コードを消費しないよう、`0xFF` を拡張描画操作コードとして使用できます。拡張描画命令は、拡張命令データ内の副操作コードを使用します。
 
-The retained v2 extended command is:
+v2 で維持する拡張命令は次のとおりです。
 
 ```text
 0xFF / subop 0x01
-  transformed-sprite frame command for native presentation strips
+  ネイティブ表示帯向け変換付きスプライトフレーム命令
 ```
 
-Earlier experiments also used extended sub-opcodes for speculative packed-list commands. Those commands were intentionally removed before the v2 protocol freeze by [ADR 0011: Keep BinaryBatch minimal and measured](./0011-keep-binary-batch-minimal-and-measured.md).
+以前の実験では、試験的な詰め込み一覧命令にも拡張副操作コードを使用しました。これらは、[ADR 0011: BinaryBatch を小さく保ち、実測に基づいて拡張する](./0011-keep-binary-batch-minimal-and-measured.md)により、v2 プロトコル固定前に意図的に削除しました。
 
-This keeps the render opcode space open for future frame-level commands while avoiding speculative protocol surface area.
+これにより、試験的なプロトコル範囲を増やさず、将来のフレーム単位命令へ描画操作コード空間を残せます。
 
-## Rules
+## 規則
 
-Native frame render commands are allowed only when all of these are true:
+ネイティブフレーム描画命令は、次のすべてを満たす場合だけ許可します。
 
-- The operation represents a repeated hot render pattern.
-- The equivalent upstream LovyanGFX code would naturally keep the loop in C++.
-- The command remains reusable outside one demo.
-- Elixir still provides the frame state.
-- Native code does not own application-specific behavior such as object movement, physics, or scene rules.
+- 繰り返される高頻度描画パターンを表す。
+- 同等の上流 LovyanGFX コードなら、自然にループを C++ 内へ置く。
+- 単一の見本を超えて再利用できる。
+- フレーム状態は引き続き Elixir が提供する。
+- 物体移動、物理処理、場面規則など、アプリケーション固有の動作をネイティブコードが所有しない。
 
-Native frame render commands must not be used for:
+ネイティブフレーム描画命令を、次の用途には使用しません。
 
-- setup
-- queries
-- calibration
-- allocation
-- low-frequency control operations
-- one-off drawing that ordinary calls or primitive binary-batch commands already handle well
+- 初期設定
+- 問い合わせ
+- 補正
+- 割り当て
+- 低頻度制御操作
+- 通常呼び出しまたは図形単位のバイナリー一括命令で十分に扱える一度限りの描画
 
-## Initial implementation
+## 初期実装
 
-The first accepted implementation is a generic transformed-sprite frame command for MovingIcons-like workloads.
+最初に採用する実装は、MovingIcons 形式の処理向けの汎用変換付きスプライトフレーム命令です。
 
-The command supports:
+この命令は、次へ対応します。
 
-- native presentation strips
-- a small fixed set of source sprite handles
-- object records with source sprite id, x, y, angle, and zoom
-- transparent key handling
-- one native loop over strips and objects
-- one final display operation
+- ネイティブ表示帯
+- 少数の固定された元スプライト識別子
+- 元スプライト識別子、x、y、角度、拡大率を持つ物体記録
+- 透明色処理
+- 表示帯と物体を巡回する1つのネイティブループ
+- 最後の表示操作1回
 
-The command avoids:
+この命令は、次を避けます。
 
-- per-object sprite registry lookup when source sprites can be resolved once
-- per-command target resolution inside the strip loop
-- repeated render command dispatch for each strip
-- application-specific object movement
+- 元スプライトを一度解決できる場合の、物体ごとのスプライト登録表検索
+- 表示帯ループ内での命令ごとの対象解決
+- 表示帯ごとの描画命令振り分けの繰り返し
+- アプリケーション固有の物体移動
 
-The MovingIcons example may use example-local fast encoders that write the native frame command directly from its object list. This is an implementation optimization for the benchmark path, not a replacement for the public `BinaryBatch` helpers.
+MovingIcons の見本では、物体一覧からネイティブフレーム命令を直接書き込む、見本内だけの高速符号化器を使用しても構いません。これは性能測定経路の実装最適化であり、公開 `BinaryBatch` 補助関数の代替ではありません。
 
-The MovingIcons example may also store source sprite handles directly in animation state. This avoids repeated source-index-to-handle conversion during frame construction and is compatible with the rule that Elixir owns animation state.
+MovingIcons の見本では、元スプライト識別子をアニメーション状態へ直接保持しても構いません。これにより、フレーム構築中の元番号から識別子への変換を繰り返さずに済み、Elixir がアニメーション状態を所有する規則とも両立します。
 
-The accepted demo configuration uses a high LCD write clock with DMA enabled. On the tested ILI9488 setup, `60 MHz` was stable and faster than `40 MHz`; `80 MHz` produced invalid rendering and must not be used as the default.
+採用した見本構成では、DMA を有効化し、高い LCD 書き込みクロックを使用します。試験した ILI9488 構成では、`60 MHz` は安定し、`40 MHz` より高速でした。`80 MHz` では表示が不正になったため、既定値として使用してはいけません。
 
-## Consequences
+## 影響
 
-### Positive
+### 良い影響
 
-- Moves the hottest render loop closer to upstream native LovyanGFX examples.
-- Avoids repeated command dispatch and target resolution inside each strip.
-- Keeps Elixir responsible for high-level animation state and object movement.
-- Preserves v2's small ordinary-call protocol.
-- Preserves primitive `BinaryBatch` operations for generic render scripts.
-- Gives performance-critical examples a realistic native-like path.
-- Keeps the optimization reusable for sprite animation, particle systems, icon scenes, and face-part rendering.
-- Provides a scalable opcode-space strategy through extended render sub-opcodes.
-- Keeps benchmark-specific Elixir encoding optimizations outside the generic native protocol.
+- 最も高頻度な描画ループを、上流のネイティブ LovyanGFX 見本へ近づけられる。
+- 各表示帯内で、命令振り分けと対象解決を繰り返さずに済む。
+- 高水準のアニメーション状態と物体移動を、引き続き Elixir が担当できる。
+- v2 の小さな通常呼び出しプロトコルを維持できる。
+- 汎用描画スクリプト向けに、図形単位の `BinaryBatch` 操作を維持できる。
+- 性能が重要な見本へ、現実的でネイティブに近い経路を提供できる。
+- スプライトアニメーション、粒子表現、図柄場面、顔部品描画へ再利用できる。
+- 拡張描画副操作コードにより、拡張可能な操作コード空間方針を持てる。
+- 性能測定固有の Elixir 符号化最適化を、汎用ネイティブプロトコルの外へ保てる。
 
-### Negative
+### 悪い影響
 
-- Adds a higher-level render command category to `BinaryBatch`.
-- Requires more native implementation than primitive-only batching.
-- Creates another path that must be tested and documented.
-- Risks drifting toward demo-specific native APIs if naming and boundaries are not kept strict.
-- Makes some render behavior less directly visible from the Elixir frame script.
-- Requires care to avoid benchmark-only optimizations leaking into the generic protocol surface.
-- Requires embedded-stack discipline in native hot paths, especially when adding caches or temporary arrays.
+- `BinaryBatch` に、より高水準な描画命令分類が増える。
+- 図形単位の一括実行だけの場合より、ネイティブ実装が増える。
+- 試験と文書化が必要な別経路が増える。
+- 命名と境界を厳格に保たなければ、見本固有のネイティブ API へ寄る危険がある。
+- 一部の描画動作が Elixir フレームスクリプトから直接見えにくくなる。
+- 性能測定固有の最適化を、汎用プロトコル範囲へ漏らさない注意が必要になる。
+- 特に一時配列やキャッシュを追加する場合、ネイティブ高頻度経路で組み込みスタックを慎重に扱う必要がある。
 
-## Rejected alternatives
+## 採用しなかった代替案
 
-### Continue optimizing only primitive binary-batch commands
+### 図形単位のバイナリー一括命令だけを最適化し続ける
 
-Rejected as the only strategy.
+唯一の方針としては採用しません。
 
-Primitive commands remain useful, but they cannot fully match upstream native examples when the upstream performance depends on a tight C++ loop around repeated drawing operations.
+図形単位命令は引き続き有用ですが、上流の性能が描画操作を囲む密な C++ ループに依存する場合、上流のネイティブ見本へ完全には近づけません。
 
-### Add a MovingIcons-specific native command
+### MovingIcons 固有のネイティブ命令を追加する
 
-Rejected.
+採用しません。
 
-MovingIcons is a benchmark and representative workload, not a protocol concept.
+MovingIcons は性能測定用の代表処理であり、プロトコル概念ではありません。
 
-### Move animation state into native code
+### アニメーション状態をネイティブコードへ移す
 
-Rejected.
+採用しません。
 
-Elixir should continue to own object state and application behavior. Native code should only execute the hot rendering pattern.
+物体状態とアプリケーション動作は、引き続き Elixir が所有します。ネイティブコードは、高頻度描画パターンだけを実行します。
 
-### Remove batch-level locking or write transactions
+### 一括実行単位の排他制御または書き込みトランザクションを削除する
 
-Rejected.
+採用しません。
 
-Locking and write transactions protect the singleton display and preserve LovyanGFX semantics. Recent testing did not show them to be the dominant performance bottleneck.
+排他制御と書き込みトランザクションは、単一ディスプレーを保護し、LovyanGFX の動作を維持します。直近の試験では、主要な性能ボトルネックではありませんでした。
 
-### Force small source sprites into internal RAM
+### 小さな元スプライトを内部 RAM へ強制配置する
 
-Rejected as a default performance strategy.
+既定の性能方針としては採用しません。
 
-Testing did not show an improvement for the current MovingIcons setup. Sprite memory placement may still be tuned later, but it is not part of this ADR's accepted direction.
+現在の MovingIcons 構成では改善が確認できませんでした。スプライトのメモリー配置は将来調整できますが、この ADR の採用方針には含めません。
 
-### Use full-height native presentation strips by default
+### 全高のネイティブ表示帯を既定にする
 
-Rejected.
+採用しません。
 
-Testing reduced the strip count from `2` to `1`, but did not materially improve frame time. The upstream-style two-strip presentation remains a safer default for constrained memory.
+試験では帯数が `2` から `1` へ減りましたが、フレーム時間は大きく改善しませんでした。メモリー制約下では、上流形式の2帯表示をより安全な既定とします。
 
-### Use per-object dirty-region presentation
+### 物体単位の変更領域表示を使用する
 
-Rejected in the tested form.
+試験した形式では採用しません。
 
-Per-object dirty presentation increased complexity and caused instability before the first frame statistics line. Future dirty-region work should use a coarser and safer strategy if revisited.
+物体単位の変更領域表示は複雑性を増し、最初のフレーム統計を出す前に不安定になりました。将来再検討する場合は、より粗く安全な方式を使用します。
 
-### Present native strips through direct `pushImageDMA()`
+### `pushImageDMA()` でネイティブ表示帯を直接表示する
 
-Rejected.
+採用しません。
 
-Direct strip presentation with `pushImageDMA()` did not improve frame time compared with the existing sprite presentation path. The existing LovyanGFX sprite presentation path appears to be at least as good for this setup.
+`pushImageDMA()` による直接表示帯転送は、既存のスプライト表示経路と比べてフレーム時間を改善しませんでした。この構成では、既存の LovyanGFX スプライト表示経路が少なくとも同等です。
 
-### Use `80 MHz` LCD write clock by default
+### LCD 書き込みクロック `80 MHz` を既定にする
 
-Rejected.
+採用しません。
 
-The measured frame time improved, but rendering was visually incorrect. Stable rendering is required for benchmark results to be meaningful.
+測定フレーム時間は改善しましたが、表示が不正でした。性能測定結果に意味を持たせるには、安定した表示が必要です。
 
-### Add frame-level DMA waits as a performance or stability fix
+### 性能または安定性対策として、フレーム単位の DMA 待機を追加する
 
-Rejected for the tested issue.
+試験した問題には採用しません。
 
-Waiting for frame DMA completion did not resolve the low-object-count crash observed during later experiments. DMA waits may still be useful in other situations, but they are not part of this ADR's accepted performance direction.
+フレーム DMA 完了待機では、その後の実験で観測した物体数が少ない場合の異常終了を解消できませんでした。DMA 待機が別の状況で有用な可能性はありますが、この ADR の採用性能方針には含めません。
 
-## Follow-up work
+## 今後の作業
 
-Further performance work should focus on:
+今後の性能作業は、次へ重点を置きます。
 
-- keeping benchmark encoders allocation-light
-- reducing Elixir-side frame construction cost only when it remains measurable
-- reducing native presentation cost
-- investigating lower-overhead strip presentation paths only when backed by measurements
-- keeping native hot-path stack usage small
-- comparing against upstream native MovingIcons on the same board, panel, bus clock, and DMA configuration
-- investigating the low-object-count `pthread` stack overflow before adding more native hot-path caches
+- 性能測定用符号化器の割り当てを少なく保つ
+- Elixir 側のフレーム構築費用が引き続き測定可能な場合だけ削減する
+- ネイティブ表示費用を削減する
+- 実測で裏付けられた場合だけ、より低負荷な表示帯転送経路を調査する
+- ネイティブ高頻度経路のスタック使用量を小さく保つ
+- 同じ基板、パネル、バスクロック、DMA 構成で、上流のネイティブ MovingIcons と比較する
+- ネイティブ高頻度経路へキャッシュを追加する前に、物体数が少ない場合の `pthread` スタックあふれを調査する
 
-Further work should not focus on:
+今後の作業では、次へ重点を置きません。
 
-- removing batch-level locking
-- removing write transactions
-- replacing primitive `BinaryBatch` operations
-- adding demo-specific native commands
-- using unstable LCD bus clocks for benchmark wins
-- adding per-object dirty presentation without a simpler, coarser strategy
+- 一括実行単位の排他制御を削除する
+- 書き込みトランザクションを削除する
+- 図形単位の `BinaryBatch` 操作を置き換える
+- 見本固有のネイティブ命令を追加する
+- 性能測定値のために不安定な LCD バスクロックを使用する
+- より単純で粗い方針を持たず、物体単位の変更領域表示を追加する
 
-## Related documents
+## 関連文書
 
-- [ADR 0009: Standardize v2 hot rendering on binary render batches](./0009-binary-batch-for-native-like-animation.md)
-- [ADR 0010: Treat BinaryBatch as the standard render transaction API](./0010-binary-batch-as-render-transaction-api.md)
-- [Architecture](../architecture.md)
-- [Protocol](../protocol.md)
+- [ADR 0009: v2 の高頻度描画をバイナリー描画一括実行へ統一する](./0009-binary-batch-for-native-like-animation.md)
+- [ADR 0010: BinaryBatch を標準の描画トランザクション API とする](./0010-binary-batch-as-render-transaction-api.md)
+- [構成](../architecture.md)
+- [プロトコル](../protocol.md)

@@ -4,15 +4,9 @@
 
 defmodule AtomLGFX.Command do
   @moduledoc """
-  Normalizes render-first command lists for `AtomLGFX.render/3`.
+  `AtomLGFX.render/3` で使用する描画命令一覧を正規化します。
 
-  This module keeps the user-facing command shape small and LovyanGFX-like while
-  leaving binary encoding and port submission to the internal render-batch
-  bridge.
-
-  Primitive colors use RGB565 by default. Use `{:index, n}` explicitly when
-  drawing into a palette-backed sprite; normalization inserts the required
-  low-level color-mode transitions.
+  公開命令では、色名、直接指定した RGB 値、文字基準位置名など、読みやすい Elixir の値を受け付けます。このモジュールは、それらを `AtomLGFX.BinaryBatch` が受け取る厳密な通信形式へ変換します。
   """
 
   import AtomLGFX.Guards
@@ -79,7 +73,7 @@ defmodule AtomLGFX.Command do
   ]
 
   @doc """
-  Normalizes one render command.
+  1つの描画命令を正規化します。
   """
   @spec normalize_one(command()) :: {:ok, normalized_command()} | {:error, term()}
   def normalize_one(:display), do: {:ok, :display}
@@ -362,7 +356,7 @@ defmodule AtomLGFX.Command do
   def normalize_one(command), do: {:error, {:bad_render_command, command}}
 
   @doc """
-  Normalizes a render command list.
+  描画命令一覧を正規化します。
   """
   @spec normalize([command()], keyword()) :: {:ok, [normalized_command()]} | {:error, term()}
   def normalize(commands, opts \\ [])
@@ -382,7 +376,7 @@ defmodule AtomLGFX.Command do
   def normalize(commands, _opts), do: {:error, {:bad_render_commands, commands}}
 
   @doc """
-  Normalizes a display color.
+  表示色を正規化します。
   """
   @spec normalize_color(term()) :: {:ok, color()} | {:error, term()}
   def normalize_color({:index, value}) when palette_index(value), do: {:ok, {:index, value}}
@@ -395,7 +389,7 @@ defmodule AtomLGFX.Command do
   end
 
   @doc """
-  Normalizes a text datum name or numeric LovyanGFX datum value.
+  文字基準位置の名前、または LovyanGFX の数値を正規化します。
   """
   @spec normalize_text_datum(term()) :: {:ok, 0..255} | {:error, term()}
   def normalize_text_datum(datum) when u8(datum), do: {:ok, datum}

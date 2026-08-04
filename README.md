@@ -6,90 +6,67 @@ SPDX-License-Identifier: Apache-2.0
 
 # atomlgfx
 
-`atomlgfx` is a LovyanGFX integration for AtomVM on ESP32-class boards.
+`atomlgfx` は、ESP32 系基板で動く AtomVM から LovyanGFX を利用するためのライブラリです。
 
-This repository contains two closely related deliverables:
+Elixir 向けの `AtomLGFX` API と、LovyanGFX を呼び出す AtomVM のネイティブポートドライバー `lgfx_port` を提供します。
 
-- an ESP-IDF component that provides the native `lgfx_port` AtomVM port driver
-- an Elixir package that provides the `AtomLGFX` wrapper module for that driver
+## できること
 
-Both layers share wire protocol v3 and evolve together. The current pre-release
-work is v3 because it implements that contract; there is no separate package or
-API version.
+- 文字や基本図形の描画
+- JPEG や生画像の描画
+- スプライトの作成と転送
+- タッチ入力の取得
+- 複数の描画命令をまとめた効率的な送信
 
-## Current API direction
-
-The preferred drawing API is now render-first. Common LovyanGFX-style drawing
-commands should be grouped into one render transaction:
+## 基本的な使い方
 
 ```elixir
-AtomLGFX.render_lcd(port, [
-  {:fill_screen, :black},
-  {:set_text_color, :white},
-  {:set_text_datum, :top_left},
-  {:set_cursor, 10, 10},
-  {:println, "Hello AtomLGFX"},
-  {:draw_line, 0, 40, 200, 40, {:rgb, 255, 0, 0}},
-  :display
-])
+{:ok, port} = AtomLGFX.open(panel_driver: :ili9488, width: 320, height: 480)
+
+:ok = AtomLGFX.init(port)
+
+:ok =
+  AtomLGFX.render_lcd(port, [
+    {:fill_screen, :black},
+    {:set_text_color, :white},
+    {:draw_string, "Hello AtomLGFX", 16, 16},
+    {:draw_line, 16, 48, 240, 48, :red},
+    :display
+  ])
 ```
 
-Internally this compiles to the existing low-memory `BinaryBatch` protocol and
-submits one request to the AtomVM port driver. Use `AtomLGFX.render_lcd/3` and
-`AtomLGFX.render_sprite/4` when the target should be obvious at the call site.
-Direct APIs remain available for setup, lifecycle, touch, queries, sprite
-allocation, JPEG drawing, and raw image upload. Render commands accept named
-colors, RGB tuples such as `{:rgb, 255, 0, 0}`, common text datum atoms such
-as `:top_left`, `:middle_center`, and `:bottom_right`, and sprite commands such
-as `{:push_sprite, sprite_target, x, y}`. Palette-backed sprite primitives use
-explicit colors such as `{:index, 2}`; the friendly render API manages the
-low-level color mode automatically. The example app now includes a
-render-first `:sprites` mode for drawing into a caller-owned sprite and pushing
-it to the LCD. The `:moving_icons` demo deliberately lives outside the friendly
-command API. Its example-local renderer uses the advanced transformed-sprite
-list command, clears only previous icon bounds, and submits one batch per frame.
-Isolated icons are erased and redrawn immediately; intersecting icons are
-grouped so their cleanup regions cannot cut into one another.
+複数の描画命令をまとめることで、AtomVM とネイティブドライバー間の呼び出し回数を抑えられます。
 
-Familiar scalar helpers such as `draw_pixel`, `draw_line`, and `fill_rect`
-remain available for occasional direct calls. Use a render transaction for
-loops so repeated pixels or primitives do not each pay a port-call boundary.
+## 全体像
 
-See [ADR 0016](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/adr/0016-render-first-low-memory-api.md) for
-the current architecture decision.
+```text
+Elixir アプリケーション
+        |
+        v
+     AtomLGFX
+        |
+        v
+     lgfx_port
+        |
+        v
+     LovyanGFX
+        |
+        v
+  液晶画面・タッチ装置
+```
 
-## What to read
+Elixir 側では扱いやすい API を提供し、ネイティブ側では AtomVM と LovyanGFX の橋渡しを行います。
 
-- [Changelog](https://github.com/mnishiguchi/atomlgfx/blob/main/CHANGELOG.md)
-- [Migration guide](docs/migration-to-v3.md)
-- [ESP-IDF component guide](docs/esp-idf-component.md)
-- [Elixir package guide](docs/elixir-package.md)
-- [Architecture](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/architecture.md)
-- [Protocol](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/protocol.md)
-- [Pre-release validation](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/pre-release-validation.md)
+## 導入
 
-## Repository map
+`atomlgfx` を利用するには、`lgfx_port` を組み込んだ AtomVM ファームウェアと、Elixir 側の `atomlgfx` 依存が必要です。両者は同じ Git コミットから取得してください。
 
-- `CMakeLists.txt`
-  - ESP-IDF component entry point
-- `include/`
-  - public native headers
-- `lgfx_port/`
-  - AtomVM-facing native port layer
-- `lgfx_device/`
-  - LovyanGFX-facing native adapter layer
-- `lib/`
-  - Elixir wrapper package
-- `examples/elixir/`
-  - example AtomVM application
-- `third_party/LovyanGFX/`
-  - pinned LovyanGFX submodule
+- [Elixir パッケージの導入と使い方](docs/elixir-package.md)
+- [AtomVM ファームウェアへの組み込み](docs/esp-idf-component.md)
+- [M5Stack 向けの情報](docs/boards/m5stack.md)
 
-## Status
+## 詳しい文書
 
-The v3 API is the current supported pre-release surface. The native driver and
-Elixir wrapper must come from the same Git revision because both layers
-implement wire protocol v3 together.
-
-No package release version has been assigned. The `0.1.0` value required by Mix
-is placeholder metadata and does not identify a published AtomLGFX release.
+- [構成](docs/architecture.md)
+- [プロトコル](docs/protocol.md)
+- [変更履歴](CHANGELOG.md)

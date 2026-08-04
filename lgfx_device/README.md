@@ -6,109 +6,85 @@ SPDX-License-Identifier: Apache-2.0
 
 # lgfx_device
 
-`lgfx_device/` is the LovyanGFX-facing native adapter layer.
+`lgfx_device/` は、LovyanGFX に面するネイティブ適合層です。
 
-It owns:
+担当範囲:
 
-- target resolution
-- device-facing validation and semantics
-- sprite, palette, image, and text behavior at the device boundary
-- the thin integration layer around the pinned LovyanGFX submodule
+- 描画対象の解決
+- 装置境界での検証と意味
+- スプライト、パレット、画像、文字の装置側動作
+- 版を固定した LovyanGFX 副リポジトリとの薄い統合
 
-It does not decode AtomVM terms or build protocol replies.
+AtomVM の項は解析せず、プロトコル応答も組み立てません。
 
-See [the protocol spec](../docs/protocol.md) for wire-level rules and
-[the architecture overview](../docs/architecture.md) for the top-level repository map.
+ワイヤー単位の規則は [プロトコル](../docs/protocol.md)、リポジトリ全体の構成は [構成](../docs/architecture.md) を参照してください。
 
-## File map
+## ファイル構成
 
 - `lgfx_device.h`
-  - device-facing public adapter surface used by the port layer
-
+  - ポート層が使う装置向け公開適合面
 - `lgfx_device_internal.hpp`
-  - internal declarations and shared adapter details
-
+  - 内部宣言と共有する適合処理
 - `state.cpp`
-  - device state
-  - initialization
-  - panel and touch setup
-  - target resolution helpers
-  - native strip-presentation state and lazy strip allocation
-
+  - 装置状態、初期化、パネルとタッチの設定、対象解決、短冊表示状態、遅延確保
 - `control.cpp`
-  - display control operations such as init, close, rotation, brightness, and color depth
-
+  - 初期化、終了、回転、明るさ、色深度などの表示制御
 - `text.cpp`
-  - text operations
-  - font preset handling
-  - cursor and wrap behavior
-  - direct LovyanGFX-style text-scale handling at the device boundary
-
+  - 文字操作、文字種プリセット、カーソル、折り返し、LovyanGFX 風文字倍率
 - `primitives.cpp`
-  - primitive drawing operations
-
+  - 基本図形の描画
 - `images.cpp`
-  - JPEG and RGB565 image operations
-
+  - JPEG と RGB565 画像操作
 - `sprites.cpp`
-  - sprite lifecycle
-  - palette lifecycle
-  - pivot
-  - sprite push and rotate/zoom behavior
-
+  - スプライトとパレットのライフサイクル、基準点、転送、回転・拡大縮小
 - `clip.cpp`
-  - clip rectangle operations
-
+  - クリップ矩形
 - `fonts/generated/`
-  - generated font data compiled into the component when enabled
+  - 有効時に部品へ組み込む生成済み文字データ
 
-## Responsibility split
+## 責務の分離
 
-This layer is responsible for device semantics that should not be duplicated in handlers.
+ハンドラーで重複させるべきでない装置意味を、この層が担当します。
 
-Examples:
+例:
 
-- whether a target exists
-- whether a sprite handle is already allocated
-- whether a sprite is palette-backed
-- whether a destination sprite exists
-- `pushImage` stride and payload validity
-- rotate/zoom semantic validity
-- final validation and forwarding of LovyanGFX-style numeric arguments to the pinned LovyanGFX call shape
+- 対象が存在するか
+- スプライト番号がすでに確保されているか
+- スプライトがパレット付きか
+- 転送先スプライトが存在するか
+- `pushImage` の行幅とデータ長が妥当か
+- 回転・拡大縮小の意味が妥当か
+- LovyanGFX 風数値引数を最終検証し、固定版 LovyanGFX の呼び出し形へ渡すこと
 
-## Design intent
+## 設計方針
 
-This layer is intentionally small.
+この層は意図的に小さく保ちます。
 
-Policy:
+- プロトコル上の関心を適合層へ持ち込まない
+- AtomVM と項の処理を適合層へ持ち込まない
+- LCD の物理制御と論理描画を分ける
+- 必要に応じて、論理描画を描画対象の境界へ通す
+- 互換用の足場を最小限にする
 
-- keep protocol concerns out of the adapter
-- keep AtomVM and term handling out of the adapter
-- keep raw LCD control separate from logical LCD drawing
-- route logical drawing through a render-target seam when needed
-- keep compatibility scaffolding minimal
+LovyanGFX 全体を写し取ることが目的ではありません。このリポジトリが公開するプロトコルに合う、小さく明示的な適合面を提供し、メモリー所有権を予測しやすく保つことが目的です。
 
-The goal is not to mirror all of LovyanGFX. The goal is to provide a small, explicit adapter surface that matches the protocol exposed by this repository while keeping memory ownership predictable.
+## 現在のモデル
 
-## Current model
+ネイティブ側は、ポート単位の設定と稼働中装置の所有権を分離します。
 
-The native model separates per-port configuration from live device ownership:
+- ポート単位の設定はポート層が保持する
+- 稼働中の LCD 装置は単一実体として扱う
+- この層は、不透明な所有者識別子を使い、所有者を考慮した初期化、終了、寸法照会を解決する
 
-- per-port configuration is stored by the port layer
-- the live LCD device remains singleton-backed
-- this layer resolves owner-aware init, close, and dimension queries using an opaque owner token
+描画対象は直接解決します。
 
-For drawing, target resolution is direct:
+- 対象 `0` は稼働中の LCD 装置
+- 対象 `1..254` は明示的に作成したスプライト
 
-- target `0` means the live LCD device
-- target `1..254` means an explicitly created sprite
+したがって、この層は単一実体の所有権と対象の意味を扱いますが、プロトコル包絡や AtomVM の項は扱いません。
 
-That means this layer may care about singleton ownership and target semantics, but it should not care about protocol envelopes or AtomVM terms.
+## この層を変更する場合
 
-## When changing this layer
-
-When adding or changing device behavior:
-
-- keep protocol tuple rules in `lgfx_port/` and `../docs/protocol.md`
-- keep this layer focused on target resolution, ownership, and device semantics
-- update protocol docs only when the externally visible contract changes
+- プロトコル組の規則は `lgfx_port/` と `../docs/protocol.md` に置く
+- この層は対象解決、所有権、装置意味へ集中させる
+- 外部から見える契約が変わる場合だけ、プロトコル文書を更新する

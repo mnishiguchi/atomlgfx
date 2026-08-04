@@ -4,133 +4,133 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 0011: Keep BinaryBatch minimal and measured
+# ADR 0011: BinaryBatch を小さく保ち、実測に基づいて拡張する
 
-## Status
+## 状態
 
-Superseded for v3 by [ADR 0015: Design AtomLGFX v3 as a low-memory LovyanGFX-style protocol](0015-v3-low-memory-protocol.md).
+v3 については、[ADR 0015: AtomLGFX v3 を低メモリーの LovyanGFX 形式プロトコルとして設計する](0015-v3-low-memory-protocol.md)によって置き換えられました。
 
-Accepted for the v2 protocol history.
+v2 のプロトコル履歴としては採用済みです。
 
-Supersedes:
+次の ADR を置き換えます。
 
-- [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md)
+- [ADR 0010: BinaryBatch を標準の描画トランザクション API とする](0010-binary-batch-as-render-transaction-api.md)
 
-## Context
+## 背景
 
-`atomlgfx` v2 introduced `BinaryBatch` to reduce AtomVM/native crossing overhead for frame rendering.
+`atomlgfx` v2 は、フレーム描画における AtomVM／ネイティブ境界越えの負荷を減らすため、`BinaryBatch` を導入しました。
 
-During v2 protocol development, the binary-batch surface expanded to include several render-private packed-list commands for generic primitive shapes, whole-sprite list blits, sprite-region list blits, JPEG drawing, and RGB565 image pushing.
+v2 プロトコルの開発中、バイナリー一括実行範囲は、汎用図形の詰め込み一覧命令、スプライト全体の一覧転送、スプライト領域の一覧転送、JPEG 描画、RGB565 画像転送など、複数の描画専用命令へ広がりました。
 
-Those commands made the batch path more expressive, but they also increased maintenance cost across:
+これらの命令によって一括実行経路の表現力は上がりましたが、次のすべてで保守費用が増えました。
 
-- native batch decode and dispatch
-- Elixir encoders and decoders
-- protocol documentation
-- generated protocol metadata
-- freeze tests
-- malformed-input tests
-- diagnostic summaries
-- benchmark logs
+- ネイティブ側の一括実行復号と振り分け
+- Elixir 側の符号化器と復号器
+- プロトコル文書
+- 生成プロトコル情報
+- 固定化試験
+- 不正入力試験
+- 診断要約
+- 性能測定記録
 
-MovingIcons-focused measurements showed that the most important retained hot path is transformed-sprite animation. In particular, `push_rotate_zoom_list` is useful as a generic transformed-sprite batch primitive, and `push_rotate_zoom_frame_strips` is useful as a native frame command for MovingIcons-like workloads where the upstream LovyanGFX example keeps the strip loop in C++.
+MovingIcons を中心に測定した結果、維持すべき最重要の高頻度経路は、変換付きスプライトのアニメーションであることが分かりました。特に、`push_rotate_zoom_list` は汎用的な変換付きスプライト一括図形として有用です。また、上流 LovyanGFX の見本と同様に帯状ループを C++ 内に置く MovingIcons 形式の処理では、`push_rotate_zoom_frame_strips` がネイティブフレーム命令として有用です。
 
-The speculative packed-list commands for generic primitive shapes and atlas-style sprite regions did not justify their maintenance cost for the v2 protocol.
+汎用図形や図柄表形式のスプライト領域向けに試験的に追加した詰め込み一覧命令は、v2 プロトコルで維持する費用を正当化できませんでした。
 
-## Decision
+## 判断
 
-Keep `BinaryBatch` as the v2 render transaction API, but intentionally minimize the retained binary-batch surface.
+`BinaryBatch` を v2 の描画トランザクション API として維持しますが、保持するバイナリー一括実行範囲を意図的に最小化します。
 
-Retain only command categories that are justified by ordinary render-script ergonomics or measured hot-path value:
+通常の描画スクリプトとして使いやすいこと、または実測した高頻度経路で価値があることが確認できた命令分類だけを維持します。
 
-- scalar render commands inside one batch transaction
-- small render state commands such as target and color mode
-- native presentation strip control
-- simple sprite push and transformed-sprite commands
-- `push_rotate_zoom_list` for generic transformed-sprite batch work
-- `push_rotate_zoom_frame_strips` for measured native-loop animation workloads
+- 1回の一括トランザクション内で使う数値描画命令
+- 対象や色形式などの小さな描画状態命令
+- ネイティブ表示帯制御
+- 単純なスプライト転送と変換付きスプライト命令
+- 汎用的な変換付きスプライト一括処理向けの `push_rotate_zoom_list`
+- 実測したネイティブループ式アニメーション向けの `push_rotate_zoom_frame_strips`
 
-Remove speculative batch commands before the v2 protocol freeze:
+v2 プロトコルを固定する前に、試験的な一括命令を削除します。
 
-- packed primitive-list commands for generic shapes
-- whole-sprite list and sprite-region list commands
-- batch-level JPEG drawing
-- batch-level RGB565 image pushing
-- the extended ellipse-list sub-opcode
+- 汎用図形向けの詰め込み図形一覧命令
+- スプライト全体一覧およびスプライト領域一覧命令
+- 一括実行内の JPEG 描画
+- 一括実行内の RGB565 画像転送
+- 拡張楕円一覧の副操作コード
 
-Payload-heavy image operations remain available as ordinary scalar calls. They are not retained in `BinaryBatch` for the v2 protocol because their payload lifetime, framing, and copying rules increase the batch contract surface without helping the measured animation hot path.
+データ量の多い画像操作は、通常の数値呼び出しとして維持します。データの生存期間、区切り、複製の規則が一括実行契約の範囲を広げる一方、実測したアニメーションの高頻度経路には寄与しないため、v2 の `BinaryBatch` には残しません。
 
-## Retained layering
+## 維持する階層
 
-The retained v2 layering is:
+v2 で維持する階層は次のとおりです。
 
 ```text
-ordinary scalar calls
-  setup, queries, allocation, calibration, touch, image payloads, low-frequency control
+通常の数値呼び出し
+  初期設定、問い合わせ、割り当て、補正、タッチ、画像データ、低頻度制御
 
 BinaryBatch
-  compact render transaction API for repeated drawing work
+  繰り返し描画向けの小さな描画トランザクション API
 
-native frame render command
-  measured hot-path escape hatch for transformed-sprite animation loops
+ネイティブフレーム描画命令
+  変換付きスプライトのアニメーションループ向けに実測した高頻度退避口
 ```
 
-## Rationale
+## 理由
 
-The finalized v2 protocol optimizes for a small maintainable protocol surface while preserving the measured performance path that motivated v2.
+確定した v2 プロトコルでは、v2 の動機となった実測済み性能経路を保ちながら、小さく保守しやすいプロトコル範囲を優先します。
 
-Repeated primitive drawing can still be expressed as repeated scalar commands inside one binary batch. That costs more bytes than a packed-list command, but it avoids a parallel compact record format for every primitive shape.
+図形描画の繰り返しは、1つのバイナリー一括実行内へ数値命令を繰り返し記述することで、引き続き表現できます。詰め込み一覧命令より多くのバイトを要しますが、図形の種類ごとに並行する小さな記録形式を持たずに済みます。
 
-New compact list commands may be reintroduced later, but only when a real workload shows that repeated scalar batch commands are insufficient and the new command remains reusable beyond one demo.
+新しい小さな一覧命令は、実際の処理によって数値一括命令の繰り返しでは不十分であることが示され、かつ1つの見本を超えて再利用可能な場合に限り、将来再導入できます。
 
-## Consequences
+## 影響
 
-### Positive
+### 良い影響
 
-- Smaller native batch decoder and dispatcher.
-- Smaller Elixir encoder and decoder surface.
-- Less protocol documentation and generated-reference churn.
-- Fewer malformed-input and freeze-test cases to maintain.
-- Clearer v2 contract.
-- Keeps the transformed-sprite path that matters for MovingIcons-like workloads.
-- Keeps room for future measured additions without freezing speculative commands now.
+- ネイティブ側の一括実行復号器と振り分け器が小さくなる。
+- Elixir 側の符号化器と復号器の範囲が小さくなる。
+- プロトコル文書と生成参照の変更量が減る。
+- 維持すべき不正入力試験と固定化試験が減る。
+- v2 契約が明確になる。
+- MovingIcons 形式の処理で重要な変換付きスプライト経路を維持できる。
+- 試験的な命令を今固定せず、将来の実測に基づく追加余地を残せる。
 
-### Negative
+### 悪い影響
 
-- Some non-critical batch conveniences are no longer available.
-- Some repeated primitive workloads use repeated scalar batch commands instead of compact list encodings.
-- Whole-sprite list and atlas-region experiments must be reintroduced deliberately if a future workload needs them.
-- Payload-heavy JPEG and RGB565 image operations must use ordinary scalar calls for now.
+- 重要度の低い一部の一括実行補助機能が利用できなくなる。
+- 一部の図形繰り返し処理は、小さな一覧符号化ではなく、数値一括命令の繰り返しを使用する。
+- 将来の処理で必要になった場合、スプライト全体一覧と図柄表領域の試験機能を意図的に再導入する必要がある。
+- データ量の多い JPEG と RGB565 画像操作は、当面、通常の数値呼び出しを使用する必要がある。
 
-## Rejected alternatives
+## 採用しなかった代替案
 
-### Keep all packed-list commands because they are already implemented
+### 実装済みであることを理由に、すべての詰め込み一覧命令を維持する
 
-Rejected.
+採用しません。
 
-Implementation existence is not enough to justify protocol surface. Each retained command becomes a long-term decoder, encoder, test, and documentation responsibility.
+実装が存在するだけでは、プロトコル範囲を正当化できません。維持する各命令は、長期的に復号器、符号化器、試験、文書の責任になります。
 
-### Keep primitive packed-list commands but remove sprite-region commands only
+### 図形の詰め込み一覧命令を維持し、スプライト領域命令だけを削除する
 
-Rejected for the v2 protocol.
+v2 プロトコルでは採用しません。
 
-The same maintenance argument applies to primitive packed-list commands. Repeated scalar batch commands are adequate until a benchmark proves otherwise.
+同じ保守上の理由が、図形の詰め込み一覧命令にも当てはまります。性能測定で不十分と判明するまでは、数値一括命令の繰り返しで十分です。
 
-### Remove BinaryBatch entirely and keep only the native frame command
+### BinaryBatch を完全に削除し、ネイティブフレーム命令だけを維持する
 
-Rejected.
+採用しません。
 
-`BinaryBatch` remains useful as the generic v2 render transaction API. The native frame command is a measured hot-path option, not a replacement for ordinary render scripts.
+`BinaryBatch` は、汎用 v2 描画トランザクション API として引き続き有用です。ネイティブフレーム命令は、実測した高頻度経路の選択肢であり、通常の描画スクリプトを置き換えるものではありません。
 
-### Move animation state into native code
+### アニメーション状態をネイティブコードへ移す
 
-Rejected.
+採用しません。
 
-Elixir should continue to own animation state and scene behavior. Native code should only execute reusable hot render patterns.
+アニメーション状態と場面動作は、引き続き Elixir が管理します。ネイティブコードは、再利用可能な高頻度描画パターンだけを実行します。
 
-## Follow-up implications
+## 今後への影響
 
-Protocol-facing sources and docs should reflect the smaller surface together:
+プロトコルに関係する定義元と文書は、小さくした範囲を同時に反映する必要があります。
 
 - `lgfx_port/include_internal/lgfx_port/protocol.h`
 - `lgfx_port/include_internal/lgfx_port/ops.def`
@@ -139,14 +139,14 @@ Protocol-facing sources and docs should reflect the smaller surface together:
 - `lib/atom_lgfx/generated.ex`
 - `docs/protocol.md`
 - `docs/protocol-reference.md`
-- protocol freeze and binary-batch tests
+- プロトコル固定化試験とバイナリー一括実行試験
 
-Future batch additions should include a short benchmark note or work-log reference explaining why repeated scalar batch commands are insufficient.
+今後、一括命令を追加する場合は、数値一括命令の繰り返しでは不十分である理由を説明する短い性能測定メモまたは作業記録への参照を添えます。
 
-## Related documents
+## 関連文書
 
-- [ADR 0004: Call-based LovyanGFX port protocol](0004-call-based-lovyangfx-port-protocol.md)
-- [ADR 0012: Allow native frame render commands for hot animation loops](0012-native-frame-render-commands-for-hot-animation.md)
-- [Architecture](../architecture.md)
-- [Protocol](../protocol.md)
-- [V2 render-batch performance work log](../worklog/20260502-v2-render-batch-performance-work-log.md)
+- [ADR 0004: 呼び出し方式の LovyanGFX ポートプロトコル](0004-call-based-lovyangfx-port-protocol.md)
+- [ADR 0012: 高頻度アニメーションループ向けネイティブフレーム描画命令を許可する](0012-native-frame-render-commands-for-hot-animation.md)
+- [構成](../architecture.md)
+- [プロトコル](../protocol.md)
+- [v2 描画一括実行の性能作業記録](../worklog/20260502-v2-render-batch-performance-work-log.md)

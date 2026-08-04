@@ -1,28 +1,28 @@
-# ADR 0016: Render-first low-memory API
+# ADR 0016: 描画を中心とする低メモリー API
 
-## Status
+## 状態
 
-Accepted
+採用
 
-## Context
+## 背景
 
-`atomlgfx` is an AtomVM LovyanGFX wrapper. It currently has a working AtomVM port driver, a v3 low-memory protocol, and a packed `BinaryBatch` path for sending several render operations in one native transaction.
+`atomlgfx` は、AtomVM 向けの LovyanGFX 包みです。現在、動作する AtomVM ポートドライバー、v3 低メモリープロトコル、複数の描画操作を1つのネイティブトランザクションで送信する詰め込み `BinaryBatch` 経路を備えています。
 
-The package has also accumulated several implementation experiments around batch rendering, native animation, and retained render programs. Those experiments were useful, but the active package direction should now be simpler:
+このパッケージには、一括描画、ネイティブアニメーション、保持型描画処理に関する複数の実装実験も蓄積しました。これらの実験は有用でしたが、今後のパッケージ方針は、より単純にします。
 
-- common LovyanGFX tutorial operations should be easy from Elixir
-- ordinary drawing should avoid one port round trip per primitive
-- memory ownership should remain explicit
-- native code should stay synchronous and boring
-- MovingIcons should remain a smoke/stress example, not the core architecture
+- LovyanGFX の一般的な入門操作を Elixir から容易に使えるようにする
+- 通常描画では、図形ごとのポート往復を避ける
+- メモリー所有権を明示的に保つ
+- ネイティブコードを同期的で単純に保つ
+- MovingIcons は中心構成ではなく、簡易動作確認／負荷確認の見本として維持する
 
-A separate Linux/Nerves package, `lovyangfx_elixir`, has shown that a friendly `render(commands)` API is productive. The important lesson is the render-first API shape, not the NIF boundary itself.
+別の Linux／Nerves 向けパッケージ `lovyangfx_elixir` により、使いやすい `render(commands)` API が有効であることが分かりました。重要なのは NIF 境界そのものではなく、描画を中心とする API の形です。
 
-## Decision
+## 判断
 
-`atomlgfx` will remain port-based internally, but become render-first externally.
+`atomlgfx` は内部では引き続きポート方式を使用し、外部では描画を中心とする API にします。
 
-The main public drawing API is:
+主要な公開描画 API は次のとおりです。
 
 ```elixir
 AtomLGFX.render(port, [
@@ -35,7 +35,7 @@ AtomLGFX.render(port, [
 ])
 ```
 
-The implementation path is:
+実装経路は次のとおりです。
 
 ```text
 AtomLGFX.render/3
@@ -47,58 +47,53 @@ AtomLGFX.render/3
   -> LovyanGFX
 ```
 
-`AtomLGFX.BinaryBatch` remains available, but it becomes a lower-level API for tests, diagnostics, and carefully tuned examples. The recommended beginner-facing path is `AtomLGFX.render/3`.
+`AtomLGFX.BinaryBatch` は引き続き利用できますが、試験、診断、慎重に調整した見本向けの低水準 API とします。入門者へ推奨する経路は `AtomLGFX.render/3` です。
 
-## Consequences
+## 影響
 
-This gives us:
+これにより、次を得られます。
 
-- a small LovyanGFX-like Elixir API
-- one native boundary crossing for common frame scripts
-- less flicker than repeated direct primitive calls
-- no NIF rewrite
-- no retained native render program
-- no hidden double-buffering
-- no background renderer
-- a clear place for command validation and color normalization
+- 小さく LovyanGFX に近い Elixir API
+- 一般的なフレームスクリプトで、ネイティブ境界越えを1回に集約
+- 図形ごとの直接呼び出しを繰り返す場合より少ないちらつき
+- NIF への書き直しが不要
+- 保持型ネイティブ描画処理なし
+- 隠れた二重バッファーなし
+- 背景描画器なし
+- 命令検証と色正規化を置く明確な場所
 
-This does not solve every performance problem. Payload-heavy operations such as JPEG rendering and raw image upload should remain explicit APIs until their memory behavior is clear enough to batch safely.
+すべての性能問題を解決するわけではありません。JPEG 描画や生画像転送のようにデータ量の多い操作は、安全に一括実行できるほどメモリー動作が明確になるまで、明示的な API として維持します。
 
-## Implementation policy
+## 実装方針
 
-The first implementation should be intentionally modest:
+最初の実装は、意図的に控えめにします。
 
-- add `AtomLGFX.Command`
-- add an internal render-batch encoder/submission bridge
-- add `AtomLGFX.render/3`
-- support common primitive, text, sprite-push, and display commands
-- keep packed multi-instance animation commands in the lower-level `BinaryBatch` API
-- keep all native code unchanged
-- add host-side tests around command normalization and batch encoding
+- `AtomLGFX.Command` を追加する
+- 内部の描画一括符号化／送信橋渡しを追加する
+- `AtomLGFX.render/3` を追加する
+- 一般的な図形、文字列、スプライト転送、表示命令へ対応する
+- 複数個体の詰め込みアニメーション命令は、低水準の `BinaryBatch` API に維持する
+- ネイティブコードはすべて変更しない
+- 命令正規化と一括符号化について、実機を必要としない試験を追加する
 
-Native cleanup can happen later after the public API settles.
+公開 API が安定した後で、ネイティブコードを整理できます。
 
-## Non-goals
+## 対象外
 
-- Do not rewrite `atomlgfx` as NIF.
-- Do not add a scene graph.
-- Do not add a retained native render loop.
-- Do not add hidden display buffers.
-- Do not make the core API or native protocol MovingIcons-specific.
-- Do not chase full LovyanGFX API coverage before common tutorial operations feel good.
+- `atomlgfx` を NIF として書き直さない。
+- 場面構造を追加しない。
+- 保持型ネイティブ描画ループを追加しない。
+- 隠れた表示バッファーを追加しない。
+- 中心 API またはネイティブプロトコルを MovingIcons 固有にしない。
+- 一般的な入門操作が使いやすくなる前に、LovyanGFX API の完全対応を追わない。
 
-## MovingIcons policy
+## MovingIcons の方針
 
-MovingIcons stays useful as two examples:
+MovingIcons は、次の2つの見本として維持します。
 
-- low-memory smoke test
-- optional stress benchmark
+- 低メモリーの簡易動作確認
+- 任意の負荷性能測定
 
-It should use the same public APIs as ordinary examples where practical. The
-ESP32-S3 hardware run measured roughly 0.2 FPS for caller-owned strip repainting
-and 4-5 FPS for a compact transformed-sprite list. MovingIcons therefore keeps
-an example-local renderer over the existing generic advanced batch primitive;
-it does not add MovingIcons concepts to the friendly API or native protocol.
-The selected renderer dynamically bounds each previous transform, immediately
-redraws isolated icons, and groups intersecting icons so cleanup cannot erase an
-already-rendered neighbor. This reduced visible flicker without a frame buffer.
+実用的な範囲では、通常の見本と同じ公開 API を使用します。ESP32-S3 実機での測定では、呼び出し側が所有する表示帯の再描画は約0.2 FPS、小さな変換付きスプライト一覧は4〜5 FPS でした。そのため MovingIcons は、既存の汎用高度一括図形の上に、見本内だけの描画器を維持します。使いやすい API やネイティブプロトコルへ MovingIcons 固有の概念は追加しません。
+
+選定した描画器は、各物体の前回変換範囲を動的に求め、孤立した図柄は直ちに再描画し、交差する図柄はまとめて扱います。これにより、後始末が描画済みの隣接物体を消すことを防ぎます。フレームバッファーを使わず、目に見えるちらつきを減らせました。
