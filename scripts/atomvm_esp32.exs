@@ -7,6 +7,7 @@
 defmodule Main do
   @script_file Path.expand(__ENV__.file)
   @script_name Path.basename(@script_file)
+  @component_root Path.expand("..", Path.dirname(@script_file))
 
   @default_target "esp32s3"
   @recommended_idf_version "v5.5"
@@ -24,7 +25,14 @@ defmodule Main do
 
   @atomvm_git_url "https://github.com/atomvm/AtomVM.git"
   @atomvm_clone_branch "release-0.7"
-  @atomvm_default_ref @atomvm_clone_branch
+  # Keep release builds reproducible even while the upstream release branch moves.
+  @atomvm_default_ref "e2cacc998f455ad66b1aa9e6391f7b32928cc38d"
+
+  # ESP-IDF disables Xtensa hardware atomics and provides a software-backed
+  # stdatomic implementation. AtomVM's current probe rejects that supported
+  # configuration because the compiler reports it as not always lock-free.
+  @atomvm_idf_atomic_probe_override "-DATOMIC_POINTER_LOCK_FREE_IS_TWO=ON"
+  @atomvm_dual_core_xtensa_targets ["esp32", "esp32s3"]
 
   def main(argv) do
     case argv do
@@ -97,7 +105,8 @@ defmodule Main do
     clean_host = Keyword.get(options, :clean_host, false)
     clean_platform = Keyword.get(options, :clean_platform, false)
     requested_components = Keyword.get_values(options, :component) |> Enum.map(&Path.expand/1)
-    sdkconfig_components = uniq_paths(requested_components ++ linked_components(esp32_dir))
+    sdkconfig_components =
+      uniq_paths([@component_root | requested_components ++ linked_components(esp32_dir)])
     explicit_sdkconfigs = Keyword.get_values(options, :sdkconfig) |> Enum.map(&Path.expand/1)
 
     sdkconfigs =
@@ -266,12 +275,15 @@ defmodule Main do
       - Supported paths: sdkconfig.defaults, sdkconfig.defaults.<target>,
         config/sdkconfig.defaults, config/sdkconfig.defaults.<target>
       - Elixir support is enabled by default. Use --no-elixir-support to opt out.
+      - The default AtomVM ref is an exact release-0.7 commit for reproducible builds.
+      - ESP32/ESP32-S3 builds keep SMP enabled using ESP-IDF's stdatomic implementation.
+      - The bundled scheduler-stack sdkconfig default is included from the component root.
 
     Examples:
       eim install -i #{@recommended_idf_version}
       eim select #{@recommended_idf_version}
       #{@script_name} info
-      #{@script_name} fetch --atomvm-ref release-0.7
+      #{@script_name} fetch
       #{@script_name} build --target esp32s3
       #{@script_name} install --target esp32s3 --port /dev/ttyACM0
       #{@script_name} install --target esp32s3 --port /dev/ttyACM0 --no-elixir-support
@@ -335,6 +347,7 @@ defmodule Main do
     say("- sdkconfig components: #{display_list(shared.sdkconfig_components)}")
     say("- sdkconfigs:           #{display_list(shared.sdkconfigs)}")
     say("- cmake_defines:      #{display_list(shared.cmake_defines)}")
+    say("- compatibility defs: #{display_list(platform_compatibility_cmake_args(shared))}")
 
     say(
       "- mkimage_out_dir:    #{if present?(shared.out_dir), do: shared.out_dir, else: "(platform build dir)"}"
@@ -914,10 +927,14 @@ defmodule Main do
             say("✔ removed component symlink: #{want}")
 
           present?(want_real) and present?(component_real) ->
-            die("Refusing to remove component symlink because it points elsewhere: #{want} -> #{want_real}")
+            die(
+              "Refusing to remove component symlink because it points elsewhere: #{want} -> #{want_real}"
+            )
 
           true ->
-            die("Refusing to remove component symlink because its target could not be resolved: #{want}")
+            die(
+              "Refusing to remove component symlink because its target could not be resolved: #{want}"
+            )
         end
 
       File.exists?(want) ->
@@ -1018,8 +1035,16 @@ defmodule Main do
     []
     |> maybe_append(shared.elixir_support, "-DATOMVM_ELIXIR_SUPPORT=on")
     |> maybe_append(release, "-DATOMVM_RELEASE=on")
+    |> Kernel.++(platform_compatibility_cmake_args(shared))
     |> Kernel.++(Enum.map(shared.cmake_defines, &normalize_cmake_define/1))
   end
+
+  defp platform_compatibility_cmake_args(%{target: target})
+       when target in @atomvm_dual_core_xtensa_targets do
+    [@atomvm_idf_atomic_probe_override]
+  end
+
+  defp platform_compatibility_cmake_args(_shared), do: []
 
   defp maybe_append(args, true, value), do: args ++ [value]
   defp maybe_append(args, false, _value), do: args
@@ -1030,7 +1055,11 @@ defmodule Main do
         Path.join(component, @sdkconfig_defaults_filename),
         Path.join([component, @sdkconfig_defaults_dirname, @sdkconfig_defaults_filename]),
         Path.join(component, "#{@sdkconfig_defaults_filename}.#{target}"),
-        Path.join([component, @sdkconfig_defaults_dirname, "#{@sdkconfig_defaults_filename}.#{target}"])
+        Path.join([
+          component,
+          @sdkconfig_defaults_dirname,
+          "#{@sdkconfig_defaults_filename}.#{target}"
+        ])
       ]
     end)
     |> Enum.filter(&File.regular?/1)

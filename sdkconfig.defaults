@@ -1,0 +1,4 @@
+# AtomVM uses CONFIG_ESP_MAIN_TASK_STACK_SIZE for both the main scheduler and
+# scheduler pthreads on SMP targets. ESP-IDF's 3584-byte default is too small
+# for the pinned AtomVM release-0.7 build on ESP32-S3.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192

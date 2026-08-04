@@ -29,7 +29,7 @@ jobs:
         run: reuse lint --plain
 
   elixir-check:
-    name: Elixir format, generated protocol files, and tests
+    name: Elixir API, docs, package, and examples
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -39,11 +39,61 @@ jobs:
           otp-version: "28"
           elixir-version: "1.19"
 
+      - name: Install Hex and Rebar
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+
+      - name: Fetch root dependencies
+        run: mix deps.get
+
       - name: Check Elixir formatting
         run: mix format --check-formatted
 
       - name: Check generated protocol files
         run: elixir scripts/sync_lgfx_protocol_doc.exs --check
 
+      - name: Compile without warnings
+        run: mix compile --warnings-as-errors
+
       - name: Run Elixir tests
         run: mix test
+
+      - name: Build documentation without warnings
+        run: mix docs --warnings-as-errors
+
+      - name: Audit Hex package construction
+        run: mix hex.build --unpack --output /tmp/atomlgfx_hex_audit
+
+      - name: Fetch example dependencies
+        working-directory: examples/elixir
+        run: mix deps.get
+
+      - name: Check example formatting
+        working-directory: examples/elixir
+        run: mix format --check-formatted
+
+      - name: Compile examples without warnings
+        working-directory: examples/elixir
+        run: mix compile --warnings-as-errors
+
+  native-source-check:
+    name: Native source and pinned LovyanGFX
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          elixir-version: "1.19"
+
+      - name: Verify pinned LovyanGFX source
+        run: |
+          git submodule status --recursive
+          test -f third_party/LovyanGFX/src/LovyanGFX.hpp
+
+      - name: Smoke-test native build helper
+        run: elixir scripts/atomvm_esp32.exs --help
