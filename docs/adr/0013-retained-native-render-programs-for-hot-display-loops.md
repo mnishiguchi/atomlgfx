@@ -4,11 +4,11 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 2026-05-06: Add retained native render scenes for hot display loops
+# ADR 0013: Add retained native render scenes for hot display loops
 
 ## Status
 
-Superseded by [ADR 2026-05-13: Reduce OOM risk in AtomLGFX v2](2026-05-13-reduce-oom-risk-in-v2.md).
+Superseded by [ADR 0014: Reduce OOM risk in AtomLGFX v2](0014-reduce-oom-risk-in-v2.md).
 
 ## Context
 

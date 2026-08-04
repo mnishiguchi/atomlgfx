@@ -55,7 +55,7 @@ Familiar scalar helpers such as `draw_pixel`, `draw_line`, and `fill_rect`
 remain available for occasional direct calls. Use a render transaction for
 loops so repeated pixels or primitives do not each pay a port-call boundary.
 
-See [ADR 2026-07-08](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/adr/2026-07-08-render-first-low-memory-api.md) for
+See [ADR 0016](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/adr/0016-render-first-low-memory-api.md) for
 the current architecture decision.
 
 ## What to read

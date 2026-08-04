@@ -479,7 +479,7 @@ The protocol intentionally keeps the binary-batch surface small. Generic primiti
 
 The retained native render-program API and native presentation-strip batch
 commands were removed by the
-[v3 low-memory protocol ADR](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/adr/2026-05-13-v3-low-memory-protocol.md)
+[v3 low-memory protocol ADR](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/adr/0015-v3-low-memory-protocol.md)
 to reduce OOM risk and simplify the public surface.
 
 MovingIcons-style animation should keep object state in Elixir and isolate

@@ -4,7 +4,7 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 2026-05-13: Reduce OOM risk in AtomLGFX v2
+# ADR 0014: Reduce OOM risk in AtomLGFX v2
 
 ## Status
 

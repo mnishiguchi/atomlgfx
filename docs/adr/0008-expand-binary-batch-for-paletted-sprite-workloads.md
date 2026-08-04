@@ -4,13 +4,13 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 2026-05-01: Expand BinaryBatch for paletted sprite workloads
+# ADR 0008: Expand BinaryBatch for paletted sprite workloads
 
 ## Status
 
 Superseded
 
-Superseded by [ADR 2026-05-03: Treat BinaryBatch as the standard render transaction API](2026-05-03-binary-batch-as-render-transaction-api.md).
+Superseded by [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md).
 
 ## Context
 
@@ -67,6 +67,6 @@ Likely work items:
 
 ## Related documents
 
-- [ADR 2026-05-03: Treat BinaryBatch as the standard render transaction API](2026-05-03-binary-batch-as-render-transaction-api.md)
+- [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md)
 - [Protocol](../protocol.md)
-- [V2 render-batch performance work log](../2026-05-02-v2-render-batch-performance-work-log.md)
+- [V2 render-batch performance work log](../worklog/20260502-v2-render-batch-performance-work-log.md)

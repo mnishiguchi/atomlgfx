@@ -4,13 +4,13 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 2026-04-29: Binary batch and instance streaming for animation hot paths
+# ADR 0005: Binary batch and instance streaming for animation hot paths
 
 ## Status
 
 Superseded
 
-Superseded by [ADR 2026-05-03: Treat BinaryBatch as the standard render transaction API](2026-05-03-binary-batch-as-render-transaction-api.md).
+Superseded by [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md).
 
 This ADR captured the early distinction between scalar control calls and render-heavy binary data. Current v2 folds that direction into the single `BinaryBatch` render transaction API.
 

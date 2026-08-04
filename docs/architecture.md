@@ -274,7 +274,7 @@ Policy:
 - [`docs/protocol-reference.md`](protocol-reference.md)
   - generated operation, capability, and error tables
 
-- [`docs/adr/2026-07-08-render-first-low-memory-api.md`](adr/2026-07-08-render-first-low-memory-api.md)
+- [`docs/adr/0016-render-first-low-memory-api.md`](adr/0016-render-first-low-memory-api.md)
   - active public API direction
 
 - [`docs/esp-idf-component.md`](esp-idf-component.md)

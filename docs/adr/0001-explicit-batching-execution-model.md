@@ -4,14 +4,14 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 2026-04-01: Explicit batching execution model
+# ADR 0001: Explicit batching execution model
 
 ## Status
 
 Superseded
 
-Superseded by [ADR 2026-04-29: Flatten native v2 implementation](2026-04-29-flatten-native-v2-implementation.md)
-and [ADR 2026-04-29: Packed binary scalar batch path](2026-04-29-packed-binary-scalar-batch.md).
+Superseded by [ADR 0006: Flatten native v2 implementation](0006-flatten-native-v2-implementation.md)
+and [ADR 0007: Packed binary scalar batch path](0007-packed-binary-scalar-batch.md).
 
 Current v2 does not expose the tuple/list batch runtime described below. The
 implemented batch fast path is the packed binary scalar `submitBinaryBatch`

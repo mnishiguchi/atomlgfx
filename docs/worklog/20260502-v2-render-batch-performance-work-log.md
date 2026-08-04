@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Context
 
-This note records MovingIcons performance work that followed [ADR 2026-05-02: Standardize v2 hot rendering on binary render batches](adr/2026-05-02-binary-batch-for-native-like-animation.md).
+This note records MovingIcons performance work that followed [ADR 0009: Standardize v2 hot rendering on binary render batches](../adr/0009-binary-batch-for-native-like-animation.md).
 
 The ADR decision remains unchanged: v2 hot rendering should use binary render batches so animation frames can be submitted once and executed natively.
 
@@ -128,8 +128,8 @@ The goal is to identify whether the next bottleneck is command decode, LovyanGFX
 This work log is preserved as the measurement trail for the primitive render-batch work.
 The active v2 hot-rendering decisions are now:
 
-- [ADR 2026-05-05: Keep BinaryBatch minimal and measured](adr/2026-05-05-keep-binary-batch-minimal-and-measured.md)
-- [ADR 2026-05-05: Allow native frame render commands for hot animation loops](adr/2026-05-05-native-frame-render-commands-for-hot-animation.md)
+- [ADR 0011: Keep BinaryBatch minimal and measured](../adr/0011-keep-binary-batch-minimal-and-measured.md)
+- [ADR 0012: Allow native frame render commands for hot animation loops](../adr/0012-native-frame-render-commands-for-hot-animation.md)
 
 Later benchmarking showed that primitive render batches are necessary but not always sufficient for the hottest animation loops. For MovingIcons-style workloads, the accepted direction is to keep animation state in Elixir while allowing selected generic native frame render commands to own the tight strip-rendering loop.
 
