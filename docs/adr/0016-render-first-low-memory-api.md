@@ -1,4 +1,4 @@
-# 2026-07-08 Render-first low-memory API
+# ADR 0016: Render-first low-memory API
 
 ## Status
 

@@ -15,8 +15,8 @@ real hardware.
 
 Collected reports:
 
-- [2026-08-04 v3 hardware validation report](2026-08-04-v3-hardware-validation-report.md)
-- [2026-05-01 hardware performance smoke report](2026-05-01-hardware-performance-smoke-report.md)
+- [2026-08-04 v3 hardware validation report](worklog/20260804-v3-hardware-validation-report.md)
+- [2026-05-01 hardware performance smoke report](worklog/20260501-hardware-performance-smoke-report.md)
 
 ## What this validates
 

@@ -4,7 +4,7 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR: Call-based LovyanGFX port protocol
+# ADR 0004: Call-based LovyanGFX port protocol
 
 ## Status
 
@@ -12,7 +12,7 @@ Accepted
 
 This ADR remains the active decision for the v2 scalar call protocol.
 
-Render-batching details were superseded by [ADR 2026-05-03: Treat BinaryBatch as the standard render transaction API](2026-05-03-binary-batch-as-render-transaction-api.md). Current v2 uses `submitBinaryBatch` as an explicit binary frame-script entry point, not the earlier tuple/list batch sketch.
+Render-batching details were superseded by [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md). Current v2 uses `submitBinaryBatch` as an explicit binary frame-script entry point, not the earlier tuple/list batch sketch.
 
 ## Context
 

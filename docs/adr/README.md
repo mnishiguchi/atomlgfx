@@ -12,15 +12,15 @@ We keep architecture decisions as Markdown ADRs in the repository.
 
 Current v3 readers should normally start with these active ADRs:
 
-- [ADR 2026-07-08: Render-first low-memory API](2026-07-08-render-first-low-memory-api.md)
+- [ADR 0016: Render-first low-memory API](0016-render-first-low-memory-api.md)
   - current public API direction: `AtomLGFX.render/3` over the existing BinaryBatch port path
-- [ADR 2026-05-13: Design AtomLGFX v3 as a low-memory LovyanGFX-style protocol](2026-05-13-v3-low-memory-protocol.md)
+- [ADR 0015: Design AtomLGFX v3 as a low-memory LovyanGFX-style protocol](0015-v3-low-memory-protocol.md)
   - defines the v3 low-memory call protocol, explicit sprite ownership, and retained-render removal
-- [ADR 2026-04-28: Call-based LovyanGFX port protocol](2026-04-28-call-based-lovyangfx-port-protocol.md)
+- [ADR 0004: Call-based LovyanGFX port protocol](0004-call-based-lovyangfx-port-protocol.md)
   - scalar call protocol and generated numeric opcode model
-- [ADR 2026-04-29: Flatten native v2 implementation](2026-04-29-flatten-native-v2-implementation.md)
+- [ADR 0006: Flatten native v2 implementation](0006-flatten-native-v2-implementation.md)
   - native implementation shape for the v2 protocol
-- [ADR 2026-04-07: Controller-first panel and touch support](2026-04-07-controller-first-panel-and-touch-support.md)
+- [ADR 0003: Controller-first panel and touch support](0003-controller-first-panel-and-touch-support.md)
   - hardware configuration direction
 
 Earlier v2 and binary-batch ADRs, including the native-frame and broader 2026-05-03 transaction-surface ADRs, are preserved as history and should not be read as the active protocol contract.
@@ -60,7 +60,7 @@ Use ADRs for durable decisions. Keep benchmark logs, temporary measurements, and
 Recommended naming for work logs:
 
 ```text
-docs/YYYY-MM-DD-short-topic-work-log.md
+docs/worklog/YYYYMMDD-short-topic-work-log.md
 ```
 
 This keeps ADRs readable while preserving the evidence that motivated the decision.
@@ -81,18 +81,18 @@ Current contributor guidance already requires those protocol-facing updates when
 Recommended file naming:
 
 ```text
-docs/adr/YYYY-MM-DD-short-title.md
+docs/adr/NNNN-short-title.md
 ```
 
 Examples:
 
-- `docs/adr/2026-04-01-explicit-batching-execution-model.md`
-- `docs/adr/2026-04-02-driver-managed-strip-buffer-composition.md`
+- `docs/adr/0001-explicit-batching-execution-model.md`
+- `docs/adr/0002-driver-managed-strip-buffer-composition.md`
 
 ### Minimal ADR template
 
 ```markdown
-# ADR YYYY-MM-DD: Title
+# ADR NNNN: Title
 
 ## Status
 

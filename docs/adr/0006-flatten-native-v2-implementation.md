@@ -4,7 +4,7 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 2026-04-29: Flatten native v2 implementation
+# ADR 0006: Flatten native v2 implementation
 
 ## Status
 
@@ -12,7 +12,7 @@ Accepted
 
 This ADR remains active for the native implementation shape.
 
-Batching language should be read with [ADR 2026-05-03: Treat BinaryBatch as the standard render transaction API](2026-05-03-binary-batch-as-render-transaction-api.md): current v2 has an explicit binary frame-script path through `submitBinaryBatch`, not a public tuple/list batch runtime.
+Batching language should be read with [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md): current v2 has an explicit binary frame-script path through `submitBinaryBatch`, not a public tuple/list batch runtime.
 
 ## Context
 

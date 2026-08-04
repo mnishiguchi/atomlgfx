@@ -4,7 +4,7 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 2026-05-03: Treat BinaryBatch as the standard render transaction API
+# ADR 0010: Treat BinaryBatch as the standard render transaction API
 
 ## Status
 
@@ -12,14 +12,14 @@ Superseded
 
 Superseded by:
 
-- [ADR 2026-05-05: Keep BinaryBatch minimal and measured](2026-05-05-keep-binary-batch-minimal-and-measured.md)
+- [ADR 0011: Keep BinaryBatch minimal and measured](0011-keep-binary-batch-minimal-and-measured.md)
 
 Supersedes:
 
-- [ADR 2026-04-29: Binary batch and instance streaming for animation hot paths](2026-04-29-binary-batch-and-instance-streaming.md)
-- [ADR 2026-04-29: Packed binary scalar batch path](2026-04-29-packed-binary-scalar-batch.md)
-- [ADR 2026-05-01: Expand BinaryBatch for paletted sprite workloads](2026-05-01-expand-binary-batch-for-paletted-sprite-workloads.md)
-- [ADR 2026-05-02: Standardize v2 hot rendering on binary render batches](2026-05-02-binary-batch-for-native-like-animation.md)
+- [ADR 0005: Binary batch and instance streaming for animation hot paths](0005-binary-batch-and-instance-streaming.md)
+- [ADR 0007: Packed binary scalar batch path](0007-packed-binary-scalar-batch.md)
+- [ADR 0008: Expand BinaryBatch for paletted sprite workloads](0008-expand-binary-batch-for-paletted-sprite-workloads.md)
+- [ADR 0009: Standardize v2 hot rendering on binary render batches](0009-binary-batch-for-native-like-animation.md)
 
 ## Context
 
@@ -33,7 +33,7 @@ Earlier ADRs explored packed scalar batches, paletted sprite workloads, instance
 
 ## Decision
 
-This decision has been superseded by [ADR 2026-05-05: Keep BinaryBatch minimal and measured](2026-05-05-keep-binary-batch-minimal-and-measured.md).
+This decision has been superseded by [ADR 0011: Keep BinaryBatch minimal and measured](0011-keep-binary-batch-minimal-and-measured.md).
 
 The original decision was that anything normally useful inside a LovyanGFX `startWrite` / `endWrite` drawing transaction should be expressible in `BinaryBatch`.
 

@@ -4,7 +4,7 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 2026-05-13: Design AtomLGFX v3 as a low-memory LovyanGFX-style protocol
+# ADR 0015: Design AtomLGFX v3 as a low-memory LovyanGFX-style protocol
 
 ## Status
 

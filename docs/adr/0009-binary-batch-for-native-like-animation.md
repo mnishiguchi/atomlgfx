@@ -4,15 +4,15 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 2026-05-02: Standardize v2 hot rendering on binary render batches
+# ADR 0009: Standardize v2 hot rendering on binary render batches
 
 ## Status
 
 Superseded
 
-Superseded by [ADR 2026-05-03: Treat BinaryBatch as the standard render transaction API](2026-05-03-binary-batch-as-render-transaction-api.md).
+Superseded by [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md).
 
-This ADR captured the native-like animation and presentation-strip direction. The active render-batch rule now lives in ADR 2026-05-03.
+This ADR captured the native-like animation and presentation-strip direction. The active render-batch rule now lives in ADR 0010.
 
 ## Context
 
@@ -217,6 +217,6 @@ Rejected. Palette-index support is required, but it should be part of the generi
 
 - [Architecture](../architecture.md)
 - [Protocol](../protocol.md)
-- [V2 render-batch performance work log](../2026-05-02-v2-render-batch-performance-work-log.md)
-- [Superseded packed scalar batch ADR](2026-04-29-packed-binary-scalar-batch.md)
-- [Superseded paletted sprite workload ADR](2026-05-01-expand-binary-batch-for-paletted-sprite-workloads.md)
+- [V2 render-batch performance work log](../worklog/20260502-v2-render-batch-performance-work-log.md)
+- [Superseded packed scalar batch ADR](0007-packed-binary-scalar-batch.md)
+- [Superseded paletted sprite workload ADR](0008-expand-binary-batch-for-paletted-sprite-workloads.md)

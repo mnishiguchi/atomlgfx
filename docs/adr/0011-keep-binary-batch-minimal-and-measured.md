@@ -4,17 +4,17 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 2026-05-05: Keep BinaryBatch minimal and measured
+# ADR 0011: Keep BinaryBatch minimal and measured
 
 ## Status
 
-Superseded for v3 by [ADR 2026-05-13: Design AtomLGFX v3 as a low-memory LovyanGFX-style protocol](2026-05-13-v3-low-memory-protocol.md).
+Superseded for v3 by [ADR 0015: Design AtomLGFX v3 as a low-memory LovyanGFX-style protocol](0015-v3-low-memory-protocol.md).
 
 Accepted for the v2 protocol history.
 
 Supersedes:
 
-- [ADR 2026-05-03: Treat BinaryBatch as the standard render transaction API](2026-05-03-binary-batch-as-render-transaction-api.md)
+- [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md)
 
 ## Context
 
@@ -145,8 +145,8 @@ Future batch additions should include a short benchmark note or work-log referen
 
 ## Related documents
 
-- [ADR 2026-04-28: Call-based LovyanGFX port protocol](2026-04-28-call-based-lovyangfx-port-protocol.md)
-- [ADR 2026-05-05: Allow native frame render commands for hot animation loops](2026-05-05-native-frame-render-commands-for-hot-animation.md)
+- [ADR 0004: Call-based LovyanGFX port protocol](0004-call-based-lovyangfx-port-protocol.md)
+- [ADR 0012: Allow native frame render commands for hot animation loops](0012-native-frame-render-commands-for-hot-animation.md)
 - [Architecture](../architecture.md)
 - [Protocol](../protocol.md)
-- [V2 render-batch performance work log](../2026-05-02-v2-render-batch-performance-work-log.md)
+- [V2 render-batch performance work log](../worklog/20260502-v2-render-batch-performance-work-log.md)

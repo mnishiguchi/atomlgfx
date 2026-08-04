@@ -4,7 +4,7 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 2026-05-05: Allow native frame render commands for hot animation loops
+# ADR 0012: Allow native frame render commands for hot animation loops
 
 ## Status
 
@@ -161,7 +161,7 @@ The retained v2 extended command is:
   transformed-sprite frame command for native presentation strips
 ```
 
-Earlier experiments also used extended sub-opcodes for speculative packed-list commands. Those commands were intentionally removed before the v2 protocol freeze by [ADR 2026-05-05: Keep BinaryBatch minimal and measured](./2026-05-05-keep-binary-batch-minimal-and-measured.md).
+Earlier experiments also used extended sub-opcodes for speculative packed-list commands. Those commands were intentionally removed before the v2 protocol freeze by [ADR 0011: Keep BinaryBatch minimal and measured](./0011-keep-binary-batch-minimal-and-measured.md).
 
 This keeps the render opcode space open for future frame-level commands while avoiding speculative protocol surface area.
 
@@ -319,7 +319,7 @@ Further work should not focus on:
 
 ## Related documents
 
-- [ADR 2026-05-02: Standardize v2 hot rendering on binary render batches](./2026-05-02-binary-batch-for-native-like-animation.md)
-- [ADR 2026-05-03: Treat BinaryBatch as the standard render transaction API](./2026-05-03-binary-batch-as-render-transaction-api.md)
+- [ADR 0009: Standardize v2 hot rendering on binary render batches](./0009-binary-batch-for-native-like-animation.md)
+- [ADR 0010: Treat BinaryBatch as the standard render transaction API](./0010-binary-batch-as-render-transaction-api.md)
 - [Architecture](../architecture.md)
 - [Protocol](../protocol.md)
