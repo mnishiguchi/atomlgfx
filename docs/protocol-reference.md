@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 This document contains generated protocol reference tables synchronized from source metadata.
 
-See [the main protocol document](protocol.md) for the human-written contract.
+See [the main protocol document](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/protocol.md) for the human-written contract.
 
 ## Generated error reasons
 

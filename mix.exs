@@ -5,6 +5,7 @@
 defmodule AtomLGFX.MixProject do
   use Mix.Project
 
+  # Mix requires a SemVer value even though AtomLGFX has no package release yet.
   @version "0.1.0"
 
   def project do
@@ -16,6 +17,8 @@ defmodule AtomLGFX.MixProject do
       deps: deps(),
       description: description(),
       package: package(),
+      homepage_url: source_url(),
+      source_url: source_url(),
       docs: docs()
     ]
   end
@@ -44,8 +47,8 @@ defmodule AtomLGFX.MixProject do
         "lib",
         "mix.exs",
         "README.md",
-        "LICENSES",
-        "docs"
+        "CHANGELOG.md",
+        "LICENSES"
       ],
       links: %{
         "GitHub" => "https://github.com/mnishiguchi/atomlgfx"
@@ -56,9 +59,23 @@ defmodule AtomLGFX.MixProject do
   defp docs do
     [
       main: "AtomLGFX",
+      source_ref: "main",
+      source_url: source_url(),
       extras: [
-        "README.md"
+        "README.md",
+        "CHANGELOG.md",
+        "docs/architecture.md",
+        "docs/adr/0015-v3-low-memory-protocol.md",
+        "docs/adr/0016-render-first-low-memory-api.md",
+        "docs/boards/m5stack.md",
+        "docs/elixir-package.md",
+        "docs/esp-idf-component.md",
+        "docs/migration-to-v3.md",
+        "docs/protocol.md",
+        "docs/protocol-reference.md"
       ]
     ]
   end
+
+  defp source_url, do: "https://github.com/mnishiguchi/atomlgfx"
 end

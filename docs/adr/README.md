@@ -12,6 +12,8 @@ We keep architecture decisions as Markdown ADRs in the repository.
 
 Current v3 readers should normally start with these active ADRs:
 
+- [ADR 2026-07-08: Render-first low-memory API](2026-07-08-render-first-low-memory-api.md)
+  - current public API direction: `AtomLGFX.render/3` over the existing BinaryBatch port path
 - [ADR 2026-05-13: Design AtomLGFX v3 as a low-memory LovyanGFX-style protocol](2026-05-13-v3-low-memory-protocol.md)
   - defines the v3 low-memory call protocol, explicit sprite ownership, and retained-render removal
 - [ADR 2026-04-28: Call-based LovyanGFX port protocol](2026-04-28-call-based-lovyangfx-port-protocol.md)
