@@ -5,25 +5,27 @@
 defmodule SampleApp.JapaneseText do
   @moduledoc false
 
-  @bg 0x0000
-  @fg 0xFFFF
-  @muted 0x8410
-  @accent 0x07FF
-
-  def run(port, w, h) when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
-    with :ok <- AtomLGFX.fill_screen(port, @bg),
-         :ok <- AtomLGFX.reset_text_state(port, 0),
-         :ok <- AtomLGFX.set_text_wrap(port, false, 0),
-         :ok <- AtomLGFX.set_text_font_preset(port, :ascii, 0),
-         :ok <- AtomLGFX.set_text_color(port, @muted, nil, 0),
-         :ok <- AtomLGFX.draw_string(port, 8, 8, "Japanese text", 0),
-         :ok <- AtomLGFX.set_text_font_preset(port, :jp, 0),
-         :ok <- AtomLGFX.set_text_color(port, @fg, nil, 0),
-         :ok <- AtomLGFX.draw_string(port, 8, 36, "こんにちは", 0),
-         :ok <- AtomLGFX.draw_string(port, 8, 58, "日本語テキスト", 0),
+  def run(port, width, height)
+      when is_integer(width) and width > 0 and is_integer(height) and height > 0 do
+    with :ok <- AtomLGFX.reset_text_state(port, 0),
          :ok <-
-           AtomLGFX.draw_rect(port, 4, 28, max(8, w - 8), min(84, max(8, h - 36)), @accent, 0),
-         :ok <- AtomLGFX.display(port) do
+           AtomLGFX.render_lcd(
+             port,
+             [
+               {:fill_screen, :black},
+               {:set_text_wrap, false},
+               {:set_text_font_preset, :ascii},
+               {:set_text_color, :dark_grey},
+               {:draw_string, "Japanese text", 8, 8},
+               {:set_text_font_preset, :jp},
+               {:set_text_color, :white},
+               {:draw_string, "こんにちは", 8, 36},
+               {:draw_string, "日本語テキスト", 8, 58},
+               {:draw_rect, 4, 28, max(8, width - 8), min(84, max(8, height - 36)), :cyan},
+               :display
+             ],
+             validate: true
+           ) do
       IO.puts("japanese_text ok")
       :ok
     else

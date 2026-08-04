@@ -18,16 +18,15 @@ defmodule SampleApp.Smoke do
   @sprite_target 20
   @palette_sprite_target 21
 
-  # Tiny embedded 8x8 red JPEG. Keeping it inline avoids a separate smoke asset.
-  @jpeg_8x8 "\xFF\xD8\xFF\xE0\x00\x10\x4A\x46\x49\x46\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xFF\xDB\x00\x43\x00\x10\x0B\x0C\x0E\x0C\x0A\x10" <>
-              "\x0E\x0D\x0E\x12\x11\x10\x13\x18\x28\x1A\x18\x16\x16\x18\x31\x23\x25\x1D\x28\x3A\x33\x3D\x3C\x39\x33\x38\x37\x40\x48\x5C\x4E\x40" <>
-              "\x44\x57\x45\x37\x38\x50\x6D\x51\x57\x5F\x62\x67\x68\x67\x3E\x4D\x71\x79\x70\x64\x78\x5C\x65\x67\x63\xFF\xDB\x00\x43\x01\x11\x12" <>
-              "\x12\x18\x15\x18\x2F\x1A\x1A\x2F\x63\x42\x38\x42\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63" <>
-              "\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\x63\xFF\xC0" <>
-              "\x00\x11\x08\x00\x08\x00\x08\x03\x01\x22\x00\x02\x11\x01\x03\x11\x01\xFF\xC4\x00\x15\x00\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00" <>
-              "\x00\x00\x00\x00\x00\x00\x00\x05\xFF\xC4\x00\x14\x10\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xFF\xC4" <>
-              "\x00\x15\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x05\x06\xFF\xC4\x00\x14\x11\x01\x00\x00\x00\x00\x00" <>
-              "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xFF\xDA\x00\x0C\x03\x01\x00\x02\x11\x03\x11\x00\x3F\x00\x8A\x00\xB5\xE3\xFF\xD9"
+  # Base64 keeps the byte fixture readable and avoids source-encoding changes.
+  @jpeg_8x8 Base.decode64!(
+              "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkM" <>
+                "EQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4I" <>
+                "CA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4e" <>
+                "Hh4eHh4eHh7/wAARCAAIAAgDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/" <>
+                "xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABwj/xAAUEQEA" <>
+                "AAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCWADpZb//Z"
+            )
 
   def run(port, w, h) when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
     try do
@@ -54,7 +53,7 @@ defmodule SampleApp.Smoke do
          :ok <- raw_ok(port, :start_write),
          :ok <- AtomLGFX.fill_screen(port, @bg),
          :ok <- AtomLGFX.set_text_color(port, @fg, nil, 0),
-         :ok <- AtomLGFX.draw_string(port, 8, 8, "AtomLGFX v2", 0),
+         :ok <- AtomLGFX.draw_string(port, 8, 8, "AtomLGFX v3", 0),
          :ok <- AtomLGFX.draw_string(port, 8, 28, "write session ok", 0),
          :ok <- raw_ok(port, :end_write),
          :ok <- raw_ok(port, :end_write),
@@ -203,30 +202,23 @@ defmodule SampleApp.Smoke do
     scaled_w = min(64, div(w, 3))
     scaled_h = min(64, div(h, 3))
 
-    case AtomLGFX.draw_jpg(port, 28, 24, @jpeg_8x8, 0) do
-      :ok ->
-        draw_jpg_scaled_optional(port, scaled_x, 24, scaled_w, scaled_h)
-
-      {:error, {:internal, -1}} ->
-        IO.puts("draw_jpg skipped reason=internal(-1)")
-        :ok
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp draw_jpg_scaled_optional(port, x, y, w, h) do
-    case AtomLGFX.draw_jpg_scaled(port, x, y, w, h, 0, 0, 4, 4, @jpeg_8x8, 0) do
-      :ok ->
-        :ok
-
-      {:error, {:internal, -1}} ->
-        IO.puts("draw_jpg_scaled skipped reason=internal(-1)")
-        :ok
-
-      {:error, reason} ->
-        {:error, reason}
+    with :ok <- AtomLGFX.draw_jpg(port, 28, 24, @jpeg_8x8, 0),
+         :ok <-
+           AtomLGFX.draw_jpg_scaled(
+             port,
+             scaled_x,
+             24,
+             scaled_w,
+             scaled_h,
+             0,
+             0,
+             4,
+             4,
+             @jpeg_8x8,
+             0
+           ) do
+      IO.puts("jpeg_paths ok")
+      :ok
     end
   end
 

@@ -237,7 +237,8 @@ defmodule SampleApp.Face do
     end
   end
 
-  defp normalize_touch_axis(position, size) when is_number(position) and is_integer(size) and size > 0 do
+  defp normalize_touch_axis(position, size)
+       when is_number(position) and is_integer(size) and size > 0 do
     center = size / 2.0
     clamp((position - center) / center, -1.0, 1.0)
   end
@@ -365,7 +366,6 @@ defmodule SampleApp.Face do
     end
   end
 
-
   defp draw_eye_commands(face, x, y, open_ratio, is_left) do
     offset_x = trunc(face.gaze_h * 3)
     offset_y = trunc(face.gaze_v * 3)
@@ -442,13 +442,15 @@ defmodule SampleApp.Face do
     Batch.fill_rect(x, y, w, h, @palette_fg)
   end
 
-  defp maybe_draw_eyebrows_commands(_face, _by) when @brow_h <= 0, do: []
-
   defp maybe_draw_eyebrows_commands(face, by) do
-    [
-      draw_eyebrow_commands(face, @brow_r_x, @brow_r_y + by, false),
-      draw_eyebrow_commands(face, @brow_l_x, @brow_l_y + by, true)
-    ]
+    if @brow_h <= 0 do
+      []
+    else
+      [
+        draw_eyebrow_commands(face, @brow_r_x, @brow_r_y + by, false),
+        draw_eyebrow_commands(face, @brow_l_x, @brow_l_y + by, true)
+      ]
+    end
   end
 
   defp draw_eyebrow_commands(face, x, y, is_left) do
@@ -523,7 +525,15 @@ defmodule SampleApp.Face do
 
       [
         Batch.fill_circle(x, y1, r1, @palette_sweat),
-        Batch.fill_triangle(x, y1 - r1 * 2, x - a, y1 - div(r1, 2), x + a, y1 - div(r1, 2), @palette_sweat)
+        Batch.fill_triangle(
+          x,
+          y1 - r1 * 2,
+          x - a,
+          y1 - div(r1, 2),
+          x + a,
+          y1 - div(r1, 2),
+          @palette_sweat
+        )
       ]
     end
   end
@@ -534,8 +544,20 @@ defmodule SampleApp.Face do
     [
       Batch.fill_rect(x - div(r1, 3), y - r1, div(r1 * 2, 3), r1 * 2, @palette_fg),
       Batch.fill_rect(x - r1, y - div(r1, 3), r1 * 2, div(r1 * 2, 3), @palette_fg),
-      maybe_fill_rect_commands(x - div(r1, 3) + 2, y - r1, max(div(r1 * 2, 3) - 4, 0), r1 * 2, @palette_bg),
-      maybe_fill_rect_commands(x - r1, y - div(r1, 3) + 2, r1 * 2, max(div(r1 * 2, 3) - 4, 0), @palette_bg)
+      maybe_fill_rect_commands(
+        x - div(r1, 3) + 2,
+        y - r1,
+        max(div(r1 * 2, 3) - 4, 0),
+        r1 * 2,
+        @palette_bg
+      ),
+      maybe_fill_rect_commands(
+        x - r1,
+        y - div(r1, 3) + 2,
+        r1 * 2,
+        max(div(r1 * 2, 3) - 4, 0),
+        @palette_bg
+      )
     ]
   end
 
@@ -551,8 +573,24 @@ defmodule SampleApp.Face do
       [
         Batch.fill_circle(x - div(r1, 2), y, div(r1, 2), @palette_heart),
         Batch.fill_circle(x + div(r1, 2), y, div(r1, 2), @palette_heart),
-        Batch.fill_triangle(x, y, x - div(r1, 2) - a_i, y + a_i, x + div(r1, 2) + a_i, y + a_i, @palette_heart),
-        Batch.fill_triangle(x, y + div(r1, 2) + trunc(2 * a), x - div(r1, 2) - a_i, y + a_i, x + div(r1, 2) + a_i, y + a_i, @palette_heart)
+        Batch.fill_triangle(
+          x,
+          y,
+          x - div(r1, 2) - a_i,
+          y + a_i,
+          x + div(r1, 2) + a_i,
+          y + a_i,
+          @palette_heart
+        ),
+        Batch.fill_triangle(
+          x,
+          y + div(r1, 2) + trunc(2 * a),
+          x - div(r1, 2) - a_i,
+          y + a_i,
+          x + div(r1, 2) + a_i,
+          y + a_i,
+          @palette_heart
+        )
       ]
     end
   end
@@ -583,7 +621,9 @@ defmodule SampleApp.Face do
 
   defp maybe_fill_rect_commands(_x, _y, width, _height, _color) when width < 1, do: []
   defp maybe_fill_rect_commands(_x, _y, _width, height, _color) when height < 1, do: []
-  defp maybe_fill_rect_commands(x, y, width, height, color), do: Batch.fill_rect(x, y, width, height, color)
+
+  defp maybe_fill_rect_commands(x, y, width, height, color),
+    do: Batch.fill_rect(x, y, width, height, color)
 
   defp maybe_draw_circle_commands(_x, _y, radius, _color) when radius < 1, do: []
   defp maybe_draw_circle_commands(x, y, radius, color), do: Batch.draw_circle(x, y, radius, color)
@@ -702,12 +742,14 @@ defmodule SampleApp.Face do
     AtomLGFX.fill_rect(port, x, y, w, h, @col_pr, @sprite_target)
   end
 
-  defp maybe_draw_eyebrows(_port, _face, _by) when @brow_h <= 0, do: :ok
-
   defp maybe_draw_eyebrows(port, face, by) do
-    with :ok <- draw_eyebrow(port, face, @brow_r_x, @brow_r_y + by, false),
-         :ok <- draw_eyebrow(port, face, @brow_l_x, @brow_l_y + by, true) do
+    if @brow_h <= 0 do
       :ok
+    else
+      with :ok <- draw_eyebrow(port, face, @brow_r_x, @brow_r_y + by, false),
+           :ok <- draw_eyebrow(port, face, @brow_l_x, @brow_l_y + by, true) do
+        :ok
+      end
     end
   end
 

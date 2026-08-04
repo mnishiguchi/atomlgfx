@@ -8,8 +8,6 @@ defmodule SampleApp.ProtocolSmoke do
   import Bitwise
 
   @t_short 5_000
-  @proto_ver 3
-
   @bg 0x0000
   @fg 0xFFFF
   @muted 0x8410

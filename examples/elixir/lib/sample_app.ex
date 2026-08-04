@@ -5,28 +5,37 @@
 defmodule SampleApp do
   @moduledoc false
 
+  alias SampleApp.BasicShapes
   alias SampleApp.Face
   alias SampleApp.JapaneseText
   alias SampleApp.MovingIcons
   alias SampleApp.PerfSmoke
   alias SampleApp.ProtocolSmoke
   alias SampleApp.Smoke
+  alias SampleApp.Sprites
+  alias SampleApp.Text
   alias SampleApp.SpriteProtocolSmoke
-
-  @default_mode :face
 
   @valid_modes [
     :smoke,
     :protocol,
     :boot,
+    :basic_shapes,
+    :text,
     :perf,
     :face,
     :japanese_text,
     :moving_icons,
     :sprites,
+    :sprite_protocol,
     :touch_calibrate,
     :all
   ]
+
+  @sample_mode_name System.get_env("SAMPLE_APP_MODE", "face")
+  @default_mode Enum.find(@valid_modes, :face, fn mode ->
+                  Atom.to_string(mode) == @sample_mode_name
+                end)
 
   @bg 0x0000
   @fg 0xFFFF
@@ -94,6 +103,18 @@ defmodule SampleApp do
     boot_for_display(port)
   end
 
+  defp run_mode(port, :basic_shapes) do
+    with_boot_dims(port, fn w, h ->
+      step("basic_shapes", BasicShapes.run(port, w, h))
+    end)
+  end
+
+  defp run_mode(port, :text) do
+    with_boot_dims(port, fn w, h ->
+      step("text", Text.run(port, w, h))
+    end)
+  end
+
   defp run_mode(port, :smoke) do
     with_boot_dims(port, fn w, h ->
       step("smoke", Smoke.run(port, w, h))
@@ -119,6 +140,12 @@ defmodule SampleApp do
   end
 
   defp run_mode(port, :sprites) do
+    with_boot_dims(port, fn w, h ->
+      step("sprites", Sprites.run(port, w, h))
+    end)
+  end
+
+  defp run_mode(port, :sprite_protocol) do
     with_boot(port, fn ->
       step("sprite_protocol_smoke", SpriteProtocolSmoke.run(port))
     end)
@@ -139,6 +166,9 @@ defmodule SampleApp do
   defp run_mode(port, :all) do
     with_boot_dims(port, fn w, h ->
       with :ok <- step("smoke", Smoke.run(port, w, h)),
+           :ok <- step("basic_shapes", BasicShapes.run(port, w, h)),
+           :ok <- step("text", Text.run(port, w, h)),
+           :ok <- step("sprites", Sprites.run(port, w, h)),
            :ok <- step("sprite_protocol_smoke", SpriteProtocolSmoke.run(port)) do
         :ok
       end

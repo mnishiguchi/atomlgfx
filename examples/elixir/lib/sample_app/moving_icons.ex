@@ -9,6 +9,7 @@ defmodule SampleApp.MovingIcons do
   import SampleApp.AtomVMCompat, only: [yield: 0]
 
   alias SampleApp.Assets
+  alias SampleApp.MovingIcons.Renderer
 
   # V3 treats MovingIcons as a low-memory stress demo, not as the main
   # performance target. The flagship target is a Stack-chan-like face that stays
@@ -29,21 +30,12 @@ defmodule SampleApp.MovingIcons do
   # Set this to 3 when comparing more strictly with upstream LovyanGFX MovingIcons.
   @obj_icon_count 3
 
-  # Retained/native presentation strips were removed from the normal example path
-  # because they make memory ownership harder to reason about. Keep animation
-  # non-flickering by drawing each vertical strip into an ordinary offscreen
-  # sprite and then pushing the completed strip to the LCD.
-  #
-  # Strip height is the main speed/memory tradeoff. Taller strips mean fewer
-  # clear/push cycles and smoother motion, but require a larger contiguous sprite
-  # allocation. For a 480x320 landscape viewport, split_factor=8 gives a
-  # 480x40x16bpp sprite, about 38 KiB. Setup still falls back to smaller strips
-  # if needed.
-  @initial_split_factor 8
+  # MovingIcons is intentionally separate from the standard render API. Its
+  # renderer submits one compact transformed-sprite list per frame, avoiding a
+  # full-frame or strip sprite and keeping memory use realistic on AtomVM.
 
   # Icon sprites are authored with a solid background color. Use a transparent-color key so
   # that background pixels do not overwrite what is already in the destination.
-  @use_transparent_key true
   @transparent_key_color565 0x0000
 
   # Background fill color for the playfield and frame buffers (RGB565).
@@ -58,21 +50,10 @@ defmodule SampleApp.MovingIcons do
   @sprite_close 3
   @sprite_piyopiyo 4
 
-  # Destination sprite handle for the strip renderer.
-  #
-  # Keep one strip sprite in the low-memory sample. The completed strip is pushed
-  # to the LCD before the buffer is reused for the next strip.
-  @sprite_buf0 10
-
-  # MovingIcons intentionally uses non-rotated sprite pushes in the low-memory
-  # sample path. `pushRotateZoom` is attractive for visual parity with upstream
-  # LovyanGFX, but it can allocate too much on no-PSRAM AtomVM targets.
-  #
-  # Make the visual motion faster without increasing persistent memory. A higher
-  # FPS target helps when the board has headroom; if rendering is slower than the
-  # target, the loop simply skips the extra sleep. A higher speed multiplier makes
-  # motion look faster without adding buffers, but it does not reduce render cost.
-  @target_fps 20
+  # Five frames per second is a measured, sustainable target for six transformed
+  # icons on the connected 480x320 ESP32-S3 device. Applications can raise this
+  # cap after measuring their own display bus and workload.
+  @target_fps 5
   @speed_multiplier 2
   @frame_interval_ms div(1000, @target_fps)
   @stats_interval_ms 1_000
@@ -94,23 +75,21 @@ defmodule SampleApp.MovingIcons do
     with {:ok, feature_bits} <- AtomLGFX.get_caps(port),
          :ok <- ensure_required_caps(feature_bits),
          :ok <- AtomLGFX.fill_screen(port, @bg),
-         {:ok, icon_handles} <- prepare_icon_sprites(port, icons, icon_w, icon_h),
-         {:ok, strip_h} <- prepare_frame_sprites(port, w, h) do
+         {:ok, icon_handles} <- prepare_icon_sprites(port, icons, icon_w, icon_h) do
       try do
         {_seed, objects} = init_objects(1, @obj_count, w, h, icon_handles)
 
         IO.puts(
-          "moving_icons render mode=strip_buffers " <>
-            "submit_mode=sync " <>
-            "draw_mode=push_sprite " <>
+          "moving_icons render mode=transformed_sprite_list " <>
+            "erase_mode=overlap_aware " <>
+            "submit_mode=binary_batch " <>
+            "draw_mode=push_rotate_zoom_list " <>
             "target_fps=#{@target_fps} " <>
-            "strip_h=#{strip_h} " <>
             "frame=#{w}x#{h}"
         )
 
-        render_loop(port, w, h, strip_h, icon_h, 0, objects, 0, monotonic_ms(), false)
+        render_loop(port, w, h, [], objects, 0, monotonic_ms(), false)
       after
-        cleanup_frame_sprites(port)
         cleanup_icon_sprites(port)
       end
     else
@@ -124,9 +103,7 @@ defmodule SampleApp.MovingIcons do
          port,
          w,
          h,
-         strip_h,
-         icon_h,
-         flip,
+         previous_objects,
          objects,
          frame_count,
          last_log_ms,
@@ -134,13 +111,19 @@ defmodule SampleApp.MovingIcons do
        ) do
     frame_started_ms = monotonic_ms()
 
-    with {:ok, next_flip} <- render_frame(port, h, strip_h, icon_h, flip, objects),
-         :ok <- AtomLGFX.display(port) do
+    with :ok <-
+           Renderer.render(
+             port,
+             previous_objects,
+             objects,
+             @bg,
+             @transparent_key_color565
+           ) do
       next_objects = update_objects(objects, w, h)
       now_ms = monotonic_ms()
 
       {next_frame_count, next_last_log_ms, next_target_announced?} =
-        maybe_log_stats(frame_count + 1, last_log_ms, now_ms, target_announced?, strip_h)
+        maybe_log_stats(frame_count + 1, last_log_ms, now_ms, target_announced?)
 
       sleep_until_next_frame(frame_started_ms)
       yield()
@@ -149,9 +132,7 @@ defmodule SampleApp.MovingIcons do
         port,
         w,
         h,
-        strip_h,
-        icon_h,
-        next_flip,
+        objects,
         next_objects,
         next_frame_count,
         next_last_log_ms,
@@ -162,71 +143,6 @@ defmodule SampleApp.MovingIcons do
         IO.puts("moving_icons render failed: #{AtomLGFX.format_error(reason)}")
         {:error, reason}
     end
-  end
-
-  defp render_frame(port, h, strip_h, icon_h, flip, objects) do
-    render_strips(port, h, strip_h, icon_h, 0, flip, objects)
-  end
-
-  defp render_strips(_port, h, _strip_h, _icon_h, y0, flip, _objects) when y0 >= h do
-    {:ok, flip}
-  end
-
-  defp render_strips(port, h, strip_h, icon_h, y0, flip, objects) do
-    with :ok <- AtomLGFX.clear(port, @bg, @sprite_buf0),
-         :ok <- draw_visible_objects_to_strip(port, @sprite_buf0, y0, strip_h, icon_h, objects),
-         :ok <- AtomLGFX.push_sprite(port, @sprite_buf0, 0, y0) do
-      render_strips(port, h, strip_h, icon_h, y0 + strip_h, flip, objects)
-    else
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  defp draw_visible_objects_to_strip(port, buf, y0, strip_h, icon_h, objects) do
-    draw_visible_objects_to_strip_i(port, buf, y0, strip_h, icon_h, objects)
-  end
-
-  defp draw_visible_objects_to_strip_i(_port, _buf, _y0, _strip_h, _icon_h, []), do: :ok
-
-  defp draw_visible_objects_to_strip_i(
-         port,
-         buf,
-         y0,
-         strip_h,
-         icon_h,
-         [
-           {x, y, _dx, _dy, src, _angle_cdeg, _zoom_x1024, _dangle_cdeg, _dzoom_x1024} = object
-           | rest
-         ]
-       ) do
-    if object_touches_strip?(object, y0, strip_h, icon_h) do
-      draw_y = y - y0
-
-      with :ok <- push_sprite_to_strip(port, src, buf, x, draw_y) do
-        draw_visible_objects_to_strip_i(port, buf, y0, strip_h, icon_h, rest)
-      end
-    else
-      draw_visible_objects_to_strip_i(port, buf, y0, strip_h, icon_h, rest)
-    end
-  end
-
-  defp push_sprite_to_strip(port, src, buf, x, y) do
-    case transparent_key() do
-      nil -> AtomLGFX.push_sprite_to(port, src, buf, x, y)
-      transparent -> AtomLGFX.push_sprite_to(port, src, buf, x, y, transparent)
-    end
-  end
-
-  defp object_touches_strip?(
-         {_x, y, _dx, _dy, _src, _angle_cdeg, _zoom_x1024, _dangle_cdeg, _dzoom_x1024},
-         y0,
-         strip_h,
-         icon_h
-       ) do
-    strip_y1 = y0 + strip_h - 1
-    icon_y1 = y + icon_h - 1
-    not (icon_y1 < y0 or y > strip_y1)
   end
 
   defp update_objects(objects, w, h), do: update_objects_i(objects, w, h, [])
@@ -241,6 +157,10 @@ defmodule SampleApp.MovingIcons do
        ) do
     {next_x, next_dx} = bounce_i16(x + dx, dx, 0, max(w - 1, 0))
     {next_y, next_dy} = bounce_i16(y + dy, dy, 0, max(h - 1, 0))
+    next_angle_cdeg = rem(angle_cdeg + dangle_cdeg + 36_000, 36_000)
+
+    {next_zoom_x1024, next_dzoom_x1024} =
+      bounce_i16(zoom_x1024 + dzoom_x1024, dzoom_x1024, 512, 2_048)
 
     updated =
       {
@@ -249,10 +169,10 @@ defmodule SampleApp.MovingIcons do
         next_dx,
         next_dy,
         src,
-        angle_cdeg,
-        zoom_x1024,
+        next_angle_cdeg,
+        next_zoom_x1024,
         dangle_cdeg,
-        dzoom_x1024
+        next_dzoom_x1024
       }
 
     update_objects_i(rest, w, h, [updated | acc])
@@ -268,7 +188,7 @@ defmodule SampleApp.MovingIcons do
 
   defp bounce_i16(value, delta, _min_value, _max_value), do: {value, delta}
 
-  defp maybe_log_stats(frame_count, last_log_ms, now_ms, target_announced?, strip_h) do
+  defp maybe_log_stats(frame_count, last_log_ms, now_ms, target_announced?) do
     elapsed_ms = now_ms - last_log_ms
 
     if elapsed_ms >= @stats_interval_ms do
@@ -277,11 +197,11 @@ defmodule SampleApp.MovingIcons do
 
       IO.puts(
         "moving_icons stats " <>
-          "renderer=strip_buffers " <>
-          "submit_mode=sync " <>
-          "draw_mode=push_sprite " <>
+          "renderer=transformed_sprite_list " <>
+          "erase_mode=overlap_aware " <>
+          "submit_mode=binary_batch " <>
+          "draw_mode=push_rotate_zoom_list " <>
           "obj_count=#{@obj_count} " <>
-          "strip_h=#{strip_h} " <>
           "fps=#{fps} " <>
           "target_fps=#{@target_fps}"
       )
@@ -305,14 +225,6 @@ defmodule SampleApp.MovingIcons do
     elapsed_ms = monotonic_ms() - frame_started_ms
     sleep_ms = max(@frame_interval_ms - elapsed_ms, 0)
     Process.sleep(sleep_ms)
-  end
-
-  defp transparent_key do
-    if @use_transparent_key do
-      @transparent_key_color565
-    else
-      nil
-    end
   end
 
   # -----------------------------------------------------------------------------
@@ -364,42 +276,11 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp prepare_frame_sprites(port, w, h) do
-    prepare_frame_sprites_i(port, w, h, @initial_split_factor)
-  end
-
-  defp prepare_frame_sprites_i(port, w, h, split_factor) do
-    strip_h = max(1, div_ceil(h, split_factor))
-
-    with :ok <- create_frame_sprite(port, @sprite_buf0, w, strip_h) do
-      {:ok, strip_h}
-    else
-      {:error, reason} ->
-        cleanup_frame_sprites(port)
-
-        if strip_h == 1 do
-          {:error, {:frame_sprite_alloc_failed, w, h, split_factor, reason}}
-        else
-          prepare_frame_sprites_i(port, w, h, split_factor + 1)
-        end
-    end
-  end
-
-  defp create_frame_sprite(port, target, w, h) do
-    color_depth = 16
-    AtomLGFX.create_sprite(port, w, h, color_depth, target)
-  end
-
   defp cleanup_icon_sprites(port) do
     _ = safe_delete_sprite(port, @sprite_info)
     _ = safe_delete_sprite(port, @sprite_alert)
     _ = safe_delete_sprite(port, @sprite_close)
     _ = safe_delete_sprite(port, @sprite_piyopiyo)
-    :ok
-  end
-
-  defp cleanup_frame_sprites(port) do
-    _ = safe_delete_sprite(port, @sprite_buf0)
     :ok
   end
 
@@ -475,10 +356,6 @@ defmodule SampleApp.MovingIcons do
     :erlang.monotonic_time(:millisecond)
   end
 
-  defp div_ceil(a, b) when is_integer(a) and is_integer(b) and b > 0 do
-    div(a + b - 1, b)
-  end
-
   defp log_icon_sizes(icons, icon_w, icon_h) do
     expected = icon_w * icon_h * 2
     i0 = byte_size(elem(icons, 0))
@@ -494,12 +371,12 @@ defmodule SampleApp.MovingIcons do
       "moving_icons config " <>
         "obj_count=#{@obj_count} " <>
         "icon_count=#{@obj_icon_count} " <>
-        "renderer=strip_buffers " <>
-        "submit_mode=sync " <>
-        "draw_mode=push_sprite " <>
+        "renderer=transformed_sprite_list " <>
+        "erase_mode=overlap_aware " <>
+        "submit_mode=binary_batch " <>
+        "draw_mode=push_rotate_zoom_list " <>
         "target_fps=#{@target_fps} " <>
-        "speed_multiplier=#{@speed_multiplier} " <>
-        "initial_split_factor=#{@initial_split_factor}"
+        "speed_multiplier=#{@speed_multiplier}"
     )
   end
 end

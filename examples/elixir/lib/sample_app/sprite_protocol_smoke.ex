@@ -9,7 +9,6 @@ defmodule SampleApp.SpriteProtocolSmoke do
 
   @t_short 5_000
 
-  @proto_ver 3
   @cap_sprite 1 <<< 0
   @cap_palette 1 <<< 4
 
