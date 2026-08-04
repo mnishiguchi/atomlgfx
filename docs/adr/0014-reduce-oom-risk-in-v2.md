@@ -4,153 +4,153 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 0014: Reduce OOM risk in AtomLGFX v2
+# ADR 0014: AtomLGFX v2 のメモリー不足危険を減らす
 
-## Status
+## 状態
 
-Accepted
+採用
 
-## Context
+## 背景
 
-AtomLGFX v2 simplified the native port implementation and added a generic call-based protocol plus explicit binary batches.
+AtomLGFX v2 は、ネイティブポート実装を単純化し、汎用的な呼び出し方式プロトコルと明示的なバイナリー一括実行を追加しました。
 
-During v2 performance work, we also added experimental retained native rendering for the MovingIcons example. That path kept object state and the hot display loop on the native side to approach native LovyanGFX animation behavior.
+v2 の性能作業中には、MovingIcons 見本向けに試験的な保持型ネイティブ描画も追加しました。この経路では、物体状態と高頻度表示ループをネイティブ側へ置き、ネイティブ LovyanGFX に近いアニメーション動作を目指しました。
 
-However, v2 became more OOM-prone than v1.
+しかし、v2 は v1 よりメモリー不足を起こしやすくなりました。
 
-V1 already proved the practical target we care about: a Stack-chan-like face animation running together with touch input, Wi-Fi, SNTP, Distributed Erlang, and remote control. That example uses a modest rendering model: a `320x240` 4-bit sprite, palette colors, ordinary drawing calls, and one `push_sprite` per frame.
+v1 は、実用上重視する目標をすでに実証しています。ｽﾀｯｸﾁｬﾝ形式の顔アニメーションを、タッチ入力、無線通信、SNTP、分散 Erlang、遠隔制御と同時に動作させられます。この見本は、`320x240` の4ビットスプライト、パレット色、通常描画呼び出し、フレームごとの1回の `push_sprite` という控えめな描画方式を使用します。
 
-V2 should preserve that reliability. Native-like MovingIcons performance is useful as an experiment, but it is not the main product requirement.
+v2 は、この信頼性を維持すべきです。ネイティブに近い MovingIcons 性能は実験として有用ですが、製品の主要要件ではありません。
 
-## Problem
+## 問題
 
-The retained native rendering path increases persistent memory pressure and lifecycle complexity.
+保持型ネイティブ描画経路は、常駐メモリー負荷と生存期間管理の複雑性を増やします。
 
-It introduces or requires:
+次を導入または必要とします。
 
-- native object buffers
-- retained render program state
-- native presentation strip buffers
-- native render task stack
-- retained renderer stats
-- exclusive display ownership checks
-- additional cleanup paths
-- additional Elixir wrapper modules
-- additional generated protocol surface
+- ネイティブ物体バッファー
+- 保持型描画処理の状態
+- ネイティブ表示帯バッファー
+- ネイティブ描画作業のスタック
+- 保持型描画器統計
+- ディスプレーの排他的所有検査
+- 追加の後始末経路
+- 追加の Elixir 包みモジュール
+- 追加の生成プロトコル範囲
 
-This is too much memory and API surface for a feature that is unlikely to be used often.
+使用頻度が低いと見込まれる機能としては、メモリー量と API 範囲が大きすぎます。
 
-The main risk is not only total memory use. Large contiguous allocations can fail even when total free heap appears acceptable. This matters when AtomLGFX must coexist with Wi-Fi, TCP/IP buffers, SNTP, and Distributed Erlang.
+主な危険は、総メモリー使用量だけではありません。空きヒープ総量が十分に見えても、大きな連続領域の割り当てに失敗する場合があります。AtomLGFX を無線通信、TCP/IP バッファー、SNTP、分散 Erlang と共存させる場合、この点が重要です。
 
-## Decision
+## 判断
 
-Remove experimental retained native rendering from the normal AtomLGFX v2 library surface.
+試験的な保持型ネイティブ描画を、通常の AtomLGFX v2 ライブラリー範囲から削除します。
 
-Keep v2 focused on:
+v2 は次へ集中します。
 
-- ordinary LovyanGFX-style calls
-- sprite creation and drawing
-- palette support
-- touch support
-- image and text operations
-- explicit `BinaryBatch` submission for useful drawing bursts
+- 通常の LovyanGFX 形式の呼び出し
+- スプライト作成と描画
+- パレット対応
+- タッチ対応
+- 画像と文字列操作
+- 有用な描画のまとまり向けの明示的な `BinaryBatch` 送信
 
-Remove or disable:
+次を削除または無効化します。
 
-- native object buffers
-- retained render programs
-- native retained render task
-- retained render stats
-- retained renderer exclusive display mode
-- retained renderer Elixir helper modules
-- MovingIcons retained-native mode
+- ネイティブ物体バッファー
+- 保持型描画処理
+- ネイティブ保持型描画作業
+- 保持型描画統計
+- 保持型描画器の排他的ディスプレー方式
+- 保持型描画器向け Elixir 補助モジュール
+- MovingIcons の保持型ネイティブ方式
 
-The MovingIcons and face examples should still avoid flicker by drawing into offscreen buffers or native presentation strips before pushing to the LCD.
+MovingIcons と顔描画の見本は、LCD へ転送する前に画面外バッファーまたはネイティブ表示帯へ描画し、引き続きちらつきを避けます。
 
-## Rationale
+## 理由
 
-V1 proved the practical target. The Stack-chan-like face example runs a useful AtomVM application with graphics and networking together.
+v1 は、実用上の目標を実証しました。ｽﾀｯｸﾁｬﾝ形式の顔見本は、描画と通信を同時に行う実用的な AtomVM アプリケーションとして動作します。
 
-That example uses a small persistent graphics footprint:
+この見本が常駐使用する描画メモリーは小規模です。
 
 ```text
 320 * 240 * 4 bits = 38,400 bytes
 ```
 
-This is much more realistic for AtomVM applications than retaining large RGB565 presentation strips plus native renderer state.
+これは、大きな RGB565 表示帯とネイティブ描画器状態を保持する方式より、AtomVM アプリケーションに現実的です。
 
-For embedded use, a slightly slower but stable renderer is preferable to a faster renderer that makes Wi-Fi or long-running applications unreliable.
+組み込み用途では、わずかに低速でも安定した描画器の方が、無線通信や長時間動作を不安定にする高速描画器より望ましいと判断します。
 
-## Consequences
+## 影響
 
-### Positive
+### 良い影響
 
-- Lower native memory footprint
-- Fewer large persistent allocations
-- Fewer cleanup failure paths
-- Smaller public API
-- Smaller Elixir wrapper surface
-- Easier documentation
-- Better chance of stable coexistence with Wi-Fi and Distributed Erlang
+- ネイティブメモリー使用量が減る
+- 大きな常駐割り当てが減る
+- 後始末失敗の経路が減る
+- 公開 API が小さくなる
+- Elixir 包みの範囲が小さくなる
+- 文書が単純になる
+- 無線通信および分散 Erlang と安定して共存できる可能性が高まる
 
-### Negative
+### 悪い影響
 
-- MovingIcons no longer targets native-like performance through retained native rendering
-- Experimental performance code is removed
-- Any future native animation engine would need to be built separately
+- MovingIcons は、保持型ネイティブ描画によるネイティブに近い性能を目標としなくなる
+- 試験的な性能コードを削除する
+- 将来ネイティブアニメーション実行機構が必要になった場合は、別に構築する必要がある
 
-### Neutral
+### 中立的な影響
 
-`BinaryBatch` remains available as the preferred optimization path for many small drawing commands.
+多数の小さな描画命令を最適化する推奨経路として、`BinaryBatch` は引き続き利用できます。
 
-It is simpler than retained native rendering because it is submitted explicitly, executed synchronously, and does not keep a native render task or retained scene alive.
+`BinaryBatch` は明示的に送信し、同期的に実行し、ネイティブ描画作業や保持場面を存続させないため、保持型ネイティブ描画より単純です。
 
-## Flicker policy
+## ちらつき防止方針
 
-Examples should avoid flicker even after retained native rendering is removed.
+保持型ネイティブ描画を削除した後も、見本はちらつきを避けます。
 
-Preferred patterns:
-
-```text
-draw into sprite
-push sprite once
-```
-
-or:
+推奨する形:
 
 ```text
-draw into strip sprite
-push strip
-repeat for remaining strips
+スプライトへ描画
+スプライトを1回転送
 ```
 
-Avoid this pattern for animation:
+または:
 
 ```text
-clear LCD
-draw objects directly to LCD one by one
+帯状スプライトへ描画
+帯を転送
+残りの帯について繰り返し
 ```
 
-If full-frame buffering is too large, use smaller strips instead of direct LCD drawing.
+アニメーションでは、次の形を避けます。
 
-## Implementation notes
+```text
+LCD を消去
+物体を1つずつ LCD へ直接描画
+```
 
-This decision removes the retained render program protocol operations and native implementation.
+全画面バッファーが大きすぎる場合は、直接 LCD 描画ではなく、小さな表示帯を使用します。
 
-The MovingIcons example moves to the existing binary frame-strip path using `AtomLGFX.BinaryBatch.push_rotate_zoom_frame_strips/2`. Elixir owns object updates, while native code owns strip clearing, transformed sprite drawing, and strip presentation for each frame.
+## 実装メモ
 
-`get_presentation_strip_height/1` is treated as a query and must not allocate native strip buffers. Allocation should happen only during explicit render or preparation paths.
+この判断により、保持型描画処理のプロトコル操作とネイティブ実装を削除します。
 
-## Acceptance criteria
+MovingIcons の見本は、`AtomLGFX.BinaryBatch.push_rotate_zoom_frame_strips/2` を使用する既存のバイナリーフレーム表示帯経路へ移行します。Elixir が物体更新を所有し、ネイティブコードが各フレームの表示帯消去、変換付きスプライト描画、表示帯転送を所有します。
 
-This ADR is implemented when:
+`get_presentation_strip_height/1` は問い合わせとして扱い、ネイティブ表示帯バッファーを割り当ててはいけません。割り当ては、明示的な描画または準備経路でのみ行います。
 
-- retained render program APIs are removed from the public Elixir API
-- retained render program native handlers are removed
-- retained render program protocol operations are removed
-- generated protocol docs no longer describe retained rendering
-- MovingIcons no longer depends on retained native rendering
-- face animation still renders without visible flicker
-- MovingIcons does not regress to obvious flicker
-- v2 can run the Stack-chan-like face example with Wi-Fi enabled
-- long-running face animation does not OOM under normal usage
+## 受け入れ条件
+
+次を満たしたとき、この ADR を実装済みとします。
+
+- 保持型描画処理 API が公開 Elixir API から削除されている
+- 保持型描画処理のネイティブ処理が削除されている
+- 保持型描画処理のプロトコル操作が削除されている
+- 生成プロトコル文書が保持型描画を説明しなくなっている
+- MovingIcons が保持型ネイティブ描画へ依存しなくなっている
+- 顔アニメーションが目立つちらつきなく描画される
+- MovingIcons が明らかなちらつきへ退行しない
+- v2 が無線通信を有効にした ｽﾀｯｸﾁｬﾝ形式の顔見本を実行できる
+- 長時間の顔アニメーションが通常利用でメモリー不足を起こさない

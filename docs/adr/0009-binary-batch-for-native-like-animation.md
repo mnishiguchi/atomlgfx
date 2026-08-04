@@ -4,99 +4,99 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 0009: Standardize v2 hot rendering on binary render batches
+# ADR 0009: v2 の高頻度描画をバイナリー描画一括実行へ統一する
 
-## Status
+## 状態
 
-Superseded
+置換済み
 
-Superseded by [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md).
+[ADR 0010: BinaryBatch を標準の描画トランザクション API とする](0010-binary-batch-as-render-transaction-api.md)によって置き換えられました。
 
-This ADR captured the native-like animation and presentation-strip direction. The active render-batch rule now lives in ADR 0010.
+この ADR は、ネイティブに近いアニメーションと帯状表示の方向性を記録したものです。現行の描画一括実行規則は ADR 0010 にあります。
 
-## Context
+## 背景
 
-`atomlgfx` v2 replaces the v1-style broad native wrapper surface with a smaller call-based protocol around LovyanGFX operations. That improves maintainability, but animation workloads still expose a separate performance problem: many small drawing calls crossing the AtomVM/native boundary are too expensive for native-like animation.
+`atomlgfx` v2 は、v1 のような広いネイティブ包みの代わりに、LovyanGFX 操作を扱う小さな呼び出し方式プロトコルを使用します。これによって保守性は向上しますが、アニメーション処理では別の性能問題が残ります。多数の小さな描画呼び出しが AtomVM／ネイティブ境界を越える方式では、ネイティブに近いアニメーションには高コストです。
 
-The representative workloads are:
+代表的な処理は次のとおりです。
 
-- MovingIcons-style animation with many sprite blits or transformed sprite blits per frame
-- Stack-chan-style face rendering with sprite-backed drawing and palette-index colors
+- フレームごとに多数のスプライト転送または変換付きスプライト転送を行う MovingIcons 形式のアニメーション
+- スプライトを描画対象とし、パレット番号色を使用する ｽﾀｯｸﾁｬﾝ形式の顔描画
 
-The initial v2 implementation proved that the call-based protocol is viable, but it also showed that ordinary synchronous calls are not the right hot path for every-frame rendering.
+v2 の初期実装によって呼び出し方式プロトコルが実用的であることは確認できましたが、通常の同期呼び出しは毎フレーム描画のすべてに適した高頻度経路ではないことも分かりました。
 
-Native-like animation needs this shape:
-
-```text
-Elixir updates animation state
-  -> Elixir builds one compact binary frame script
-  -> AtomVM sends one request
-  -> native code validates and executes the frame script
-  -> LovyanGFX performs the actual drawing under one native write session
-```
-
-This ADR is the single active rendering decision for the current v2 plan. It replaces the earlier narrow packed-scalar and paletted-sprite batch ADRs while keeping their useful principles.
-
-## Decision
-
-Use `submitBinaryBatch` as the explicit v2 hot-rendering path.
-
-Elixir callers build frame scripts with `AtomLGFX.BinaryBatch` and submit them through `AtomLGFX.submit_binary_batch/2` or `AtomLGFX.BinaryBatch.render/2`.
-
-Ordinary synchronous operations remain the default path for:
-
-- setup
-- configuration
-- sprite and palette lifecycle
-- debugging
-- low-frequency operations
-- simple applications that do not need animation performance
-
-Animation loops should avoid one native port call per primitive. They should instead submit one binary frame script per frame where practical.
-
-## Current render-batch model
-
-A binary render batch is an ordered command stream:
+ネイティブに近いアニメーションには、次の形が必要です。
 
 ```text
-opcode u8 + opcode-specific payload
+Elixir がアニメーション状態を更新
+  -> Elixir が小さなバイナリーフレームスクリプトを1つ構築
+  -> AtomVM が要求を1回送信
+  -> ネイティブコードがフレームスクリプトを検証して実行
+  -> LovyanGFX が1回のネイティブ書き込み区間で実際の描画を実行
 ```
 
-The command stream is interpreted by the native render-batch dispatcher. The dispatcher owns:
+この ADR は、当時の v2 計画における単一の現行描画判断でした。以前の狭い詰め込み数値一括実行 ADR とパレット式スプライト一括実行 ADR を置き換えながら、有用な原則を維持しました。
 
-- command decode
-- command validation
-- command-local target and color-mode state
-- one native execution pass
-- one `startWrite` / `endWrite` grouping around supported drawing work
+## 判断
 
-The current batch surface includes reusable render operations rather than demo-specific commands:
+`submitBinaryBatch` を v2 の明示的な高頻度描画経路として使用します。
 
-- target selection
-- RGB565 and palette-index color mode selection
-- scalar primitive drawing
-- text drawing for small overlays
-- sprite push
-- sprite push lists
-- sprite source-region lists
-- rotate/zoom instance lists
-- native presentation strip begin/present commands
-- display command
+Elixir の呼び出し側は `AtomLGFX.BinaryBatch` でフレームスクリプトを構築し、`AtomLGFX.submit_binary_batch/2` または `AtomLGFX.BinaryBatch.render/2` で送信します。
 
-The intended boundary is:
+通常の同期操作は、次の用途における既定経路として維持します。
+
+- 初期設定
+- 構成
+- スプライトとパレットの生存期間管理
+- 調査
+- 低頻度操作
+- アニメーション性能を必要としない単純なアプリケーション
+
+アニメーションループでは、図形ごとにネイティブポートを呼び出すことを避けます。実用的な箇所では、フレームごとに1つのバイナリーフレームスクリプトを送信します。
+
+## 現在の描画一括実行モデル
+
+バイナリー描画一括実行は、順序付きの命令列です。
 
 ```text
-Elixir describes the frame.
-Native executes the frame.
+操作コード u8 + 操作コード固有データ
 ```
 
-Native code must not know about application concepts such as MovingIcons or Stack-chan.
+命令列は、ネイティブの描画一括実行振り分け器が解釈します。振り分け器は、次を担当します。
 
-## Native presentation strips
+- 命令の復号
+- 命令の検証
+- 命令単位の対象状態と色形式状態
+- 1回のネイティブ実行
+- 対応描画処理を囲む1組の `startWrite` / `endWrite`
 
-For strip-buffered rendering in binary-batch mode, v2 uses native presentation strips instead of public sprite handles as frame buffers.
+当時の一括実行範囲には、見本固有ではなく、再利用可能な次の描画操作が含まれていました。
 
-The preferred strip frame shape is:
+- 対象選択
+- RGB565 とパレット番号の色形式選択
+- 数値図形描画
+- 小さな重ね描画用の文字列描画
+- スプライト転送
+- スプライト転送一覧
+- スプライト元領域一覧
+- 回転拡大個体一覧
+- ネイティブ表示帯の開始／表示命令
+- 表示命令
+
+意図する境界は次のとおりです。
+
+```text
+Elixir がフレームを記述する。
+ネイティブがフレームを実行する。
+```
+
+ネイティブコードは、MovingIcons や ｽﾀｯｸﾁｬﾝ のようなアプリケーション概念を認識してはいけません。
+
+## ネイティブ表示帯
+
+バイナリー一括実行方式で帯状バッファー描画を行う場合、v2 は公開スプライト識別子をフレームバッファーとして使わず、ネイティブ表示帯を使用します。
+
+推奨する帯状フレームの形は次のとおりです。
 
 ```elixir
 [
@@ -109,114 +109,114 @@ The preferred strip frame shape is:
 ]
 ```
 
-While a native strip is active, logical render target `0` resolves to the active native strip. Outside an active strip, target `0` resolves to the live LCD.
+ネイティブ表示帯が有効な間、論理描画対象 `0` は有効なネイティブ表示帯へ解決されます。表示帯が有効でないとき、対象 `0` は実際の LCD へ解決されます。
 
-This keeps application code from managing public frame-buffer sprites in the animation hot path, while still preserving the normal target-numbering contract.
+これにより、通常の対象番号契約を保ちながら、アニメーションの高頻度経路でアプリケーションが公開フレームバッファースプライトを管理せずに済みます。
 
-The Elixir strip loop must use the strip height negotiated by native code. The native presentation layer may allocate a smaller strip height than the preferred height when memory is constrained. Hard-coding `160` rows in Elixir is not a stable contract.
+Elixir 側の帯状ループは、ネイティブ側との協議で得た帯高を使用する必要があります。メモリーが限られる場合、ネイティブ表示層は希望値より小さい帯高を割り当てることがあります。Elixir 側で `160` 行を固定値として埋め込むことは、安定した契約ではありません。
 
-## MovingIcons benchmark interpretation
+## MovingIcons 性能測定の解釈
 
-The MovingIcons benchmark should focus on `strip_buffers + binary_batch` modes.
+MovingIcons の性能測定では、`strip_buffers + binary_batch` の方式に重点を置きます。
 
-`direct_lcd` currently clears the visible display every frame. That makes it useful as a correctness/debug mode, but not as the primary animation-performance baseline.
+現在の `direct_lcd` は毎フレーム、表示中の画面を消去します。そのため正しさの確認や調査には有用ですが、アニメーション性能の主要な基準には適しません。
 
-Current draw modes have different meanings:
+描画方式ごとの意味は異なります。
 
 - `push_rotate_zoom_list`
-  - closest to the dynamic transform behavior
-  - useful for measuring transformed sprite cost
+  - 動的変換の動作に最も近い
+  - 変換付きスプライト費用の測定に有用
 
 - `push_sprite_list`
-  - whole-sprite blit baseline
-  - useful for separating transform cost from sprite blit and presentation cost
+  - スプライト全体転送の基準
+  - 変換費用と、スプライト転送および表示費用を分離するために有用
 
 - `push_sprite_region_list`
-  - atlas-oriented source-region primitive
-  - useful for future animation layouts and dirty-region style rendering
-  - not automatically faster for MovingIcons when every object still uses a full 32x32 icon
+  - 図柄表の元領域を扱う図形操作
+  - 将来のアニメーション配置や変更領域描画に有用
+  - すべての物体が32×32の図柄全体を使う MovingIcons で、自動的に高速になるわけではない
 
-Benchmark conclusions should not compare non-equivalent behavior as if it were the same animation.
+動作が同等でない方式を、同じアニメーションであるかのように比較して結論を出してはいけません。
 
-## Stack-chan and palette-index rendering
+## ｽﾀｯｸﾁｬﾝとパレット番号描画
 
-Stack-chan-like workloads remain an important target, but should be handled through generic render-batch primitives.
+ｽﾀｯｸﾁｬﾝ形式の処理は引き続き重要な対象ですが、汎用描画一括実行図形で扱います。
 
-The direction is:
+方向性は次のとおりです。
 
-- preserve palette-index color semantics
-- support transparent palette indices separately from transparent RGB565 values
-- avoid forcing naturally indexed sprites through RGB565 conversion as the main solution
-- prefer atlas/list/region primitives that are reusable beyond Stack-chan
+- パレット番号色の意味を維持する
+- 透明パレット番号を透明 RGB565 値とは別に扱う
+- 元から番号色であるスプライトを、主要な解決策として RGB565 へ強制変換しない
+- ｽﾀｯｸﾁｬﾝ以外でも再利用可能な図柄表／一覧／領域図形を優先する
 
-Palette-index sprite performance is follow-up implementation work, not a separate architecture.
+パレット番号式スプライトの性能改善は、別の構成ではなく、今後の実装作業として扱います。
 
-## Consequences
+## 影響
 
-### Positive
+### 良い影響
 
-- Reduces AtomVM/native crossings in animation frames.
-- Keeps ordinary calls simple and synchronous.
-- Keeps native APIs generic instead of demo-specific.
-- Gives MovingIcons and Stack-chan a shared performance direction.
-- Keeps native presentation policy in `lgfx_device` rather than in application code.
-- Gives benchmark work a clearer matrix: presentation cost, transform cost, sprite blit cost, and command decode cost can be separated.
-- Consolidates rendering decisions into one active ADR.
+- アニメーションフレームにおける AtomVM／ネイティブ境界越えを減らせる。
+- 通常呼び出しを単純かつ同期的に保てる。
+- 見本固有ではなく、汎用的なネイティブ API を維持できる。
+- MovingIcons と ｽﾀｯｸﾁｬﾝ に共通する性能改善方針を持てる。
+- ネイティブ表示方針をアプリケーションコードではなく `lgfx_device` に置ける。
+- 表示費用、変換費用、スプライト転送費用、命令復号費用を分離する、明確な性能測定軸を持てる。
+- 描画判断を1つの現行 ADR へ統合できる。
 
-### Negative
+### 悪い影響
 
-- Adds a second execution path that must be tested separately from ordinary calls.
-- Requires careful binary command validation.
-- Requires generated protocol docs and freeze tests to stay synchronized.
-- Requires benchmarking discipline because faster draw modes may not be behaviorally equivalent.
-- Does not make expensive LovyanGFX primitives cheap by itself.
+- 通常呼び出しとは別に試験すべき、第2の実行経路が増える。
+- バイナリー命令を慎重に検証する必要がある。
+- 生成プロトコル文書と固定化試験を同期させる必要がある。
+- より高速な描画方式が動作上同等とは限らないため、性能測定を慎重に行う必要がある。
+- 高コストな LovyanGFX 図形処理そのものを安価にするわけではない。
 
-## Rejected alternatives
+## 採用しなかった代替案
 
-### Batch every ordinary operation automatically
+### すべての通常操作を自動的に一括実行する
 
-Rejected. That would obscure error behavior, complicate ordering, and turn the whole API into a deferred execution model.
+採用しません。エラー動作が分かりにくくなり、順序制御が複雑になり、API 全体が遅延実行方式になってしまいます。
 
-### Reintroduce a broad v1-style native wrapper surface
+### v1 形式の広いネイティブ包みを再導入する
 
-Rejected. That would improve some hot paths by hand, but it would bring back the code-volume and maintenance problem v2 is meant to solve.
+採用しません。高頻度経路を個別に高速化できますが、v2 が解消しようとしているコード量と保守負担の問題を再び持ち込みます。
 
-### Add demo-specific native APIs
+### 見本固有のネイティブ API を追加する
 
-Rejected. MovingIcons and Stack-chan are representative workloads, not protocol concepts.
+採用しません。MovingIcons と ｽﾀｯｸﾁｬﾝ は代表的な処理であり、プロトコル概念ではありません。
 
-### Treat direct LCD rendering as the main baseline
+### 直接 LCD 描画を主要な基準にする
 
-Rejected for the current benchmark. The existing direct-LCD path clears the visible display every frame, so it is not a useful native-like animation baseline.
+現在の性能測定では採用しません。既存の直接 LCD 経路は毎フレーム表示中の画面を消去するため、ネイティブに近いアニメーション基準として有用ではありません。
 
-### Keep paletted sprite rendering as a separate batch architecture
+### パレット式スプライト描画を別の一括実行構成として維持する
 
-Rejected. Palette-index support is required, but it should be part of the generic render-batch command stream.
+採用しません。パレット番号対応は必要ですが、汎用描画一括実行命令列の一部として扱います。
 
-## Follow-up checklist
+## 今後の確認項目
 
-- [x] Add binary render-batch submission through `submitBinaryBatch`
-- [x] Add reusable `AtomLGFX.BinaryBatch` command builders
-- [x] Add `push_rotate_zoom_list` for transformed sprite workloads
-- [x] Add `push_sprite_list` for whole-sprite blit workloads
-- [x] Add `push_sprite_region_list` for atlas/source-region workloads
-- [x] Add native presentation strip commands
-- [x] Use native presentation strips in MovingIcons binary-batch strip mode
-- [x] Avoid public frame-buffer sprite allocation for `strip_buffers + binary_batch`
-- [x] Add binary fast path for prebuilt batch binaries
-- [x] Add protocol query for native presentation strip height
-- [x] Use native-negotiated presentation strip height in MovingIcons
-- [ ] Confirm negotiated strip height behavior on target hardware
-- [ ] Re-run MovingIcons benchmarks after native strip integration
-- [ ] Add native timing trace if frame time remains high
-- [ ] Measure render-batch validation overhead separately from draw and presentation cost
-- [ ] Add first-class palette-index sprite/list/region support needed by Stack-chan
-- [ ] Update this ADR or add a follow-up ADR if the rendering strategy changes substantially
+- [x] `submitBinaryBatch` によるバイナリー描画一括送信を追加
+- [x] 再利用可能な `AtomLGFX.BinaryBatch` 命令生成関数を追加
+- [x] 変換付きスプライト処理向けの `push_rotate_zoom_list` を追加
+- [x] スプライト全体転送向けの `push_sprite_list` を追加
+- [x] 図柄表／元領域処理向けの `push_sprite_region_list` を追加
+- [x] ネイティブ表示帯命令を追加
+- [x] MovingIcons のバイナリー一括実行帯方式でネイティブ表示帯を使用
+- [x] `strip_buffers + binary_batch` で公開フレームバッファースプライト割り当てを回避
+- [x] 構築済み一括バイナリー向けの高速経路を追加
+- [x] ネイティブ表示帯高を問い合わせるプロトコルを追加
+- [x] MovingIcons でネイティブ側と協議した表示帯高を使用
+- [ ] 対象実機で協議済み帯高の動作を確認
+- [ ] ネイティブ表示帯統合後に MovingIcons の性能測定を再実行
+- [ ] フレーム時間が依然として長い場合、ネイティブ計時記録を追加
+- [ ] 描画および表示費用と分けて、描画一括実行検証費用を測定
+- [ ] ｽﾀｯｸﾁｬﾝ に必要な正式なパレット番号式スプライト／一覧／領域対応を追加
+- [ ] 描画方針が大きく変わった場合、この ADR を更新するか後続 ADR を追加
 
-## Related documents
+## 関連文書
 
-- [Architecture](../architecture.md)
-- [Protocol](../protocol.md)
-- [V2 render-batch performance work log](../worklog/20260502-v2-render-batch-performance-work-log.md)
-- [Superseded packed scalar batch ADR](0007-packed-binary-scalar-batch.md)
-- [Superseded paletted sprite workload ADR](0008-expand-binary-batch-for-paletted-sprite-workloads.md)
+- [構成](../architecture.md)
+- [プロトコル](../protocol.md)
+- [v2 描画一括実行の性能作業記録](../worklog/20260502-v2-render-batch-performance-work-log.md)
+- [置き換え済みの詰め込み数値一括実行 ADR](0007-packed-binary-scalar-batch.md)
+- [置き換え済みのパレット式スプライト処理 ADR](0008-expand-binary-batch-for-paletted-sprite-workloads.md)

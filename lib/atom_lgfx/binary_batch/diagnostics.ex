@@ -12,13 +12,7 @@ defmodule AtomLGFX.BinaryBatch.Diagnostics do
   @push_rotate_zoom_list_record_size 12
 
   @doc """
-  Returns a compact diagnostic summary for a binary-batch command stream.
-
-  This helper is intended for logs, benchmarks, and generated-frame debugging. It
-  decodes the stream without calling the native driver and reports command counts
-  plus useful aggregate values such as batch size, dynamic payload bytes, fixed
-  overhead bytes, packed list record bytes, x1000 wire-efficiency ratios, packed
-  list command count, packed list instance count, and transform instance count.
+  バイナリーバッチ命令列の簡潔な診断概要を返します。
   """
   @spec summary(iodata()) :: {:ok, map()} | {:error, term()}
   def summary(commands) do
@@ -30,7 +24,7 @@ defmodule AtomLGFX.BinaryBatch.Diagnostics do
   end
 
   @doc """
-  Returns a binary-batch diagnostic summary or raises `ArgumentError`.
+  バイナリーバッチの診断概要を返し、不正な場合は `ArgumentError` を送出します。
   """
   @spec summary!(iodata()) :: map()
   def summary!(commands) do
@@ -41,12 +35,7 @@ defmodule AtomLGFX.BinaryBatch.Diagnostics do
   end
 
   @doc """
-  Returns a structured diagnostic report for a binary-batch command stream.
-
-  Unlike `decode/1` and `summary/1`, this helper returns partial context for
-  malformed streams. It is intended for generated-frame debugging and test
-  failure messages where knowing the last successfully decoded command is more
-  useful than only seeing the failing opcode.
+  バイナリーバッチ命令列の構造化された診断報告を返します。
   """
   @spec diagnose(iodata()) :: {:ok, map()} | {:error, map()}
   def diagnose(commands) do
@@ -66,7 +55,7 @@ defmodule AtomLGFX.BinaryBatch.Diagnostics do
   end
 
   @doc """
-  Returns a successful binary-batch diagnostic report or raises `ArgumentError`.
+  正常なバイナリーバッチ診断報告を返し、不正な場合は `ArgumentError` を送出します。
   """
   @spec diagnose!(iodata()) :: map()
   def diagnose!(commands) do
@@ -77,14 +66,11 @@ defmodule AtomLGFX.BinaryBatch.Diagnostics do
   end
 
   @doc """
-  Compares two binary-batch command streams using `summary/1` metrics.
+  `summary/1` の測定値を使用して2つのバイナリーバッチ命令列を比較します。
 
-  The first argument is treated as the baseline and the second argument as the
-  candidate. Delta values are `candidate - baseline`, while
-  `:batch_bytes_savings` is `baseline - candidate` for easier compactness checks.
+  第1引数を基準、第2引数を候補として扱います。差分値は `候補 - 基準` です。容量削減を確認しやすいよう、`:batch_bytes_savings` だけは `基準 - 候補` で計算します。
 
-  This helper is intended for tests, logs, and ADR-driven profiling. It does not
-  call the native driver and does not change the render hot path.
+  試験、記録、ADR に基づく性能分析での利用を想定しています。ネイティブドライバーは呼び出さず、描画の高速経路にも影響しません。
   """
   @spec compare(iodata(), iodata()) ::
           {:ok, map()} | {:error, {:baseline, term()}} | {:error, {:candidate, term()}}
@@ -110,7 +96,7 @@ defmodule AtomLGFX.BinaryBatch.Diagnostics do
   end
 
   @doc """
-  Compares two binary-batch command streams or raises `ArgumentError`.
+  2つのバイナリーバッチ命令列を比較し、不正な場合は `ArgumentError` を送出します。
   """
   @spec compare!(iodata(), iodata()) :: map()
   def compare!(baseline_commands, candidate_commands) do
@@ -124,31 +110,28 @@ defmodule AtomLGFX.BinaryBatch.Diagnostics do
   end
 
   @doc """
-  Checks a binary-batch command stream against caller-provided diagnostic limits.
+  呼び出し側が指定した診断上限に対して、バイナリーバッチ命令列を検査します。
 
-  This helper is intended for tests, generated-frame guardrails, and benchmark
-  logs. It uses `summary/1`, so it does not call the native driver and does not
-  change the render hot path.
+  試験、生成フレームの安全柵、性能記録での利用を想定しています。`summary/1` を使用するため、ネイティブドライバーは呼び出さず、描画の高速経路にも影響しません。
 
-  Supported limit keys are:
+  対応する上限:
 
-    * `:max_batch_bytes`
-    * `:max_command_count`
-    * `:max_scalar_count`
-    * `:max_render_private_count`
-    * `:max_dynamic_payload_bytes`
-    * `:max_fixed_overhead_bytes`
-    * `:max_bytes_per_command_x1000`
-    * `:max_bytes_per_logical_scalar_x1000`
-    * `:max_dynamic_payload_ratio_x1000`
-    * `:max_packed_list_record_ratio_x1000`
-    * `:max_packed_list_instances_per_command_x1000`
-    * `:min_packed_list_count`
-    * `:min_packed_list_instance_count`
-    * `:min_packed_list_instances_per_command_x1000`
+  - `:max_batch_bytes`
+  - `:max_command_count`
+  - `:max_scalar_count`
+  - `:max_render_private_count`
+  - `:max_dynamic_payload_bytes`
+  - `:max_fixed_overhead_bytes`
+  - `:max_bytes_per_command_x1000`
+  - `:max_bytes_per_logical_scalar_x1000`
+  - `:max_dynamic_payload_ratio_x1000`
+  - `:max_packed_list_record_ratio_x1000`
+  - `:max_packed_list_instances_per_command_x1000`
+  - `:min_packed_list_count`
+  - `:min_packed_list_instance_count`
+  - `:min_packed_list_instances_per_command_x1000`
 
-  Returns `{:ok, report}` when all limits pass, or
-  `{:error, {:budget_exceeded, report}}` when any limit fails.
+  すべての上限を満たす場合は `{:ok, report}`、いずれかを超えた場合は `{:error, {:budget_exceeded, report}}` を返します。
   """
   @spec check_budget(iodata(), map() | keyword()) ::
           {:ok, map()} | {:error, term()} | {:error, {:budget_exceeded, map()}}
@@ -177,8 +160,7 @@ defmodule AtomLGFX.BinaryBatch.Diagnostics do
   end
 
   @doc """
-  Checks a binary-batch command stream against diagnostic limits or raises
-  `ArgumentError`.
+  診断上限に対してバイナリーバッチ命令列を検査し、不正な場合は `ArgumentError` を送出します。
   """
   @spec check_budget!(iodata(), map() | keyword()) :: map()
   def check_budget!(commands, limits) do

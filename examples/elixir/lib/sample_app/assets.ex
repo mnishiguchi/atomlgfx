@@ -4,9 +4,9 @@
 
 defmodule SampleApp.Assets do
   @moduledoc """
-  Static binary assets used by the Elixir examples.
+  Elixir の見本アプリケーションで使用する静的バイナリー素材です。
 
-  This module exposes bundled icon binaries.
+  同梱したアイコンのバイナリーを提供します。
   """
 
   @icon_w 32
@@ -27,7 +27,7 @@ defmodule SampleApp.Assets do
   def icon_h, do: @icon_h
 
   @doc """
-  Returns one bundled icon binary.
+  同梱したアイコンのバイナリーを1つ返します。
   """
   def icon(name), do: Map.fetch!(@icons, name)
 end

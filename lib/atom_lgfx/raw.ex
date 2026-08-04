@@ -4,18 +4,16 @@
 
 defmodule AtomLGFX.Raw do
   @moduledoc """
-  Explicit escape hatch for low-level LovyanGFX protocol calls.
+  低水準の LovyanGFX プロトコル呼び出しを明示的に行うための窓口です。
 
-  This module bypasses the curated public-operation filter used by
-  `AtomLGFX.call/4`. It still requires operation names to be known atoms from
-  the generated opcode table.
+  このモジュールは `AtomLGFX.call/4` が使用する公開操作の選別を迂回します。ただし、操作名には生成済み操作コード表に存在する既知のアトムだけを指定できます。
   """
 
   alias AtomLGFX.OpSchema
   alias AtomLGFX.Protocol
 
   @doc """
-  Calls a known operation through the raw v3 call protocol.
+  生の v3 呼び出しプロトコルを通じて、既知の操作を呼び出します。
   """
   def call(port, op_name, args \\ [], opts \\ [])
 

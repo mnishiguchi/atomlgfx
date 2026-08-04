@@ -4,42 +4,31 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Elixir package
+# Elixir パッケージ
 
-This repository provides the pre-release `atomlgfx` Elixir wrapper for AtomVM.
-The current work is v3 because it implements wire protocol v3. No separate
-package or API version has been assigned.
+このリポジトリは、AtomVM 向けの公開前 Elixir ラッパー `atomlgfx` を提供します。現在の実装はワイヤープロトコル v3 を実装するため v3 と呼びますが、独立したパッケージ版や API 版はまだ設けていません。
 
-It is a wrapper around the native `lgfx_port` driver in this repository. The
-package provides the Elixir-facing API, convenience helpers, and wrapper-side
-normalization on top of the shared native protocol.
+このパッケージは、同じリポジトリにあるネイティブドライバー `lgfx_port` のラッパーです。共有ネイティブプロトコルの上に、Elixir 向け API、補助関数、入力の正規化を提供します。
 
-The current native protocol is v3:
+現在のネイティブプロトコルは v3 です。
 
-- ordinary drawing and control calls are synchronous flat tuple requests
-- common drawing commands should normally be grouped with `AtomLGFX.render/3`
-- `AtomLGFX.render_lcd/3` and `AtomLGFX.render_sprite/4` make common target
-  selection explicit while still using the same render-first path
-- sprite drawing can use `AtomLGFX.render_sprite/4`, then `{:push_sprite, ...}`
-  in an LCD render command list
-- `AtomLGFX.render/3` compiles LovyanGFX-style commands to the existing
-  `AtomLGFX.BinaryBatch` protocol
-- `AtomLGFX.BinaryBatch` remains available for lower-level tests, diagnostics,
-  and tuned frame scripts
-- setup, queries, allocation, calibration, sprite lifecycle, palette creation,
-  and touch operations stay on the ordinary call path
+- 通常の描画や制御は、平坦な組による同期要求として実行する
+- 一般的な描画命令は、通常 `AtomLGFX.render/3` でまとめる
+- `AtomLGFX.render_lcd/3` と `AtomLGFX.render_sprite/4` は、同じ描画優先経路を使いながら対象を明示する
+- スプライトへの描画は `AtomLGFX.render_sprite/4` で行い、LCD 側の描画命令で `{:push_sprite, ...}` を使える
+- `AtomLGFX.render/3` は LovyanGFX 風の命令を既存の `AtomLGFX.BinaryBatch` プロトコルへ変換する
+- `AtomLGFX.BinaryBatch` は、低水準試験、診断、調整済みフレーム命令列のため引き続き利用できる
+- 初期設定、照会、確保、補正、スプライトのライフサイクル、パレット作成、タッチ操作は通常の呼び出し経路を使う
 
-## Requirements
+## 必要条件
 
-This package depends on AtomVM firmware that includes the native `lgfx_port`
-driver.
+このパッケージには、ネイティブ `lgfx_port` ドライバーを組み込んだ AtomVM ファームウェアが必要です。
 
-The native driver and this Elixir wrapper are developed together in the same
-repository and must come from the same Git commit.
+ネイティブドライバーと Elixir ラッパーは同じリポジトリで一体として開発しています。必ず同じ Git コミットから取得してください。
 
-## Installation
+## 導入
 
-When depending on Git, pin the exact commit used to build the native driver.
+Git 依存として使う場合は、ネイティブドライバーの構築に使ったコミットへ固定します。
 
 ```elixir
 defp deps do
@@ -51,13 +40,13 @@ defp deps do
 end
 ```
 
-Then fetch dependencies.
+依存関係を取得します。
 
 ```bash
 mix deps.get
 ```
 
-## Basic usage
+## 基本的な使い方
 
 ```elixir
 {:ok, port} = AtomLGFX.open(panel_driver: :ili9488, width: 320, height: 480)
@@ -78,20 +67,13 @@ mix deps.get
   ])
 ```
 
-Adjust options and function calls to match your board and target device.
+基板と表示装置に合わせて、設定値と関数呼び出しを調整してください。
 
-## Render batches
+## 描画バッチ
 
-Use `AtomLGFX.render/3` first for ordinary drawing. `AtomLGFX.render_lcd/3` and
-`AtomLGFX.render_sprite/4` are thin helpers that make the target explicit while
-still using the same render-first path. Render commands normalize common color
-inputs, including named colors, `{:rgb, r, g, b}`, `{:rgb565, value}`, and
-`{:rgb888, value}`. Text datum commands accept LovyanGFX-style atoms such as
-`:top_left`, `:middle_center`, and `:bottom_right`. Palette-backed sprite
-primitives use explicit `{:index, n}` colors; render normalization inserts the
-necessary low-level color-mode transitions. Use `AtomLGFX.BinaryBatch` directly
-when a test, benchmark, or tuned example needs exact control of the wire-level
-frame script.
+通常の描画では、まず `AtomLGFX.render/3` を使います。`AtomLGFX.render_lcd/3` と `AtomLGFX.render_sprite/4` は、同じ描画優先経路を使いながら対象を明示する薄い補助関数です。
+
+描画命令は、名前付き色、`{:rgb, r, g, b}`、`{:rgb565, value}`、`{:rgb888, value}` などの一般的な色入力を正規化します。文字基準位置には `:top_left`、`:middle_center`、`:bottom_right` などの LovyanGFX 風アトムを指定できます。パレット付きスプライトの基本図形では `{:index, n}` を明示し、必要な低水準色モードの切り替えは描画正規化側が挿入します。
 
 ```elixir
 :ok = AtomLGFX.create_sprite(port, 120, 72, 16, 1)
@@ -113,12 +95,7 @@ frame script.
   ])
 ```
 
-When exact wire-level control matters, use `AtomLGFX.BinaryBatch` directly.
-It is now a stable public facade. Lower-level implementation details live in
-focused internal modules for encoding, submission, validation, and diagnostics.
-Ordinary callers should continue using `AtomLGFX.render/3` or the public
-`AtomLGFX.BinaryBatch` facade instead of calling those internal modules directly.
-
+ワイヤー形式を厳密に制御する必要がある試験、性能測定、調整済みの例では、`AtomLGFX.BinaryBatch` を直接使います。これは安定した公開窓口であり、符号化、送信、検証、診断の詳細は用途別の内部モジュールへ分離しています。通常の利用者は、内部モジュールではなく `AtomLGFX.render/3` または公開 `AtomLGFX.BinaryBatch` を使用してください。
 
 ```elixir
 frame = [
@@ -132,42 +109,35 @@ frame = [
 :ok = AtomLGFX.BinaryBatch.render(port, frame)
 ```
 
-Successful submission means the script was decoded and executed synchronously.
-Malformed bytes fail as protocol errors; unsupported render commands are
-rejected.
+送信成功は、命令列が同期的に解析・実行されたことを表します。不正なバイト列はプロトコルエラーとなり、未対応の描画命令は拒否されます。
 
-## High-load animation
+## 高負荷アニメーション
 
-The experimental retained render-program API was removed to reduce OOM risk.
-Use the friendly render API for ordinary drawing bursts. For measured hot loops
-such as MovingIcons, keep object state in Elixir and isolate the advanced
-`AtomLGFX.BinaryBatch.push_rotate_zoom_list/2` path in an application-specific
-renderer. This keeps the common API intuitive without hiding large buffers or
-adding demo concepts to the protocol.
+メモリー不足の危険を下げるため、試験的な保持描画プログラム API は削除しました。通常の描画のまとまりには、使いやすい描画 API を使用してください。
 
-## Scope
+MovingIcons のような計測対象の高負荷処理では、物体状態を Elixir 側に保持し、上級者向け `AtomLGFX.BinaryBatch.push_rotate_zoom_list/2` の利用を用途固有の描画器へ隔離します。これにより、一般 API を分かりやすく保ち、大きな隠れバッファや例固有の概念をプロトコルへ持ち込みません。
 
-This package owns:
+## 責務
 
-- Elixir-facing API shape
-- convenience helpers
-- wrapper-side validation and normalization
-- wrapper-local ergonomics
+このパッケージが担当する範囲は次のとおりです。
 
-It does not define the native protocol contract or LovyanGFX device semantics.
+- Elixir 向け API の形
+- 補助関数
+- ラッパー側の検証と正規化
+- ラッパー内の使いやすさ
 
-For those, see:
+ネイティブプロトコル契約や LovyanGFX の装置意味は、このパッケージでは定義しません。
 
-- [Architecture](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/architecture.md)
-- [Protocol](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/protocol.md)
-- [ESP-IDF component guide](esp-idf-component.md)
-- [Port layer](../lgfx_port/README.md)
-- [Device adapter layer](../lgfx_device/README.md)
+関連文書:
 
-## Compatibility
+- [構成](architecture.md)
+- [プロトコル](protocol.md)
+- [ESP-IDF 部品](esp-idf-component.md)
+- [ポート層](../lgfx_port/README.md)
+- [装置適合層](../lgfx_device/README.md)
 
-The v3 public API is the current supported pre-release surface. Always use the
-native component from the same Git commit as the Elixir wrapper; mixing
-development revisions can produce `bad_proto`, `bad_op`, or capability
-mismatches. The `0.1.0` value in `mix.exs` is required placeholder metadata,
-not a published AtomLGFX version.
+## 互換性
+
+v3 公開 API が、現在対応している公開前の操作面です。ネイティブ部品と Elixir ラッパーは必ず同じ Git コミットから取得してください。異なる開発リビジョンを混在させると、`bad_proto`、`bad_op`、機能不一致が生じる可能性があります。
+
+`mix.exs` の `0.1.0` は Mix が要求する仮の記録値であり、公開済み AtomLGFX の版ではありません。

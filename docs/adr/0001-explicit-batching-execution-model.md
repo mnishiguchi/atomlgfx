@@ -4,166 +4,163 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 0001: Explicit batching execution model
+# ADR 0001: 明示的バッチ実行モデル
 
-## Status
+## 状態
 
-Superseded
+置換済み
 
-Superseded by [ADR 0006: Flatten native v2 implementation](0006-flatten-native-v2-implementation.md)
-and [ADR 0007: Packed binary scalar batch path](0007-packed-binary-scalar-batch.md).
+[ADR 0006: v2 ネイティブ実装を平坦化する](0006-flatten-native-v2-implementation.md) および [ADR 0007: 圧縮バイナリーによるスカラー描画バッチ経路](0007-packed-binary-scalar-batch.md) により置き換えられました。
 
-Current v2 does not expose the tuple/list batch runtime described below. The
-implemented batch fast path is the packed binary scalar `submitBinaryBatch`
-operation.
+現在の v2 は、以下で説明する組・一覧形式のバッチ実行基盤を公開していません。実装済みの高速バッチ経路は、圧縮バイナリーによるスカラー描画の `submitBinaryBatch` 操作です。
 
-## Context
+## 背景
 
-`atomlgfx` aims to improve rendering-heavy workloads while preserving the simple and predictable mental model of ordinary operations.
+`atomlgfx` は、通常操作の単純で予測しやすい考え方を保ちながら、描画量の多い処理を改善することを目指しています。
 
-The adopted direction is:
+採用した方向は次のとおりです。
 
-- keep ordinary operations synchronous
-- make batching explicit and optional
-- use `lgfx_runtime` only for batch execution
-- keep `lgfx_device` as the LovyanGFX-facing adapter
-- treat `startWrite` / `endWrite` as an internal batch optimization
+- 通常操作は同期実行のまま維持する
+- バッチ処理を明示的かつ任意とする
+- `lgfx_runtime` はバッチ実行にだけ使用する
+- `lgfx_device` は LovyanGFX と接する適応層として維持する
+- `startWrite` / `endWrite` は内部的なバッチ最適化として扱う
 
-For MovingIcons-like workloads, the main performance objective is to reduce Elixir/native control-plane overhead:
+MovingIcons のような処理では、Elixir とネイティブ間の制御負荷を減らすことが主な性能目標です。
 
-- fewer Elixir-to-native crossings
-- fewer reply allocations
-- fewer lock/unlock cycles
-- wider native write windows across grouped rendering commands
+- Elixir からネイティブへの移動回数を減らす
+- 応答値の確保回数を減らす
+- ロックと解除の回数を減らす
+- まとめた描画命令全体に対して、ネイティブ側の書き込み区間を広げる
 
-Tuple batching helps with control-plane overhead, but it is not the final representation for repeated homogeneous animation data. Fixed-layout binary operations remain a better long-term fit for data-plane workloads.
+組形式のバッチは制御面の負荷を減らせますが、同じ形のアニメーションデータを繰り返し扱う最終形式ではありません。固定配置のバイナリー操作の方が、データ面の高頻度処理には長期的に適しています。
 
-At the time this ADR was accepted, the batch path provided:
+この ADR を採用した時点で、バッチ経路は次を提供していました。
 
-- explicit batch submission via `submitBinaryBatch`
-- inline, no-payload batch commands for the first render-heavy slice
-- runtime tracking for batch id, state, and failure
-- a single pending batch slot per port
-- grouped native dispatch under a wider write window
-- a preserved direct synchronous path for ordinary non-batch operations
+- `submitBinaryBatch` による明示的なバッチ送信
+- 最初の描画量の多い範囲を対象とする、データを別に所有しない行内バッチ命令
+- バッチ番号、状態、失敗を追跡する実行基盤
+- ポートごとに1つの保留バッチ枠
+- 広い書き込み区間内でまとめて行うネイティブ命令振り分け
+- バッチ外の通常操作向けに維持した直接同期経路
 
-A design question remained open:
+次の設計上の問いが残っていました。
 
-- should batch execution be forced into a richer deferred worker/queue model now,
-  or should the architecture stay smaller and focus on the main performance win first?
+- 今すぐ、より高度な遅延作業器や待ち行列モデルへバッチ実行を移すべきか
+- それとも構成を小さく保ち、まず主な性能上の利点に集中すべきか
 
-## Decision
+## 決定
 
-`atomlgfx` adopts the following batching execution model:
+`atomlgfx` は、次のバッチ実行モデルを採用します。
 
-1. Ordinary non-batch operations remain on the direct synchronous path.
-   - Requests are decoded in `lgfx_port`.
-   - Handlers call `lgfx_device_*` directly.
-   - Success and failure for ordinary operations remain immediate.
+1. バッチ外の通常操作は、直接同期経路に維持します。
+   - 要求は `lgfx_port` で復号します。
+   - 各処理は `lgfx_device_*` を直接呼び出します。
+   - 通常操作の成功と失敗は、引き続き直ちに返します。
 
-2. Batching is explicit and opt-in.
-   - Heavy render paths may build and submit a batch explicitly.
-   - Ordinary API usage continues to feel like v1.
+2. バッチ処理は明示的な任意機能とします。
+   - 描画量の多い経路では、必要に応じてバッチを明示的に構築して送信できます。
+   - 通常の API 利用感は v1 と同様に保ちます。
 
-3. `lgfx_runtime` is batch-only infrastructure, but not a general queue.
-   - The current design uses a single pending batch slot per port.
-   - A second batch is rejected while one batch is pending.
-   - This is an intentional simplification, not an accidental omission.
+3. `lgfx_runtime` はバッチ専用の基盤としますが、汎用待ち行列にはしません。
+   - 現在の設計では、ポートごとに保留バッチ枠を1つだけ持ちます。
+   - バッチが保留中の場合、2つ目のバッチは拒否します。
+   - これは意図的な簡素化であり、実装漏れではありません。
 
-4. The batching model does not require a separate worker or richer deferred scheduler at this time.
-   - Same port-thread-driven batch execution is acceptable.
-   - We do not introduce extra queueing machinery solely to make the model appear more asynchronous.
-   - The architecture should stay honest about the execution model it actually needs.
+4. 現時点では、バッチモデルに別の作業器や高度な遅延実行管理を必須としません。
+   - ポートの処理スレッドがそのままバッチを実行する方式を認めます。
+   - 非同期らしく見せることだけを目的として、追加の待ち行列機構を導入しません。
+   - 実際に必要な実行モデルを正直に表す、小さな構成を維持します。
 
-5. The main performance win comes from grouped native execution, not from stricter delay semantics.
-   - Many Elixir-side render calls collapse into one explicit batch submit.
-   - Many replies collapse into one reply.
-   - Batch commands execute in one native loop.
-   - Batch execution may hold one wider `startWrite` / `endWrite` window across grouped commands.
+5. 主な性能上の利点は、厳密な遅延実行の意味ではなく、ネイティブ側でまとめて実行することから得ます。
+   - Elixir 側の多数の描画呼び出しを、1回の明示的なバッチ送信へまとめます。
+   - 多数の応答を1つへまとめます。
+   - バッチ命令を1つのネイティブループで実行します。
+   - まとめた命令全体に対し、1つの広い `startWrite` / `endWrite` 区間を保持できます。
 
-6. `lgfx_runtime` must not become the universal execution path.
-   - Runtime concerns stay confined to explicit batching.
-   - Ordinary operations remain direct.
-   - `lgfx_device` remains the device-facing execution core.
+6. `lgfx_runtime` をすべての操作の共通経路にはしません。
+   - 実行基盤に関する責務は明示的なバッチ処理に限定します。
+   - 通常操作は直接経路に維持します。
+   - `lgfx_device` は機器側の実行中核として維持します。
 
-7. Tuple batch is a control-plane feature, not the final animation data plane.
-   - It is suitable for grouped coarse operations, diagnostics, and mixed command sets.
-   - It is not intended to become a second interpreted graphics VM.
+7. 組形式のバッチは制御面の機能であり、アニメーションデータの最終形式ではありません。
+   - 粗い操作をまとめる場合、診断、異なる命令を混在させる場合に適しています。
+   - 第2の解釈式描画仮想機械へ成長させることは意図していません。
 
-8. Public batch policy belongs to Elixir.
-   - Elixir decides whether an operation is public-batchable, raw-only, payload-bearing, or otherwise unsafe for the public batch API.
-   - Native batch code still rejects malformed payloads, invalid opcodes, unsupported live capabilities, payload-ownership violations, and runtime-state errors.
+8. 公開バッチの方針は Elixir 側に置きます。
+   - 操作を公開バッチで許可するか、生呼び出し専用とするか、別データを持つか、公開バッチ API には危険かを Elixir 側で判断します。
+   - ネイティブ側のバッチ処理でも、不正なデータ、無効な操作番号、実機が対応しない機能、データ所有権違反、実行状態エラーを拒否します。
 
-9. Repeated homogeneous hot-path rendering should prefer binary operations or native presentation helpers.
-   - Tuple batch should not grow indefinitely to describe every frame-oriented workload.
-   - The batch runtime stays smaller when high-frequency animation traffic uses a dedicated binary data plane.
+9. 同じ形の描画を高頻度で繰り返す場合は、バイナリー操作またはネイティブ表示補助を優先します。
+   - フレーム向けのあらゆる処理を記述するために、組形式バッチを際限なく増やしません。
+   - 高頻度のアニメーション通信を専用バイナリーデータ経路へ分離することで、バッチ実行基盤を小さく保ちます。
 
-## Rationale
+## 理由
 
-This decision keeps the architecture aligned with the narrower direction:
+この決定は、構成を次の小さな方向へ揃えます。
 
-- `v2 = v1 + explicit batching`
-- the direct synchronous path remains the default path
-- explicit batching is the only place where deferred-style execution semantics appear
-- runtime concerns remain separate from device semantics
-- tuple batch remains a grouped control-plane tool rather than the long-term animation data plane
+- `v2 = v1 + 明示的バッチ`
+- 直接同期経路を既定の経路として維持する
+- 遅延実行に似た意味を持つのは明示的バッチだけとする
+- 実行基盤の責務と機器の意味を分離する
+- 組形式バッチを、長期的なアニメーションデータ経路ではなく、まとめた制御操作として維持する
 
-This approach is simpler to implement, easier to explain, and sufficient for the main performance goal:
+この方法は実装しやすく、説明しやすく、主な性能目標を満たすために十分です。
 
-- improve MovingIcons-like heavy render performance by reducing Elixir/native control-plane overhead
+- Elixir とネイティブ間の制御負荷を減らし、MovingIcons のような描画量の多い処理を改善する
 
-A richer asynchronous queue model would add complexity:
+より高度な非同期待ち行列モデルを導入すると、次の複雑さが増えます。
 
-- broader queue semantics
-- more lifecycle bookkeeping
-- more states to explain and test
-- more opportunities to blur the direct sync path
+- より広い待ち行列の意味
+- より多いライフサイクル管理
+- 説明・検証すべき状態の増加
+- 直接同期経路との境界が曖昧になる可能性
 
-That complexity is not justified unless measurement shows that the simpler model is insufficient.
+小さなモデルでは不十分だと測定で分かるまでは、この複雑さを正当化できません。
 
-## Consequences
+## 影響
 
-### Positive
+### 利点
 
-- Preserves the simple v1 mental model for ordinary operations
-- Keeps batching explicit and contained
-- Reduces protocol/control-plane overhead where it matters most
-- Avoids premature queue/scheduler complexity
-- Keeps the current implementation easier to reason about and benchmark
+- 通常操作について v1 の単純な考え方を維持できる
+- バッチ処理を明示的な範囲に閉じ込められる
+- 重要な箇所でプロトコルと制御面の負荷を減らせる
+- 時期尚早な待ち行列・実行管理の複雑化を避けられる
+- 現在の実装を理解し、測定しやすく保てる
 
-### Negative
+### 欠点
 
-- The runtime semantics are simpler than a full queue/worker model
-- A single pending batch slot limits concurrency across multiple outstanding batches
-- Future `flush` or wait semantics may need refinement if richer scheduling is introduced later
-- Documentation must be careful not to overstate async behavior
-- Tuple batch is not the ideal representation for repeated homogeneous animation records
+- 完全な待ち行列・作業器モデルより実行基盤の意味が単純になる
+- 保留バッチ枠が1つのため、複数バッチを同時に未完了状態へ置けない
+- 将来、より高度な実行管理を導入する場合、`flush` や待機の意味を見直す可能性がある
+- 文書で非同期動作を実態以上に表現しないよう注意が必要になる
+- 同じ形のアニメーションレコードを繰り返す用途には、組形式バッチが最適ではない
 
-## Rejected alternatives
+## 却下した案
 
-### Alternative 1: route all operations through runtime
+### 案1: すべての操作を実行基盤経由にする
 
-Rejected.
+却下しました。
 
-This would over-generalize the runtime, add deferred semantics to ordinary operations, and weaken the simple v1-style behavior that remains valuable for most of the API.
+実行基盤を過度に一般化し、通常操作にも遅延実行の意味を加え、API の大部分で有用な v1 形式の単純な動作を弱めます。
 
-### Alternative 2: require a richer worker or queue model now
+### 案2: 今すぐ高度な作業器または待ち行列モデルを必須にする
 
-Rejected for now.
+現時点では却下しました。
 
-A stricter queue model may become useful later, but it is not required to validate the main performance objective for MovingIcons-like workloads.
+より厳密な待ち行列モデルが将来役立つ可能性はありますが、MovingIcons のような処理で主な性能目標を検証するためには必要ありません。
 
-### Alternative 3: optimize for semantic purity before measuring performance
+### 案3: 性能測定より先に意味上の純粋さを最適化する
 
-Rejected.
+却下しました。
 
-The primary concern is to prove the main win first: fewer Elixir/native crossings and wider native execution windows in heavy render paths.
+まず証明すべき主な利点は、描画量の多い経路で Elixir とネイティブ間の移動回数を減らし、ネイティブ側の実行区間を広げることです。
 
-## Follow-up implications
+## 今後への影響
 
-- Benchmark MovingIcons and similar grouped render workloads against v1-style per-op execution.
-- Keep the single pending batch slot explicit in code comments and documentation.
-- Avoid introducing broader runtime semantics until benchmark data shows they are needed.
-- Keep tuple batch focused on grouped control-plane operations.
-- Prefer fixed-layout binary operations or native presentation helpers for repeated homogeneous rendering workloads.
-- Revisit richer queueing, flush semantics, and payload batching only if measured benefits justify the added complexity.
+- MovingIcons と同様のまとめ描画処理を、v1 形式の操作ごとの実行と比較測定する
+- 保留バッチ枠が1つであることを、コードコメントと文書へ明示する
+- 測定結果が必要性を示すまでは、より広い実行基盤の意味を導入しない
+- 組形式バッチを、まとめた制御面の操作に限定する
+- 同じ形の描画を繰り返す場合は、固定配置のバイナリー操作またはネイティブ表示補助を優先する
+- 待ち行列、`flush` の意味、データ付きバッチは、測定上の利点が複雑さを正当化する場合にだけ再検討する

@@ -4,174 +4,174 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 0003: Controller-first panel and touch support
+# ADR 0003: 表示器とタッチ制御器を制御器単位で対応する
 
-## Status
+## 状態
 
-Accepted
+採用
 
-## Context
+## 背景
 
-`atomlgfx` currently supports a small panel-driver set and a touch path that was originally shaped around XPT2046-style SPI touch configuration.
+`atomlgfx` は現在、少数の表示器制御器に対応し、当初 XPT2046 形式の SPI タッチ設定を前提として設計したタッチ経路を持っています。
 
-That worked for the current supported boards and examples, but it creates a structural limitation for adding new hardware such as M5Stack Core2, which uses:
+現在対応している基板と見本では動作しますが、次を使用する M5Stack Core2 のような新しい機器を追加するうえで、構造上の制約になります。
 
-- LCD controller: `ILI9342C`
-- touch controller: `FT6336U`
+- LCD 制御器: `ILI9342C`
+- タッチ制御器: `FT6336U`
 
-The main design question is not only whether to add support for those two controllers, but how to model future hardware support in a way that keeps the codebase maintainable and the public API understandable.
+主な設計上の問いは、この2つの制御器へ対応するかどうかだけではありません。将来の機器対応をどのように表現すれば、コードベースを保守しやすく、公開 API を理解しやすく保てるかが重要です。
 
-A narrow board-specific approach such as adding an early `:m5stack_core2` special case would solve one immediate bring-up path, but it would blur the distinction between:
+早い段階で `:m5stack_core2` の特別処理を追加するような基板固有方式は、直近の初期動作確認を解決しますが、次の境界を曖昧にします。
 
-- generic controller support
-- board-level presets and examples
+- 汎用的な制御器対応
+- 基板単位の既定設定と見本
 
-The touch side is the more important architecture decision.
+タッチ側は、より重要な構成上の決定です。
 
-Supporting `FT6336U` requires a more general model where touch is selected by controller type rather than inferred from an XPT2046-shaped SPI configuration surface.
+`FT6336U` へ対応するには、XPT2046 形式の SPI 設定からタッチ方式を推測するのではなく、制御器の種類を明示して選択する、より一般的なモデルが必要です。
 
-Implementation work also clarified an additional boundary:
+実装作業から、さらに次の境界が明確になりました。
 
-- generic controller support is not the same as full board bring-up
+- 汎用制御器対応と、基板全体の初期動作対応は同じではない
 
-Some boards that share the same display and touch controllers still differ in how reset, backlight, interrupt, or power are routed. Those board-specific control paths may involve PMUs or I/O expanders and should not be forced into the generic controller layer too early.
+同じ表示器・タッチ制御器を使用する基板でも、リセット、バックライト、割り込み、電源の接続方法が異なる場合があります。これらの基板固有制御には電源管理回路や入出力拡張器が関わることがあり、早い段階で汎用制御器層へ押し込むべきではありません。
 
-A second practical clarification also emerged during implementation:
+実装中には、次の実用上の整理も得られました。
 
-- the initial FT6336U rollout may arrive first through open-time controller configuration
-- full build-default parity for non-XPT2046 touch controllers may follow later
+- 最初の FT6336U 対応は、開始時の制御器設定として先に提供してよい
+- XPT2046 以外のタッチ制御器を構築時既定値でも同等に扱う対応は、後から追加してよい
 
-This staged rollout is acceptable if the architectural direction is correct and the public model remains controller-first.
+構成上の方向が正しく、公開モデルが制御器優先のままであれば、この段階的導入を認めます。
 
-## Decision
+## 決定
 
-`atomlgfx` will support new display and touch hardware through a controller-first configuration model.
+`atomlgfx` は、新しい表示器とタッチ機器へ、制御器優先の設定モデルで対応します。
 
-1. Panel support remains controller-based.
-   - Add `ILI9342C` as a supported `panel_driver`.
-   - Continue to treat panel selection as a generic controller choice, not as a board-only choice.
+1. 表示器対応を制御器単位で維持します。
+   - `ILI9342C` を対応する `panel_driver` として追加します。
+   - 表示器の選択は、基板専用の選択ではなく、汎用制御器の選択として扱い続けます。
 
-2. Touch support becomes controller-based.
-   - Introduce an explicit `touch_driver` configuration.
-   - The initial generic touch-driver surface will support at least:
+2. タッチ対応を制御器単位へ変更します。
+   - 明示的な `touch_driver` 設定を導入します。
+   - 最初の汎用タッチ制御器面では、少なくとも次へ対応します。
      - `:xpt2046`
      - `:ft6336u`
 
-3. Driver-specific configuration is separated by controller family.
-   - XPT2046-specific SPI configuration remains available for `:xpt2046`.
-   - FT6336U-specific configuration is added in a controller-appropriate form.
-   - We do not force new touch controllers into an XPT2046-shaped configuration model.
+3. 制御器系列ごとに固有設定を分離します。
+   - `:xpt2046` では、XPT2046 固有の SPI 設定を引き続き利用できます。
+   - FT6336U には、その制御器に適した設定を追加します。
+   - 新しいタッチ制御器を XPT2046 形式の設定モデルへ無理に合わせません。
 
-4. Generic controller support has a narrower meaning than full board bring-up.
-   - Controller support means `atomlgfx` can configure and attach the controller through its normal generic configuration path.
-   - Controller support does not by itself guarantee that all board-specific reset, backlight, interrupt, or power-management paths are handled.
-   - Board-specific PMU or I/O-expander behavior belongs in a higher board layer when required.
+4. 汎用制御器対応の意味を、基板全体の初期動作対応より狭く定義します。
+   - 制御器対応とは、通常の汎用設定経路を通じて `atomlgfx` が制御器を設定・接続できることを意味します。
+   - 制御器へ対応しただけでは、基板固有のリセット、バックライト、割り込み、電源管理をすべて扱えることを保証しません。
+   - 基板固有の電源管理回路や入出力拡張器の処理は、必要に応じて上位の基板層へ置きます。
 
-5. The initial rollout may be staged.
-   - FT6336U support may land first as an open-time controller configuration path.
-   - Full build-default parity for additional touch-controller families may follow later.
-   - This staged rollout is acceptable as long as the long-term model remains controller-first.
+5. 最初の導入は段階的に進められます。
+   - FT6336U 対応は、開始時の制御器設定経路として先に導入できます。
+   - 他のタッチ制御器系列を構築時既定値でも同等に扱う対応は、後から追加できます。
+   - 長期的なモデルを制御器優先に保つ限り、この段階的導入を認めます。
 
-6. Touch capability and attachment semantics must become controller-aware.
-   - Touch support must not be inferred only from XPT2046-specific signals such as a chip-select pin.
-   - Effective touch attachment and capability advertisement must reflect the selected controller family and the conditions required for that family.
+6. タッチ機能と接続判定を制御器対応にします。
+   - チップ選択ピンなど、XPT2046 固有の信号だけからタッチ対応を推測しません。
+   - 実際のタッチ接続状態と機能公開は、選択した制御器系列と、その系列に必要な条件を反映します。
 
-7. Board support is layered on top of controller support.
-   - M5Stack Core2 support will be provided through controller support first.
-   - A Core2 preset, helper, or example may be added later as a convenience layer.
-   - Board presets must not replace the generic controller abstractions.
+7. 基板対応を制御器対応の上へ重ねます。
+   - M5Stack Core2 には、まず制御器対応を通じて対応します。
+   - Core2 の既定設定、補助関数、見本は、後から利便層として追加できます。
+   - 基板の既定設定で、汎用制御器の抽象化を置き換えません。
 
-8. Public rendering APIs should remain stable where possible.
-   - This decision primarily affects configuration, capability gating, and native attach paths.
-   - Existing drawing and touch-read APIs should remain unchanged unless a clear incompatibility requires otherwise.
+8. 可能な限り公開描画 API を維持します。
+   - この決定が主に影響するのは、設定、機能判定、ネイティブ接続経路です。
+   - 明確な非互換性がない限り、既存の描画 API とタッチ読み取り API は変更しません。
 
-## Rationale
+## 理由
 
-This decision keeps the architecture aligned with the existing direction of the project:
+この決定は、プロジェクトの既存方向へ構成を揃えます。
 
-- generic public APIs
-- native-layer ownership of hardware-specific behavior
-- clear separation between configuration, device logic, and examples
+- 汎用的な公開 API
+- 機器固有動作をネイティブ層が所有する構成
+- 設定、機器処理、見本の明確な分離
 
-A controller-first model is a better long-term fit than a board-first shortcut.
+制御器優先モデルは、基板優先の近道より長期的に適しています。
 
-It avoids several problems:
+次の問題を避けられます。
 
-- growing the codebase through one-off board special cases
-- baking SPI-specific assumptions into all future touch support
-- making the supported surface harder to explain and test
-- conflating controller support with full board support
+- 基板ごとの一回限りの特別処理によってコードベースが増える
+- 今後のすべてのタッチ対応へ SPI 固有の前提を埋め込む
+- 対応範囲を説明・検証しにくくする
+- 制御器対応と基板全体の対応を混同する
 
-This direction also keeps future work reusable.
+この方向なら、今後の作業も再利用できます。
 
-Once `ILI9342C` and `FT6336U` are modeled as first-class controllers, the same infrastructure can support other boards that use the same or similar hardware without needing a fresh architecture decision each time.
+`ILI9342C` と `FT6336U` を第一級の制御器として表現すれば、同じまたは類似する機器を使用する他の基板でも、毎回新しい構成上の決定を行わずに同じ基盤を利用できます。
 
-At the same time, keeping controller support distinct from board bring-up gives the project room to handle boards that need extra reset, power, backlight, or interrupt orchestration without polluting the generic controller layer with board-specific glue too early.
+同時に、制御器対応と基板全体の初期動作対応を分けることで、追加のリセット、電源、バックライト、割り込み制御が必要な基板にも対応できます。汎用制御器層を、早すぎる段階で基板固有の処理によって汚さずに済みます。
 
-The staged rollout decision is also intentional.
+段階的導入も意図的です。
 
-It is better to land the correct controller model first than to preserve a misleading XPT2046-shaped abstraction only because the build-default surface has not yet been generalized.
+構築時既定値の面がまだ一般化されていないことだけを理由に、誤解を招く XPT2046 形式の抽象化を維持するより、まず正しい制御器モデルを導入する方が適切です。
 
-## Consequences
+## 影響
 
-### Positive
+### 利点
 
-- Makes `ILI9342C` support reusable beyond one board
-- Makes `FT6336U` support reusable beyond one board
-- Removes the current XPT2046-shaped limitation from touch configuration
-- Keeps board presets as a convenience layer rather than the primary abstraction
-- Makes future controller additions easier to reason about
-- Clarifies that controller support and board bring-up are related but distinct milestones
-- Allows incremental rollout without committing to the wrong abstraction
+- `ILI9342C` 対応を1つの基板以外でも再利用できる
+- `FT6336U` 対応を1つの基板以外でも再利用できる
+- タッチ設定から、現在の XPT2046 形式に偏った制約を除ける
+- 基板の既定設定を主要な抽象化ではなく利便層として維持できる
+- 今後の制御器追加を考えやすくなる
+- 制御器対応と基板全体の初期動作対応が、関連する別の節目であることを明確にできる
+- 誤った抽象化へ固定せず、段階的に導入できる
 
-### Negative
+### 欠点
 
-- Requires refactoring of the current touch configuration path
-- Increases configuration and validation complexity compared with a single-controller touch model
-- Adds more native attach and capability branches to test
-- May require migration care to preserve existing XPT2046 behavior cleanly
-- Some boards that share the same controllers may still require additional board-specific initialization layers
-- The initial rollout may temporarily leave build-default touch configuration less symmetric than the open-time configuration surface
+- 現在のタッチ設定経路を整理し直す必要がある
+- 単一制御器のタッチモデルと比べて、設定と検証が複雑になる
+- 検証すべきネイティブ接続経路と機能判定の分岐が増える
+- 既存 XPT2046 の動作をきれいに維持するため、移行時の注意が必要になる
+- 同じ制御器を持つ基板でも、追加の基板固有初期化層が必要な場合がある
+- 最初の導入段階では、開始時設定と比べて構築時既定値のタッチ設定が一時的に非対称になる可能性がある
 
-## Rejected alternatives
+## 却下した案
 
-### Alternative 1: add only a board-specific `:m5stack_core2` path
+### 案1: 基板固有の `:m5stack_core2` 経路だけを追加する
 
-Rejected.
+却下しました。
 
-This would solve one immediate target but would not address the deeper architectural problem that touch support is currently too tightly shaped around one controller family.
+直近の対象は解決できますが、現在のタッチ対応が1つの制御器系列に強く依存しているという、より深い構成上の問題を解決しません。
 
-### Alternative 2: add `ILI9342C` now and postpone the touch-model refactor indefinitely
+### 案2: 今は `ILI9342C` だけを追加し、タッチモデルの整理を無期限に延期する
 
-Rejected.
+却下しました。
 
-The LCD addition is useful, but the larger long-term decision is how touch support is modeled. Delaying that indefinitely would make future controller support harder to add cleanly.
+LCD の追加自体は有用ですが、長期的に重要なのはタッチ対応をどのように表現するかです。無期限に延期すると、今後の制御器対応をきれいに追加しにくくなります。
 
-### Alternative 3: keep touch support implicitly XPT2046-shaped and bolt FT6336U onto the same configuration surface
+### 案3: XPT2046 形式の暗黙モデルを維持し、同じ設定面へ FT6336U を継ぎ足す
 
-Rejected.
+却下しました。
 
-This would preserve short-term familiarity at the cost of a misleading and brittle abstraction.
+短期的な慣れやすさと引き換えに、誤解を招き壊れやすい抽象化を残します。
 
-### Alternative 4: treat controller support as equivalent to full board support
+### 案4: 制御器対応を基板全体の対応と同一視する
 
-Rejected.
+却下しました。
 
-Some boards sharing the same controllers still differ in reset, backlight, interrupt, or power plumbing. Treating controller support as full board support would overstate what the generic layer actually provides.
+同じ制御器を持つ基板でも、リセット、バックライト、割り込み、電源の接続方法が異なる場合があります。制御器対応を基板全体の対応として扱うと、汎用層が実際に提供する範囲を誇張します。
 
-### Alternative 5: model all board-control resources immediately in generic open configuration
+### 案5: すべての基板制御資源を、直ちに汎用開始時設定へ表現する
 
-Rejected for now.
+現時点では却下しました。
 
-A fully generic surface for PMUs, I/O expanders, board-controlled reset lines, and board-controlled backlights may become useful later, but introducing that abstraction now would add complexity before the controller-first layer is fully established.
+電源管理回路、入出力拡張器、基板管理のリセット線、基板管理のバックライトをすべて扱う汎用面が将来有用になる可能性はあります。しかし、制御器優先層が確立する前に導入すると、早すぎる複雑化になります。
 
-## Follow-up implications
+## 今後への影響
 
-- Add `ILI9342C` to the supported panel-driver configuration and native device attach path.
-- Introduce explicit `touch_driver` selection.
-- Refactor touch configuration validation to separate controller-specific fields.
-- Add native `FT6336U` support.
-- Update touch capability and effective-attachment logic so it is controller-aware rather than CS-only.
-- Update the LovyanGFX build surface to include the minimum sources required by the selected controller families.
-- Add an M5Stack Core2 preset, helper, or example after generic controller support is stable.
-- Preserve existing XPT2046 support during the refactor.
+- 対応する表示器制御器設定とネイティブ機器接続経路へ `ILI9342C` を追加する
+- 明示的な `touch_driver` 選択を導入する
+- タッチ設定の検証を整理し、制御器固有の項目を分離する
+- ネイティブ側へ `FT6336U` 対応を追加する
+- タッチ機能と実際の接続判定を、チップ選択ピンだけでなく制御器に応じたものへ更新する
+- 選択した制御器系列に必要な最小限のソースを LovyanGFX 構築面へ追加する
+- 汎用制御器対応が安定した後、M5Stack Core2 の既定設定、補助関数、見本を追加する
+- 整理中も既存 XPT2046 対応を維持する

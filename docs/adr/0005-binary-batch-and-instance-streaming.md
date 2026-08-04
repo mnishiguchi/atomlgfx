@@ -4,86 +4,79 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 0005: Binary batch and instance streaming for animation hot paths
+# ADR 0005: アニメーションの高頻度処理向けバイナリー一括実行と個体列
 
-## Status
+## 状態
 
-Superseded
+置換済み
 
-Superseded by [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md).
+[ADR 0010: BinaryBatch を標準の描画トランザクション API とする](0010-binary-batch-as-render-transaction-api.md)によって置き換えられました。
 
-This ADR captured the early distinction between scalar control calls and render-heavy binary data. Current v2 folds that direction into the single `BinaryBatch` render transaction API.
+この ADR は、数値による制御呼び出しと、描画量の多いバイナリーデータを分ける初期の考え方を記録したものです。現在の v2 では、その方向性を単一の `BinaryBatch` 描画トランザクション API に統合しています。
 
-## Context
+## 背景
 
-`atomlgfx` v2 introduced a call-based protocol and explicit batching to reduce
-ordinary Elixir/native call overhead while preserving a simple synchronous API
-model. The current explicit scalar batch implementation is a packed binary
-stream submitted through `submitBinaryBatch`.
+`atomlgfx` v2 では、通常の Elixir／ネイティブ呼び出し負荷を減らしつつ、単純な同期 API の形を保つため、呼び出し方式のプロトコルと明示的な一括実行を導入しました。現在の明示的な数値一括実行は、`submitBinaryBatch` から送信する詰め込みバイナリー列です。
 
-The MovingIcons investigation showed two separate issues:
+MovingIcons の調査から、異なる2つの問題が明らかになりました。
 
-- large LovyanGFX sprite buffers must live in PSRAM on ESP32-S3-class boards
-- after PSRAM is enabled, the example stops crashing, but protocol-level batch execution still cannot be expected to match native LovyanGFX speed
+- ESP32-S3 系の基板では、大きな LovyanGFX スプライトバッファーを PSRAM に置く必要がある
+- PSRAM を有効化すると見本アプリケーションの異常終了は止まるが、プロトコル上の一括実行がネイティブ LovyanGFX と同等の速度になるとは限らない
 
-The native LovyanGFX reference loop is fast because most work stays in C++:
+ネイティブ LovyanGFX の基準ループが高速なのは、大半の処理が C++ 内に留まるためです。
 
-- object state is already native
-- transform arguments are already scalar native values
-- strip rendering loops do not allocate BEAM terms
-- drawing calls do not cross the AtomVM port boundary per object
-- no nested protocol batch needs to be decoded each frame
+- 物体状態がすでにネイティブ側にある
+- 変換引数がすでにネイティブの数値である
+- 帯状描画ループが BEAM 項を割り当てない
+- 物体ごとの描画呼び出しで AtomVM ポート境界を越えない
+- フレームごとに入れ子のプロトコル一括実行を復号しない
 
-The protocol batch path still pays significant per-frame costs compared with a
-specialized native loop:
+専用のネイティブループと比べると、プロトコルの一括実行経路では、フレームごとに次の費用が残ります。
 
-- Elixir builds lists and tuples for each command
-- Elixir creates float terms for angle and zoom arguments
-- the native port must still decode each described command
-- strip rendering may still require one batch submit plus one sprite push per strip
+- Elixir が命令ごとの一覧とタプルを構築する
+- 角度と拡大率のために Elixir が浮動小数点項を作る
+- ネイティブポートが、記述された各命令を引き続き復号する必要がある
+- 帯状描画では、帯ごとに一括送信1回とスプライト転送1回が必要になる場合がある
 
-Packed scalar batching remains valuable for correctness, diagnostics, and
-ordinary grouped scalar drawing. It is not the right representation for
-high-frequency animation instance data.
+詰め込み数値一括実行は、正しさの確認、診断、通常の数値描画をまとめる用途では引き続き有用です。しかし、高頻度アニメーションの個体データを表現する方法としては適していません。
 
-The design question is:
+設計上の問いは次のとおりです。
 
-- should `atomlgfx` continue widening generic batches, or should it add a separate binary data plane for compact, streaming animation workloads?
+- `atomlgfx` は汎用一括実行を広げ続けるべきか。それとも、小さく連続的なアニメーション処理のため、別のバイナリーデータ経路を追加すべきか。
 
-## Decision
+## 判断
 
-Add a protocol-level binary data plane for render-heavy workloads while keeping
-the ordinary call protocol and explicit scalar batching intact.
+通常の呼び出しプロトコルと明示的な数値一括実行を維持しながら、描画量の多い処理向けに、プロトコル層のバイナリーデータ経路を追加します。
 
-The binary data-plane direction has two layers:
+バイナリーデータ経路は、次の2段階で進めます。
 
-1. Specialized fixed-layout binary operations are the first implementation target.
-   - Add operations such as `pushRotateZoomList(Binary)`.
-   - Follow with fixed-layout bulk operations such as `pushImage`, `fillRectsBinary`, or `drawLinesBinary` where measurement shows they matter.
-   - Each binary format should match one repeated native loop closely.
-   - Native code validates the binary header and record count, then scans records linearly without materializing nested command structures.
+1. 固定配置の専用バイナリー操作を最初の実装対象とする。
+   - `pushRotateZoomList(Binary)` のような操作を追加する。
+   - 実測で効果が確認できた場合は、`pushImage`、`fillRectsBinary`、`drawLinesBinary` などの固定配置一括操作を追加する。
+   - 各バイナリー形式は、対応する繰り返しネイティブループに近い形にする。
+   - ネイティブコードはバイナリーヘッダーと記録数を検証し、入れ子の命令構造を実体化せず、記録を直線的に走査する。
 
-2. A generic binary batch stream is optional later, not required for the first performance step.
-   - A command such as `submitBinaryBatchBinary(Binary)` may still be useful for some mixed binary workloads.
-   - If added later, it should remain a thin streaming decoder rather than a second scene VM or a replacement for the public tuple API.
+2. 汎用バイナリー一括列は、将来の任意機能とし、最初の性能改善には必須としない。
+   - 混在するバイナリー処理には、`submitBinaryBatchBinary(Binary)` のような命令が将来役立つ可能性がある。
+   - 後から追加する場合も、第2の場面実行環境や公開タプル API の代替ではなく、薄い連続復号器に留める。
 
-The existing tuple call protocol remains the stable, human-readable control plane:
+既存のタプル呼び出しプロトコルは、安定した、人が読みやすい制御経路として残します。
 
-- ordinary calls stay tuple-based
-- packed `submitBinaryBatch` remains available for scalar command streams
-- ordinary tuple calls remain useful for small or mixed command sets
-- binary operations are explicitly opt-in and reserved for data-plane workloads
+- 通常呼び出しはタプル形式のままとする
+- 数値命令列には、詰め込み `submitBinaryBatch` を引き続き利用できる
+- 小規模または異種混在の命令集合には、通常のタプル呼び出しを使用できる
+- バイナリー操作は明示的に選択し、データ処理向けに限定する
 
-The binary data plane is an optimization, not a replacement for the public Elixir API.
+バイナリーデータ経路は最適化手段であり、公開 Elixir API の代替ではありません。
 
-## Protocol shape
+## プロトコル形式
 
-The exact wire layout may evolve during implementation, but the first-class shape is a specialized fixed-layout record stream.
+正確な通信配置は実装中に調整する可能性がありますが、最初に正式対応する形式は、専用の固定配置記録列です。
 
-For the first implemented sprite transform instance stream:
+最初に実装するスプライト変換個体列では、次の形式を使用します。
 
 ```text
-pushRotateZoomList payload:
+pushRotateZoomList データ:
   magic:bytes[4] = "PRZL"
   version:u8 = 1
   options:u8
@@ -102,13 +95,13 @@ InstanceRecord:
   zoom_y1024:u16
 ```
 
-The preferred transform representation is fixed-point:
+変換値には固定小数点表現を推奨します。
 
-- angle uses centidegrees in `0..35999`
-- zoom uses `x1024`
-- native C++ converts fixed-point values to `float` only at the LovyanGFX call boundary
+- 角度は `0..35999` の百分の一度単位
+- 拡大率は `x1024`
+- ネイティブ C++ は、LovyanGFX 呼び出し境界でのみ固定小数点値を `float` へ変換する
 
-If a generic binary batch stream is added later, it should still follow the same philosophy:
+将来、汎用バイナリー一括列を追加する場合も、同じ考え方に従います。
 
 ```text
 submitBinaryBatchBinary(Binary)
@@ -128,100 +121,98 @@ CommandRecord:
   payload:payload_len bytes
 ```
 
-Even in that form, the decoder should stream over the binary and avoid materializing a full native command array unless a specific command requires owned payload storage.
+この形式でも、復号器はバイナリーを順に走査し、特定の命令が所有データを必要とする場合を除き、完全なネイティブ命令配列を実体化しません。
 
-## Rationale
+## 理由
 
-The bottleneck is no longer just native drawing. It is the amount of BEAM allocation and protocol decode work required to describe many similar drawing operations every frame.
+問題となる負荷は、ネイティブ描画だけではありません。毎フレーム、多数の似た描画操作を記述するために必要な BEAM の割り当て量と、プロトコル復号量が問題です。
 
-A compact binary stream better matches the workload:
+小さなバイナリー列は、この処理により適しています。
 
-- Elixir builds one binary rather than many nested terms
-- native code scans bytes linearly
-- validation is predictable and cheap
-- transform values stay integer until the final C++ call
-- repeated sprite operations become one command with many instances
-- fixed-layout operations keep native dispatch small and mechanical
+- Elixir は多数の入れ子項ではなく、1つのバイナリーを構築する
+- ネイティブコードはバイト列を直線的に走査する
+- 検証費用が予測しやすく小さい
+- 変換値は最後の C++ 呼び出しまで整数のまま保持できる
+- 繰り返すスプライト操作を、多数の個体を含む1命令にできる
+- 固定配置の操作により、ネイティブ振り分けを小さく機械的に保てる
 
-This keeps the architecture honest:
+これにより、構造上の役割を正直に保てます。
 
-- tuple protocol remains the normal RPC-style control surface
-- packed scalar batch remains a grouped control-plane feature
-- binary protocol is reserved for data-plane workloads
-- native LovyanGFX still performs the actual drawing
-- no scene-specific `render_moving_icons_frame` API is introduced
+- タプルプロトコルは、通常の遠隔手続き呼び出し形式の制御面として残る
+- 詰め込み数値一括実行は、まとめられた制御面機能として残る
+- バイナリープロトコルは、データ処理向けに限定する
+- 実際の描画は引き続きネイティブ LovyanGFX が行う
+- 場面固有の `render_moving_icons_frame` API は導入しない
 
-The specialized instance-stream command is justified because repeated transformed sprite blits are a common graphics primitive, not just a MovingIcons implementation detail.
+変換付きスプライトの繰り返し転送は、MovingIcons だけの実装詳細ではなく、一般的な描画処理です。そのため、専用の個体列命令を設ける理由があります。
 
-Using fixed-layout specialized operations first also avoids over-designing a universal binary command language before measurement shows it is needed.
+また、固定配置の専用操作から始めることで、必要性を実測する前に万能なバイナリー命令言語を過剰設計せずに済みます。
 
-## Consequences
+## 影響
 
-### Positive
+### 良い影響
 
-- Reduces BEAM heap pressure in animation loops
-- Reduces native term-walking and tuple decode overhead
-- Allows one native loop to draw many sprite instances
-- Keeps integer animation state in Elixir without per-frame float terms
-- Preserves the existing tuple API for readability and compatibility
-- Provides a path toward native-like LovyanGFX throughput without hardcoding one demo
+- アニメーションループの BEAM ヒープ負荷を減らせる
+- ネイティブ側の項走査とタプル復号負荷を減らせる
+- 1つのネイティブループで多数のスプライト個体を描画できる
+- フレームごとの浮動小数点項を作らず、Elixir で整数のアニメーション状態を保てる
+- 読みやすさと互換性のため、既存のタプル API を維持できる
+- 特定の見本に固定せず、ネイティブ LovyanGFX に近い処理量を目指す経路を作れる
 
-### Negative
+### 悪い影響
 
-- Adds a second protocol representation to maintain
-- Requires careful binary layout versioning and validation
-- Binary payloads are less self-describing than ordinary tuple calls
-- Debugging malformed batches becomes harder without tooling
-- Endianness, alignment, and record-size rules must be documented precisely
-- Some workloads may need multiple specialized binary operations instead of one generic binary entry point
+- 保守すべきプロトコル表現が2種類になる
+- バイナリー配置の版管理と検証を慎重に行う必要がある
+- バイナリーデータは通常のタプル呼び出しより自己記述性が低い
+- 支援用具がなければ、不正な一括データの調査が難しくなる
+- エンディアン、位置合わせ、記録寸法の規則を正確に文書化する必要がある
+- 処理によっては、1つの汎用バイナリー入口ではなく、複数の専用バイナリー操作が必要になる
 
-## Rejected alternatives
+## 採用しなかった代替案
 
-### Alternative 1: keep optimizing generic batches only
+### 代替案1: 汎用一括実行だけを最適化し続ける
 
-Rejected.
+採用しません。
 
-Generic batches reduce port call count, but they still require command
-construction and decode. That overhead is fundamental to the representation and
-becomes visible in frame-by-frame animation workloads.
+汎用一括実行はポート呼び出し回数を減らせますが、命令の構築と復号は依然として必要です。この費用は表現方式に本質的なものであり、毎フレームのアニメーション処理では無視できません。
 
-### Alternative 2: make generic binary batch the first and only new binary feature
+### 代替案2: 汎用バイナリー一括実行だけを、最初かつ唯一の新しいバイナリー機能とする
 
-Rejected for now.
+現時点では採用しません。
 
-A universal binary command stream may still be useful later, but it is not the cheapest first step. The biggest immediate wins come from specialized fixed-layout operations that match common repeated native loops directly.
+万能なバイナリー命令列は将来役立つ可能性がありますが、最初の一歩として最も安価ではありません。直近で最大の効果を得られるのは、よく使う繰り返しネイティブループに直接対応する固定配置の専用操作です。
 
-### Alternative 3: implement a scene-specific native MovingIcons renderer
+### 代替案3: MovingIcons 専用のネイティブ描画器を実装する
 
-Rejected.
+採用しません。
 
-This would likely be fastest, but it would turn the driver into a demo-specific engine. The project should remain a generic LovyanGFX wrapper.
+最速になる可能性は高いものの、ドライバーが見本固有の実行機構になります。このプロジェクトは汎用 LovyanGFX 包みのまま保つべきです。
 
-### Alternative 4: move all object simulation state into C++
+### 代替案4: すべての物体シミュレーション状態を C++ へ移す
 
-Rejected for now.
+現時点では採用しません。
 
-Moving object state into native code would reduce Elixir work further, but it changes the programming model more aggressively. The next step should first optimize the command/data representation while keeping application-owned state.
+物体状態をネイティブ側へ移せば Elixir の処理をさらに減らせますが、プログラミングモデルを大きく変えます。次の段階では、アプリケーション所有の状態を保ちながら、まず命令とデータの表現を最適化します。
 
-### Alternative 5: make every operation binary-only
+### 代替案5: すべての操作をバイナリー限定にする
 
-Rejected.
+採用しません。
 
-The tuple protocol is easier to inspect, easier to validate while developing, and appropriate for ordinary operations. Binary encoding should be used where measurement shows it matters.
+タプルプロトコルは確認しやすく、開発中の検証も容易で、通常の操作に適しています。バイナリー符号化は、実測で必要性が確認できる箇所に使用します。
 
-## Follow-up implications
+## 今後への影響
 
-- Define fixed-layout payloads for specialized binary operations in `docs/protocol.md`.
-- Add capability bits for sprite instance streaming and future binary bulk operations as they are introduced.
-- Implement `pushRotateZoomList` or equivalent bulk sprite-transform operation first.
-- Extend `pushImage` and future bulk primitive operations with the same fixed-layout binary philosophy where measurement justifies them.
-- Consider a generic `submitBinaryBatchBinary` stream only after specialized binary operations are benchmarked and the remaining gap is clear.
-- Add Elixir builders that construct binaries without intermediate tuple command lists.
-- Add minimal protocol tests for binary layout validation and malformed payload rejection.
-- Benchmark MovingIcons with:
-  - sync calls
-  - packed scalar batch
-  - specialized binary operation
-  - generic binary batch if introduced later
-  - sprite instance stream
-- Keep PSRAM sprite allocation as a prerequisite for large strip-buffer workloads.
+- 専用バイナリー操作の固定配置データを `docs/protocol.md` に定義する。
+- スプライト個体列と、今後追加するバイナリー一括操作について、導入時に機能ビットを追加する。
+- 最初に `pushRotateZoomList` または同等の一括スプライト変換操作を実装する。
+- 実測で妥当な場合、`pushImage` と今後の一括図形操作にも同じ固定配置バイナリー方針を適用する。
+- 専用バイナリー操作を測定し、残る差が明確になった後でのみ、汎用 `submitBinaryBatchBinary` 列を検討する。
+- 中間タプル命令一覧を作らずにバイナリーを構築する Elixir 側の生成関数を追加する。
+- バイナリー配置の検証と不正データ拒否について、最小限のプロトコル試験を追加する。
+- MovingIcons を次の条件で比較測定する。
+  - 同期呼び出し
+  - 詰め込み数値一括実行
+  - 専用バイナリー操作
+  - 導入した場合の汎用バイナリー一括実行
+  - スプライト個体列
+- 大きな帯状バッファー処理では、PSRAM へのスプライト割り当てを前提条件として維持する。

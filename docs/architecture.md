@@ -4,23 +4,23 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Architecture
+# 構成
 
-`atomlgfx` is split into two closely related deliverables:
+`atomlgfx` は、密接に連携する次の二つの成果物で構成します。
 
-- a native ESP-IDF component built around the `lgfx_port` AtomVM port driver
-- an Elixir package that provides the `AtomLGFX` wrapper for that driver
+- AtomVM ポートドライバー `lgfx_port` を中心とするネイティブ ESP-IDF 部品
+- そのドライバーを扱う `AtomLGFX` ラッパーを提供する Elixir パッケージ
 
-This document gives the top-level system map.
+この文書は、全体構成を示します。
 
-For the caller-visible protocol contract, see [the protocol spec](protocol.md). For generated operation, capability, and error tables, see [the protocol reference](protocol-reference.md).
+呼び出し側から見えるプロトコル契約は [プロトコル](protocol.md)、生成された操作、機能、エラーの表は [プロトコル参照](protocol-reference.md) を参照してください。
 
-## Big picture
+## 全体像
 
-`atomlgfx` has two execution paths:
+`atomlgfx` には、次の二つの実行経路があります。
 
-- a direct synchronous path for ordinary operations
-- an explicit binary batch path for hot rendering work
+- 通常操作向けの直接同期経路
+- 高負荷描画向けの明示的なバイナリーバッチ経路
 
 ```text
 Elixir / AtomVM
@@ -28,263 +28,248 @@ Elixir / AtomVM
     | {lgfx, ProtoVer, Op, ...Args}
     | {lgfx, ProtoVer, Op, Target, Flags, ...Args}
     v
-+------------------------------+
-| lgfx_port/                   |
-| - request decode             |
-| - metadata validation        |
-| - handler dispatch           |
-| - binary script validation    |
-| - reply encode               |
-+---------------+--------------+
-                |
-                +--> direct synchronous path
-                |      -> handlers
-                |      -> lgfx_device
-                |      -> LovyanGFX
-                |
-                +--> binary batch path
-                       -> render script dispatch
-                       -> lgfx_device
-                       -> LovyanGFX
++--------------------------------+
+| lgfx_port/                     |
+| - 要求の解析                   |
+| - 情報に基づく検証             |
+| - ハンドラーの振り分け         |
+| - バイナリー命令列の検証             |
+| - 応答の符号化                 |
++----------------+---------------+
+                 |
+                 +--> 直接同期経路
+                 |      -> handlers
+                 |      -> lgfx_device
+                 |      -> LovyanGFX
+                 |
+                 +--> バイナリーバッチ経路
+                        -> 描画命令列の振り分け
+                        -> lgfx_device
+                        -> LovyanGFX
 ```
 
-## Design summary
+## 設計概要
 
-The current architecture uses a call-based protocol for ordinary operations and an explicit binary render-batch path for measured drawing bursts.
+現在の構成は、通常操作には呼び出し方式のプロトコルを使い、計測対象の描画のまとまりには明示的なバイナリー描画バッチを使います。
 
-In short:
+要点:
 
-- ordinary operations execute immediately
-- ordinary operations return real success or failure immediately
-- binary batching is explicit and opt-in
-- the binary-batch surface is intentionally small and measured
-- frame scripts are built in Elixir and executed natively
-- `startWrite` / `endWrite` grouping is internal to binary-batch execution
-- target `0` is the LCD; target `1..254` are caller-owned sprites
+- 通常操作は直ちに実行する
+- 通常操作は実際の成功または失敗を直ちに返す
+- バイナリーバッチは明示的に選ぶ
+- バイナリーバッチの操作面は、意図的に小さく、計測に基づいて保つ
+- フレーム命令列は Elixir で構築し、ネイティブ側で実行する
+- `startWrite` / `endWrite` のまとめ処理はバイナリーバッチ内部で行う
+- 対象 `0` は LCD、対象 `1..254` は呼び出し側が所有するスプライト
 
-The goal is to reduce control-plane overhead for grouped rendering without turning the whole API surface into a deferred execution system.
+描画をまとめた場合の制御面の負担を減らしつつ、API 全体を遅延実行方式へ変えないことが目的です。
 
-## Repository roles
+## リポジトリ内の役割
 
 - `include/lgfx_port/`
-  - public native headers
-
+  - 公開ネイティブヘッダー
 - `lgfx_port/`
-  - AtomVM-facing port layer
-  - request envelope handling
-  - metadata-driven validation
-  - handler dispatch for ordinary operations
-  - binary-batch envelope decode and script validation
-  - ordered render command dispatch for explicit batch operations
-
+  - AtomVM に面するポート層
+  - 要求包絡の処理
+  - 情報に基づく検証
+  - 通常操作のハンドラー振り分け
+  - バイナリーバッチ包絡の解析と命令列検証
+  - 明示的バッチ操作の順序付き描画命令振り分け
 - `lgfx_device/`
-  - LovyanGFX-facing adapter layer
-  - protocol-agnostic device operations
-  - pinned-submodule integration
-  - native presentation policy for logical LCD drawing
-
+  - LovyanGFX に面する適合層
+  - プロトコルに依存しない装置操作
+  - 固定版副リポジトリとの統合
+  - 論理 LCD 描画のネイティブ表示方針
 - `lib/`
-  - root Elixir wrapper package
-  - high-level `AtomLGFX` API
-  - internal render encode/submit flow and normalized command encoder
-  - `AtomLGFX.BinaryBatch` public facade
-  - internal binary-batch codec, submission, validation, and diagnostics modules
-
+  - Elixir ラッパーパッケージ
+  - 高水準 `AtomLGFX` API
+  - 内部の描画符号化・送信経路と正規化済み命令符号化器
+  - 公開窓口 `AtomLGFX.BinaryBatch`
+  - 内部のバイナリーバッチ符号化、送信、検証、診断モジュール
 - `examples/elixir/`
-  - example application that consumes the root package
-  - benchmark-oriented workloads such as MovingIcons, isolated behind an example-local advanced renderer
+  - ルートパッケージを利用する例示アプリケーション
+  - MovingIcons などの性能測定向け処理は、例専用の上級描画器へ隔離
 
-## Execution model
+## 実行方式
 
-### Direct synchronous path
+### 直接同期経路
 
-Ordinary operations follow the direct path:
-
-```text
-AtomVM message
-  -> lgfx_port decodes and validates
-  -> handler decodes wire args
-  -> handler calls lgfx_device_*
-  -> handler maps result to protocol reply
-```
-
-This path is the default behavior for the API surface.
-
-Properties:
-
-- immediate execution
-- immediate success or failure
-- no batch involvement
-- no deferred failure model
-
-### Binary render-batch path
-
-Render batching is a separate execution path used only when the caller explicitly submits a frame script.
-
-At a high level:
+通常操作は、次の直接経路を通ります。
 
 ```text
-submitBinaryBatch request
-  -> lgfx_port validates submitBinaryBatch
-  -> lgfx_port validates the binary stream envelope
-  -> lgfx_port walks the binary frame script once
-  -> lgfx_device performs the final LovyanGFX calls
+AtomVM メッセージ
+  -> lgfx_port が解析して検証
+  -> ハンドラーがワイヤー引数を解析
+  -> ハンドラーが lgfx_device_* を呼び出す
+  -> ハンドラーが結果をプロトコル応答へ変換
 ```
 
-Properties:
+これは API 全体の既定経路です。
 
-- batch submission is explicit
-- ordinary operations do not implicitly go through the batch path
-- batch execution is ordered
-- with `LGFX_PORT_RENDER_BATCH_PREVALIDATE=ON`, malformed streams are rejected before device mutation
-- with the default prevalidation-off build, syntax/support checks happen while executing for lower hot-path overhead
-- malformed commands or device/runtime failures can stop execution after earlier commands have run
-- `startWrite` / `endWrite` grouping happens inside batch execution
-- command-local state controls render target and color interpretation
-- speculative compact list commands stay out of the protocol unless measured workloads justify them
+特徴:
 
-## Responsibility split
+- 即時実行
+- 即時の成功または失敗
+- バッチを介さない
+- 後から失敗する方式を持たない
+
+### バイナリー描画バッチ経路
+
+呼び出し側がフレーム命令列を明示的に送信した場合だけ、描画バッチ経路を使います。
+
+```text
+submitBinaryBatch 要求
+  -> lgfx_port が submitBinaryBatch を検証
+  -> lgfx_port がバイナリー命令列の包絡を検証
+  -> lgfx_port がバイナリーフレーム命令列を走査
+  -> lgfx_device が最終的な LovyanGFX 呼び出しを実行
+```
+
+特徴:
+
+- バッチ送信は明示的
+- 通常操作は暗黙にバッチ経路へ流れない
+- 命令は順番どおりに実行する
+- `LGFX_PORT_RENDER_BATCH_PREVALIDATE=ON` では、装置変更前に不正な命令列を拒否する
+- 既定の事前検証無効構成では、高負荷経路の負担を下げるため実行中に構文と対応状況を確認する
+- 不正な命令または装置・実行時エラーが発生すると、前の命令を実行済みの状態で停止する場合がある
+- `startWrite` / `endWrite` のまとめ処理はバッチ実行内部で行う
+- 命令内状態が描画対象と色の解釈を制御する
+- 小さな一覧命令などの試験的機能は、実測で必要性が示されるまでプロトコルへ追加しない
+
+## 責務の分離
 
 ### `lgfx_port/`
 
-This layer owns protocol-facing responsibilities:
+プロトコル側の責務を持ちます。
 
-- request tuple decoding
-- op lookup and validation
-- handler dispatch for ordinary operations
-- packed binary stream validation for explicit batch submission
-- ordered packed command dispatch
-- reply encoding
-- protocol-visible error mapping
+- 要求組の解析
+- 操作検索と検証
+- 通常操作のハンドラー振り分け
+- 明示的バッチ送信の詰め込みバイナリー検証
+- 詰め込み命令の順序付き振り分け
+- 応答の符号化
+- 外部から見えるエラーへの変換
 
-It should not own detailed LovyanGFX semantics.
+詳細な LovyanGFX の意味は持ちません。
 
 ### `lgfx_device/`
 
-This layer owns device-facing responsibilities:
+装置側の責務を持ちます。
 
-- target resolution
-- render-target resolution for logical LCD drawing
-- sprite existence and allocation rules
-- palette-backed behavior
-- image and JPEG device semantics
-- native strip-presentation state and lifecycle
-- presentation fallback behavior
-- final validation and forwarding to the pinned LovyanGFX call surface
+- 描画対象の解決
+- 論理 LCD 描画用の描画対象解決
+- スプライトの存在と確保規則
+- パレット付き動作
+- 画像と JPEG の装置意味
+- ネイティブ短冊表示状態とライフサイクル
+- 表示失敗時の代替動作
+- 固定版 LovyanGFX 呼び出し面への最終検証と転送
 
-It should not decode AtomVM terms or build protocol replies.
+AtomVM の項を解析せず、プロトコル応答も構築しません。
 
 ### `lib/`
 
-This layer owns Elixir-facing responsibilities:
+Elixir 側の責務を持ちます。
 
-- wrapper API shape
-- Elixir-side validation and normalization
-- binary command builders
-- convenience helpers
-- wrapper-local ergonomics
+- ラッパー API の形
+- Elixir 側の検証と正規化
+- バイナリー命令構築器
+- 補助関数
+- ラッパー内の使いやすさ
 
-It should not redefine the native protocol contract.
+ネイティブプロトコル契約を再定義しません。
 
-## Presentation model
+## 表示モデル
 
-The device layer keeps target resolution simple:
+装置層は、対象解決を単純に保ちます。
 
-- target `0` means the live LCD device
-- target `1..254` means an explicitly created sprite
+- 対象 `0` は稼働中の LCD 装置
+- 対象 `1..254` は明示的に作成したスプライト
 
-Higher-level code that needs buffered or strip-based presentation owns those buffers as ordinary sprites. This keeps persistent allocation visible through `create_sprite` / `delete_sprite` and avoids hidden native presentation buffers in query or batch paths.
+バッファ表示や短冊表示を必要とする高水準コードは、そのバッファを通常のスプライトとして所有します。永続的な確保を `create_sprite` / `delete_sprite` で見える状態にし、照会やバッチ経路に隠れたネイティブ表示バッファを持ちません。
 
-## Build defaults and runtime overrides
+## 構築時の既定値と実行時の上書き
 
-Build defaults come from CMake cache variables and are emitted into the generated config header used by the native component.
+構築時の既定値は CMake の保存変数から取得し、ネイティブ部品が使う生成設定ヘッダーへ出力します。
 
-- template:
+- 雛形:
   - `lgfx_port/cmake/lgfx_port_config.h.in`
-
-- generated output:
+- 生成先:
   - `<build>/.../generated/lgfx_port/lgfx_port_config.h`
 
-Selected values may also be overridden per port at `open_port/2`. In practice:
+選択した値は、`open_port/2` でポート単位に上書きできます。
 
-- build defaults define the baseline
-- open-time config may override selected fields per port
-- `init` applies the calling port's stored snapshot
+- 構築時の既定値が基準を定める
+- 開始時設定が選択した項目をポート単位で上書きできる
+- `init` が呼び出し元ポートに保存した設定を適用する
 
-## Metadata-driven surface
+## 情報駆動の操作面
 
-The protocol-visible operation surface is declared in:
+外部から見える操作面は、次で宣言します。
 
 - `lgfx_port/include_internal/lgfx_port/ops.def`
 
-That metadata drives:
+この情報は次を駆動します。
 
-- operation registration
-- validation rules
-- dispatch surface
-- capability linkage
-- internal execution classification for batch support
-- generated tables in `docs/protocol-reference.md`
+- 操作登録
+- 検証規則
+- 振り分け面
+- 機能との関連付け
+- バッチ対応の内部実行分類
+- `docs/protocol-reference.md` の生成表
 
-The design goal is one declarative source for the protocol-visible surface, with synchronized code and documentation around it.
+一つの宣言元からプロトコル操作面を定義し、その周辺のコードと文書を同期することが目的です。
 
-## Ownership model
+## 所有権モデル
 
-The current native design separates configuration persistence from live device ownership:
+現在のネイティブ設計は、設定の保持と稼働中装置の所有権を分離します。
 
-- open-time configuration is stored per port context
-- the live LCD device remains singleton-backed
-- only one port may own the live device at a time
+- 開始時設定はポート文脈ごとに保存する
+- 稼働中 LCD 装置は単一実体として扱う
+- 稼働中装置を所有できるポートは一つだけ
 
-This keeps per-port configuration explicit without pretending the underlying hardware is multi-instance.
+基礎となるハードウェアを複数実体のように見せず、ポート単位設定だけを明示します。
 
-## Binary payload rule
+## バイナリーデータの規則
 
-Variable-length payloads such as text, JPEG data, and RGB565 image data must not outlive the request by borrowing caller-owned term memory.
+文字列、JPEG、RGB565 画像などの可変長データは、呼び出し側が所有する項メモリーを借用したまま要求境界を越えてはいけません。
 
-Current rule:
+現在の規則:
 
-- ordinary handlers borrow request binary pointers only for the duration of the current request
-- device calls consume those bytes synchronously
-- device code must not retain borrowed payload pointers after the call returns
+- 通常ハンドラーは、現在の要求中だけ要求のバイナリーデータへのポインターを借用する
+- 装置呼び出しは、そのバイト列を同期的に消費する
+- 装置コードは、呼び出し終了後に借用ポインターを保持しない
 
-For explicit batching:
+明示的バッチでは次の規則を適用します。
 
-- `submitBinaryBatch` borrows the command binary only for the synchronous request boundary
-- the render decoder must not retain pointers into the caller binary
-- payload-heavy operations remain on the ordinary path unless a future batch command explicitly defines native-owned storage or request-scoped payload lifetime
+- `submitBinaryBatch` は同期要求の間だけ命令を格納したバイナリーを借用する
+- 描画解析器は呼び出し側のバイナリーへのポインターを保持しない
+- 大きなデータを持つ操作は、将来のバッチ命令がネイティブ所有領域または要求内寿命を明示的に定義するまで通常経路へ残す
 
-See [the protocol spec](protocol.md) for the caller-visible payload contract.
+呼び出し側から見える契約は [プロトコル](protocol.md) を参照してください。
 
-## Pinned LovyanGFX policy
+## LovyanGFX 固定版の方針
 
-`atomlgfx` targets the pinned LovyanGFX submodule used by this repository.
+`atomlgfx` は、このリポジトリで固定した LovyanGFX 副リポジトリを対象とします。
 
-Policy:
+- 互換性の推測より直接統合を優先する
+- 固定版を変更する場合は意図的に更新する
+- 互換用の足場を最小限に保つ
 
-- prefer direct integration over compatibility probing
-- update deliberately when the pinned submodule changes
-- keep compatibility scaffolding minimal
-
-## Where to read next
+## 次に読む文書
 
 - [`docs/protocol.md`](protocol.md)
-  - tuple protocol contract
-
+  - 組プロトコル契約
 - [`docs/protocol-reference.md`](protocol-reference.md)
-  - generated operation, capability, and error tables
-
+  - 生成された操作、機能、エラー表
 - [`docs/adr/0016-render-first-low-memory-api.md`](adr/0016-render-first-low-memory-api.md)
-  - active public API direction
-
+  - 現在の公開 API 方針
 - [`docs/esp-idf-component.md`](esp-idf-component.md)
-  - native component build and usage guide
-
+  - ネイティブ部品の構築と利用
 - [`docs/elixir-package.md`](elixir-package.md)
-  - Elixir wrapper usage guide
-
+  - Elixir ラッパーの利用
 - [`lgfx_port/README.md`](../lgfx_port/README.md)
-  - port-layer maintainer notes
-
+  - ポート層の保守者向け説明
 - [`lgfx_device/README.md`](../lgfx_device/README.md)
-  - device adapter and native presentation notes
+  - 装置適合層とネイティブ表示の説明

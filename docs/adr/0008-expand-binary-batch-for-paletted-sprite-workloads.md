@@ -4,69 +4,69 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 0008: Expand BinaryBatch for paletted sprite workloads
+# ADR 0008: パレット式スプライト処理向けに BinaryBatch を拡張する
 
-## Status
+## 状態
 
-Superseded
+置換済み
 
-Superseded by [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md).
+[ADR 0010: BinaryBatch を標準の描画トランザクション API とする](0010-binary-batch-as-render-transaction-api.md)によって置き換えられました。
 
-## Context
+## 背景
 
-This ADR originally proposed expanding the binary batch path for Stack-chan-like paletted sprite workloads.
+この ADR は当初、ｽﾀｯｸﾁｬﾝのようなパレット式スプライト処理に向けて、バイナリー一括実行経路を拡張することを提案したものです。
 
-The motivating workload remains valid:
+動機となった処理要件は、現在も有効です。
 
-- render into sprite-backed targets
-- use palette-index colors such as `{:index, n}`
-- draw many scalar primitives or sprite regions per frame
-- preserve transparent palette-index behavior
-- avoid unnecessary RGB565 conversion for naturally indexed assets
+- スプライトを描画対象として描画する
+- `{:index, n}` のようなパレット番号色を使用する
+- フレームごとに多数の数値図形またはスプライト領域を描画する
+- 透明パレット番号の動作を維持する
+- 元から番号色である素材を、不必要に RGB565 へ変換しない
 
-The later render-batch ADR broadened the scope. The project no longer treats paletted drawing as a separate batch architecture. Paletted sprite support is now one required capability of the general binary render-batch path.
+後続の描画一括実行 ADR では、対象範囲を広げました。現在のプロジェクトでは、パレット式描画を独立した一括実行構成として扱いません。パレット式スプライト対応は、汎用バイナリー描画一括実行経路に必要な機能の1つです。
 
-## Superseded decision
+## 置き換えられた判断
 
-The useful principles from this ADR are carried forward:
+この ADR の有用な原則は、後続判断へ引き継がれています。
 
-- `submitBinaryBatch` remains the single explicit binary frame-script entry point.
-- Palette-index color semantics must be first-class in render batches.
-- Transparent palette indices must be distinct from transparent RGB565 colors.
-- Stack-chan should use generic primitives, not Stack-chan-specific native commands.
-- Atlas, list, and region primitives should be reusable across animation workloads.
+- `submitBinaryBatch` を、単一の明示的なバイナリーフレームスクリプト入口として維持する。
+- 描画一括実行では、パレット番号色の意味を正式対応する。
+- 透明パレット番号と透明 RGB565 色を明確に区別する。
+- ｽﾀｯｸﾁｬﾝ固有のネイティブ命令ではなく、汎用図形を使用する。
+- 図柄表、一覧、領域の図形操作を、複数のアニメーション処理で再利用可能にする。
 
-The older framing of this as a separate paletted-sprite batch decision is superseded.
+パレット式スプライト専用の一括実行判断として扱う以前の位置付けは、置き換えられました。
 
-## Current direction
+## 現在の方向性
 
-Future work should extend the generic render-batch command stream.
+今後は、汎用描画一括実行命令列を拡張します。
 
-Likely work items:
+想定する作業項目:
 
-- complete palette-index scalar drawing coverage in render batches
-- support palette-index transparent sprite/list/region operations
-- keep RGB565 and palette-index interpretation explicit
-- test that indexed colors require valid palette backing where appropriate
-- benchmark Stack-chan-style workloads separately from MovingIcons
+- 描画一括実行におけるパレット番号色の数値描画対応を完成させる
+- パレット番号を透明色として使うスプライト／一覧／領域操作へ対応する
+- RGB565 とパレット番号の解釈を明示的に保つ
+- 必要な箇所では、番号色に有効なパレットの裏付けが必要であることを試験する
+- ｽﾀｯｸﾁｬﾝ形式の処理を MovingIcons とは別に性能測定する
 
-## Consequences
+## 影響
 
-### Positive
+### 良い影響
 
-- Keeps the v2 hot path unified around `submitBinaryBatch`.
-- Avoids a second batch architecture just for indexed rendering.
-- Preserves the Stack-chan requirement as a concrete performance target.
-- Keeps future work generic and reusable.
+- v2 の高頻度経路を `submitBinaryBatch` に統一できる。
+- 番号色描画だけのために、第2の一括実行構成を作らずに済む。
+- ｽﾀｯｸﾁｬﾝの要件を、具体的な性能目標として維持できる。
+- 今後の作業を汎用的かつ再利用可能に保てる。
 
-### Negative
+### 悪い影響
 
-- This ADR no longer records the active decision by itself.
-- Readers must follow the later render-batch ADR for the current architecture.
-- Palette-index sprite performance remains a follow-up implementation area.
+- この ADR 単独では、現行判断を記録しなくなった。
+- 現行構成を理解するには、後続の描画一括実行 ADR を参照する必要がある。
+- パレット番号式スプライトの性能改善は、今後の実装課題として残る。
 
-## Related documents
+## 関連文書
 
-- [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md)
-- [Protocol](../protocol.md)
-- [V2 render-batch performance work log](../worklog/20260502-v2-render-batch-performance-work-log.md)
+- [ADR 0010: BinaryBatch を標準の描画トランザクション API とする](0010-binary-batch-as-render-transaction-api.md)
+- [プロトコル](../protocol.md)
+- [v2 描画一括実行の性能作業記録](../worklog/20260502-v2-render-batch-performance-work-log.md)

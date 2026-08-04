@@ -4,7 +4,7 @@
 
 defmodule AtomLGFX.Color do
   @moduledoc """
-  Helpers for working with AtomLGFX color values.
+  AtomLGFX の色値を扱うための補助関数群です。
   """
 
   import Bitwise
@@ -50,7 +50,7 @@ defmodule AtomLGFX.Color do
   }
 
   @doc """
-  Returns the RGB565 value for a named color.
+  名前付き色に対応する RGB565 値を返します。
   """
   @spec named_rgb565(atom()) :: {:ok, rgb565_value()} | {:error, term()}
   def named_rgb565(name) when is_atom(name) do
@@ -61,7 +61,7 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Returns the packed RGB888 value for a named color.
+  名前付き色に対応する圧縮 RGB888 値を返します。
   """
   @spec named_rgb888(atom()) :: {:ok, rgb888_value()} | {:error, term()}
   def named_rgb888(name) when is_atom(name) do
@@ -71,12 +71,12 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Normalizes a user-facing display color to RGB565.
+  利用者向けの表示色を RGB565 へ正規化します。
 
-  Accepted values are:
+  受け付ける値:
 
-  - an RGB565 integer
-  - a named color atom, such as `:black`, `:white`, or `:red`
+  - RGB565 整数
+  - `:black`、`:white`、`:red` などの名前付き色
   - `{:rgb565, value}`
   - `{:rgb565, r, g, b}`
   - `{:rgb888, value}`
@@ -107,12 +107,12 @@ defmodule AtomLGFX.Color do
   def normalize_display(color), do: {:error, {:bad_display_color, color}}
 
   @doc """
-  Normalizes a user-facing palette color to packed RGB888.
+  利用者向けの配色表の色を圧縮 RGB888 へ正規化します。
 
-  Accepted values are:
+  受け付ける値:
 
-  - a packed RGB888 integer
-  - a named color atom, such as `:black`, `:white`, or `:red`
+  - 圧縮 RGB888 整数
+  - `:black`、`:white`、`:red` などの名前付き色
   - `{:rgb888, value}`
   - `{:rgb888, r, g, b}`
   - `{:rgb, r, g, b}`
@@ -143,7 +143,7 @@ defmodule AtomLGFX.Color do
   def normalize_palette(color), do: {:error, {:bad_palette_color, color}}
 
   @doc """
-  Packs 8-bit RGB channels into an RGB332 color.
+  8ビットの RGB 各成分を RGB332 色へまとめます。
   """
   @spec color332(0..255, 0..255, 0..255) :: rgb332_value
   def color332(r, g, b) when u8(r) and u8(g) and u8(b) do
@@ -151,7 +151,7 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Packs 8-bit RGB channels into an RGB565 color.
+  8ビットの RGB 各成分を RGB565 色へまとめます。
   """
   @spec color565(0..255, 0..255, 0..255) :: rgb565_value
   def color565(r, g, b) when u8(r) and u8(g) and u8(b) do
@@ -159,7 +159,7 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Packs 8-bit RGB channels into a packed RGB888 color.
+  8ビットの RGB 各成分を圧縮 RGB888 色へまとめます。
   """
   @spec color888(0..255, 0..255, 0..255) :: rgb888_value
   def color888(r, g, b) when u8(r) and u8(g) and u8(b) do
@@ -167,7 +167,7 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Endian-converts one RGB565 scalar color value.
+  1つの RGB565 色値のバイト順を変換します。
   """
   @spec swap565(rgb565_value) :: rgb565_value
   def swap565(color) when rgb565(color) do
@@ -175,7 +175,7 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Packs RGB channels, then endian-converts the RGB565 scalar color value.
+  RGB 各成分を RGB565 色へまとめた後、バイト順を変換します。
   """
   @spec swap565(0..255, 0..255, 0..255) :: rgb565_value
   def swap565(r, g, b) when u8(r) and u8(g) and u8(b) do
@@ -185,7 +185,7 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Endian-converts one RGB888 scalar color value.
+  1つの RGB888 色値のバイト順を変換します。
   """
   @spec swap888(rgb888_value) :: rgb888_value
   def swap888(color) when color888(color) do
@@ -193,7 +193,7 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Packs RGB channels, then endian-converts the RGB888 scalar color value.
+  RGB 各成分を RGB888 色へまとめた後、バイト順を変換します。
   """
   @spec swap888(0..255, 0..255, 0..255) :: rgb888_value
   def swap888(r, g, b) when u8(r) and u8(g) and u8(b) do
@@ -203,7 +203,7 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Converts RGB565 to RGB332.
+  RGB565 を RGB332 へ変換します。
   """
   @spec color16to8(rgb565_value) :: rgb332_value
   def color16to8(color565_value) when rgb565(color565_value) do
@@ -213,7 +213,7 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Converts RGB332 to RGB565.
+  RGB332 を RGB565 へ変換します。
   """
   @spec color8to16(rgb332_value) :: rgb565_value
   def color8to16(color332_value) when u8(color332_value) do
@@ -229,7 +229,7 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Converts RGB565 to packed RGB888.
+  RGB565 を圧縮 RGB888 へ変換します。
   """
   @spec color16to24(rgb565_value) :: rgb888_value
   def color16to24(color565_value) when rgb565(color565_value) do
@@ -245,7 +245,7 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Converts packed RGB888 to RGB565.
+  圧縮 RGB888 を RGB565 へ変換します。
   """
   @spec color24to16(rgb888_value) :: rgb565_value
   def color24to16(color888_value) when color888(color888_value) do
@@ -257,25 +257,25 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Wraps an RGB565 display color explicitly as `{:rgb565, value}`.
+  RGB565 表示色を `{:rgb565, value}` として明示します。
   """
   @spec display(rgb565_value) :: display_descriptor
   def display(color) when rgb565(color), do: {:rgb565, color}
 
   @doc """
-  Wraps a packed RGB888 palette color explicitly as `{:rgb888, value}`.
+  圧縮 RGB888 の配色表色を `{:rgb888, value}` として明示します。
   """
   @spec palette(rgb888_value) :: palette_descriptor
   def palette(color) when color888(color), do: {:rgb888, color}
 
   @doc """
-  Wraps a palette index explicitly as `{:index, value}`.
+  配色表番号を `{:index, value}` として明示します。
   """
   @spec index(palette_index_value) :: index_descriptor
   def index(value) when palette_index(value), do: {:index, value}
 
   @doc """
-  Encodes one RGB565 value as an ordinary little-endian 16-bit binary word.
+  1つの RGB565 値を通常のリトルエンディアン16ビット語へ符号化します。
   """
   @spec rgb565_le(rgb565_value) :: binary
   def rgb565_le(color) when rgb565(color) do
@@ -283,7 +283,7 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Encodes one RGB565 value as a big-endian 16-bit binary word.
+  1つの RGB565 値をビッグエンディアン16ビット語へ符号化します。
   """
   @spec rgb565_be(rgb565_value) :: binary
   def rgb565_be(color) when rgb565(color) do
@@ -291,7 +291,7 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Encodes a list of RGB565 values as ordinary little-endian words.
+  RGB565 値の一覧を通常のリトルエンディアン語へ符号化します。
   """
   @spec pixels_le([rgb565_value]) :: binary
   def pixels_le(colors) when is_list(colors) do
@@ -309,7 +309,7 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Encodes a list of RGB565 values as big-endian words.
+  RGB565 値の一覧をビッグエンディアン語へ符号化します。
   """
   @spec pixels_be([rgb565_value]) :: binary
   def pixels_be(colors) when is_list(colors) do
@@ -327,8 +327,7 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  Encodes a list of RGB565 values as pre-swapped raw bytes, analogous to upstream
-  `swap565_t`-style data in memory.
+  RGB565 値の一覧を、上流の `swap565_t` 形式に相当する事前入れ替え済みの生バイト列へ符号化します。
   """
   @spec pixels_swap565([rgb565_value]) :: binary
   def pixels_swap565(colors) when is_list(colors) do
@@ -336,163 +335,163 @@ defmodule AtomLGFX.Color do
   end
 
   @doc """
-  RGB565 black.
+  RGB565 の黒色です。
   """
   @spec black() :: rgb565_value
   def black, do: 0x0000
 
   @doc """
-  RGB565 navy.
+  RGB565 の紺色です。
   """
   @spec navy() :: rgb565_value
   def navy, do: 0x000F
 
   @doc """
-  RGB565 dark green.
+  RGB565 の濃い緑色です。
   """
   @spec dark_green() :: rgb565_value
   def dark_green, do: 0x03E0
 
   @doc """
-  RGB565 dark cyan.
+  RGB565 の濃いシアン色です。
   """
   @spec dark_cyan() :: rgb565_value
   def dark_cyan, do: 0x03EF
 
   @doc """
-  RGB565 maroon.
+  RGB565 のえび茶色です。
   """
   @spec maroon() :: rgb565_value
   def maroon, do: 0x7800
 
   @doc """
-  RGB565 purple.
+  RGB565 の紫色です。
   """
   @spec purple() :: rgb565_value
   def purple, do: 0x780F
 
   @doc """
-  RGB565 olive.
+  RGB565 のオリーブ色です。
   """
   @spec olive() :: rgb565_value
   def olive, do: 0x7BE0
 
   @doc """
-  RGB565 light grey.
+  RGB565 の薄い灰色です。
   """
   @spec light_grey() :: rgb565_value
   def light_grey, do: 0xC618
 
   @doc """
-  RGB565 dark grey.
+  RGB565 の濃い灰色です。
   """
   @spec dark_grey() :: rgb565_value
   def dark_grey, do: 0x7BEF
 
   @doc """
-  RGB565 blue.
+  RGB565 の青色です。
   """
   @spec blue() :: rgb565_value
   def blue, do: 0x001F
 
   @doc """
-  RGB565 green.
+  RGB565 の緑色です。
   """
   @spec green() :: rgb565_value
   def green, do: 0x07E0
 
   @doc """
-  RGB565 cyan.
+  RGB565 のシアン色です。
   """
   @spec cyan() :: rgb565_value
   def cyan, do: 0x07FF
 
   @doc """
-  RGB565 red.
+  RGB565 の赤色です。
   """
   @spec red() :: rgb565_value
   def red, do: 0xF800
 
   @doc """
-  RGB565 magenta.
+  RGB565 のマゼンタ色です。
   """
   @spec magenta() :: rgb565_value
   def magenta, do: 0xF81F
 
   @doc """
-  RGB565 yellow.
+  RGB565 の黄色です。
   """
   @spec yellow() :: rgb565_value
   def yellow, do: 0xFFE0
 
   @doc """
-  RGB565 white.
+  RGB565 の白色です。
   """
   @spec white() :: rgb565_value
   def white, do: 0xFFFF
 
   @doc """
-  RGB565 orange.
+  RGB565 の橙色です。
   """
   @spec orange() :: rgb565_value
   def orange, do: 0xFD20
 
   @doc """
-  RGB565 green-yellow.
+  RGB565 の黄緑色です。
   """
   @spec green_yellow() :: rgb565_value
   def green_yellow, do: 0xAFE5
 
   @doc """
-  RGB565 pink.
+  RGB565 の桃色です。
   """
   @spec pink() :: rgb565_value
   def pink, do: 0xFE19
 
   @doc """
-  RGB565 brown.
+  RGB565 の茶色です。
   """
   @spec brown() :: rgb565_value
   def brown, do: 0x9A60
 
   @doc """
-  RGB565 gold.
+  RGB565 の金色です。
   """
   @spec gold() :: rgb565_value
   def gold, do: 0xFEA0
 
   @doc """
-  RGB565 silver.
+  RGB565 の銀色です。
   """
   @spec silver() :: rgb565_value
   def silver, do: 0xC618
 
   @doc """
-  RGB565 sky blue.
+  RGB565 の空色色です。
   """
   @spec sky_blue() :: rgb565_value
   def sky_blue, do: 0x867D
 
   @doc """
-  RGB565 violet.
+  RGB565 のすみれ色色です。
   """
   @spec violet() :: rgb565_value
   def violet, do: 0x915C
 
   @doc """
-  Special upstream-style transparent color constant.
+  上流と同じ形式の特殊な透明色定数です。
   """
   @spec transparent() :: rgb565_value
   def transparent, do: 0x0120
 
   @doc """
-  Alias for `light_grey/0`.
+  `light_grey/0` の別名です。
   """
   @spec light_gray() :: rgb565_value
   def light_gray, do: light_grey()
 
   @doc """
-  Alias for `dark_grey/0`.
+  `dark_grey/0` の別名です。
   """
   @spec dark_gray() :: rgb565_value
   def dark_gray, do: dark_grey()

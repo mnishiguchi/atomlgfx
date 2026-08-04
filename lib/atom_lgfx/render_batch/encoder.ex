@@ -11,7 +11,7 @@ defmodule AtomLGFX.RenderBatch.Encoder do
   @type normalized_command :: Command.normalized_command()
 
   @doc """
-  Encodes already-normalized commands into one binary-batch command stream.
+  正規化済み命令を1つのバイナリーバッチ命令列へ符号化します。
   """
   @spec encode_normalized([normalized_command()]) :: {:ok, binary()} | {:error, term()}
   def encode_normalized(commands) when is_list(commands) do

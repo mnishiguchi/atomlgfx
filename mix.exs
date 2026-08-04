@@ -5,7 +5,7 @@
 defmodule AtomLGFX.MixProject do
   use Mix.Project
 
-  # Mix requires a SemVer value even though AtomLGFX has no package release yet.
+  # AtomLGFX は未公開だが、Mix が SemVer 形式の値を要求するため仮の版を置く。
   @version "0.1.0"
 
   def project do
@@ -36,7 +36,7 @@ defmodule AtomLGFX.MixProject do
   end
 
   defp description do
-    "Elixir wrapper for the AtomVM LovyanGFX driver"
+    "AtomVM 用 LovyanGFX ドライバーの Elixir ラッパー"
   end
 
   defp package do

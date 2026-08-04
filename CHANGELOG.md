@@ -4,76 +4,62 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Changelog
+# 変更履歴
 
-All notable user-facing changes for `atomlgfx` are tracked here.
+`atomlgfx` の利用者に影響する主な変更を記録します。
 
-This project is still pre-release. Entries describe branch-level milestones,
-not published package versions. Wire protocol v3 is the maintained versioned
-compatibility contract.
+本計画は公開前です。各項目は公開済みパッケージ版ではなく、開発上の節目を表します。互換性を管理する版付き契約はワイヤープロトコル v3 です。
 
-## Unreleased
+## 未公開
 
-### Added
+### 追加
 
-- Added the v3 low-memory call protocol for ordinary LovyanGFX operations.
-- Added generated operation metadata, protocol reference tables, and Elixir validation metadata derived from `ops.def`.
-- Added explicit binary batching through `AtomLGFX.BinaryBatch` and `AtomLGFX.submit_binary_batch/2`.
-- Added render-first helpers `AtomLGFX.render/3`, `AtomLGFX.render_lcd/3`,
-  `AtomLGFX.render_to/4`, and `AtomLGFX.render_sprite/4`.
-- Added render command normalization for RGB tuple colors, palette colors, and
-  named text datum values.
-- Added a render-first sprite example mode for drawing into sprites and pushing
-  them to the LCD.
-- Added capability discovery for binary batch support.
-- Added the familiar direct `AtomLGFX.draw_pixel/4` and `/5` facade while
-  retaining render-first guidance for pixel loops.
+- 通常の LovyanGFX 操作用に、低メモリーの v3 呼び出しプロトコルを追加
+- `ops.def` から生成する操作情報、プロトコル参照表、Elixir 検証情報を追加
+- `AtomLGFX.BinaryBatch` と `AtomLGFX.submit_binary_batch/2` による明示的なバイナリーバッチを追加
+- `AtomLGFX.render/3`、`AtomLGFX.render_lcd/3`、`AtomLGFX.render_to/4`、`AtomLGFX.render_sprite/4` の描画優先関数を追加
+- RGB 組、パレット色、名前付き文字基準位置を扱う描画命令の正規化を追加
+- スプライトへ描画して LCD へ転送する描画優先の例を追加
+- バイナリーバッチ対応の機能照会を追加
+- 画素の繰り返し描画では描画処理単位を推奨しつつ、単発用途向けの `AtomLGFX.draw_pixel/4` と `/5` を追加
 
-### Changed
+### 変更
 
-- Reworked the native port layer around flatter metadata-driven dispatch.
-- Clarified protocol semantics for targets, colors, palettes, sprites, text, JPEG, and image payloads.
-- Simplified the example application around smoke checks, performance checks, and a separate advanced MovingIcons renderer.
-- Updated the text examples to use the render-first API for ordinary drawing.
-- Split `AtomLGFX.BinaryBatch` into a stable public facade backed by narrower internal codec, submission, validation, and diagnostics modules.
-- Isolated the MovingIcons hot loop in an example-local renderer that submits compact transformed-sprite lists without adding animation-specific commands to the friendly API. The renderer uses overlap-aware dynamic cleanup bounds to reduce visible flicker without allocating a frame buffer.
-- Hardened native render-batch execution with compact stream argument checks before hot-path execution.
-- Simplified native render-batch dispatch so public boundaries validate streams once and the inner stream walker only parses or executes commands.
-- Replaced the native `term_from_int32` compatibility macro with an explicit `lgfx_term_from_i32` helper.
-- Removed submission, validation, and diagnostics delegates from the internal `BinaryBatch.Codec` module so it only owns codec responsibilities.
-- Split normalized render-command encoding into a focused internal encoder,
-  keeping the public render helpers centered on encode/submit flow.
-- Simplified the internal render encoder so unsupported normalized commands are
-  rejected explicitly instead of relying on function-clause exceptions.
-- Made render option validation explicit and replaced custom display-command scanning with a direct `:lists.member/2` check.
-- Tightened internal render submission so `validate:` must be a boolean instead
-  of relying on truthiness.
-- Harmonized direct `set_text_datum/3` with render commands so common datum
-  atoms and numeric LovyanGFX values are both accepted.
-- Pinned the default AtomVM release revision and stabilized dual-core ESP32-S3
-  builds with ESP-IDF's software-backed atomics and an 8 KB scheduler stack.
-- Replaced the malformed JPEG smoke fixture and made direct and scaled JPEG
-  rendering mandatory in hardware validation.
+- ネイティブポート層を、より平坦で情報駆動の振り分けへ再構成
+- 対象、色、パレット、スプライト、文字、JPEG、画像データのプロトコル意味を明確化
+- 例示アプリケーションを、動作確認、性能確認、独立した高度な MovingIcons 描画器へ整理
+- 通常の文字描画例を描画優先 API へ更新
+- `AtomLGFX.BinaryBatch` を安定した公開窓口とし、内部を符号化、送信、検証、診断へ分割
+- MovingIcons の高負荷処理を例専用の描画器へ隔離し、一般向け API にアニメーション固有命令を追加せず、変形スプライト一覧を小さく送信する構成へ変更
+- MovingIcons の消去領域を重なりに応じてまとめ、フレームバッファを確保せずちらつきを軽減
+- 高負荷経路の実行前に、小さな引数検査を行うようネイティブ描画バッチを強化
+- 公開境界で命令列を一度検証し、内側の走査器は解析または実行に専念するよう簡素化
+- 互換用 `term_from_int32` マクロを明示的な `lgfx_term_from_i32` 関数へ置換
+- 内部 `BinaryBatch.Codec` から送信、検証、診断の委譲を除き、符号化だけを担当するよう整理
+- 正規化済み描画命令の符号化を専用内部モジュールへ分離
+- 未対応命令を関数節例外に頼らず明示的に拒否するよう内部描画符号化器を簡素化
+- 描画設定の検証を明示化し、独自の表示命令走査を `:lists.member/2` へ置換
+- `validate:` は真偽値だけを受け入れるよう内部送信を厳格化
+- 直接 API の `set_text_datum/3` でも、描画命令と同じ名前付き値と LovyanGFX 数値を受け入れるよう統一
+- 既定の AtomVM リリースリビジョンを固定し、ESP-IDF のソフトウェア原子操作と 8 KB のスケジューラースタックにより、二核 ESP32-S3 の構築を安定化
+- 壊れていた JPEG 動作確認資料を置き換え、直接描画と拡大縮小描画を機器検証の必須項目へ変更
 
-### Removed
+### 削除
 
-- Removed the experimental retained native render-program API to reduce OOM risk.
-- Removed the old tuple/list batch runtime and command-builder modules.
-- Removed the old tuple/list batch builder and submission path.
-- Removed the separate native `lgfx_runtime` command-dispatch layer.
+- メモリー不足の危険を下げるため、試験的なネイティブ保持描画プログラム API を削除
+- 旧来の組・一覧バッチ実行系と命令構築モジュールを削除
+- 旧来の組・一覧バッチ構築および送信経路を削除
+- 独立したネイティブ `lgfx_runtime` 命令振り分け層を削除
 
-### Compatibility
+### 互換性
 
-- Wire protocol v3 is not compatible with v1 or v2 native drivers.
-- The native driver and Elixir wrapper must come from the same Git revision.
-- Public low-level Elixir operation names use canonical `snake_case` atoms.
-- LovyanGFX-style `camelCase` atoms are not part of the v3 Elixir-facing API.
+- ワイヤープロトコル v3 は、v1 または v2 のネイティブドライバーと互換ではない
+- ネイティブドライバーと Elixir ラッパーは同じ Git リビジョンから取得する
+- 公開される低水準 Elixir 操作名は、正規の `snake_case` アトムを使う
+- LovyanGFX 風の `camelCase` アトムは、v3 の Elixir 向け API に含めない
 
-## v1 baseline
+## v1 基準
 
-The v1 baseline is the original implementation that now lives on the `v1`
-branch. Historically, it was on `main` around commit `67e487f`.
+v1 は元の実装であり、現在は `v1` ブランチにあります。以前は `main` のコミット `67e487f` 前後に存在しました。
 
-Use the current migration guide when moving example applications or downstream
-code to the v3 API. The original v1-to-v2 guide is retained as a historical
-record.
+例示アプリケーションや下流コードを v3 API へ移す場合は、現在の移行文書を参照してください。旧 v1 から v2 への移行文書は、経緯を残すため保持しています。

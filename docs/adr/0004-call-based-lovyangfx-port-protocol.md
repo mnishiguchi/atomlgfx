@@ -4,37 +4,37 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 0004: Call-based LovyanGFX port protocol
+# ADR 0004: 呼び出し方式の LovyanGFX ポートプロトコル
 
-## Status
+## 状態
 
-Accepted
+採用
 
-This ADR remains the active decision for the v2 scalar call protocol.
+この ADR は、v2 の単一命令呼び出しプロトコルに関する現行の判断です。
 
-Render-batching details were superseded by [ADR 0010: Treat BinaryBatch as the standard render transaction API](0010-binary-batch-as-render-transaction-api.md). Current v2 uses `submitBinaryBatch` as an explicit binary frame-script entry point, not the earlier tuple/list batch sketch.
+描画一括実行の詳細は、[ADR 0010: BinaryBatch を標準の描画トランザクション API とする](0010-binary-batch-as-render-transaction-api.md)によって置き換えられました。現在の v2 では、初期案のタプル／一覧方式ではなく、`submitBinaryBatch` を明示的なバイナリーフレームスクリプトの入口として使用します。
 
-## Context
+## 背景
 
-This project is an AtomVM ESP-IDF component that exposes LovyanGFX functionality to Elixir code running on AtomVM.
+このプロジェクトは、AtomVM 上で動作する Elixir コードから LovyanGFX の機能を利用できるようにする AtomVM 向け ESP-IDF 構成要素です。
 
-The existing `atomlgfx` implementation proves that the concept works. It can call LovyanGFX from AtomVM and render graphics on ESP32 devices. However, the current native implementation has become larger than desirable for what is fundamentally a thin wrapper around the upstream LovyanGFX library.
+既存の `atomlgfx` 実装によって、この構想が成立することは確認できています。AtomVM から LovyanGFX を呼び出し、ESP32 機器へ描画できます。一方で、上流の LovyanGFX ライブラリーを薄く包むことが本来の目的であるにもかかわらず、現在のネイティブ実装は望ましい規模を超えて大きくなっています。
 
-The main source of complexity is that each LovyanGFX operation tends to require repeated native plumbing:
+複雑さの主因は、LovyanGFX の各操作ごとに次のようなネイティブ側の定型処理が繰り返されることです。
 
-- request decoding
-- argument validation
-- command dispatch
-- target resolution
-- LovyanGFX method invocation
-- reply encoding
-- optional batch handling
+- 要求の復号
+- 引数の検証
+- 命令の振り分け
+- 対象の解決
+- LovyanGFX 関数の呼び出し
+- 応答の符号化
+- 任意の一括実行処理
 
-This creates a large C/C++ surface area even for simple drawing operations.
+単純な描画操作であっても、これによって C/C++ 側の実装範囲が大きくなります。
 
-The goal of the rewrite is to simplify the AtomVM port interface and reduce native code by using a single generic call-based protocol.
+書き直しの目的は、単一の汎用呼び出し方式プロトコルを採用し、AtomVM ポートの接続面を単純化するとともに、ネイティブコードを減らすことです。
 
-The Elixir-facing API should be idiomatic and performance-conscious:
+Elixir 側の API は、Elixir らしく、性能にも配慮した形にします。
 
 ```elixir
 AtomLGFX.call(port, :draw_line, [0, 0, 120, 80, 0xFFFF])
@@ -42,7 +42,7 @@ AtomLGFX.call(port, :fill_rect, [10, 10, 80, 40, 0x07E0])
 AtomLGFX.call(port, :set_rotation, [1])
 ```
 
-Convenience wrappers may be provided on top:
+その上に、使いやすい補助関数を用意しても構いません。
 
 ```elixir
 AtomLGFX.draw_line(port, 0, 0, 120, 80, 0xFFFF)
@@ -50,74 +50,74 @@ AtomLGFX.fill_rect(port, 10, 10, 80, 40, 0x07E0)
 AtomLGFX.set_rotation(port, 1)
 ```
 
-LovyanGFX itself uses C++-style method names such as `drawLine`, `fillRect`, and `setRotation`. These names should not be exposed directly as the normal Elixir API. The Elixir layer should use `snake_case` names and map them to generated numeric operation codes before crossing the AtomVM port boundary.
+LovyanGFX 自体は、`drawLine`、`fillRect`、`setRotation` のような C++ 形式の関数名を使用します。通常の Elixir API で、これらの名前をそのまま公開してはいけません。Elixir 層では `snake_case` の名前を使用し、AtomVM ポート境界を越える前に、生成済みの数値操作コードへ変換します。
 
-The boundary is intentionally strict:
+境界の責務は明確に分けます。
 
-- Elixir validates API correctness and protocol policy.
-- Native validates crash safety, device reality, and payload ownership.
+- Elixir は、API の正しさとプロトコル方針を検証する。
+- ネイティブは、異常終了の防止、実機状態、データ所有権を検証する。
 
-The Elixir layer is responsible for constructing valid protocol payloads. The native layer should remain intentionally thin.
+Elixir 層が正しいプロトコルデータを構築し、ネイティブ層は意図的に薄く保ちます。
 
-## Decision
+## 判断
 
-Use a call-based LovyanGFX port protocol.
+呼び出し方式の LovyanGFX ポートプロトコルを採用します。
 
-The Elixir public API uses `snake_case` operation names as atoms:
+Elixir の公開 API では、`snake_case` の操作名をアトムとして使用します。
 
 ```elixir
 AtomLGFX.call(port, :fill_rect, [10, 10, 80, 40, color])
 ```
 
-Before sending the request to native code, the Elixir layer maps the operation atom to a numeric operation code.
+要求をネイティブコードへ送る前に、Elixir 層が操作名アトムを数値操作コードへ変換します。
 
-The native wire protocol uses this generic request shape:
+ネイティブの通信プロトコルでは、次の汎用要求形式を使用します。
 
 ```erlang
 {lgfx, ProtocolVersion, call, OpCode, Target, Flags, Args}
 ```
 
-Example:
+例:
 
 ```erlang
 {lgfx, 2, call, 1, 0, 0, [10, 10, 80, 40, 2016]}
 ```
 
-In this example, operation code `1` may represent `:fill_rect`.
+この例では、操作コード `1` が `:fill_rect` を表すものとします。
 
-The Elixir layer owns the authoritative operation schema, argument normalization, public/raw policy, and opcode mapping. The native layer performs minimal defensive checks, validates native-only state, and dispatches to LovyanGFX.
+Elixir 層は、正本となる操作定義、引数の正規化、公開／低水準 API の方針、操作コードの対応付けを管理します。ネイティブ層は、最小限の防御的検査、ネイティブ側でしか判断できない状態の検証、LovyanGFX への振り分けを行います。
 
-This gives us:
+これにより、次を実現します。
 
-- idiomatic Elixir API names
-- compact wire payloads
-- efficient native dispatch
-- minimal native protocol knowledge
-- a single request shape for normal calls and batch execution
+- Elixir らしい API 名
+- 小さな通信データ
+- 効率的なネイティブ振り分け
+- ネイティブ側のプロトコル知識を最小化
+- 通常呼び出しと一括実行で共通する単一の要求形式
 
-## Responsibilities
+## 責務
 
-### Elixir responsibilities
+### Elixir 側の責務
 
-The Elixir layer is responsible for:
+Elixir 層は、次を担当します。
 
-- exposing the public API
-- owning the authoritative operation schema
-- using idiomatic `snake_case` operation names
-- deciding operation policy such as public, raw-only, internal-only, tuple-batchable, or binary-only
-- normalizing user input
-- validating argument count and argument shape
-- converting colors into the expected native representation
-- constructing operation flags from normalized inputs
-- mapping operation names to numeric operation codes
-- constructing the port request tuple
-- constructing batch payloads
-- rejecting invalid public batch usage before it crosses the port boundary
-- rejecting unsafe public API usage patterns
-- providing friendly errors
-- generating or deriving repetitive wrappers and metadata from the shared schema
+- 公開 API の提供
+- 正本となる操作定義の管理
+- Elixir らしい `snake_case` の操作名の使用
+- 公開、低水準限定、内部限定、タプル一括実行対応、バイナリー限定など、各操作の方針決定
+- 利用者入力の正規化
+- 引数の個数と形の検証
+- 色をネイティブ側が期待する表現へ変換
+- 正規化済み入力から操作フラグを構築
+- 操作名から数値操作コードへの対応付け
+- ポート要求タプルの構築
+- 一括実行データの構築
+- 不正な公開一括実行をポート境界の手前で拒否
+- 危険な公開 API の利用方法を拒否
+- 分かりやすいエラーの提供
+- 共通定義から定型的な補助関数や付随情報を生成または導出
 
-Example low-level API:
+低水準 API の例:
 
 ```elixir
 def call(port, op_name, args \\ [], opts \\ []) when is_atom(op_name) do
@@ -129,7 +129,7 @@ def call(port, op_name, args \\ [], opts \\ []) when is_atom(op_name) do
 end
 ```
 
-Example optional wrapper:
+任意の補助関数の例:
 
 ```elixir
 def draw_line(port, x0, y0, x1, y1, color, opts \\ []) do
@@ -137,41 +137,41 @@ def draw_line(port, x0, y0, x1, y1, color, opts \\ []) do
 end
 ```
 
-Operation names should be known atoms. The implementation must not create atoms dynamically from user-provided strings.
+操作名には、既知のアトムだけを使用します。利用者から渡された文字列をもとに、アトムを動的生成してはいけません。
 
-Good:
+適切:
 
 ```elixir
 Protocol.opcode!(:fill_rect)
 ```
 
-Bad:
+不適切:
 
 ```elixir
 String.to_atom(user_input)
 ```
 
-### Native responsibilities
+### ネイティブ側の責務
 
-The native layer is responsible for:
+ネイティブ層は、次を担当します。
 
-- decoding the common request envelope
-- checking the protocol marker and version
-- checking opcode bounds and target value representability
-- safely extracting scalar terms and borrowed binary pointers
-- rejecting oversized binaries and malformed request terms
-- resolving the target display or sprite
-- validating native state such as initialized/not initialized
-- validating device reality such as target existence, sprite existence, and payload size against live target state
-- enforcing payload ownership and request-lifetime rules
-- dispatching by numeric operation code
-- calling the corresponding LovyanGFX method
-- encoding the reply
-- preventing native crashes from malformed payloads
+- 共通要求包絡の復号
+- プロトコル識別子と版の確認
+- 操作コード範囲と対象値の表現可能性の確認
+- 数値項と借用バイナリーポインターの安全な取得
+- 過大なバイナリーや不正な要求項の拒否
+- 対象ディスプレーまたはスプライトの解決
+- 初期化済み／未初期化など、ネイティブ状態の検証
+- 対象やスプライトの存在、実際の対象状態に対するデータ寸法など、実機状態の検証
+- データ所有権と要求の生存期間に関する規則の適用
+- 数値操作コードによる振り分け
+- 対応する LovyanGFX 関数の呼び出し
+- 応答の符号化
+- 不正なデータによるネイティブ異常終了の防止
 
-The native layer should not own public API policy, friendly validation, or duplicate the full protocol schema. It should only keep the guardrails needed to avoid undefined behavior and to account for live native state that Elixir cannot know.
+ネイティブ層は、公開 API の方針や利用者向けの検証を管理せず、完全なプロトコル定義も重複保持しません。未定義動作を防ぎ、Elixir からは分からない実際のネイティブ状態を扱うために必要な防護だけを保持します。
 
-Example native dispatch shape:
+ネイティブ振り分けの例:
 
 ```cpp
 esp_err_t lgfx_dispatch(
@@ -213,44 +213,43 @@ esp_err_t lgfx_dispatch(
 }
 ```
 
-This is still a native dispatcher, but it is intentionally thin. It does not introduce one handler file or one device wrapper for every LovyanGFX operation.
+ネイティブ側に振り分け処理は残りますが、意図的に薄く保ちます。LovyanGFX の操作ごとに個別の処理ファイルや機器包みを作ることはしません。
 
-## Protocol shape
+## プロトコル形式
 
-### Direct call
+### 直接呼び出し
 
 ```erlang
 {lgfx, 2, call, OpCode, Target, Flags, Args}
 ```
 
-Fields:
+各要素:
 
-- `lgfx`: protocol marker
-- `2`: protocol version
-- `call`: request kind
-- `OpCode`: numeric operation code generated from a known Elixir operation name
-- `Target`: target display or sprite identifier
-- `Flags`: operation flags
-- `Args`: list of arguments
+- `lgfx`: プロトコル識別子
+- `2`: プロトコル版
+- `call`: 要求種別
+- `OpCode`: 既知の Elixir 操作名から生成した数値操作コード
+- `Target`: 対象ディスプレーまたはスプライトの識別子
+- `Flags`: 操作フラグ
+- `Args`: 引数一覧
 
-Example Elixir call:
+Elixir 呼び出しの例:
 
 ```elixir
 AtomLGFX.call(port, :fill_screen, [0])
 ```
 
-Example native wire payload:
+ネイティブ通信データの例:
 
 ```erlang
 {lgfx, 2, call, 4, 0, 0, [0]}
 ```
 
-### Batch call
+### 一括呼び出し
 
-The implemented v2 batch path is a normal call-shaped operation whose argument
-is a packed binary scalar command stream.
+実装済みの v2 一括実行経路は、通常の呼び出し形式を使う操作です。その引数として、数値命令を詰めたバイナリー命令列を渡します。
 
-Example Elixir-side representation:
+Elixir 側の表現例:
 
 ```elixir
 batch =
@@ -263,24 +262,21 @@ batch =
 AtomLGFX.submit_binary_batch(port, batch, 0)
 ```
 
-Example native wire payload:
+ネイティブ通信データの例:
 
 ```erlang
 {lgfx, 2, call, SubmitBinaryBatchOpCode, 0, 0, [CommandBinary]}
 ```
 
-The packed command stream reuses ordinary numeric opcodes for the supported
-subset, but it is not a general tuple/list batch runtime. Native batch handling
-is limited to malformed payload guards, unsupported opcode rejection, device
-state validation, payload lifetime, and efficient synchronous command execution.
+詰め込み命令列では、対応範囲に含まれる通常の数値操作コードを再利用します。ただし、汎用的なタプル／一覧方式の一括実行環境ではありません。ネイティブ側の一括実行処理は、不正データの防御、未対応操作コードの拒否、機器状態の検証、データ生存期間の管理、同期的で効率的な命令実行に限定します。
 
-## Operation naming
+## 操作名
 
-The Elixir-facing API uses `snake_case` operation names.
+Elixir 側の API では、`snake_case` の操作名を使用します。
 
-LovyanGFX itself uses C++-style method names such as `drawLine`, `fillRect`, and `setRotation`. These names should not be exposed directly as the normal Elixir API.
+LovyanGFX 自体は、`drawLine`、`fillRect`、`setRotation` のような C++ 形式の関数名を使用します。通常の Elixir API で、これらを直接公開してはいけません。
 
-Instead, the Elixir layer uses idiomatic operation names such as:
+代わりに、Elixir 層では次のような Elixir らしい操作名を使用します。
 
 - `:draw_line`
 - `:fill_rect`
@@ -288,37 +284,37 @@ Instead, the Elixir layer uses idiomatic operation names such as:
 - `:set_text_color`
 - `:push_image`
 
-These operation names are mapped to generated numeric operation codes before crossing the AtomVM port boundary.
+これらの操作名は、AtomVM ポート境界を越える前に、生成済みの数値操作コードへ変換します。
 
-Example:
+例:
 
 ```elixir
 AtomLGFX.call(port, :draw_line, [0, 0, 120, 80, color])
 ```
 
-is encoded as a numeric operation code and eventually dispatched to:
+この呼び出しは数値操作コードへ符号化され、最終的に次へ振り分けられます。
 
 ```cpp
 gfx->drawLine(...)
 ```
 
-This keeps the public API idiomatic for Elixir while preserving a direct mapping to LovyanGFX internally.
+これにより、内部では LovyanGFX との直接的な対応を保ちながら、公開 API は Elixir らしくできます。
 
-## Public API safety policy
+## 公開 API の安全方針
 
-The public Elixir API should not expose every LovyanGFX method directly.
+公開 Elixir API では、LovyanGFX の全関数をそのまま公開しません。
 
-Although the native protocol is call-based, the public API must prevent known bad usage patterns. In particular, operations that are too fine-grained for the AtomVM port boundary should not be exposed as normal public helpers.
+ネイティブプロトコルが呼び出し方式であっても、公開 API は既知の不適切な利用方法を防ぐ必要があります。特に、AtomVM ポート境界を越えるには細かすぎる操作を、通常の公開補助関数として提供してはいけません。
 
-Per-pixel operations such as `drawPixel` and `writePixel` are intentionally excluded from the main API because they invite inefficient loops from Elixir code.
+`drawPixel` や `writePixel` のような画素単位の操作は、Elixir から非効率な繰り返しを行いやすいため、主要 API から意図的に除外します。
 
-Avoid exposing public helpers such as:
+次のような公開補助関数は避けます。
 
 ```elixir
 AtomLGFX.draw_pixel(port, x, y, color)
 ```
 
-This kind of API makes it too easy to write code like:
+この種の API があると、次のようなコードを容易に書けてしまいます。
 
 ```elixir
 for x <- 0..319, y <- 0..239 do
@@ -326,115 +322,111 @@ for x <- 0..319, y <- 0..239 do
 end
 ```
 
-That would cross the AtomVM port boundary once per pixel and is not appropriate for this API.
+これは画素ごとに AtomVM ポート境界を越えるため、この API には適していません。
 
-Repeated small drawing operations should use one of the following instead:
+細かな描画操作を繰り返す場合は、次のいずれかを使用します。
 
-- coarse drawing primitives such as `fill_rect` or `draw_line`
-- batch execution
-- sprites
-- image buffers
-- native-side helper operations
+- `fill_rect` や `draw_line` のような大きな描画単位
+- 一括実行
+- スプライト
+- 画像バッファー
+- ネイティブ側の補助操作
 
-The low-level raw API may exist as an explicit escape hatch, but it should be separated from the normal public API.
+低水準 API は、明示的な退避口として用意しても構いません。ただし、通常の公開 API とは分離します。
 
-Example:
+例:
 
 ```elixir
 AtomLGFX.fill_rect(port, 0, 0, 320, 240, color)
 ```
 
-Preferred.
+こちらを推奨します。
 
 ```elixir
 AtomLGFX.Raw.call(port, :draw_pixel, [x, y, color])
 ```
 
-Allowed only through the raw API, if enabled.
+必要であれば、低水準 API を通した場合だけ許可します。
 
-The batch API should also reject unsafe operations by default. A batch containing many single-pixel operations should fail validation and guide the caller toward `push_image` or another buffer-oriented API.
+一括実行 API も、既定では危険な操作を拒否します。多数の単画素操作を含む一括実行は検証で失敗させ、`push_image` などのバッファー指向 API を案内します。
 
-## Performance considerations
+## 性能上の考慮
 
-The call-based protocol is expected to be acceptable for normal LovyanGFX operations where display I/O dominates total cost. Operations such as `fill_screen`, `fill_rect`, `draw_line`, `draw_string`, and `push_image` usually spend more time in display transfer or LovyanGFX processing than in protocol dispatch.
+通常の LovyanGFX 操作では、ディスプレー入出力が総処理時間の大半を占めるため、呼び出し方式のプロトコルで十分と見込まれます。`fill_screen`、`fill_rect`、`draw_line`、`draw_string`、`push_image` などは、多くの場合、プロトコル振り分けよりもディスプレー転送や LovyanGFX 内部処理に時間を要します。
 
-However, the protocol should not be used as a per-pixel hot path from Elixir. Repeated small operations are expensive because each call crosses the AtomVM port boundary and requires term decoding.
+一方、Elixir から画素単位の頻繁な処理に使用してはいけません。細かな操作を繰り返すと、呼び出しごとに AtomVM ポート境界を越え、項を復号する必要があるため高コストです。
 
-The public Elixir API may use operation names as atoms:
+公開 Elixir API では、操作名をアトムとして使用できます。
 
 ```elixir
 AtomLGFX.call(port, :draw_line, [0, 0, 120, 80, 0xFFFF])
 ```
 
-For native performance, the wire protocol uses generated numeric operation codes instead of strings:
+ネイティブ側の性能を保つため、通信プロトコルでは文字列ではなく、生成済みの数値操作コードを使用します。
 
 ```erlang
 {lgfx, 2, call, OpCode, Target, Flags, Args}
 ```
 
-The Elixir layer is responsible for mapping operation names to operation codes. The native layer can then dispatch with a compact `switch` statement instead of repeated string comparisons.
+Elixir 層が操作名を操作コードへ変換します。これにより、ネイティブ層は文字列比較を繰り返さず、小さな `switch` 文で振り分けられます。
 
-Packed binary batch execution is the primary control-plane strategy for reducing
-call overhead across grouped scalar operations. Repeated homogeneous hot-path
-rendering should prefer fixed-layout binary operations, sprites, image buffers,
-or native-side presentation helpers instead of growing a tuple/list batch
-runtime.
+複数の数値操作をまとめた呼び出し負荷を減らす主要な制御方法として、詰め込みバイナリーによる一括実行を使用します。同種の処理を繰り返す高頻度描画では、タプル／一覧方式の一括実行環境を拡張するのではなく、固定配置のバイナリー操作、スプライト、画像バッファー、ネイティブ側の表示補助処理を優先します。
 
-Initial performance rules:
+初期の性能規則:
 
-- direct calls are acceptable for coarse drawing operations
-- repeated tiny scalar calls should be grouped through packed binary batch or replaced with buffer-oriented operations
-- per-pixel loops from Elixir should be avoided by API design
-- unsafe pixel-level operations should not be exposed in the main public API
-- payload-bearing operations must define clear memory ownership
-- generated opcodes are preferred over string dispatch
-- repeated homogeneous animation data should prefer fixed-layout binary payloads
+- 大きな描画単位であれば直接呼び出しを許可する
+- 細かな数値呼び出しの繰り返しは、詰め込みバイナリー一括実行へまとめるか、バッファー指向操作へ置き換える
+- Elixir からの画素単位ループは API 設計によって避ける
+- 危険な画素単位操作は主要公開 API へ出さない
+- データを伴う操作は、明確なメモリー所有権を定義する
+- 文字列振り分けより生成済み操作コードを優先する
+- 同種のアニメーションデータを繰り返す場合は、固定配置のバイナリーデータを優先する
 
-## Payload operations
+## データを伴う操作
 
-Some operations carry string or binary payloads, for example:
+次のように、文字列またはバイナリーデータを伴う操作があります。
 
 - `draw_string`
 - `print`
 - `println`
 - `push_image`
-- image rendering functions
+- 画像描画関数
 
-For the first implementation, payload-bearing operations may be allowed for direct calls only.
+初期実装では、データを伴う操作は直接呼び出しだけで許可しても構いません。
 
-Batch support for payload-bearing operations should be added only after payload ownership is explicit. The native side must not keep borrowed pointers to AtomVM binary data beyond the lifetime of the current request.
+データを伴う操作の一括実行対応は、データ所有権を明確にしてから追加します。ネイティブ側は、現在の要求の生存期間を超えて AtomVM バイナリーへの借用ポインターを保持してはいけません。
 
-Initial rule:
+初期規則:
 
 ```text
-Direct call:
-  payload-bearing operations are allowed.
+直接呼び出し:
+  データを伴う操作を許可する。
 
-Batch call:
-  payload-bearing operations are rejected unless the payload is copied into runtime-owned memory.
+一括呼び出し:
+  データを実行環境所有のメモリーへ複製しない限り、データを伴う操作を拒否する。
 ```
 
-## Raw API
+## 低水準 API
 
-A raw API may be provided as an explicit escape hatch.
+明示的な退避口として、低水準 API を用意しても構いません。
 
-Example:
+例:
 
 ```elixir
 AtomLGFX.Raw.call(port, :draw_pixel, [x, y, color])
 ```
 
-The raw API is not the normal application API. It exists for experimentation, debugging, and advanced use cases.
+低水準 API は、通常のアプリケーション API ではありません。実験、調査、高度な利用のために設けます。
 
-The raw API may expose operations that are intentionally absent from the main API, but it should make the tradeoff obvious through module naming, documentation, and validation behavior.
+主要 API から意図的に除外した操作を低水準 API で公開しても構いませんが、モジュール名、文書、検証動作を通じて、その代償が明確に分かるようにします。
 
-The raw API may be disabled or omitted in minimal builds.
+最小構成では、低水準 API を無効化または省略しても構いません。
 
-## Code generation
+## コード生成
 
-The preferred long-term implementation is to keep the operation schema in one source of truth and generate repetitive code from it.
+長期的には、操作定義を単一の正本に置き、そこから定型コードを生成する方針を推奨します。
 
-Example source:
+定義元の例:
 
 ```elixir
 @ops [
@@ -491,7 +483,7 @@ Example source:
 ]
 ```
 
-Generated outputs may include:
+生成物の例:
 
 ```text
 lib/atom_lgfx/generated/ops.ex
@@ -500,108 +492,108 @@ lgfx_port/generated/opcodes.h
 lgfx_port/generated/simple_dispatch.cpp
 ```
 
-Simple scalar operations should be generated or collapsed into mechanical dispatch. Handwritten native code should remain for stateful or payload-bearing operations such as lifecycle, sprites, images, text payloads, batch runtime, and native presentation helpers.
+単純な数値操作は生成するか、機械的な振り分けへ集約します。手書きのネイティブコードは、状態を持つ操作、データを伴う操作、ライフサイクル、スプライト、画像、文字列データ、一括実行環境、ネイティブ側の表示補助処理に残します。
 
-This keeps the handwritten native code focused on runtime concerns instead of API surface plumbing.
+これにより、手書きのネイティブコードを API 接続の定型処理ではなく、実行時の責務へ集中させられます。
 
-## Consequences
+## 影響
 
-### Positive
+### 良い影響
 
-- The AtomVM port interface becomes simpler.
-- The native C/C++ surface area is reduced.
-- The Elixir layer becomes the protocol authority.
-- The public Elixir API remains idiomatic.
-- Operation names use `snake_case` in Elixir.
-- The native wire protocol remains compact by using numeric operation codes.
-- Native dispatch can use `switch` instead of string comparison.
-- Adding a LovyanGFX operation requires less native boilerplate.
-- Simple scalar direct calls and tuple-batch commands can be generated from the same schema.
-- Public Elixir wrappers can remain friendly without forcing native API duplication.
-- Known performance foot-guns can be banned from the main API.
-- The implementation stays close to LovyanGFX instead of creating a second graphics abstraction.
+- AtomVM ポートの接続面が単純になる。
+- ネイティブ C/C++ の実装範囲が減る。
+- Elixir 層がプロトコルの正本になる。
+- 公開 Elixir API を Elixir らしく保てる。
+- Elixir では `snake_case` の操作名を使用できる。
+- 数値操作コードにより、ネイティブ通信プロトコルを小さく保てる。
+- ネイティブ側は文字列比較ではなく `switch` で振り分けられる。
+- LovyanGFX 操作を追加するときのネイティブ定型コードが減る。
+- 単純な数値直接呼び出しとタプル一括実行命令を同じ定義から生成できる。
+- 公開 Elixir 補助関数を使いやすく保ちつつ、ネイティブ API の重複を避けられる。
+- 既知の性能上の落とし穴を主要 API から禁止できる。
+- 第2の描画抽象層を作らず、LovyanGFX に近い実装を保てる。
 
-### Negative
+### 悪い影響
 
-- The native side still needs a dispatcher because C++ methods cannot be invoked dynamically by name.
-- The operation code mapping must be generated or maintained carefully.
-- Invalid payloads may produce lower-level native errors if Elixir validation is bypassed.
-- Some LovyanGFX overloads need explicit protocol choices.
-- Payload ownership must be handled carefully for strings, binaries, and image buffers.
-- Code generation may become necessary as the supported LovyanGFX API surface grows.
-- Until generation is in place, operation metadata can still drift across Elixir and native code.
-- The raw API can still be misused if exposed without care.
+- C++ 関数を名前で動的に呼び出せないため、ネイティブ側に振り分け処理は必要になる。
+- 操作コードの対応は、生成または慎重な保守が必要になる。
+- Elixir 側の検証を迂回した不正データでは、低水準なネイティブエラーが返る場合がある。
+- LovyanGFX の一部の多重定義には、明示的なプロトコル上の選択が必要になる。
+- 文字列、バイナリー、画像バッファーのデータ所有権を慎重に扱う必要がある。
+- 対応する LovyanGFX API が増えるにつれて、コード生成が必要になる可能性がある。
+- 生成を導入するまでは、Elixir とネイティブ間で操作情報がずれる可能性が残る。
+- 低水準 API を不用意に公開すると、誤用される可能性がある。
 
-### Neutral
+### 中立的な影響
 
-- This design intentionally favors a thin bridge over a fully typed native binding.
-- Native validation is defensive, not authoritative.
-- The protocol is closer to a remote procedure call interface than a traditional Elixir wrapper.
-- The public API is curated and does not mirror the full LovyanGFX API one-to-one.
+- 完全に型付けされたネイティブ結合ではなく、薄い橋渡しを意図的に優先する。
+- ネイティブ検証は防御的なものであり、正本ではない。
+- このプロトコルは、伝統的な Elixir 包みより遠隔手続き呼び出しに近い。
+- 公開 API は選別され、LovyanGFX API を一対一では再現しない。
 
-## Alternatives considered
+## 検討した代替案
 
-### One native function per LovyanGFX operation
+### LovyanGFX 操作ごとに1つのネイティブ関数を作る
 
-This is the approach used by the earlier implementation.
+以前の実装で採用していた方法です。
 
-It is explicit and easy to reason about for a small number of operations, but it creates too much repeated native code as the API surface grows.
+操作数が少ないうちは明示的で理解しやすい一方、API 範囲が広がるにつれて、ネイティブ側の定型コードが増えすぎます。
 
-Rejected because the rewrite aims to reduce native boilerplate.
+今回の書き直しではネイティブ定型コードの削減を目指すため、採用しません。
 
-### String-based operation names on the wire
+### 通信上で文字列の操作名を使用する
 
-The wire protocol could send operation names as strings or atoms:
+通信プロトコルで、操作名を文字列またはアトムとして送る方法です。
 
 ```erlang
 {lgfx, 2, call, fillRect, 0, 0, [10, 10, 80, 40, 2016]}
 ```
 
-This is readable, but it pushes name handling closer to native code and encourages string or atom comparisons in the dispatcher.
+読みやすい一方、名前処理がネイティブ側へ寄り、振り分けで文字列またはアトム比較を行いやすくなります。
 
-Rejected because the operation set is fixed and known. Numeric operation codes are more compact and easier to dispatch efficiently.
+操作集合は固定かつ既知であり、数値操作コードの方が小さく効率的に振り分けられるため、採用しません。
 
-### LovyanGFX camelCase names in Elixir
+### Elixir で LovyanGFX の camelCase 名を使用する
 
-The Elixir API could mirror LovyanGFX names directly:
+Elixir API で LovyanGFX の名前をそのまま使用する方法です。
 
 ```elixir
 AtomLGFX.call(port, :fillRect, [10, 10, 80, 40, color])
 ```
 
-This makes the mapping to LovyanGFX obvious, but it exposes C++ naming style in Elixir.
+LovyanGFX との対応は明確になりますが、Elixir に C++ の命名様式を露出させます。
 
-Rejected because the public Elixir API should use idiomatic `snake_case` names.
+公開 Elixir API では Elixir らしい `snake_case` を使用するため、採用しません。
 
-### Fully typed native operation registry
+### 完全に型付けしたネイティブ操作登録表
 
-A typed native registry can describe every operation, argument type, target policy, and reply type.
+すべての操作、引数型、対象方針、応答型を記述する型付きネイティブ登録表を持つ方法です。
 
-This is safer, but it duplicates protocol knowledge that already belongs in the Elixir layer.
+安全性は高まりますが、本来 Elixir 層に属するプロトコル知識を重複させます。
 
-Rejected for the initial rewrite because it keeps too much schema responsibility in C/C++.
+初期の書き直しでは C/C++ 側に定義上の責務を持たせすぎるため、採用しません。
 
-### Raw dynamic C++ method invocation
+### C++ 関数名による完全な動的呼び出し
 
-Calling arbitrary LovyanGFX methods dynamically by name would be ideal in theory, but C++ does not provide practical runtime method reflection for this use case.
+任意の LovyanGFX 関数を名前で動的に呼び出せれば理想的ですが、この用途に実用的な実行時関数反映機構は C++ にありません。
 
-Rejected as an implementation strategy.
+実装方式として採用しません。
 
-The accepted design is a raw dynamic protocol bridge with a thin handwritten or generated dispatcher.
+採用する設計は、薄い手書きまたは生成済み振り分けを備えた、低水準の動的プロトコル橋渡しです。
 
-### Exposing every LovyanGFX method publicly
+### LovyanGFX の全関数を公開する
 
-The public API could expose every supported LovyanGFX method as a normal Elixir helper.
+対応する LovyanGFX 関数を、すべて通常の Elixir 補助関数として公開する方法です。
 
-Rejected because some operations are inappropriate across the AtomVM port boundary. Per-pixel operations and write-transaction-style APIs can easily lead to poor performance when called repeatedly from Elixir.
+一部の操作は AtomVM ポート境界越しの利用に適しません。画素単位操作や書き込みトランザクション形式の API は、Elixir から繰り返し呼ぶと性能低下を起こしやすいため、採用しません。
 
-The accepted design is a curated public API with an optional raw escape hatch.
+公開 API を選別し、必要な場合だけ低水準の退避口を提供します。
 
-## Initial v2 scope
+## v2 の初期範囲
 
-The first implementation should support a small but useful subset of LovyanGFX operations.
+最初の実装では、小規模ながら実用的な LovyanGFX 操作の集合を対応対象とします。
 
-Main public API:
+主要公開 API:
 
 - `init`
 - `close`
@@ -622,7 +614,7 @@ Main public API:
 - `push_image`
 - `batch`
 
-Raw or internal-only API:
+低水準または内部限定 API:
 
 - `draw_pixel`
 - `write_pixel`
@@ -632,24 +624,24 @@ Raw or internal-only API:
 - `start_write`
 - `end_write`
 
-The success criterion is not the number of supported methods. The success criterion is that adding one more LovyanGFX method requires only a small dispatch addition or a generated operation entry.
+成功基準は、対応関数の数ではありません。LovyanGFX 関数を1つ追加するとき、振り分けへの小さな追加または生成済み操作項目だけで済むことを基準とします。
 
-## Decision summary
+## 判断の要約
 
-Use one call-based AtomVM port protocol:
+次の単一呼び出し方式の AtomVM ポートプロトコルを使用します。
 
 ```erlang
 {lgfx, 2, call, OpCode, Target, Flags, Args}
 ```
 
-The Elixir public API uses `snake_case` operation atoms.
+Elixir の公開 API では、`snake_case` の操作アトムを使用します。
 
-The Elixir layer maps operation atoms to generated numeric operation codes.
+Elixir 層が操作アトムを生成済みの数値操作コードへ変換します。
 
-The native layer remains a thin bridge that decodes the common envelope, resolves the target, dispatches by operation code, calls LovyanGFX, and returns a reply.
+ネイティブ層は薄い橋渡しとして、共通包絡を復号し、対象を解決し、操作コードで振り分け、LovyanGFX を呼び出して応答を返します。
 
-The preferred implementation direction is one operation schema that drives both Elixir metadata and generated native simple dispatch. Handwritten native code remains reserved for stateful, payload-bearing, or presentation-oriented operations.
+実装方針としては、単一の操作定義から Elixir 側の付随情報とネイティブ側の単純振り分けの両方を生成することを推奨します。手書きのネイティブコードは、状態を持つ操作、データを伴う操作、表示に特化した操作に限定します。
 
-The main public API is intentionally curated. It should not expose known performance foot-guns such as per-pixel operations. Those operations may exist only in a clearly separated raw API, if needed.
+主要公開 API は意図的に選別します。画素単位操作のような既知の性能上の落とし穴は公開しません。必要であれば、明確に分離した低水準 API だけで提供します。
 
-This provides the simplicity of a raw dynamic protocol while avoiding the impracticality of raw dynamic C++ method invocation and the performance cost of string-based native dispatch.
+これにより、低水準の動的プロトコルが持つ単純さを得ながら、C++ 関数の完全な動的呼び出しが現実的でない点と、文字列によるネイティブ振り分けの性能費用を避けられます。

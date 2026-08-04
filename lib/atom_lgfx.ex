@@ -4,17 +4,17 @@
 
 defmodule AtomLGFX do
   @moduledoc """
-  Elixir client for the `lgfx_port` AtomVM port driver.
+  `lgfx_port` AtomVM ポートドライバーを扱う Elixir 側の窓口です。
 
-  The public API is intentionally shaped like a small LovyanGFX-style wrapper:
+  公開 API は、小さく分かりやすい LovyanGFX 形式のラッパーとして設計されています。
 
-  - use natural text scales like `1`, `2`, or `1.5`
-  - use natural rotation angles in degrees
-  - use natural zoom values like `1.0`, `2.0`, or `0.5`
+  - 文字倍率には `1`、`2`、`1.5` などの自然な値を使用します
+  - 回転角には度数をそのまま使用します
+  - 拡大縮小率には `1.0`、`2.0`、`0.5` などの自然な値を使用します
 
-  Rotation and scale APIs use direct LovyanGFX-style numeric semantics.
+  回転と倍率の API は、LovyanGFX と同じ数値の意味をそのまま使用します。
 
-  Typical bring-up:
+  基本的な起動例:
 
       {:ok, port} =
         AtomLGFX.open(
@@ -32,49 +32,38 @@ defmodule AtomLGFX do
       :ok = AtomLGFX.init(port)
       :ok = AtomLGFX.display(port)
 
-  Lifecycle notes:
+  ライフサイクル:
 
-  - The native driver uses a singleton device model.
-  - `open/1` remembers open-time config per port.
-  - `init/1` applies the remembered config for that same port.
-  - Only one port can own the live native device at a time.
-  - `close/1` performs full device teardown and clears this module's runtime caches.
-  - `close/1` does not close the port handle and does not forget that port's remembered open-time config.
-  - `close/1` force-unwinds any still-open native write nesting for the owning port during teardown.
+  - ネイティブドライバーは単一機器モデルです
+  - `open/1` はポートごとに開始時設定を保存します
+  - `init/1` は同じポートに保存された設定を適用します
+  - 実行中のネイティブ機器を所有できるポートは一度に1つだけです
+  - `close/1` は機器を完全に終了し、このモジュールの実行時キャッシュを消去します
+  - `close/1` は BEAM のポートハンドルを閉じず、保存した開始時設定も削除しません
+  - `close/1` は終了時に、所有ポートに残ったネイティブ書き込みの入れ子を強制的に解消します
 
-  Data / reply notes:
+  データと応答:
 
-  - Omitted open options keep build defaults.
-  - `get_touch/1` and `get_touch_raw/1` return `{:ok, :none}` or `{:ok, {x, y, size}}`.
-  - Primitive and text display colors accept either:
-    - RGB565 integers like `0xF81F`
-    - indexed tuples like `{:index, 3}` on palette-backed sprite targets
-  - Transparent keys for sprite push operations accept either:
-    - RGB565 `u16` values (`0x0000..0xFFFF`)
-    - indexed tuples like `{:index, 0}` on palette-backed source sprites
-  - `AtomLGFX.Color` provides small helpers for RGB565 display colors, RGB888 palette colors, and indexed color descriptors.
-  - `set_text_datum/3` is a numeric passthrough. It accepts `0..255` and forwards the raw value to the pinned native driver.
-  - `set_text_size/3` and `set_text_size_xy/4` accept direct LovyanGFX-style scale values.
-  - `set_text_wrap/3` follows LovyanGFX one-argument semantics:
-    - `set_text_wrap(port, wrap, target)` sets `wrap_x = wrap` and `wrap_y = false`
-    - `set_text_wrap_xy/4` sets both axes explicitly
-  - `set_cursor/4` and `get_cursor/2` operate on either the LCD target `0` or a sprite target `1..254`.
-  - `print/3` and `println/3` use the target's current cursor state.
-  - `draw_jpg/5` draws a JPEG binary at `{x, y}` on the selected target.
-  - `draw_jpg/11` accepts direct LovyanGFX-style scale values.
-  - `set_clip_rect/6` and `clear_clip_rect/2` apply to the selected target.
-    LCD and sprite clip states are independent.
-  - `create_palette/2` and `set_palette_color/4` manage palette backing for paletted sprite targets.
-  - `set_text_font_preset/3` provides stable protocol-owned font selection.
-    Supported presets are `:ascii` and `:jp`.
-  - Font preset and text scale are independent concerns.
-    - Use `set_text_font_preset/3` to choose the glyph source.
-    - Use `set_text_size/3` or `set_text_size_xy/4` to control rendered size.
-  - `push_rotate_zoom_to/7`, `/8`, and `/9` use direct degree and zoom values.
-  - `push_rotate_zoom_list_to/4` is the compact fixed-point hot path for many transformed sprite instances.
-  - `push_image_rgb565/8` expects ordinary RGB565 pixel data encoded as
-    little-endian 16-bit words.
-  - `set_swap_bytes/3` controls target-specific byte swapping for raw image upload.
+  - 省略した開始時設定には構築時の既定値を使用します
+  - `get_touch/1` と `get_touch_raw/1` は `{:ok, :none}` または `{:ok, {x, y, size}}` を返します
+  - 基本図形と文字の表示色には、RGB565 整数または `{:index, 3}` 形式の配色表番号を使用できます
+  - スプライト転送の透明色には、RGB565 `u16` 値または `{:index, 0}` 形式の配色表番号を使用できます
+  - `AtomLGFX.Color` は RGB565 表示色、RGB888 配色表色、配色表番号を扱う補助関数群です
+  - `set_text_datum/3` は `0..255` の値を固定したネイティブドライバーへそのまま渡します
+  - `set_text_size/3` と `set_text_size_xy/4` は LovyanGFX 形式の倍率値を直接受け取ります
+  - `set_text_wrap/3` は X 軸だけを指定し、Y 軸の折り返しを無効にします。両軸を指定する場合は `set_text_wrap_xy/4` を使用します
+  - `set_cursor/4` と `get_cursor/2` は LCD 対象 `0` またはスプライト対象 `1..254` を扱います
+  - `print/3` と `println/3` は対象が保持する現在のカーソル位置を使用します
+  - `draw_jpg/5` は JPEG バイナリーを選択対象の `{x, y}` へ描画します
+  - `draw_jpg/11` は LovyanGFX 形式の倍率値を直接受け取ります
+  - LCD とスプライトの切り抜き状態は個別に保持されます
+  - `create_palette/2` と `set_palette_color/4` は配色表式スプライトの配色表を管理します
+  - `set_text_font_preset/3` は `:ascii` と `:jp` の安定した書体選択を提供します
+  - 書体の選択と文字倍率は独立しており、倍率は `set_text_size/3` または `set_text_size_xy/4` で指定します
+  - `push_rotate_zoom_to/7`、`/8`、`/9` は角度と倍率を直接受け取ります
+  - `push_rotate_zoom_list_to/4` は、多数の変形スプライトを扱う固定小数点形式の高速経路です
+  - `push_image_rgb565/8` は、リトルエンディアンの16ビット語で符号化した通常の RGB565 画素データを受け取ります
+  - `set_swap_bytes/3` は、生画像転送時の対象別バイト入れ替えを制御します
   """
 
   alias AtomLGFX.Cache
@@ -95,19 +84,17 @@ defmodule AtomLGFX do
 
   @port_name "lgfx_port"
 
-  @typedoc "An open AtomVM port handle for the native `lgfx_port` driver."
+  @typedoc "ネイティブ `lgfx_port` ドライバーを開いた AtomVM ポートハンドルです。"
   @type port_handle :: port()
 
-  @typedoc "LCD target `0` or a sprite handle in `1..254`."
+  @typedoc "LCD 対象 `0`、または `1..254` のスプライトハンドルです。"
   @type target :: 0..254
 
-  @typedoc "RGB565 display color or a palette index descriptor."
+  @typedoc "RGB565 表示色、または配色表番号の記述子です。"
   @type display_color :: Color.rgb565_value() | Color.index_descriptor()
 
   @doc """
-  Opens the `lgfx_port` driver with optional open-time configuration.
-
-  Omitted options keep the driver's build defaults.
+  任意の開始時設定を指定して `lgfx_port` ドライバーを開きます。
   """
   def open(options \\ [])
 
@@ -130,16 +117,12 @@ defmodule AtomLGFX do
   end
 
   @doc """
-  Normalizes open-time configuration without opening the driver.
-
-  Returns `{:ok, keyword}` on success or `{:error, reason}` on invalid input.
+  ドライバーを開かずに開始時設定を正規化します。
   """
   def normalize_open_config(options), do: OpenConfig.normalize_open_config(options)
 
   @doc """
-  Sends a low-level v3 call request to the driver.
-
-  This is mainly useful for smoke tests and protocol-level experiments.
+  低水準の v3 呼び出し要求をドライバーへ送信します。
   """
   def raw_call(port, op, target, flags, args, timeout \\ Protocol.short_timeout())
       when is_integer(target) and
@@ -149,10 +132,7 @@ defmodule AtomLGFX do
   end
 
   @doc """
-  Calls a curated LovyanGFX operation through the v3 protocol.
-
-  Operation names are `snake_case` atoms such as `:fill_rect` or `:set_rotation`.
-  Internal write-session operations remain intentionally unavailable here.
+  v3 プロトコルを通じて、公開対象として選定された LovyanGFX 操作を呼び出します。
   """
   def call(port, op_name, args \\ [], opts \\ [])
 
@@ -170,20 +150,14 @@ defmodule AtomLGFX do
   end
 
   @doc """
-  Submits a multi-target binary batch frame script.
-
-  The binary should be built with `AtomLGFX.BinaryBatch.render/2` helpers or
-  `AtomLGFX.BinaryBatch.batch/1`.
+  複数対象を扱うバイナリーバッチのフレーム処理を送信します。
   """
   def submit_binary_batch(port, command_binary) when is_binary(command_binary) do
     Protocol.submit_binary_batch(port, command_binary, Protocol.long_timeout())
   end
 
   @doc """
-  Submits a binary batch with an explicit default target.
-
-  The current command stream can still override targets with
-  `AtomLGFX.BinaryBatch.target/1`.
+  既定の描画対象を明示してバイナリーバッチを送信します。
   """
   def submit_binary_batch(port, target, command_binary)
       when is_integer(target) and target >= 0 and target <= 254 and is_binary(command_binary) do
@@ -191,29 +165,26 @@ defmodule AtomLGFX do
   end
 
   @doc """
-  Renders a LovyanGFX-style command list through the binary-batch path.
+  LovyanGFX 形式の命令一覧をバイナリーバッチ経路で描画します。
 
-  This is the preferred API for ordinary drawing work because many small
-  primitive and text operations can cross the AtomVM port boundary as one
-  render transaction.
+  多数の小さな基本図形・文字操作を1回の処理として AtomVM のポート境界を越えられるため、通常の描画ではこの API を推奨します。
 
       AtomLGFX.render(port, [
         {:fill_screen, :black},
         {:set_text_color, :white},
         {:set_cursor, 10, 10},
-        {:println, "Hello AtomLGFX"},
+        {:println, "こんにちは AtomLGFX"},
         {:draw_line, 0, 40, 200, 40, :red},
         :display
       ])
 
-  Options:
+  選択肢:
 
-    * `:target` - default render target. Defaults to `0` for the LCD.
-    * `:display` - appends `:display` when no display command is present.
-    * `:validate` - validates the encoded batch before native submission.
+  - `:target` - 既定の描画対象。既定値は LCD を示す `0`
+  - `:display` - 表示命令がない場合に `:display` を末尾へ追加する
+  - `:validate` - ネイティブ側へ送信する前に符号化済みバッチを検証する
 
-  Payload-heavy operations such as JPEG drawing and raw image upload remain
-  explicit APIs for now so memory ownership stays clear.
+  JPEG 描画や生画像転送などデータ量の多い操作は、メモリーの所有関係を明確にするため、現時点では個別 API として維持します。
   """
   @spec render(port(), [Command.command()], keyword()) :: :ok | {:error, term()}
   def render(port, commands, opts \\ [])
@@ -231,11 +202,9 @@ defmodule AtomLGFX do
   end
 
   @doc """
-  Renders a command list to an explicit target.
+  明示した対象へ命令一覧を描画します。
 
-  This single-target helper keeps target selection at the call site and rejects
-  embedded `{:target, id}` commands. Target `0` is the LCD. Targets `1..254`
-  are sprites. Use `render/3` directly for an intentional multi-target batch.
+  対象の指定を呼び出し箇所に限定し、命令一覧内の `{:target, id}` を拒否します。対象 `0` は LCD、`1..254` はスプライトです。意図的に複数対象を扱う場合は `render/3` を直接使用します。
   """
   @spec render_to(port(), :lcd | 0..254, [Command.command()], keyword()) :: :ok | {:error, term()}
   def render_to(port, target, commands, opts \\ [])
@@ -270,7 +239,7 @@ defmodule AtomLGFX do
   end
 
   @doc """
-  Renders a command list to the LCD target.
+  LCD 対象へ命令一覧を描画します。
   """
   @spec render_lcd(port(), [Command.command()], keyword()) :: :ok | {:error, term()}
   def render_lcd(port, commands, opts \\ [])
@@ -288,11 +257,9 @@ defmodule AtomLGFX do
   end
 
   @doc """
-  Renders a command list to a sprite target.
+  スプライト対象へ命令一覧を描画します。
 
-  This helper intentionally accepts only sprite handles `1..254` and rejects
-  embedded target switches, so accidental LCD rendering is caught at the public
-  API boundary.
+  この補助関数はスプライトハンドル `1..254` だけを受け付け、命令一覧内の対象切り替えを拒否します。これにより、誤って LCD へ描画する問題を公開 API の境界で検出します。
   """
   @spec render_sprite(port(), 1..254, [Command.command()], keyword()) :: :ok | {:error, term()}
   def render_sprite(port, sprite_target, commands, opts \\ [])
@@ -317,115 +284,102 @@ defmodule AtomLGFX do
   end
 
   @doc """
-  Verifies basic protocol reachability.
+  基本的なプロトコル疎通を確認します。
   """
   def ping(port), do: Protocol.ping(port)
 
   @doc """
-  Returns the driver's advertised protocol capabilities.
+  ドライバーが公開するプロトコル機能を返します。
   """
   def get_caps(port), do: Protocol.get_caps(port)
 
   @doc """
-  Returns the remembered open-time configuration for this port.
+  このポートに保存された開始時設定を返します。
   """
   def get_open_config(port), do: Cache.get_open_config(port)
 
   @doc """
-  Returns the last protocol-level error snapshot from the driver.
+  ドライバーが保持する直近のプロトコルエラー情報を返します。
   """
   def get_last_error(port), do: Protocol.get_last_error(port)
 
   @doc """
-  Returns the width of the selected target.
-
-  Target `0` is the LCD. Targets `1..254` are sprite handles.
+  選択した対象の幅を返します。
   """
   def width(port, target \\ 0), do: Protocol.width(port, target)
 
   @doc """
-  Returns the height of the selected target.
-
-  Target `0` is the LCD. Targets `1..254` are sprite handles.
+  選択した対象の高さを返します。
   """
   def height(port, target \\ 0), do: Protocol.height(port, target)
 
   @doc """
-  Returns whether sprite operations are advertised by the driver.
+  ドライバーがスプライト操作に対応しているかを返します。
   """
   def supports_sprite?(port), do: Protocol.supports_sprite?(port)
 
   @doc """
-  Returns whether `pushImage` is advertised by the driver.
+  ドライバーが `pushImage` に対応しているかを返します。
   """
   def supports_pushimage?(port), do: Protocol.supports_pushimage?(port)
 
   @doc """
-  Returns whether `getLastError` is advertised by the driver.
+  ドライバーが `getLastError` に対応しているかを返します。
   """
   def supports_last_error?(port), do: Protocol.supports_last_error?(port)
 
   @doc """
-  Returns whether touch operations are advertised by the driver.
+  ドライバーがタッチ操作に対応しているかを返します。
   """
   def supports_touch?(port), do: Protocol.supports_touch?(port)
 
   @doc """
-  Returns whether palette lifecycle operations are advertised by the driver.
+  ドライバーが配色表のライフサイクル操作に対応しているかを返します。
   """
   def supports_palette?(port), do: Protocol.supports_palette?(port)
 
   @doc """
-  Returns whether multi-target binary-batch frame scripts are advertised by the driver.
+  ドライバーが複数対象のバイナリーバッチ処理に対応しているかを返します。
   """
   def supports_batch?(port), do: Protocol.supports_batch?(port)
 
   @doc """
-  Returns the maximum accepted binary payload size for this driver instance.
+  このドライバー実体が受け付けるバイナリーデータの最大容量を返します。
   """
   def max_binary_bytes(port), do: Protocol.max_binary_bytes(port)
 
   @doc """
-  Initializes the native device using this port's remembered open-time configuration.
+  このポートに保存された開始時設定を使用してネイティブ機器を初期化します。
   """
   def init(port), do: Device.init(port)
 
   @doc """
-  Flushes or presents the LCD display according to the native driver behavior.
+  ネイティブドライバーの動作に従って LCD 表示を反映します。
   """
   def display(port), do: Device.display(port)
 
   @doc """
-  Sets the LCD rotation.
-
-  Accepted values are `0..7`.
+  LCD の回転方向を設定します。
   """
   def set_rotation(port, rotation), do: Device.set_rotation(port, rotation)
 
   @doc """
-  Sets LCD brightness using the driver's raw `u8` brightness value.
+  ドライバーの生の `u8` 値で LCD の明るさを設定します。
   """
   def set_brightness(port, brightness), do: Device.set_brightness(port, brightness)
 
   @doc """
-  Sets the color depth for the selected target.
-
-  Valid depths are `1`, `2`, `4`, `8`, `16`, and `24`.
+  選択した対象の色深度を設定します。
   """
   def set_color_depth(port, depth, target \\ 0), do: Device.set_color_depth(port, depth, target)
 
   @doc """
-  Enables or disables LovyanGFX byte swapping for the selected target.
-
-  Target `0` is the LCD. Targets `1..254` are sprite handles.
+  選択した対象で LovyanGFX のバイト入れ替えを有効または無効にします。
   """
   def set_swap_bytes(port, enabled, target \\ 0), do: Device.set_swap_bytes(port, enabled, target)
 
   @doc """
-  Closes the native device owned by this port and clears runtime caches.
-
-  This does not close the BEAM port handle itself and does not forget the
-  remembered open-time configuration for the port.
+  このポートが所有するネイティブ機器を終了し、実行時キャッシュを消去します。
   """
   def close(port) do
     with :ok <- Device.close(port) do
@@ -435,41 +389,31 @@ defmodule AtomLGFX do
   end
 
   @doc """
-  Sets a clip rectangle on the selected target.
-
-  Target `0` is the LCD. Targets `1..254` are sprite handles.
+  選択した対象に切り抜き長方形を設定します。
   """
   def set_clip_rect(port, x, y, width, height, target \\ 0) do
     Clip.set_clip_rect(port, x, y, width, height, target)
   end
 
   @doc """
-  Clears the active clip rectangle on the selected target.
+  選択した対象の有効な切り抜き長方形を解除します。
   """
   def clear_clip_rect(port, target \\ 0), do: Clip.clear_clip_rect(port, target)
 
   @doc """
-  Fills the selected target with the given display color.
-
-  Accepts either RGB565 integers like `0xF81F` or indexed tuples like `{:index, 3}`.
-  Indexed color mode is valid only on palette-backed sprite targets.
+  選択した対象を指定した表示色で塗りつぶします。
   """
   def fill_screen(port, color, target \\ 0), do: Primitives.fill_screen(port, color, target)
 
   @doc """
-  Clears the selected target with the given display color.
-
-  Accepts either RGB565 integers like `0xF81F` or indexed tuples like `{:index, 3}`.
-  Indexed color mode is valid only on palette-backed sprite targets.
+  選択した対象を指定した表示色で消去します。
   """
   def clear(port, color, target \\ 0), do: Primitives.clear(port, color, target)
 
   @doc """
-  Draws one pixel using the given display color.
+  指定した表示色で1画素を描画します。
 
-  This mirrors LovyanGFX `drawPixel`. For pixel loops or generated imagery,
-  prefer `render/3`, `render_lcd/3`, or `render_sprite/4` so many pixels cross
-  the AtomVM port boundary in one transaction.
+  LovyanGFX の `drawPixel` に対応します。画素を繰り返し描画する場合や画像を生成する場合は、多数の画素を1回で AtomVM のポート境界へ送れる `render/3`、`render_lcd/3`、`render_sprite/4` を推奨します。
   """
   @spec draw_pixel(port_handle(), integer(), integer(), display_color(), target()) ::
           :ok | {:error, term()}
@@ -477,184 +421,172 @@ defmodule AtomLGFX do
     do: Primitives.draw_pixel(port, x, y, color, target)
 
   @doc """
-  Draws a fast vertical line using the given scalar color.
+  指定した色値で高速な垂直線を描画します。
   """
   def draw_fast_vline(port, x, y, height, color, target \\ 0),
     do: Primitives.draw_fast_vline(port, x, y, height, color, target)
 
   @doc """
-  Draws a fast horizontal line using the given scalar color.
+  指定した色値で高速な水平線を描画します。
   """
   def draw_fast_hline(port, x, y, width, color, target \\ 0),
     do: Primitives.draw_fast_hline(port, x, y, width, color, target)
 
   @doc """
-  Draws a line using the given scalar color.
+  指定した色値で線を描画します。
   """
   def draw_line(port, x0, y0, x1, y1, color, target \\ 0),
     do: Primitives.draw_line(port, x0, y0, x1, y1, color, target)
 
   @doc """
-  Draws a rectangle outline using the given scalar color.
+  指定した色値で長方形の輪郭を描画します。
   """
   def draw_rect(port, x, y, width, height, color, target \\ 0),
     do: Primitives.draw_rect(port, x, y, width, height, color, target)
 
   @doc """
-  Fills a rectangle using the given scalar color.
+  指定した色値で長方形を塗りつぶします。
   """
   def fill_rect(port, x, y, width, height, color, target \\ 0),
     do: Primitives.fill_rect(port, x, y, width, height, color, target)
 
   @doc """
-  Draws a rounded rectangle outline using the given scalar color.
+  指定した色値で角丸長方形の輪郭を描画します。
   """
   def draw_round_rect(port, x, y, width, height, radius, color, target \\ 0),
     do: Primitives.draw_round_rect(port, x, y, width, height, radius, color, target)
 
   @doc """
-  Fills a rounded rectangle using the given scalar color.
+  指定した色値で角丸長方形を塗りつぶします。
   """
   def fill_round_rect(port, x, y, width, height, radius, color, target \\ 0),
     do: Primitives.fill_round_rect(port, x, y, width, height, radius, color, target)
 
   @doc """
-  Draws a circle outline using the given scalar color.
+  指定した色値で円の輪郭を描画します。
   """
   def draw_circle(port, x, y, radius, color, target \\ 0),
     do: Primitives.draw_circle(port, x, y, radius, color, target)
 
   @doc """
-  Fills a circle using the given scalar color.
+  指定した色値で円を塗りつぶします。
   """
   def fill_circle(port, x, y, radius, color, target \\ 0),
     do: Primitives.fill_circle(port, x, y, radius, color, target)
 
   @doc """
-  Draws an ellipse outline using the given scalar color.
+  指定した色値で楕円の輪郭を描画します。
   """
   def draw_ellipse(port, x, y, radius_x, radius_y, color, target \\ 0),
     do: Primitives.draw_ellipse(port, x, y, radius_x, radius_y, color, target)
 
   @doc """
-  Fills an ellipse using the given scalar color.
+  指定した色値で楕円を塗りつぶします。
   """
   def fill_ellipse(port, x, y, radius_x, radius_y, color, target \\ 0),
     do: Primitives.fill_ellipse(port, x, y, radius_x, radius_y, color, target)
 
   @doc """
-  Draws an arc outline using the given scalar color.
-
-  Angles are passed in degrees.
+  指定した色値で円弧の輪郭を描画します。
   """
   def draw_arc(port, x, y, radius0, radius1, angle0, angle1, color, target \\ 0),
     do: Primitives.draw_arc(port, x, y, radius0, radius1, angle0, angle1, color, target)
 
   @doc """
-  Fills an arc using the given scalar color.
-
-  Angles are passed in degrees.
+  指定した色値で円弧を塗りつぶします。
   """
   def fill_arc(port, x, y, radius0, radius1, angle0, angle1, color, target \\ 0),
     do: Primitives.fill_arc(port, x, y, radius0, radius1, angle0, angle1, color, target)
 
   @doc """
-  Draws a quadratic bezier curve using the given scalar color.
+  指定した色値で2次ベジェ曲線を描画します。
   """
   def draw_bezier(port, x0, y0, x1, y1, x2, y2, color, target \\ 0),
     do: Primitives.draw_bezier(port, x0, y0, x1, y1, x2, y2, color, target)
 
   @doc """
-  Draws a cubic bezier curve using the given scalar color.
+  指定した色値で3次ベジェ曲線を描画します。
   """
   def draw_bezier(port, x0, y0, x1, y1, x2, y2, x3, y3, color, target \\ 0),
     do: Primitives.draw_bezier(port, x0, y0, x1, y1, x2, y2, x3, y3, color, target)
 
   @doc """
-  Draws a triangle outline using the given scalar color.
+  指定した色値で三角形の輪郭を描画します。
   """
   def draw_triangle(port, x0, y0, x1, y1, x2, y2, color, target \\ 0),
     do: Primitives.draw_triangle(port, x0, y0, x1, y1, x2, y2, color, target)
 
   @doc """
-  Fills a triangle using the given scalar color.
+  指定した色値で三角形を塗りつぶします。
   """
   def fill_triangle(port, x0, y0, x1, y1, x2, y2, color, target \\ 0),
     do: Primitives.fill_triangle(port, x0, y0, x1, y1, x2, y2, color, target)
 
   @doc """
-  Creates a sprite at the given handle using the target's default sprite color depth.
+  指定したハンドルに、対象の既定色深度を使用するスプライトを作成します。
   """
   def create_sprite(port, width, height, target),
     do: Sprites.create_sprite(port, width, height, target)
 
   @doc """
-  Creates a sprite at the given handle with an explicit color depth.
+  指定したハンドルに、色深度を明示したスプライトを作成します。
   """
   def create_sprite(port, width, height, color_depth, target),
     do: Sprites.create_sprite(port, width, height, color_depth, target)
 
   @doc """
-  Deletes the sprite at the given handle.
+  指定したハンドルのスプライトを削除します。
   """
   def delete_sprite(port, target), do: Sprites.delete_sprite(port, target)
 
   @doc """
-  Creates palette backing for an existing paletted sprite target.
+  既存の配色表式スプライト対象に配色表を作成します。
   """
   def create_palette(port, target), do: Sprites.create_palette(port, target)
 
   @doc """
-  Sets one palette entry on a palette-backed sprite target using RGB888.
+  配色表を持つスプライト対象に RGB888 で1項目を設定します。
   """
   def set_palette_color(port, target, palette_index, rgb888),
     do: Sprites.set_palette_color(port, target, palette_index, rgb888)
 
   @doc """
-  Sets the pivot point for the selected target.
-
-  Target `0` is the LCD. Targets `1..254` are sprite handles.
+  選択した対象の基準点を設定します。
   """
   def set_pivot(port, target, x, y), do: Sprites.set_pivot(port, target, x, y)
 
   @doc """
-  Pushes a source sprite to the destination target at `{x, y}`.
+  描画元スプライトを描画先対象の `{x, y}` へ転送します。
   """
   def push_sprite_to(port, src_target, dst_target, x, y),
     do: Sprites.push_sprite_to(port, src_target, dst_target, x, y)
 
   @doc """
-  Pushes a source sprite to the destination target at `{x, y}` using a transparent key.
-
-  Accepts either an RGB565 integer or an indexed tuple like `{:index, 0}`.
-  Indexed transparent mode is valid only on palette-backed source sprites.
+  透明色を使用して描画元スプライトを描画先対象の `{x, y}` へ転送します。
   """
   def push_sprite_to(port, src_target, dst_target, x, y, transparent),
     do: Sprites.push_sprite_to(port, src_target, dst_target, x, y, transparent)
 
   @doc """
-  Pushes a source sprite to the LCD at `{x, y}`.
+  描画元スプライトを LCD の `{x, y}` へ転送します。
   """
   def push_sprite(port, src_target, x, y), do: Sprites.push_sprite(port, src_target, x, y)
 
   @doc """
-  Pushes a source sprite to the LCD at `{x, y}` using a transparent key.
-
-  Accepts either an RGB565 integer or an indexed tuple like `{:index, 0}`.
-  Indexed transparent mode is valid only on palette-backed source sprites.
+  透明色を使用して描画元スプライトを LCD の `{x, y}` へ転送します。
   """
   def push_sprite(port, src_target, x, y, transparent),
     do: Sprites.push_sprite(port, src_target, x, y, transparent)
 
   @doc """
-  Pushes a source sprite to the destination target using direct degree and zoom values.
+  角度と倍率を直接指定して、描画元スプライトを描画先対象へ転送します。
   """
   def push_rotate_zoom_to(port, src_target, dst_target, x, y, angle, zoom) do
     Sprites.push_rotate_zoom_to(port, src_target, dst_target, x, y, angle, zoom)
   end
 
   @doc """
-  Pushes a source sprite to the destination target using direct degree and zoom values.
+  角度と倍率を直接指定して、描画元スプライトを描画先対象へ転送します。
   """
   def push_rotate_zoom_to(port, src_target, dst_target, x, y, angle, zoom_x, zoom_y) do
     Sprites.push_rotate_zoom_to(
@@ -670,8 +602,7 @@ defmodule AtomLGFX do
   end
 
   @doc """
-  Pushes a source sprite to the destination target using direct degree and zoom values
-  and a transparent key.
+  角度と倍率を直接指定し、透明色を使用して描画元スプライトを描画先対象へ転送します。
   """
   def push_rotate_zoom_to(
         port,
@@ -698,154 +629,134 @@ defmodule AtomLGFX do
   end
 
   @doc """
-  Pushes many transformed source sprites to one destination target.
+  多数の変形済み描画元スプライトを1つの描画先対象へ転送します。
 
-  `instances` is a list of fixed-point tuples:
+  `instances` は次の固定小数点形式の組の一覧です。
 
       {src_target, x, y, angle_cdeg, zoom_x1024, zoom_y1024}
 
-  `angle_cdeg` is centidegrees in `0..35999`. `zoom_x1024` and `zoom_y1024`
-  are positive `x1024` fixed-point scales, where `1024` means `1.0x`.
+  `angle_cdeg` は `0..35999` の百分の一度です。`zoom_x1024` と `zoom_y1024` は正の x1024 固定小数点倍率で、`1024` が `1.0倍` を表します。
 
-  Options:
+  選択肢:
 
-  - `:transparent` accepts an RGB565 integer or `{:index, n}`
-  - `:y_offset` is subtracted from each instance y coordinate natively
-  - `:approx_cull` asks native code to skip off-target transforms when safe
+  - `:transparent` - RGB565 整数または `{:index, n}`
+  - `:y_offset` - 各実体の Y 座標からネイティブ側で差し引く値
+  - `:approx_cull` - 安全な場合に対象外の変形をネイティブ側で省く
   """
   def push_rotate_zoom_list_to(port, dst_target, instances, opts \\ []) do
     Sprites.push_rotate_zoom_list_to(port, dst_target, instances, opts)
   end
 
   @doc """
-  Returns the current touch point in screen-space coordinates.
-
-  Returns `{:ok, :none}` or `{:ok, {x, y, size}}`.
+  現在のタッチ位置を画面座標で返します。
   """
   def get_touch(port), do: Touch.get_touch(port)
 
   @doc """
-  Returns the current raw touch point in controller-space coordinates.
-
-  Returns `{:ok, :none}` or `{:ok, {x, y, size}}`.
+  現在の生のタッチ位置を制御器座標で返します。
   """
   def get_touch_raw(port), do: Touch.get_touch_raw(port)
 
   @doc """
-  Sets the persisted touch calibration parameters.
-
-  The payload must contain exactly 8 unsigned 16-bit integers.
+  保存するタッチ補正値を設定します。
   """
   def set_touch_calibrate(port, params8), do: Touch.set_touch_calibrate(port, params8)
 
   @doc """
-  Runs interactive touch calibration and returns the resulting 8-value tuple.
+  対話式のタッチ補正を実行し、結果を8要素の組として返します。
   """
   def calibrate_touch(port), do: Touch.calibrate_touch(port)
 
   @doc """
-  Sets text size using direct LovyanGFX-style scale values.
+  LovyanGFX 形式の倍率値を直接使用して文字倍率を設定します。
   """
   def set_text_size(port, scale, target \\ 0), do: Text.set_text_size(port, scale, target)
 
   @doc """
-  Sets text size independently for both axes using direct LovyanGFX-style scale values.
+  LovyanGFX 形式の倍率値を直接使用して、X 軸と Y 軸の文字倍率を個別に設定します。
   """
   def set_text_size_xy(port, sx, sy, target \\ 0), do: Text.set_text_size_xy(port, sx, sy, target)
 
   @doc """
-  Sets the text datum for the selected target.
-
-  Common datum atoms such as `:top_left`, `:middle_center`, and `:bottom_right`
-  are accepted in addition to raw LovyanGFX numeric values in `0..255`.
+  選択した対象の文字基準位置を設定します。
   """
   def set_text_datum(port, datum, target \\ 0), do: Text.set_text_datum(port, datum, target)
 
   @doc """
-  Sets text wrapping using LovyanGFX one-argument semantics.
+  LovyanGFX の1引数形式に従って文字折り返しを設定します。
 
-  This means:
+  設定内容は次のとおりです。
 
   - `wrap_x = wrap`
   - `wrap_y = false`
 
-  Use `set_text_wrap_xy/4` when both axes must be controlled explicitly.
+  両軸を明示的に制御する場合は `set_text_wrap_xy/4` を使用します。
   """
   def set_text_wrap(port, wrap, target \\ 0), do: Text.set_text_wrap(port, wrap, target)
 
   @doc """
-  Sets text wrapping for both axes explicitly.
+  X 軸と Y 軸の文字折り返しを明示的に設定します。
   """
   def set_text_wrap_xy(port, wrap_x, wrap_y, target \\ 0),
     do: Text.set_text_wrap_xy(port, wrap_x, wrap_y, target)
 
   @doc """
-  Sets a stable protocol-owned text font preset.
+  プロトコルで安定して扱える文字書体プリセットを設定します。
 
-  Supported presets are `:ascii` and `:jp`.
-
-  This selects the glyph source and normalizes cached text scale to `1.0x`.
-  Use `set_text_size/3` or `set_text_size_xy/4` to control rendered size.
+  対応する値は `:ascii` と `:jp` です。書体を選択すると、保持している文字倍率を `1.0倍` へ正規化します。描画倍率は `set_text_size/3` または `set_text_size_xy/4` で指定します。
   """
   def set_text_font_preset(port, preset, target \\ 0),
     do: Text.set_text_font_preset(port, preset, target)
 
   @doc """
-  Sets the text foreground color, and optionally the background color.
-
-  Accepts RGB565 integers like `0xF81F` or indexed tuples like `{:index, 3}`.
-  Indexed color mode is valid only on palette-backed sprite targets.
+  文字の前景色と、任意の背景色を設定します。
   """
   def set_text_color(port, fg_color, bg_color \\ nil, target \\ 0),
     do: Text.set_text_color(port, fg_color, bg_color, target)
 
   @doc """
-  Sets the current text cursor for the selected target.
+  選択した対象の現在の文字カーソルを設定します。
   """
   def set_cursor(port, x, y, target \\ 0), do: Text.set_cursor(port, x, y, target)
 
   @doc """
-  Returns the current text cursor for the selected target as `{:ok, {x, y}}`.
+  選択した対象の現在の文字カーソルを `{:ok, {x, y}}` で返します。
   """
   def get_cursor(port, target \\ 0), do: Text.get_cursor(port, target)
 
   @doc """
-  Draws a UTF-8 string at `{x, y}` on the selected target.
+  選択した対象の `{x, y}` に UTF-8 文字列を描画します。
   """
   def draw_string(port, x, y, text, target \\ 0), do: Text.draw_string(port, x, y, text, target)
 
   @doc """
-  Prints UTF-8 text at the current cursor of the selected target.
+  選択した対象の現在のカーソル位置へ UTF-8 文字列を出力します。
   """
   def print(port, text, target \\ 0), do: Text.print(port, text, target)
 
   @doc """
-  Prints UTF-8 text followed by newline behavior at the current cursor of the selected target.
+  選択した対象の現在のカーソル位置へ UTF-8 文字列を改行付きで出力します。
   """
   def println(port, text, target \\ 0), do: Text.println(port, text, target)
 
   @doc """
-  Convenience helper that sets text color and scale before drawing a string.
+  文字列の描画前に文字色と倍率を設定する補助関数です。
   """
   def draw_string_bg(port, x, y, fg_color, bg_color, scale, text, target \\ 0),
     do: Text.draw_string_bg(port, x, y, fg_color, bg_color, scale, text, target)
 
   @doc """
-  Clears cached text state tracked by the Elixir wrapper for the selected target.
+  Elixir ラッパーが保持する、選択対象の文字状態キャッシュを消去します。
   """
   def reset_text_state(port, target \\ 0), do: Text.reset_text_state(port, target)
 
   @doc """
-  Draws a JPEG binary at `{x, y}` on the selected target.
-
-  This uses the short `drawJpg` protocol form.
+  JPEG バイナリーを選択した対象の `{x, y}` へ描画します。
   """
   def draw_jpg(port, x, y, jpeg, target \\ 0), do: Images.draw_jpg(port, x, y, jpeg, target)
 
   @doc """
-  Draws a JPEG binary using the extended `drawJpg` protocol form.
-
-  `scale_x` and `scale_y` are direct values like `1`, `2`, or `0.5`.
+  拡張 `drawJpg` プロトコル形式を使用して JPEG バイナリーを描画します。
   """
   def draw_jpg(
         port,
@@ -876,9 +787,7 @@ defmodule AtomLGFX do
   end
 
   @doc """
-  Convenience wrapper for extended JPEG drawing.
-
-  Accepts a single natural Elixir scale value for both axes.
+  拡張 JPEG 描画を簡単に呼び出すための補助関数です。
   """
   def draw_jpg_scaled(
         port,
@@ -907,9 +816,7 @@ defmodule AtomLGFX do
   end
 
   @doc """
-  Convenience wrapper for extended JPEG drawing.
-
-  Accepts independent direct scale values for X and Y.
+  拡張 JPEG 描画を簡単に呼び出すための補助関数です。
   """
   def draw_jpg_scaled(
         port,
@@ -940,33 +847,22 @@ defmodule AtomLGFX do
   end
 
   @doc """
-  Pushes an RGB565 image binary to the selected target.
+  RGB565 画像バイナリーを選択した対象へ転送します。
 
-  The payload is interpreted as ordinary RGB565 data encoded as little-endian
-  16-bit words.
+  データは、リトルエンディアンの16ビット語で符号化した通常の RGB565 画素として解釈します。これは LovyanGFX で一般的な `uint16_t*` の RGB565 画像バッファーに対応します。対象別のバイト入れ替えは `set_swap_bytes/3` で制御します。
 
-  This matches the common LovyanGFX-style `uint16_t*` RGB565 image-buffer model.
-  Target-specific byte swapping remains controlled by `set_swap_bytes/3`.
+  通常の生画像データには `AtomLGFX.Color.rgb565_le/1` または `AtomLGFX.Color.pixels_le/1` を使用します。上流 LovyanGFX の `swap565_t` 形式に相当する、事前に入れ替えたデータが必要な場合は `AtomLGFX.Color.rgb565_be/1` または `AtomLGFX.Color.pixels_swap565/1` を使用します。
 
-  Use `AtomLGFX.Color.rgb565_le/1` or `AtomLGFX.Color.pixels_le/1` for ordinary
-  raw image payloads.
+  `AtomLGFX.Color.swap565/1` は1つの RGB565 値のバイト順を変換する関数であり、生バイナリーの符号化関数ではありません。
 
-  Use `AtomLGFX.Color.rgb565_be/1` or `AtomLGFX.Color.pixels_swap565/1` when you
-  need explicit pre-swapped RGB565 bytes analogous to upstream LovyanGFX
-  `swap565_t`-style data.
-
-  `AtomLGFX.Color.swap565/1` is the scalar RGB565 endian-conversion helper, not
-  a raw binary encoder.
-
-  Large payloads may be chunked automatically by the Elixir wrapper to stay
-  within the driver's advertised binary limit.
+  大きなデータは、ドライバーが公開するバイナリー上限内に収まるよう、Elixir ラッパーが自動的に分割する場合があります。
   """
   def push_image_rgb565(port, x, y, width, height, pixels, stride_pixels \\ 0, target \\ 0) do
     Images.push_image_rgb565(port, x, y, width, height, pixels, stride_pixels, target)
   end
 
   @doc """
-  Formats a wrapper or protocol error into a readable string.
+  ラッパーまたはプロトコルのエラーを読みやすい文字列へ整形します。
   """
   def format_error(reason), do: Errors.format_error(reason)
 

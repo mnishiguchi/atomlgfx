@@ -12,7 +12,7 @@ defmodule AtomLGFX.RenderBatch do
   @type normalized_command :: Command.normalized_command()
 
   @doc """
-  Normalizes and encodes render commands into one binary-batch command stream.
+  描画命令を正規化し、1つのバイナリーバッチ命令列へ符号化します。
   """
   @spec encode([command()], keyword()) :: {:ok, binary()} | {:error, term()}
   def encode(commands, opts \\ [])
@@ -27,13 +27,13 @@ defmodule AtomLGFX.RenderBatch do
   def encode(commands, _opts), do: {:error, {:bad_render_commands, commands}}
 
   @doc """
-  Encodes already-normalized commands into one binary-batch command stream.
+  正規化済み命令を1つのバイナリーバッチ命令列へ符号化します。
   """
   @spec encode_normalized([normalized_command()]) :: {:ok, binary()} | {:error, term()}
   defdelegate encode_normalized(commands), to: AtomLGFX.RenderBatch.Encoder
 
   @doc """
-  Submits render commands through the existing binary-batch port path.
+  既存のバイナリーバッチ用ポート経路を通じて描画命令を送信します。
   """
   @spec render(port(), [command()], keyword()) :: :ok | {:error, term()}
   def render(port, commands, opts \\ [])
@@ -50,7 +50,7 @@ defmodule AtomLGFX.RenderBatch do
   def render(_port, commands, _opts), do: {:error, {:bad_render_commands, commands}}
 
   @doc """
-  Submits a prebuilt binary-batch command stream.
+  構築済みのバイナリーバッチ命令列を送信します。
   """
   @spec submit(port(), iodata(), keyword()) :: :ok | {:error, term()}
   def submit(port, commands, opts \\ [])

@@ -4,145 +4,145 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 0015: Design AtomLGFX v3 as a low-memory LovyanGFX-style protocol
+# ADR 0015: AtomLGFX v3 を低メモリーの LovyanGFX 形式プロトコルとして設計する
 
-## Status
+## 状態
 
-Accepted
+採用
 
-## Context
+## 背景
 
-AtomLGFX v1 proved that a practical AtomVM graphics application can run on M5Stack-class hardware together with networking.
+AtomLGFX v1 により、実用的な AtomVM 描画アプリケーションを、通信機能と同時に M5Stack 級の実機で動作させられることが確認できました。
 
-The important proven use case is:
+実証済みの重要な利用例は次のとおりです。
 
-- Stack-chan-like face animation
-- touch input
+- ｽﾀｯｸﾁｬﾝ形式の顔アニメーション
+- タッチ入力
 - Wi-Fi
 - SNTP
-- Distributed Erlang
-- remote control of expression, gaze, and mouth state
+- 分散 Erlang
+- 表情、視線、口の状態の遠隔制御
 
-That v1 example uses a modest rendering model:
+この v1 見本は、控えめな描画方式を使用します。
 
 ```text
-one 320x240 4-bit sprite
-+ palette colors
-+ ordinary drawing calls
-+ one push_sprite per frame
+320x240 の4ビットスプライト1つ
++ パレット色
++ 通常の描画呼び出し
++ フレームごとの push_sprite 1回
 ```
 
-The approximate persistent face sprite memory is:
+顔スプライトが常駐使用するおおよそのメモリー量は次のとおりです。
 
 ```text
 320 * 240 * 4 bits / 8 = 38,400 bytes
 ```
 
-This is realistic for AtomVM applications that must leave memory for Wi-Fi, TCP/IP buffers, application processes, and long-running logic.
+これは、Wi-Fi、TCP/IP バッファー、アプリケーション処理、長時間動作のためにメモリーを残す必要がある AtomVM アプリケーションで現実的な量です。
 
-AtomLGFX v2 improved API consistency, code generation, protocol documentation, and performance experiments. However, v2 also introduced retained native rendering for the MovingIcons example. That experiment added native object buffers, retained render programs, native presentation strip buffers, a render task, and additional lifecycle complexity.
+AtomLGFX v2 は、API の一貫性、コード生成、プロトコル文書、性能実験を改善しました。一方、v2 では MovingIcons 見本向けに保持型ネイティブ描画も導入しました。この実験では、ネイティブ物体バッファー、保持型描画処理、ネイティブ表示帯バッファー、描画作業、追加の生存期間管理が必要になりました。
 
-The retained renderer improved a narrow animation benchmark, but it made the library more memory-sensitive and harder to reason about.
+保持型描画器は限定されたアニメーション性能測定を改善しましたが、ライブラリーのメモリー感度を高め、動作の理解も難しくしました。
 
-For AtomLGFX v3, we will use the lessons from v2 while returning to a v1-like memory profile.
+AtomLGFX v3 では、v2 から得た知見を活かしながら、v1 に近いメモリー特性へ戻します。
 
-## Problem
+## 問題
 
-AtomLGFX needs a protocol that is:
+AtomLGFX には、次の特性を持つプロトコルが必要です。
 
-- intuitive from Elixir
-- close to LovyanGFX concepts
-- small in native code
-- predictable in memory behavior
-- good enough for smooth user-interface examples
-- reliable with Wi-Fi enabled
+- Elixir から直感的に使える
+- LovyanGFX の概念に近い
+- ネイティブコードが小さい
+- メモリー動作を予測しやすい
+- 滑らかな利用者向け画面の見本に十分な性能を持つ
+- Wi-Fi を有効にしても信頼性がある
 
-The v2 retained-native-rendering model is too heavy for this goal.
+v2 の保持型ネイティブ描画モデルは、この目標に対して重すぎます。
 
-The problem is not only total memory use. On ESP32-class devices, large contiguous allocations can fail even when total free heap appears acceptable. Hidden or retained allocations are especially risky when graphics must coexist with Wi-Fi, TCP/IP, SNTP, and Distributed Erlang.
+問題は、総メモリー使用量だけではありません。ESP32 級の機器では、空きヒープ総量が十分に見えても、大きな連続領域の割り当てに失敗することがあります。描画が Wi-Fi、TCP/IP、SNTP、分散 Erlang と共存する必要がある場合、隠れた割り当てや保持型割り当ては特に危険です。
 
-The v3 protocol must avoid hidden large allocations and must make persistent memory ownership explicit.
+v3 プロトコルは、隠れた大きな割り当てを避け、常駐メモリーの所有権を明示する必要があります。
 
-## Decision drivers
+## 判断を支える優先事項
 
-In priority order:
+優先順は次のとおりです。
 
-1. Long-running stability with Wi-Fi enabled
-2. Predictable memory ownership
-3. Non-flickering UI examples
-4. Intuitive LovyanGFX-like API
-5. Good enough performance
-6. Native-like animation performance only when it does not conflict with the above
+1. Wi-Fi を有効にした長時間動作の安定性
+2. 予測可能なメモリー所有権
+3. ちらつきのない利用者向け画面の見本
+4. 直感的で LovyanGFX に近い API
+5. 十分な性能
+6. 上記と矛盾しない場合だけ、ネイティブに近いアニメーション性能
 
-## Decision
+## 判断
 
-AtomLGFX v3 will be designed as a low-memory, call-based protocol focused on ordinary LovyanGFX-style operations, explicit sprite ownership, touch support, palette support, and optional synchronous binary batches.
+AtomLGFX v3 は、通常の LovyanGFX 形式の操作、明示的なスプライト所有、タッチ対応、パレット対応、任意の同期的バイナリー一括実行へ重点を置く、低メモリーの呼び出し方式プロトコルとして設計します。
 
-AtomLGFX v3 will not include retained native render programs.
+AtomLGFX v3 には、保持型ネイティブ描画処理を含めません。
 
-The preferred design is:
+推奨設計は次のとおりです。
 
 ```text
-ordinary calls
-+ explicit sprites
-+ palette support
-+ touch support
-+ optional synchronous BinaryBatch
-+ no retained native scene
-+ no native render task
+通常呼び出し
++ 明示的なスプライト
++ パレット対応
++ タッチ対応
++ 任意の同期 BinaryBatch
++ 保持型ネイティブ場面なし
++ ネイティブ描画作業なし
 ```
 
-The primary real-world smoke target is:
+実世界での主要な簡易動作確認対象は、次の組み合わせです。
 
 ```text
-Stack-chan-like face animation
-+ touch
+ｽﾀｯｸﾁｬﾝ形式の顔アニメーション
++ タッチ
 + Wi-Fi
 + SNTP
-+ Distributed Erlang
-+ remote control
-+ long-running stability
++ 分散 Erlang
++ 遠隔制御
++ 長時間動作の安定性
 ```
 
-MovingIcons can remain a stress test, but it is not the primary design target.
+MovingIcons は負荷確認として維持できますが、主要な設計対象ではありません。
 
-## Goals
+## 目標
 
-- Preserve v1-like memory behavior.
-- Keep the public API intuitive and close to LovyanGFX.
-- Keep native implementation smaller and easier to audit.
-- Avoid hidden large allocations.
-- Avoid native background rendering tasks.
-- Support smooth Stack-chan-like face animation with Wi-Fi enabled.
-- Keep `BinaryBatch` as an optional synchronous optimization.
-- Use v2 code-generation lessons for consistency without shipping large runtime metadata.
+- v1 に近いメモリー動作を維持する。
+- 公開 API を直感的で LovyanGFX に近い形に保つ。
+- ネイティブ実装を小さく、確認しやすく保つ。
+- 隠れた大きな割り当てを避ける。
+- ネイティブの背景描画作業を避ける。
+- Wi-Fi を有効にして、滑らかな ｽﾀｯｸﾁｬﾝ形式の顔アニメーションへ対応する。
+- `BinaryBatch` を任意の同期的最適化として維持する。
+- v2 のコード生成から得た知見を一貫性のために活かしつつ、大きな実行時付随情報は組み込まない。
 
-## Non-goals
+## 対象外
 
-- Native-like MovingIcons performance.
-- A native retained scene graph.
-- A native animation engine.
-- A background render task.
-- Full LovyanGFX API coverage in the first v3 implementation.
-- Compatibility with v2 retained-render APIs.
+- ネイティブに近い MovingIcons 性能。
+- ネイティブ側に保持する場面構造。
+- ネイティブアニメーション実行機構。
+- 背景描画作業。
+- 最初の v3 実装における LovyanGFX API の完全対応。
+- v2 の保持型描画 API との互換性。
 
-## Compatibility policy
+## 互換性方針
 
-V3 does not need to be wire-compatible with v2.
+v3 は、v2 の通信形式と互換である必要はありません。
 
-The public Elixir API may preserve common v1/v2 function names where they support the v3 goals, but v3 should not preserve APIs that increase memory risk or implementation complexity.
+v3 の目標に合う共通関数名については、公開 Elixir API で v1／v2 の名前を維持しても構いません。一方、メモリー危険や実装複雑性を増やす API は維持しません。
 
-Retained-render APIs are intentionally excluded from v3.
+保持型描画 API は、v3 から意図的に除外します。
 
-## Protocol shape
+## プロトコル形式
 
-The v3 wire protocol will use a compact flat tuple form by default:
+v3 の通信プロトコルは、既定で小さく平坦なタプル形式を使用します。
 
 ```elixir
 {:lgfx, 3, op, arg1, arg2, ...}
 ```
 
-Examples:
+例:
 
 ```elixir
 {:lgfx, 3, :ping}
@@ -166,36 +166,36 @@ Examples:
 #                                  target flags binary
 ```
 
-The tuple contains:
+タプルの要素は次のとおりです。
 
 ```text
-:lgfx       protocol tag
-3           protocol version
-op          operation atom
-args        operation-specific positional arguments
+:lgfx       プロトコル識別子
+3           プロトコル版
+op          操作アトム
+args        操作固有の位置引数
 ```
 
-The protocol intentionally avoids a nested argument list such as:
+プロトコルでは、次のような入れ子引数一覧を意図的に避けます。
 
 ```elixir
 {:lgfx, 3, op, [arg1, arg2, arg3]}
 ```
 
-Lists allocate one cons cell per argument. For hot drawing calls, a flat tuple is simpler and more memory-friendly.
+一覧は引数ごとに連結セルを1つ割り当てます。高頻度な描画呼び出しでは、平坦なタプルの方が単純で、メモリー効率にも優れます。
 
-The protocol also avoids the heavier v2-style envelope:
+また、次のような v2 形式の重い包絡も避けます。
 
 ```elixir
 {:lgfx, 2, :call, op_code, target, flags, args}
 ```
 
-V3 should keep flags and metadata out of the common path unless they are clearly needed.
+v3 では、明確な必要性がない限り、共通経路からフラグと付随情報を外します。
 
-The default v3 wire shape uses operation atoms for readability and simpler debugging. If measurements show that atom dispatch is materially slower or larger than numeric dispatch, the Elixir wrapper may translate public operation names to compact numeric opcodes internally. The public API should remain unchanged.
+既定の v3 通信形式では、読みやすさと調査の容易さのため、操作アトムを使用します。実測によってアトム振り分けが数値振り分けより明確に遅い、または大きいと分かった場合、Elixir 包みが公開操作名を内部で小さな数値操作コードへ変換しても構いません。公開 API は変更しません。
 
-## Operation naming
+## 操作名
 
-Operation names should use Elixir-style `snake_case` atoms:
+操作名は、Elixir 形式の `snake_case` アトムを使用します。
 
 ```elixir
 :fill_rect
@@ -206,7 +206,7 @@ Operation names should use Elixir-style `snake_case` atoms:
 :submit_binary_batch
 ```
 
-The public Elixir API should also use idiomatic Elixir names:
+公開 Elixir API も、Elixir らしい名前を使用します。
 
 ```elixir
 AtomLGFX.fill_rect(...)
@@ -214,63 +214,63 @@ AtomLGFX.create_sprite(...)
 AtomLGFX.push_sprite(...)
 ```
 
-Documentation may mention the upstream LovyanGFX names where helpful, but the runtime API should not require `camelCase` atoms.
+必要に応じて、文書内で対応する上流 LovyanGFX 名を説明しても構いません。ただし、実行時 API で `camelCase` アトムを要求しません。
 
-## Target model
+## 対象モデル
 
-V3 will keep the target model simple:
+v3 の対象モデルは単純に保ちます。
 
 ```text
-target 0      LCD
-target 1..n   sprites
+対象 0      LCD
+対象 1..n   スプライト
 ```
 
-On the wire, target-aware drawing operations should pass the target explicitly near the front of the argument list.
+通信上では、対象を持つ描画操作の引数列の前方へ、対象を明示的に渡します。
 
-Example:
+例:
 
 ```elixir
 {:lgfx, 3, :fill_rect, target, x, y, width, height, color}
 ```
 
-The public Elixir API may keep target as an optional final argument for readability and compatibility with existing examples:
+公開 Elixir API では、読みやすさと既存見本との互換性のため、対象を任意の最後の引数として維持しても構いません。
 
 ```elixir
 AtomLGFX.fill_rect(port, x, y, width, height, color)
 AtomLGFX.fill_rect(port, x, y, width, height, color, target)
 ```
 
-The wrapper normalizes this into the explicit wire form.
+包みが、これを明示的な通信形式へ正規化します。
 
-## Replies
+## 応答
 
-Commands should return:
+命令は、次を返します。
 
 ```elixir
 :ok
 ```
 
-Queries should return:
+問い合わせは、次を返します。
 
 ```elixir
 {:ok, value}
 ```
 
-Errors should return small terms:
+エラーは、小さな項で返します。
 
 ```elixir
 {:error, reason}
 ```
 
-or, when a small detail is useful:
+小さな詳細が有用な場合は、次の形式を使用します。
 
 ```elixir
 {:error, {reason, detail}}
 ```
 
-Avoid large structured error maps in the embedded runtime.
+組み込み実行環境では、大きな構造化エラーマップを避けます。
 
-Good error examples:
+適切なエラー例:
 
 ```elixir
 {:error, :invalid_arg}
@@ -279,17 +279,17 @@ Good error examples:
 {:error, {:invalid_target, 9}}
 ```
 
-## Capabilities
+## 機能
 
-Capability discovery should remain lightweight.
+機能の問い合わせは、軽量に保ちます。
 
-The low-level capability query should return an integer bitmask:
+低水準の機能問い合わせは、整数のビットマスクを返します。
 
 ```elixir
 {:ok, capability_bits}
 ```
 
-Suggested capability bits:
+想定する機能ビット:
 
 ```text
 LGFX_CAP_TOUCH
@@ -300,62 +300,62 @@ LGFX_CAP_TEXT
 LGFX_CAP_IMAGES
 ```
 
-Do not include retained render capability.
+保持型描画機能は含めません。
 
-A friendly Elixir helper may convert the bitmask into a list or map for development, but the embedded protocol should stay compact.
+開発用の使いやすい Elixir 補助関数が、ビットマスクを一覧またはマップへ変換しても構いません。ただし、組み込みプロトコルは小さく保ちます。
 
 ## BinaryBatch
 
-V3 will keep `BinaryBatch` as an optional synchronous optimization.
+v3 では、`BinaryBatch` を任意の同期的最適化として維持します。
 
-Binary batches are acceptable because they are:
+バイナリー一括実行を許容する理由は、次のとおりです。
 
-- explicitly submitted by the caller
-- executed synchronously
-- not retained as native scene state
-- not backed by a native render task
-- easier to reason about than retained rendering
+- 呼び出し側が明示的に送信する
+- 同期的に実行する
+- ネイティブ場面状態として保持しない
+- ネイティブ描画作業を背景で動かさない
+- 保持型描画より動作を理解しやすい
 
-BinaryBatch should be used for:
+BinaryBatch は、次の用途に使用します。
 
-- bursts of many small primitive drawing commands
-- setup drawing
-- optional MovingIcons stress-test modes
-- drawing into an offscreen sprite when ordinary calls are too slow
+- 多数の小さな図形描画命令のまとまり
+- 初期画面描画
+- MovingIcons 負荷確認の任意方式
+- 通常呼び出しでは遅すぎる場合の画面外スプライト描画
 
-BinaryBatch should not become a hidden scene system.
+BinaryBatch を、隠れた場面実行機構にしてはいけません。
 
-Each flagship example must have a safe renderer that does not require `BinaryBatch`.
+主要な見本には、それぞれ `BinaryBatch` を必要としない安全な描画器を用意します。
 
-`BinaryBatch` may be used only as an optional measured optimization. If `BinaryBatch` causes OOM, responsiveness regressions, or confusing failure modes on low-memory boards, the example must fall back to the safe renderer.
+`BinaryBatch` は、実測した任意の最適化としてだけ使用できます。低メモリー基板で `BinaryBatch` がメモリー不足、応答性低下、分かりにくい失敗を引き起こす場合、見本は安全な描画器へ戻る必要があります。
 
-BinaryBatch builders must avoid avoidable intermediate binaries in hot loops. Prefer iodata construction with one final binary conversion, or prebuilt/static command fragments where practical. Debug helpers such as decode, summary, and validation must not be used in animation loops.
+BinaryBatch の生成関数は、高頻度ループで避けられる中間バイナリーを作らないようにします。実用的な箇所では、iodata を構築して最後に1回だけバイナリーへ変換するか、構築済み／静的な命令断片を使用します。復号、要約、検証などの調査補助関数をアニメーションループ内で使用してはいけません。
 
-The basic wire operation is:
+基本的な通信操作は次のとおりです。
 
 ```elixir
 {:lgfx, 3, :submit_binary_batch, target, flags, binary}
 ```
 
-Where:
+各値:
 
 ```text
-target   LCD or sprite target
-flags    small integer, usually 0
-binary   packed command stream
+target   LCD またはスプライト対象
+flags    小さな整数。通常は 0
+binary   詰め込み命令列
 ```
 
-The command stream format should be documented separately.
+命令列形式は、別に文書化します。
 
-## Memory rules
+## メモリー規則
 
-V3 protocol design must follow these rules.
+v3 のプロトコル設計は、次の規則に従います。
 
-### No hidden large allocation
+### 隠れた大きな割り当てを行わない
 
-Query operations must not allocate large native buffers.
+問い合わせ操作は、大きなネイティブバッファーを割り当ててはいけません。
 
-Safe examples:
+安全な例:
 
 ```elixir
 AtomLGFX.width(port)
@@ -364,13 +364,13 @@ AtomLGFX.get_touch(port)
 AtomLGFX.get_capabilities(port)
 ```
 
-A function named like `get_*` must behave like a query.
+`get_*` のような名前の関数は、問い合わせとして動作する必要があります。
 
-Presentation or strip buffers must not be allocated by query functions. If strip rendering is supported, buffer allocation must happen through an explicit create, prepare, or render path and must have a matching release path.
+表示または帯状バッファーを、問い合わせ関数で割り当ててはいけません。帯状描画へ対応する場合、バッファー割り当ては明示的な作成、準備、描画経路で行い、対応する解放経路を持たせます。
 
-### Persistent allocation must be explicit
+### 常駐割り当てを明示する
 
-Persistent allocations must use clear names:
+常駐割り当てには、動作が分かる明確な名前を使用します。
 
 ```elixir
 create_sprite
@@ -380,91 +380,91 @@ open
 close
 ```
 
-A function that allocates persistent memory should make that behavior obvious from its name and documentation.
+常駐メモリーを割り当てる関数は、その動作が名前と文書から明確に分かるようにします。
 
-### Every persistent allocation needs a release path
+### すべての常駐割り当てに解放経路を持たせる
 
-Examples:
+例:
 
 ```text
 open -> close
 create_sprite -> delete_sprite
 ```
 
-If palettes are separate native resources, they must have explicit release operations. If a palette is owned by a sprite, deleting the sprite must release the palette.
+パレットを独立したネイティブ資源として扱う場合、明示的な解放操作を用意します。パレットをスプライトが所有する場合、スプライト削除時にパレットも解放します。
 
-### No native render task
+### ネイティブ描画作業を持たない
 
-V3 must not start a native background renderer.
+v3 は、ネイティブの背景描画器を開始しません。
 
-All drawing is initiated by the caller.
+すべての描画は、呼び出し側が開始します。
 
-### No retained native scene state
+### 保持型ネイティブ場面状態を持たない
 
-V3 must not keep object buffers, render programs, or scene descriptions alive on the native side.
+v3 は、物体バッファー、描画処理、場面記述をネイティブ側で保持しません。
 
-### Prefer low-bit-depth sprites for UI
+### 利用者向け画面では低ビット深度スプライトを優先する
 
-The recommended Stack-chan-style face renderer should use:
-
-```text
-320x240 4-bit sprite
-+ palette colors
-+ one push per frame
-```
-
-This is the primary practical rendering pattern.
-
-Avoid defaulting to larger buffers such as:
+推奨する ｽﾀｯｸﾁｬﾝ形式の顔描画器は、次を使用します。
 
 ```text
-320x240 8-bit sprite      = 76,800 bytes
-480x320 RGB565 full frame = 307,200 bytes
+320x240 の4ビットスプライト
++ パレット色
++ フレームごとの転送1回
 ```
 
-Full RGB565 frame buffers should be considered optional and board-dependent.
+これを主要な実用描画方式とします。
 
-## Safe renderer before fast renderer
-
-Each important example must have a safe rendering path that uses minimal memory and simple operations.
-
-For the face example:
+次のような大きなバッファーを既定にしません。
 
 ```text
-safe path:
-  ordinary drawing calls into 4-bit sprite
-  push sprite once per frame
-
-optional fast path:
-  small batch into 4-bit sprite
-  push sprite once per frame
+320x240 の8ビットスプライト = 76,800 bytes
+480x320 RGB565 全画面       = 307,200 bytes
 ```
 
-The safe path must remain the baseline.
+RGB565 全画面バッファーは、任意かつ基板依存とみなします。
 
-If the fast path becomes OOM-prone or harder to debug, the example should fall back to the safe path.
+## 高速描画器より先に安全な描画器を用意する
 
-## Touch response policy
+重要な各見本は、最小限のメモリーと単純な操作を使用する安全な描画経路を持つ必要があります。
 
-Touch response should be improved by loop structure, not by blindly increasing graphics load.
-
-Recommended application loop:
+顔見本の場合:
 
 ```text
-poll touch frequently
-update face state immediately
-render at a controlled max FPS
-force redraw when touch state changes
-push completed sprite frame
+安全な経路:
+  通常の描画呼び出しで4ビットスプライトへ描画
+  フレームごとにスプライトを1回転送
+
+任意の高速経路:
+  小さな一括実行で4ビットスプライトへ描画
+  フレームごとにスプライトを1回転送
 ```
 
-The protocol should make touch polling cheap and independent from rendering where practical.
+安全な経路を基準として維持します。
 
-## API surface
+高速経路がメモリー不足を起こしやすい、または調査しにくい場合、見本は安全な経路へ戻ります。
 
-The initial v3 public API should focus on a compact, useful subset.
+## タッチ応答方針
 
-### Device lifecycle
+タッチ応答は、描画負荷を無条件に増やすのではなく、ループ構造によって改善します。
+
+推奨するアプリケーションループ:
+
+```text
+高頻度でタッチを取得
+顔状態を直ちに更新
+制御した最大 FPS で描画
+タッチ状態が変化したら再描画を強制
+完成したスプライトフレームを転送
+```
+
+実用的な範囲では、プロトコルによってタッチ取得を安価にし、描画から独立させます。
+
+## API 範囲
+
+最初の v3 公開 API は、小さく実用的な範囲へ集中します。
+
+### 機器の生存期間
 
 ```elixir
 AtomLGFX.open(opts)
@@ -473,7 +473,7 @@ AtomLGFX.ping(port)
 AtomLGFX.init(port)
 ```
 
-### Display configuration
+### ディスプレー構成
 
 ```elixir
 AtomLGFX.set_rotation(port, rotation)
@@ -482,7 +482,7 @@ AtomLGFX.height(port)
 AtomLGFX.set_brightness(port, brightness)
 ```
 
-### Primitive drawing
+### 図形描画
 
 ```elixir
 AtomLGFX.fill_screen(port, color)
@@ -494,9 +494,9 @@ AtomLGFX.fill_circle(port, x, y, radius, color)
 AtomLGFX.fill_triangle(port, x0, y0, x1, y1, x2, y2, color)
 ```
 
-Target-aware variants may accept an optional final target argument.
+対象を持つ形式では、任意の最後の引数として対象を受け取っても構いません。
 
-### Sprites
+### スプライト
 
 ```elixir
 AtomLGFX.create_sprite(port, width, height, depth, target)
@@ -505,62 +505,62 @@ AtomLGFX.push_sprite(port, target, x, y)
 AtomLGFX.set_swap_bytes(port, swap?, target)
 ```
 
-### Palettes
+### パレット
 
 ```elixir
 AtomLGFX.create_palette(port, target)
 AtomLGFX.set_palette_color(port, target, index, color)
 ```
 
-If palettes are sprite-owned, `delete_sprite/2` must release the associated palette.
+パレットをスプライトが所有する場合、`delete_sprite/2` は関連するパレットも解放する必要があります。
 
-### Touch
+### タッチ
 
 ```elixir
 AtomLGFX.get_touch(port)
 ```
 
-### Text and images
+### 文字列と画像
 
-Text and image APIs should be added conservatively.
+文字列 API と画像 API は、慎重に追加します。
 
-They should not force large runtime metadata or hidden allocations into the common path.
+共通経路へ大きな実行時付随情報や隠れた割り当てを持ち込んではいけません。
 
-### Batch
+### 一括実行
 
 ```elixir
 AtomLGFX.submit_binary_batch(port, target, batch)
 ```
 
-A convenience wrapper may default the target to LCD:
+使いやすい補助関数で、対象を LCD に既定設定しても構いません。
 
 ```elixir
 AtomLGFX.submit_binary_batch(port, batch)
 ```
 
-## Code generation
+## コード生成
 
-V3 may keep an operation definition file, but generated output should be used carefully.
+v3 は操作定義ファイルを維持しても構いませんが、生成物は慎重に使用します。
 
-Generation is useful for:
+生成が有用な対象:
 
-- native dispatch declarations
-- Elixir wrapper generation
-- docs
-- tests
-- arity validation
+- ネイティブ振り分け宣言
+- Elixir 包みの生成
+- 文書
+- 試験
+- 引数個数の検証
 
-Generation should not force large runtime metadata maps into the embedded application.
+生成によって、大きな実行時付随情報マップを組み込みアプリケーションへ持ち込んではいけません。
 
-The preferred approach is:
+推奨する方法:
 
 ```text
-generate at build time
-compile only compact dispatch and wrappers
-avoid shipping large metadata structures to AtomVM
+構築時に生成
+小さな振り分けと包みだけをコンパイル
+大きな付随情報構造を AtomVM へ組み込まない
 ```
 
-Prefer generated function clauses:
+生成済み関数節を優先します。
 
 ```elixir
 def opcode(:fill_rect), do: 0x23
@@ -568,7 +568,7 @@ def opcode(:fill_circle), do: 0x24
 def opcode(:push_sprite), do: 0x41
 ```
 
-Avoid large runtime maps containing docs, schemas, and metadata:
+文書、定義、付随情報を含む大きな実行時マップは避けます。
 
 ```elixir
 %{
@@ -580,249 +580,249 @@ Avoid large runtime maps containing docs, schemas, and metadata:
 }
 ```
 
-Full metadata can remain available for host-side documentation generation and tests.
+完全な付随情報は、開発用計算機での文書生成と試験にだけ使用できます。
 
-## Examples
+## 見本
 
-### Stack-chan-like face
+### ｽﾀｯｸﾁｬﾝ形式の顔
 
-This becomes the primary v3 smoke example.
+これを v3 の主要な簡易動作確認見本とします。
 
-Expected rendering model:
+想定する描画方式:
 
 ```text
-create one 320x240 4-bit sprite
-create palette
-draw face into sprite
-push sprite once per frame
-read touch frequently
-allow remote state changes
+320x240 の4ビットスプライトを1つ作成
+パレットを作成
+顔をスプライトへ描画
+フレームごとにスプライトを1回転送
+高頻度でタッチを取得
+遠隔から状態を変更可能にする
 ```
 
-Required smoke coverage:
+必要な簡易動作確認範囲:
 
-- AtomLGFX opens and initializes
-- face sprite allocation succeeds
-- palette colors are configured
-- animation runs without visible flicker
-- touch input updates gaze and mouth state
-- Wi-Fi connects
-- SNTP synchronizes
-- Distributed Erlang starts
-- remote expression/gaze/mouth controls work
-- the app runs for an extended period without OOM or reboot
+- AtomLGFX が開始して初期化できる
+- 顔スプライトの割り当てに成功する
+- パレット色を設定できる
+- アニメーションが目立つちらつきなく動作する
+- タッチ入力によって視線と口の状態が更新される
+- Wi-Fi が接続する
+- SNTP が時刻を同期する
+- 分散 Erlang が開始する
+- 遠隔から表情、視線、口を制御できる
+- 長時間動作してもメモリー不足または再起動が起きない
 
 ### MovingIcons
 
-MovingIcons remains a stress test, not the design target.
+MovingIcons は、設計対象ではなく負荷確認として維持します。
 
-Allowed modes:
+許可する方式:
 
 ```text
 sprite_strips
-binary_batch, optional measured mode
-direct_lcd_diagnostic, diagnostic only
-sprite_full, only when memory diagnostics show enough headroom
+binary_batch（任意の実測方式）
+direct_lcd_diagnostic（診断専用）
+sprite_full（メモリー診断で十分な余裕を確認できた場合だけ）
 ```
 
-Disallowed mode:
+許可しない方式:
 
 ```text
 retained_native
 ```
 
-MovingIcons should avoid obvious flicker where practical, but it does not need to match native LovyanGFX performance.
+実用的な範囲では、MovingIcons で目立つちらつきを避けます。ただし、ネイティブ LovyanGFX と同等の性能は要求しません。
 
-The default MovingIcons mode should prioritize running reliably on low-memory boards over visual richness.
+MovingIcons の既定方式は、見た目の豊かさより、低メモリー基板で信頼性を保って動作することを優先します。
 
-## Consequences
+## 影響
 
-### Positive
+### 良い影響
 
-- Lower memory footprint than v2 retained rendering
-- More predictable allocation behavior
-- Simpler native implementation
-- Smaller public API
-- Easier cleanup semantics
-- Better chance of stable Wi-Fi coexistence
-- Easier examples and documentation
-- Clearer project identity
+- v2 の保持型描画よりメモリー使用量が少ない
+- 割り当て動作を予測しやすい
+- ネイティブ実装が単純になる
+- 公開 API が小さくなる
+- 後始末の意味が分かりやすくなる
+- Wi-Fi と安定して共存できる可能性が高まる
+- 見本と文書が分かりやすくなる
+- プロジェクトの役割が明確になる
 
-### Negative
+### 悪い影響
 
-- MovingIcons will not target native-like performance
-- v2 retained-render code and tests will be removed or abandoned
-- Some v2 protocol flexibility will be intentionally dropped
-- Future advanced animation support would need a separate design
+- MovingIcons はネイティブに近い性能を目標としない
+- v2 の保持型描画コードと試験を削除または放棄する
+- v2 プロトコルの一部の柔軟性を意図的に削る
+- 将来の高度なアニメーション対応には、別の設計が必要になる
 
-### Neutral
+### 中立的な影響
 
-`BinaryBatch` remains available, but only as an explicit synchronous optimization.
+`BinaryBatch` は、明示的な同期最適化として引き続き利用できます。
 
-It is not a retained renderer.
+保持型描画器ではありません。
 
-## Alternatives considered
+## 検討した代替案
 
-### Continue v2 retained rendering
+### v2 の保持型描画を継続する
 
-Rejected.
+採用しません。
 
-It preserves the MovingIcons experiment but keeps too much memory pressure and lifecycle complexity in the core library.
+MovingIcons の実験は維持できますが、中心ライブラリーへ大きすぎるメモリー負荷と生存期間管理の複雑性を残します。
 
-### Optimize v2 retained rendering
+### v2 の保持型描画を最適化する
 
-Rejected for the core library.
+中心ライブラリーでは採用しません。
 
-Reducing strip height, improving cleanup, using PSRAM, and shrinking task stack size would help, but the design would still be too specialized for the main API.
+表示帯高の縮小、後始末の改善、PSRAM の使用、作業スタック寸法の縮小は有効ですが、設計は主要 API として依然専門的すぎます。
 
-### Hide retained rendering behind a compile-time option
+### 構築時の選択機能として保持型描画を隠す
 
-Deferred.
+保留します。
 
-This may be useful later for experiments, but it should not define the core v3 protocol.
+将来の実験には有用な可能性がありますが、中心 v3 プロトコルを定義するものにはしません。
 
-### Return fully to v1 protocol
+### 完全に v1 プロトコルへ戻す
 
-Rejected.
+採用しません。
 
-V1 had better memory behavior, but v2 taught useful lessons about naming, generated consistency, documentation, validation, and explicit batching. V3 should keep those lessons without keeping v2’s retained renderer.
+v1 はより良いメモリー動作を持ちましたが、v2 から命名、生成による一貫性、文書、検証、明示的な一括実行について有用な知見を得ました。v3 は v2 の保持型描画器を残さず、これらの知見を維持します。
 
-### Remove batching entirely
+### 一括実行を完全に削除する
 
-Rejected for now.
+現時点では採用しません。
 
-Small explicit batches can improve responsiveness for examples such as Stack-chan face rendering. The problem is not batching itself; the problem is unbounded or retained rendering state.
+小さく明示的な一括実行は、ｽﾀｯｸﾁｬﾝの顔描画などの見本で応答性を改善できます。問題は一括実行そのものではなく、制限のない、または保持型の描画状態です。
 
-## Implementation plan
+## 実装計画
 
-### 1. Define v3 operation list
+### 1. v3 操作一覧を定義する
 
-Create a compact v3 operation definition file.
+小さな v3 操作定義ファイルを作成します。
 
-Each operation should define:
+各操作で次を定義します。
 
-- operation atom
-- arity
-- argument types
-- return type
-- whether it can allocate
-- whether it targets LCD/sprite
-- whether it is safe as a query
+- 操作アトム
+- 引数個数
+- 引数型
+- 戻り値型
+- 割り当てを行う可能性
+- LCD／スプライトのどちらを対象にできるか
+- 問い合わせとして安全か
 
-### 2. Implement v3 native decoder
+### 2. v3 ネイティブ復号器を実装する
 
-Implement a flat tuple decoder for:
+次の平坦なタプルを復号します。
 
 ```elixir
 {:lgfx, 3, op, ...args}
 ```
 
-The decoder should:
+復号器は次を行います。
 
-- validate protocol tag
-- validate version
-- dispatch by operation atom
-- validate arity
-- decode positional arguments
-- return compact errors
+- プロトコル識別子を検証
+- 版を検証
+- 操作アトムで振り分け
+- 引数個数を検証
+- 位置引数を復号
+- 小さなエラーを返す
 
-If measurements show that numeric opcodes are materially better, keep the public API unchanged and translate operation atoms to compact opcodes in the Elixir wrapper.
+実測により数値操作コードが明確に優れる場合、公開 API は変更せず、Elixir 包みで操作アトムを小さな操作コードへ変換します。
 
-### 3. Remove retained rendering from the core
+### 3. 中心機能から保持型描画を削除する
 
-Remove or exclude:
+次を削除または除外します。
 
-- object buffers
-- render programs
-- native render task
-- retained render stats
-- retained render capability
-- retained render Elixir modules
-- MovingIcons retained-native mode
+- 物体バッファー
+- 描画処理
+- ネイティブ描画作業
+- 保持型描画統計
+- 保持型描画機能
+- 保持型描画向け Elixir モジュール
+- MovingIcons の保持型ネイティブ方式
 
-### 4. Keep or adapt BinaryBatch
+### 4. BinaryBatch を維持または調整する
 
-Keep `BinaryBatch` as a separate explicit path.
+`BinaryBatch` を、独立した明示的経路として維持します。
 
-Review its memory behavior and avoid validation, decode, or summary helpers in hot loops.
+メモリー動作を確認し、高頻度ループでは検証、復号、要約補助関数を避けます。
 
-### 5. Port Stack-chan-like face to v3
+### 5. ｽﾀｯｸﾁｬﾝ形式の顔を v3 へ移行する
 
-Port the v1 face example to the v3 API.
+v1 の顔見本を v3 API へ移行します。
 
-Use it as the primary memory and reliability smoke test.
+主要なメモリーおよび信頼性の簡易動作確認として使用します。
 
-### 6. Add memory diagnostics
+### 6. メモリー診断を追加する
 
-Add optional debug logging for:
+任意の診断記録として、次を追加します。
 
-- free heap
-- largest free block
-- after AtomLGFX open
-- after display init
-- after sprite creation
-- before Wi-Fi start
-- after Wi-Fi start
-- after got IP
-- after Distributed Erlang start
+- 空きヒープ
+- 最大空き連続領域
+- AtomLGFX 開始後
+- ディスプレー初期化後
+- スプライト作成後
+- Wi-Fi 開始前
+- Wi-Fi 開始後
+- IP 取得後
+- 分散 Erlang 開始後
 
-### 7. Update documentation
+### 7. 文書を更新する
 
-Document:
+次を文書化します。
 
-- v3 protocol shape
-- public API
-- memory rules
-- recommended sprite-based rendering pattern
-- BinaryBatch as optional optimization
-- retained rendering removal
+- v3 プロトコル形式
+- 公開 API
+- メモリー規則
+- 推奨するスプライト式描画方式
+- 任意最適化としての BinaryBatch
+- 保持型描画の削除
 
-## Acceptance criteria
+## 受け入れ条件
 
-This ADR is implemented when:
+次を満たしたとき、この ADR を実装済みとします。
 
-- v3 protocol uses a compact flat tuple shape, or an equivalent compact opcode form behind the same public API
-- ordinary drawing calls work through v3
-- sprite creation, palette setup, and `push_sprite` work through v3
-- touch works through v3
-- `BinaryBatch` works as an explicit synchronous path, or is intentionally deferred
-- retained render program APIs are absent from v3
-- no query operation performs hidden large allocation
-- Stack-chan-like face animation runs without visible flicker
-- Stack-chan-like face animation runs with Wi-Fi enabled
-- SNTP and Distributed Erlang can run with the face example
-- long-running face animation does not OOM under normal usage
-- MovingIcons no longer depends on retained native rendering
+- v3 プロトコルが小さな平坦タプル形式、または同じ公開 API の背後にある同等の小さな操作コード形式を使用する
+- 通常描画呼び出しが v3 で動作する
+- スプライト作成、パレット設定、`push_sprite` が v3 で動作する
+- タッチが v3 で動作する
+- `BinaryBatch` が明示的な同期経路として動作するか、意図的に後回しにされている
+- v3 に保持型描画処理 API が存在しない
+- 問い合わせ操作が隠れた大きな割り当てを行わない
+- ｽﾀｯｸﾁｬﾝ形式の顔アニメーションが目立つちらつきなく動作する
+- ｽﾀｯｸﾁｬﾝ形式の顔アニメーションが Wi-Fi を有効にして動作する
+- SNTP と分散 Erlang が顔見本と同時に動作できる
+- 長時間の顔アニメーションが通常利用でメモリー不足を起こさない
+- MovingIcons が保持型ネイティブ描画へ依存しない
 
-## Summary
+## 要約
 
-AtomLGFX v3 will be a pragmatic low-memory protocol.
+AtomLGFX v3 は、実用重視の低メモリープロトコルとします。
 
-It will keep the useful lessons from v2:
+v2 から得た有用な知見を維持します。
 
 ```text
-clear API naming
-generated consistency
-explicit binary batches
-better documentation
+明確な API 命名
+生成による一貫性
+明示的なバイナリー一括実行
+改善された文書
 ```
 
-while returning to the practical memory behavior proven by v1:
+同時に、v1 が実証した実用的なメモリー動作へ戻します。
 
 ```text
-ordinary calls
-+ explicit sprites
-+ palette rendering
-+ touch
-+ Wi-Fi coexistence
-+ stable long-running applications
+通常呼び出し
++ 明示的なスプライト
++ パレット描画
++ タッチ
++ Wi-Fi との共存
++ 安定した長時間動作アプリケーション
 ```
 
-V3 should make the common embedded graphics use case reliable first. Performance experiments can exist separately, but they should not shape the core protocol.
+v3 では、一般的な組み込み描画の利用例を、まず信頼できるものにします。性能実験は別に存在できますが、中心プロトコルを形作るものにはしません。
 
-The core principle is:
+中心原則は次のとおりです。
 
 ```text
-AtomLGFX v3 is not an animation engine.
-It is a low-memory LovyanGFX wrapper for practical AtomVM applications.
+AtomLGFX v3 はアニメーション実行機構ではない。
+実用的な AtomVM アプリケーション向けの、低メモリーな LovyanGFX 包みである。
 ```

@@ -16,19 +16,13 @@ defmodule AtomLGFX.Device do
   def close(port), do: Protocol.call_ok(port, :close, 0, 0, [], Protocol.long_timeout())
 
   @doc """
-  Starts a LovyanGFX write session on the LCD device.
-
-  This maps directly to native `startWrite()` and participates in LovyanGFX's
-  nested write counter. Calls should normally be paired with `end_write/1`.
+  LCD 機器上で LovyanGFX の書き込み区間を開始します。
   """
   def start_write(port),
     do: Protocol.call_ok(port, :start_write, 0, 0, [], Protocol.long_timeout())
 
   @doc """
-  Ends a LovyanGFX write session on the LCD device.
-
-  This maps directly to native `endWrite()` and decrements LovyanGFX's nested
-  write counter.
+  LCD 機器上の LovyanGFX 書き込み区間を終了します。
   """
   def end_write(port),
     do: Protocol.call_ok(port, :end_write, 0, 0, [], Protocol.long_timeout())

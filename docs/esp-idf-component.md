@@ -4,116 +4,96 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ESP-IDF component
+# ESP-IDF 部品
 
-This repository provides an ESP-IDF component that exposes a native AtomVM port
-driver backed by LovyanGFX.
+このリポジトリは、LovyanGFX を背後に持つ AtomVM のネイティブポートドライバーを提供する ESP-IDF 部品を含みます。
 
-The component implements wire protocol v3 for the current AtomLGFX v3 API. It is
-distributed from this repository rather than as part of the Hex package. Build
-it from the same Git commit as the `atomlgfx` Elixir dependency.
+この部品は、現在の AtomLGFX v3 API に対応するワイヤープロトコル v3 を実装します。Hex パッケージには含めず、このリポジトリから配布します。`atomlgfx` の Elixir 依存と同じ Git コミットから構築してください。
 
-The component is intended for AtomVM firmware on ESP32-class boards. It
-implements the native side of the `AtomLGFX` API used by the Elixir package in
-this repository.
+対象は ESP32 系基板上の AtomVM ファームウェアです。同じリポジトリにある Elixir パッケージが使用する `AtomLGFX` API のネイティブ側を実装します。
 
-## What this component provides
+## 提供するもの
 
-- native `lgfx_port` AtomVM port driver
-- request decode and dispatch for the tuple protocol
-- LovyanGFX-backed display operations
-- sprite, palette, image, text, and touch support
-- explicit binary batch submission for grouped rendering work
-- protocol-level capabilities and diagnostics
+- ネイティブ `lgfx_port` AtomVM ポートドライバー
+- 組プロトコルの要求解析と振り分け
+- LovyanGFX を使う表示操作
+- スプライト、パレット、画像、文字、タッチ対応
+- 描画処理をまとめる明示的なバイナリーバッチ送信
+- プロトコル単位の機能情報と診断情報
 
-## What this component does not provide
+## 提供しないもの
 
-- high-level Elixir ergonomics
-- Elixir-side validation helpers
-- application-level board configuration guidance for every target board
+- 高水準の Elixir 向け使いやすさ
+- Elixir 側の検証補助
+- あらゆる基板に対するアプリケーション用設定手順
 
-For Elixir-side usage, see [the Elixir package guide](elixir-package.md).
+Elixir 側の利用方法は [Elixir パッケージ](elixir-package.md) を参照してください。
 
-## Repository areas related to this component
+## 関連するリポジトリ領域
 
 - `CMakeLists.txt`
-  - component entry point
-
+  - 部品の入口
 - `include/lgfx_port/lgfx_port.h`
-  - public native header
-
+  - 公開ネイティブヘッダー
 - `lgfx_port/`
-  - AtomVM-facing protocol boundary
-  - ordinary request handling
-  - explicit binary batch submission decode and validation
-  - frame-script dispatch
-
+  - AtomVM に面するプロトコル境界
+  - 通常要求の処理
+  - 明示的なバイナリーバッチ送信の解析と検証
+  - フレーム命令列の振り分け
 - `lgfx_device/`
-  - LovyanGFX-facing device adapter
-
+  - LovyanGFX に面する装置適合層
 - `third_party/LovyanGFX/`
-  - pinned LovyanGFX submodule
+  - 版を固定した LovyanGFX の副リポジトリ
 
-## Build preparation
+## 構築準備
 
-Initialize the LovyanGFX submodule first.
+先に LovyanGFX の副リポジトリを初期化します。
 
 ```bash
 git submodule sync --recursive
 git submodule update --init --recursive
 ```
 
-## Build and flash AtomVM firmware
+## AtomVM ファームウェアの構築と書き込み
 
-The repository includes a helper script for building AtomVM firmware with this
-native driver.
+このリポジトリには、ネイティブドライバーを含む AtomVM ファームウェアを構築する補助スクリプトがあります。
 
 ```bash
 ./scripts/atomvm_esp32.exs install --target esp32s3 --port /dev/ttyACM0
 ```
 
-Adjust target and serial port values for your environment.
+対象と直列ポートは環境に合わせて変更してください。
 
-## Configuration
+## 設定
 
-Build defaults are derived from CMake configuration and emitted into the
-generated native config header.
+構築時の既定値は CMake 設定から導出し、生成されるネイティブ設定ヘッダーへ出力します。一部の値は、ホストアプリケーションがポートを開く際に上書きできます。
 
-Selected values may also be overridden at port open time by the host
-application.
+所有権、実行方式、設定の流れは [構成](architecture.md) を参照してください。
 
-For the ownership model, execution model, and configuration flow, see
-[the architecture document](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/architecture.md).
+## プロトコルと機能
 
-## Protocol and capabilities
+この部品は、`AtomLGFX` が使う組プロトコルのネイティブ側を実装します。
 
-This component implements the native side of the tuple protocol used by
-`AtomLGFX`.
+要求と応答の意味、検証規則、データ表現、バッチ処理は [プロトコル](protocol.md) を参照してください。生成された操作表、エラー理由、機能語彙は [プロトコル参照](protocol-reference.md) にあります。
 
-For request and response semantics, validation rules, data encodings, and
-batching behavior, see [the protocol document](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/protocol.md).
+## 内部設計文書
 
-For the generated operation matrix, error reasons, and capability vocabulary,
-see [the protocol reference](protocol-reference.md).
+主にネイティブ層の保守者向けです。
 
-## Internal design documents
+- [ポート層](../lgfx_port/README.md)
+- [装置適合層](../lgfx_device/README.md)
+- [構成](architecture.md)
+- [プロトコル](protocol.md)
+- [プロトコル参照](protocol-reference.md)
 
-These documents are mainly for maintainers of the native layer:
+## 変更時の注意
 
-- [Port layer](../lgfx_port/README.md)
-- [Device adapter layer](../lgfx_device/README.md)
-- [Architecture](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/architecture.md)
-- [Protocol](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/protocol.md)
-- [Protocol reference](protocol-reference.md)
+外部から見えるプロトコル動作を変更する場合は、次を行います。
 
-## Notes for contributors
-
-When changing protocol-visible behavior:
-
-- update `lgfx_port/include_internal/lgfx_port/ops.def` as needed
-- update handlers, packed batch dispatch, or device code as needed
-- update `docs/protocol.md` if the external contract changed
-- resync generated protocol tables
+- 必要に応じて `lgfx_port/include_internal/lgfx_port/ops.def` を更新する
+- 必要に応じてハンドラー、バイナリーバッチ振り分け、装置コードを更新する
+- 外部契約が変わる場合は `docs/protocol.md` を更新する
+- 生成されたプロトコル表を同期する
 
 ```bash
 elixir scripts/sync_lgfx_protocol_doc.exs

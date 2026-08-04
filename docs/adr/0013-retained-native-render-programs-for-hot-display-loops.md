@@ -4,99 +4,99 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# ADR 0013: Add retained native render scenes for hot display loops
+# ADR 0013: 高頻度表示ループ向けに保持型ネイティブ描画場面を追加する
 
-## Status
+## 状態
 
-Superseded by [ADR 0014: Reduce OOM risk in AtomLGFX v2](0014-reduce-oom-risk-in-v2.md).
+[ADR 0014: AtomLGFX v2 のメモリー不足危険を減らす](0014-reduce-oom-risk-in-v2.md)によって置き換えられました。
 
-## Context
+## 背景
 
-`atomlgfx` v2 provides a compact call-based protocol for invoking LovyanGFX operations from AtomVM. It also provides `BinaryBatch` for submitting compact drawing transactions, including native frame commands such as the transformed-sprite PRZF frame command used by the `MovingIcons` example.
+`atomlgfx` v2 は、AtomVM から LovyanGFX 操作を呼び出すための、小さな呼び出し方式プロトコルを提供します。また、`MovingIcons` 見本で使用する変換付きスプライト PRZF フレーム命令など、ネイティブフレーム命令を含む小さな描画トランザクションを送信するため、`BinaryBatch` を提供します。
 
-This design significantly reduces AtomVM-to-native call overhead compared with issuing one port call per drawing operation. It keeps the Elixir interface generic and keeps most ordinary drawing, setup, query, and control operations maintainable.
+この設計により、描画操作ごとにポートを呼び出す場合と比べて、AtomVM からネイティブへの呼び出し負荷を大きく減らせます。Elixir の接続面を汎用的に保ち、通常描画、初期設定、問い合わせ、制御操作の大半を保守しやすくできます。
 
-However, the `MovingIcons` workload remains performance-sensitive because each animation frame still requires AtomVM participation:
+しかし、`MovingIcons` の処理は、各アニメーションフレームで AtomVM が関与するため、依然として性能に敏感です。
 
-- Elixir updates object state.
-- Elixir encodes the frame command.
-- AtomVM submits one native command per frame.
-- Native code decodes the command.
-- Native code renders and presents the frame.
-- Control returns to AtomVM before the next frame.
+- Elixir が物体状態を更新する。
+- Elixir がフレーム命令を符号化する。
+- AtomVM がフレームごとに1つのネイティブ命令を送信する。
+- ネイティブコードが命令を復号する。
+- ネイティブコードがフレームを描画して表示する。
+- 次のフレームの前に、制御が AtomVM へ戻る。
 
-A comparable upstream LovyanGFX implementation reached approximately 10 fps on the same class of hardware by using a different execution model. In that implementation, the hot frame loop runs entirely inside a native FreeRTOS task. Object state, movement, strip rendering, sprite presentation, and display flushing are all handled natively without AtomVM participation per frame.
+同等の上流 LovyanGFX 実装は、異なる実行方式によって、同程度の実機で約10 fps に達しました。その実装では、高頻度フレームループ全体がネイティブ FreeRTOS 作業内で動作します。物体状態、移動、帯状描画、スプライト表示、画面反映のすべてを、フレームごとの AtomVM 関与なしにネイティブ側で処理します。
 
-That means v2 has solved much of the per-operation protocol overhead, but it does not fully match the upstream native execution model for animation-heavy workloads.
+つまり、v2 は操作ごとのプロトコル負荷の多くを解消しましたが、アニメーション量の多い処理について、上流のネイティブ実行方式へ完全には一致していません。
 
-## Decision
+## 判断
 
-Extend the existing v2 protocol with retained native render scenes.
+既存の v2 プロトコルへ、保持型ネイティブ描画場面を追加します。
 
-A retained native render scene is a native-side object that is configured from Elixir, then executed repeatedly by native code. Elixir remains responsible for setup, resource creation, initial data upload, lifecycle control, and optional low-frequency updates. Native code owns the hot display loop.
+保持型ネイティブ描画場面は、Elixir から設定した後、ネイティブコードが繰り返し実行するネイティブ側の物体です。Elixir は、初期設定、資源作成、初期データ転送、生存期間制御、任意の低頻度更新を担当します。ネイティブコードが高頻度表示ループを所有します。
 
-This is an additive protocol extension. It does not require a protocol version bump unless the implementation changes existing command semantics, existing payload layouts, response formats, or protocol negotiation behavior.
+これは追加型のプロトコル拡張です。既存命令の意味、既存データ配置、応答形式、プロトコル協議動作を変更しない限り、プロトコル版を上げる必要はありません。
 
-The initial target is `MovingIcons`-class performance, but the protocol should not expose a `moving_icons`-specific API. The public Elixir interface should remain generic.
+最初の対象は MovingIcons 程度の性能ですが、公開 API に `moving_icons` 固有の概念を出してはいけません。公開 Elixir 接続面は汎用的に保ちます。
 
-## Design
+## 設計
 
-The existing v2 protocol remains the immediate-call and binary-batch protocol. Retained native render scenes are added as an extension for workloads where the display frame loop must run natively.
+既存の v2 プロトコルは、即時呼び出しとバイナリー一括実行のプロトコルとして維持します。表示フレームループをネイティブ内で動かす必要がある処理向けに、保持型ネイティブ描画場面を拡張として追加します。
 
-The extension introduces retained native resources such as:
+この拡張では、次のような保持型ネイティブ資源を導入します。
 
-- display handles
-- sprite or image handles
-- instance buffers
-- render scenes
-- renderer runtime state
-- renderer statistics
+- ディスプレー識別子
+- スプライトまたは画像識別子
+- 個体バッファー
+- 描画場面
+- 描画器の実行状態
+- 描画器統計
 
-The initial render scene type should support striped transformed-sprite rendering.
+最初の描画場面形式は、帯状の変換付きスプライト描画へ対応します。
 
-Conceptually:
+概念上の流れ:
 
 ```text
 Elixir
-  creates display and sprite resources
-  uploads source sprites or image data
-  creates an instance buffer
-  uploads initial object state
-  creates a retained render scene
-  starts or stops the native renderer
-  reads renderer statistics
+  ディスプレーとスプライト資源を作成
+  元スプライトまたは画像データを転送
+  個体バッファーを作成
+  初期物体状態を転送
+  保持型描画場面を作成
+  ネイティブ描画器を開始または停止
+  描画器統計を取得
 
-Native
-  owns the hot frame loop
-  owns per-frame object updates when configured
-  renders strips
-  pushes strips to the display
-  calls display flush operations
-  records frame statistics
+ネイティブ
+  高頻度フレームループを所有
+  設定された場合はフレームごとの物体更新を所有
+  表示帯を描画
+  表示帯をディスプレーへ転送
+  画面反映操作を呼び出し
+  フレーム統計を記録
 ```
 
-The first useful render scene can be modeled as:
+最初に有用な描画場面は、次の形式として表せます。
 
 ```text
 sprite_transform
 ```
 
-It should support:
+次へ対応します。
 
-- multiple source sprites
-- compact object records
-- per-object position
-- velocity or movement parameters
-- rotation
-- zoom
-- source index
-- transparent color
-- background color
-- strip height
-- display bounds
-- renderer statistics
+- 複数の元スプライト
+- 小さな物体記録
+- 物体ごとの位置
+- 速度または移動引数
+- 回転
+- 拡大率
+- 元番号
+- 透明色
+- 背景色
+- 表示帯高
+- ディスプレー範囲
+- 描画器統計
 
-The renderer should support at least these lifecycle operations:
+描画器は、少なくとも次の生存期間操作へ対応します。
 
 ```text
 create_instance_buffer
@@ -108,57 +108,57 @@ read_render_scene_stats
 destroy_render_scene
 ```
 
-The initial native update policies should be intentionally small:
+最初のネイティブ更新方針は、意図的に小さくします。
 
 ```text
 none
 bounce
 ```
 
-`none` allows Elixir to own object updates and upload changes manually.
+`none` では Elixir が物体更新を所有し、変更を手動で転送できます。
 
-`bounce` allows native code to update object positions every frame, matching the common `MovingIcons` style workload.
+`bounce` ではネイティブコードが毎フレーム物体位置を更新し、一般的な `MovingIcons` 形式の処理へ対応します。
 
-## Protocol-version policy
+## プロトコル版の方針
 
-Retained native render scenes are added without changing the protocol version.
+保持型ネイティブ描画場面は、プロトコル版を変更せずに追加します。
 
-The protocol version should be bumped only if a future change breaks compatibility, such as:
+次のような互換性を壊す変更を行う場合だけ、将来プロトコル版を上げます。
 
-- changing existing opcode meanings
-- changing existing payload layouts
-- changing response formats incompatibly
-- requiring new negotiation semantics
-- making existing v2 clients unable to talk to the port
+- 既存操作コードの意味を変更する
+- 既存データ配置を変更する
+- 応答形式を非互換に変更する
+- 新しい協議方式を必須にする
+- 既存 v2 利用側がポートと通信できなくなる
 
-Adding new commands for retained resources is compatible with the existing v2 protocol model.
+保持型資源向けの新規命令を追加することは、既存 v2 プロトコルモデルと互換です。
 
-## Exclusive display ownership
+## ディスプレーの排他的所有
 
-A native render scene may need exclusive display ownership while running.
+ネイティブ描画場面は、実行中にディスプレーを排他的に所有する必要がある場合があります。
 
-For maximum performance, the renderer may use settings similar to native LovyanGFX examples:
+最大性能のため、描画器はネイティブ LovyanGFX 見本に近い次の設定を使用できます。
 
-- long-lived write transaction
-- no display lock
-- non-shared bus
-- retained source sprites
-- retained strip sprites
-- native task pinned to a core when appropriate
+- 長期間の書き込みトランザクション
+- ディスプレー排他制御なし
+- 非共有バス
+- 保持された元スプライト
+- 保持された表示帯スプライト
+- 必要に応じて特定のコアへ固定したネイティブ作業
 
-While an exclusive renderer is running, ordinary drawing calls should either be rejected or require the renderer to be stopped first.
+排他的描画器が動作中は、通常描画呼び出しを拒否するか、先に描画器を停止する必要があります。
 
-This should be explicit in the API rather than hidden.
+この動作は隠さず、API で明示します。
 
-Example concept:
+概念例:
 
 ```elixir
 AtomLGFX.RenderScene.start(port, scene, mode: :exclusive)
 ```
 
-## Example Elixir shape
+## Elixir API の例
 
-The exact API may change, but the intended shape is:
+正確な API は変更する可能性がありますが、意図する形は次のとおりです。
 
 ```elixir
 {:ok, icon0} = AtomLGFX.create_sprite(display, 32, 32, color_depth: 16)
@@ -196,47 +196,47 @@ The exact API may change, but the intended shape is:
 :ok = AtomLGFX.RenderScene.stop(port, scene)
 ```
 
-## Consequences
+## 影響
 
-This design gives the existing protocol two clear performance modes.
+この設計により、既存プロトコルには明確な2つの性能方式ができます。
 
-Immediate and batch commands answer:
-
-```text
-How can Elixir call LovyanGFX efficiently?
-```
-
-Retained native render scenes answer:
+即時命令と一括命令が答える問い:
 
 ```text
-How can Elixir configure a native LovyanGFX renderer that runs at hardware speed?
+Elixir から LovyanGFX を効率的に呼び出すにはどうするか。
 ```
 
-Benefits:
+保持型ネイティブ描画場面が答える問い:
 
-- avoids AtomVM participation on every animation frame
-- avoids per-frame command encoding
-- avoids per-frame port request and reply overhead
-- allows native code to keep the display write path hot
-- allows native object movement for simple animation policies
-- keeps the Elixir-facing interface generic
-- provides a realistic path toward upstream LovyanGFX-class frame rates
-- preserves the existing v2 protocol version when implemented additively
+```text
+実機速度で動くネイティブ LovyanGFX 描画器を、Elixir からどのように設定するか。
+```
 
-Costs:
+利点:
 
-- adds a second protocol style inside v2
-- introduces native retained state
-- requires lifecycle management for native resources
-- requires clear ownership rules while a renderer is running
-- may require careful cleanup on process exit or port close
-- may require renderer-specific statistics and diagnostics
+- 各アニメーションフレームで AtomVM が関与しない
+- フレームごとの命令符号化が不要になる
+- フレームごとのポート要求と応答の負荷を避けられる
+- ネイティブコードがディスプレー書き込み経路を高頻度状態に保てる
+- 単純なアニメーション方針では、ネイティブ側で物体を移動できる
+- Elixir 側の接続面を汎用的に保てる
+- 上流 LovyanGFX 相当のフレーム速度へ近づく現実的な経路になる
+- 追加型として実装する場合、既存の v2 プロトコル版を維持できる
 
-## Implementation findings
+費用:
 
-The first retained native renderer confirmed the intended execution-model change. `MovingIcons` can run with native-owned object updates, native-owned strip rendering, and Elixir-side stats polling instead of Elixir submitting every frame.
+- v2 内に第2のプロトコル様式が増える
+- ネイティブ側に保持状態が増える
+- ネイティブ資源の生存期間管理が必要になる
+- 描画器動作中の明確な所有権規則が必要になる
+- 処理終了またはポート終了時の慎重な後始末が必要になる場合がある
+- 描画器固有の統計と診断が必要になる場合がある
 
-Initial retained-render measurements reached approximately 6 to 7 fps with 50 objects and 160-pixel presentation strips. The observed frame time was dominated by presentation rather than object update or transformed-sprite drawing:
+## 実装で得られた知見
+
+最初の保持型ネイティブ描画器により、意図した実行方式の変更を確認できました。MovingIcons は、Elixir が毎フレーム送信する代わりに、ネイティブ所有の物体更新と帯状描画を行い、Elixir 側では統計だけを取得する形で動作できます。
+
+初期の保持型描画測定では、物体50個、表示帯高160画素で約6〜7 fps に達しました。観測したフレーム時間は、物体更新や変換付きスプライト描画よりも表示処理が大半を占めました。
 
 ```text
 frame_ms:   143..253
@@ -245,70 +245,70 @@ present_ms: 104..195
 update_ms:    0
 ```
 
-This means the retained-render design removed the most important AtomVM per-frame overhead, but the remaining gap to approximately 10 fps is now mostly in the strip presentation path.
+つまり、保持型描画設計は、フレームごとの AtomVM 負荷という最重要部分を取り除きました。一方、約10 fps までの残りの差は、主に表示帯の転送経路にあります。
 
-The retained renderer also exposed a scheduler concern. A continuously ready native render task can starve the CPU idle task and trigger the ESP-IDF task watchdog. Retained render loops must include a real scheduler delay or equivalent watchdog-friendly pacing. A plain `taskYIELD()` is not sufficient when the render task remains ready at a priority above idle.
+保持型描画器からは、実行順制御上の懸念も明らかになりました。常に実行可能なネイティブ描画作業は、CPU の待機作業を飢餓状態にし、ESP-IDF の作業監視機構を発動させる可能性があります。保持型描画ループには、実際の実行順制御待機、または同等の監視機構に配慮した間隔調整が必要です。描画作業が待機作業より高い優先度で実行可能状態のままであれば、単純な `taskYIELD()` では不十分です。
 
-## Alternatives considered
+## 検討した代替案
 
-### Continue optimizing v2 immediate and binary-batch commands only
+### v2 の即時命令とバイナリー一括命令だけを最適化し続ける
 
-v2 can still be improved, especially around sprite memory placement, strip height, display locking, bus sharing, and PSRAM usage.
+特にスプライトのメモリー配置、表示帯高、ディスプレー排他制御、バス共有、PSRAM 使用について、v2 は引き続き改善できます。
 
-However, immediate and binary-batch commands still require AtomVM participation per frame. That makes them structurally different from the upstream native implementation that reached approximately 10 fps.
+しかし、即時命令とバイナリー一括命令では、フレームごとに AtomVM が関与します。これは、約10 fps に達した上流ネイティブ実装と構造的に異なります。
 
-This remains useful, but it is unlikely to be the cleanest path for native-class animation performance.
+この方針も有用ですが、ネイティブ相当のアニメーション性能へ最も素直に近づく経路ではない可能性があります。
 
-### Add more BinaryBatch commands
+### BinaryBatch 命令をさらに追加する
 
-Adding more batch operations would improve generic drawing transactions, but it would not remove per-frame Elixir encoding and submission.
+一括操作を増やせば汎用描画トランザクションは改善しますが、フレームごとの Elixir 符号化と送信は残ります。
 
-This is useful for v2, but it does not address the main execution-model gap.
+v2 には有用ですが、主な実行方式の差を解消しません。
 
-### Add a MovingIcons-specific native command
+### MovingIcons 固有のネイティブ命令を追加する
 
-A dedicated native `MovingIcons` command would likely be fastest to implement, but it would make the API scene-specific.
+専用のネイティブ `MovingIcons` 命令は、最も速く実装できる可能性がありますが、API が場面固有になります。
 
-That would conflict with the goal of keeping `atomlgfx` a generic LovyanGFX interface for AtomVM.
+これは、`atomlgfx` を AtomVM 向けの汎用 LovyanGFX 接続面として保つ目標と矛盾します。
 
-The retained render-scene design keeps the native hot loop while avoiding a demo-specific API.
+保持型描画場面設計は、見本固有 API を避けながら、ネイティブ高頻度ループを維持します。
 
-### Bump the protocol version
+### プロトコル版を上げる
 
-Rejected for now.
+現時点では採用しません。
 
-The proposed change is additive. It can be implemented as new commands and retained resource types without changing existing command semantics, payload layouts, response formats, or negotiation behavior.
+提案する変更は追加型です。既存命令の意味、データ配置、応答形式、協議動作を変更せず、新規命令と保持型資源として実装できます。
 
-A protocol version bump should be reserved for breaking changes.
+プロトコル版の変更は、互換性を壊す変更のために残します。
 
-## Initial implementation scope
+## 初期実装範囲
 
-The first implementation should be intentionally narrow:
+最初の実装は、意図的に次へ限定します。
 
-- one instance-buffer layout: `sprite_transform_2d`
-- one render-scene renderer: `sprite_transform`
-- two update policies: `none` and `bounce`
-- one renderer mode: `exclusive`
-- basic statistics reporting
-- explicit start and stop operations
+- 個体バッファー配置は `sprite_transform_2d` の1種類
+- 描画場面の描画器は `sprite_transform` の1種類
+- 更新方針は `none` と `bounce` の2種類
+- 描画器方式は `exclusive` の1種類
+- 基本的な統計報告
+- 明示的な開始操作と停止操作
 
-This is enough to validate whether `atomlgfx` can approach the upstream LovyanGFX `MovingIcons` frame rate while preserving a generic Elixir interface.
+これにより、汎用 Elixir 接続面を保ちながら、`atomlgfx` が上流 LovyanGFX `MovingIcons` のフレーム速度へ近づけるかを検証できます。
 
-## Follow-up work
+## 今後の作業
 
-After the first benchmarkable version, continue with:
+最初の性能測定可能版の後、次を進めます。
 
-- configurable sprite memory policy
-- configurable strip memory policy
-- renderer task core affinity
-- target FPS limiting
-- asynchronous stats messages
-- safe renderer interruption
-- additional render-scene types
-- non-exclusive renderer mode
-- documentation comparing immediate, binary-batch, native-frame, and retained-render usage
-- watchdog-friendly render-loop pacing
-- presentation-path profiling
-- SPI and DMA configuration comparison against upstream LovyanGFX examples
-- PSRAM versus internal-RAM comparison for source sprites and presentation strips
-- strip-height benchmarking
+- 設定可能なスプライトメモリー方針
+- 設定可能な表示帯メモリー方針
+- 描画器作業を動かすコアの指定
+- 目標 FPS 制限
+- 非同期の統計メッセージ
+- 安全な描画器中断
+- 追加の描画場面形式
+- 非排他的な描画器方式
+- 即時、バイナリー一括、ネイティブフレーム、保持型描画の利用方法を比較する文書
+- 作業監視機構に配慮した描画ループ間隔調整
+- 表示経路の性能分析
+- 上流 LovyanGFX 見本との SPI および DMA 構成比較
+- 元スプライトと表示帯について、PSRAM と内部 RAM を比較
+- 表示帯高の性能測定

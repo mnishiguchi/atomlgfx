@@ -4,55 +4,44 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Hardware performance smoke report - 2026-05-01
+# 実機性能簡易検証報告 - 2026-05-01
 
-## Summary
+## 概要
 
-This report records the first successful on-device performance smoke run for
-the AtomLGFX v2 packed binary batch path.
+本報告は、AtomLGFX v2 の圧縮バイナリーバッチ経路について、実機上で初めて正常に完了した性能簡易検証を記録するものです。
 
-The run establishes a baseline for the current v2 design:
+今回の測定により、現在の v2 設計について次の基準値を得ました。
 
-- ordinary protocol calls remain the general-purpose path for correctness and
-  API coverage
-- packed binary batches substantially reduce per-command overhead for many
-  small drawing commands
-- `submitBinaryBatch` is working as the synchronous packed scalar drawing fast
-  path
-- protocol capability reporting now correctly recognizes `CAP_BATCH`
+- 通常のプロトコル呼び出しは、正しさと API 網羅性を重視する汎用経路として維持する
+- 多数の小さな描画命令では、圧縮バイナリーバッチによって命令ごとの負荷が大幅に減る
+- `submitBinaryBatch` は、同期実行される圧縮済みスカラー描画の高速経路として動作している
+- プロトコルの機能報告で `CAP_BATCH` を正しく認識できるようになった
 
-At 120 commands per run, the packed batch path was about `26.6x` faster than
-direct `fill_rect` calls and about `31.1x` faster than direct `draw_line`
-calls when comparing execution only. Even after including Elixir-side batch
-construction, the packed path still came out about `11.8x` to `12.2x` faster.
+1回あたり120命令の実行時間だけを比較すると、圧縮バッチ経路は `fill_rect` の直接呼び出しより約 `26.6倍`、`draw_line` の直接呼び出しより約 `31.1倍` 高速でした。Elixir 側でのバッチ構築時間を含めても、約 `11.8倍` から `12.2倍` 高速でした。
 
-## Context
+## 背景
 
-The v2 implementation is designed around two execution styles:
+v2 の実装には、次の2種類の実行方式があります。
 
-- ordinary LovyanGFX-style calls
-  - one request
-  - one native handler
-  - one reply
-  - broad API coverage
+- 通常の LovyanGFX 形式の呼び出し
+  - 1回の要求
+  - 1回のネイティブ処理
+  - 1回の応答
+  - 幅広い API を対象とする
 
-- packed binary scalar batches
-  - one target
-  - one RGB565 command stream
-  - synchronous execution
-  - optimized for many small primitive drawing commands
+- 圧縮バイナリーによるスカラー描画バッチ
+  - 対象は1つ
+  - RGB565 の命令列を使用
+  - 同期実行
+  - 多数の小さな基本図形描画に最適化
 
-The binary batch path was recently hardened so the native dispatcher prevalidates
-the whole packed stream before starting the write session. This prevents
-malformed bytes or unsupported packed opcodes from partially mutating the display.
+バイナリーバッチ経路では、書き込み処理を開始する前に、ネイティブ側の振り分け処理が圧縮命令列全体を事前検証するよう強化しました。これにより、不正なバイト列や未対応の圧縮命令によって、表示内容が途中まで変更されることを防ぎます。
 
-This report exists to answer a narrow question: does that stricter validation
-still leave the packed path meaningfully faster on real hardware? For this run,
-the answer is yes.
+本報告で確認する点は限定的です。厳格な検証を追加した後も、実機上で圧縮経路が十分に高速かどうかを確認します。今回の結果は「はい」でした。
 
-## Test setup
+## 検証環境
 
-Observed device configuration:
+確認した機器設定は次のとおりです。
 
 ```text
 panel=ILI9488
@@ -65,19 +54,16 @@ touch_driver=XPT2046
 touch_attached=true
 ```
 
-Sample mode:
+実行条件は次のとおりです。
 
 ```text
 SAMPLE_APP_MODE=perf
 rounds=120
 ```
 
-The captured serial output did not include the board name, so this baseline is
-currently tied to the observed panel and bus configuration rather than to a
-board label. Future runs should record `board=`, `branch=`, and `commit=`
-explicitly alongside the perf lines.
+取得したシリアル出力には基板名が含まれていません。そのため、この基準値は現時点では基板名ではなく、確認した表示器とバスの設定に対応します。今後の測定では、性能行とともに `board=`、`branch=`、`commit=` を明示的に記録します。
 
-The run completed successfully:
+実行は正常に完了しました。
 
 ```text
 perf_smoke done
@@ -85,42 +71,38 @@ perf_smoke ok
 Return value: ok
 ```
 
-## Protocol capability note
+## プロトコル機能に関する補足
 
-Before the `ProtocolSmoke` fix, the sample app printed:
+`ProtocolSmoke` の修正前は、見本アプリケーションに次の表示がありました。
 
 ```text
 protocol smoke note: unknown feature bits present (future caps): 32
 ```
 
-That value is not an unknown future capability. It is bit 5:
+この値は未知の将来機能ではありません。第5ビットです。
 
 ```text
 1 << 5 = 32
 ```
 
-In the v2 protocol, bit 5 is `CAP_BATCH`.
+v2 プロトコルでは、第5ビットは `CAP_BATCH` です。
 
-The sample app was updated so `SampleApp.ProtocolSmoke` recognizes `CAP_BATCH`
-and treats it as part of the known capability mask. After the fix, the warning
-disappeared:
+`SampleApp.ProtocolSmoke` が `CAP_BATCH` を認識し、既知の機能マスクへ含めるように修正しました。修正後は警告が消えました。
 
 ```text
 protocol smoke ok
 protocol_smoke ok
 ```
 
-This matters for the perf report because the measured fast path depends on
-`submitBinaryBatch`, and `submitBinaryBatch` is gated behind `LGFX_CAP_BATCH`.
+測定した高速経路は `submitBinaryBatch` に依存し、`submitBinaryBatch` は `LGFX_CAP_BATCH` によって利用可否が決まるため、この修正は性能報告にも関係します。
 
-## Performance results
+## 性能結果
 
-Two successful runs were captured back to back. The second table below is the
-latest one and is the baseline used for the derived comparisons in this report.
+正常な実行を続けて2回取得しました。以下の2つ目の表が最新結果であり、本報告の比較基準です。
 
-Previous successful run:
+前回の正常実行:
 
-| Path | Commands | Bytes | Elapsed us | Per command us | Commands per sec |
+| 経路 | 命令数 | バイト数 | 経過時間 us | 1命令あたり us | 1秒あたりの命令数 |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | build_fill_rect_batch | 120 | 1320 | 252957 | 2107 | 474 |
 | build_draw_line_batch | 120 | 1320 | 256148 | 2134 | 468 |
@@ -129,9 +111,9 @@ Previous successful run:
 | direct_draw_line | 120 | 0 | 5151062 | 42925 | 23 |
 | binary_batch_draw_line | 120 | 1320 | 165972 | 1383 | 723 |
 
-Latest successful run:
+最新の正常実行:
 
-| Path | Commands | Bytes | Elapsed us | Per command us | Commands per sec |
+| 経路 | 命令数 | バイト数 | 経過時間 us | 1命令あたり us | 1秒あたりの命令数 |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | build_fill_rect_batch | 120 | 1320 | 253505 | 2112 | 473 |
 | build_draw_line_batch | 120 | 1320 | 256656 | 2138 | 467 |
@@ -140,78 +122,67 @@ Latest successful run:
 | direct_draw_line | 120 | 0 | 5153652 | 42947 | 23 |
 | binary_batch_draw_line | 120 | 1320 | 165932 | 1382 | 723 |
 
-## Repeatability
+## 再現性
 
-The two successful runs are very stable.
+2回の正常実行は非常に安定しています。
 
-| Path | Previous elapsed us | Latest elapsed us | Difference |
+| 経路 | 前回の経過時間 us | 最新の経過時間 us | 差 |
 | --- | ---: | ---: | ---: |
 | direct_fill_rect | 5328655 | 5330118 | +0.03% |
 | binary_batch_fill_rect | 199885 | 200108 | +0.11% |
 | direct_draw_line | 5151062 | 5153652 | +0.05% |
 | binary_batch_draw_line | 165972 | 165932 | -0.02% |
 
-This is good enough for a hardware smoke benchmark. It is not a full benchmark
-suite, but it is stable enough to use as a branch-to-branch and board-to-board
-regression check.
+実機の簡易性能検証としては十分な安定性です。完全な性能試験一式ではありませんが、分岐間や基板間の性能退行を確認する基準として利用できます。
 
-## Approximate speedup
+## おおよその高速化率
 
-Execution-only comparison:
+実行時間だけの比較:
 
-| Operation | Direct elapsed us | Binary batch elapsed us | Approximate speedup |
+| 操作 | 直接実行 us | バイナリーバッチ us | おおよその高速化率 |
 | --- | ---: | ---: | ---: |
-| fill_rect | 5330118 | 200108 | 26.6x |
-| draw_line | 5153652 | 165932 | 31.1x |
+| fill_rect | 5330118 | 200108 | 26.6倍 |
+| draw_line | 5153652 | 165932 | 31.1倍 |
 
-Including Elixir-side batch construction cost:
+Elixir 側でのバッチ構築時間を含む比較:
 
-| Operation | Direct elapsed us | Build + batch elapsed us | Approximate speedup |
+| 操作 | 直接実行 us | 構築 + バッチ実行 us | おおよその高速化率 |
 | --- | ---: | ---: | ---: |
-| fill_rect | 5330118 | 453613 | 11.8x |
-| draw_line | 5153652 | 422588 | 12.2x |
+| fill_rect | 5330118 | 453613 | 11.8倍 |
+| draw_line | 5153652 | 422588 | 12.2倍 |
 
-The packed binary path is therefore substantially faster even when including
-Elixir-side command construction. The measured build cost is small relative to
-the direct-call overhead that the packed path removes.
+Elixir 側での命令構築を含めても、圧縮バイナリー経路は大幅に高速です。測定された構築負荷は、圧縮経路によって除かれる直接呼び出しの負荷と比べて小さいことが分かります。
 
-## Interpretation
+## 考察
 
-The result supports the v2 architecture:
+結果は v2 の構成を支持しています。
 
-- the ordinary call path remains appropriate for setup, text, images, sprites,
-  and less frequent operations
-- the packed binary batch path is clearly better for many small scalar drawing
-  commands
-- keeping the binary batch path intentionally narrow is justified by the observed
-  performance gain
-- the current strict prevalidation pass does not erase the performance benefit
+- 通常呼び出しは、初期設定、文字、画像、スプライト、低頻度の操作に適している
+- 多数の小さなスカラー描画では、圧縮バイナリーバッチが明確に優れている
+- バイナリーバッチの対象を意図的に限定する判断は、確認された性能差から妥当である
+- 現在の厳格な事前検証を行っても、性能上の利点は失われない
 
-It is also worth reading the result conservatively. This report covers one
-sample mode, one round count, and one observed panel/bus setup. It does not yet
-say whether the same ratios hold across other boards or for more fill-heavy
-scenes where the panel itself may dominate total time.
+ただし、結果は控えめに解釈する必要があります。本報告は、1つの実行方式、1つの繰り返し回数、1組の表示器とバス設定だけを対象としています。他の基板でも同じ比率になるか、また表示器自体の処理時間が支配的になりやすい塗りつぶし中心の場面でも同様かは未確認です。
 
-## Known tradeoff
+## 既知の兼ね合い
 
-The native binary batch dispatcher currently decodes the command stream twice:
+ネイティブ側のバイナリーバッチ振り分け処理は、現在、命令列を2回読み取ります。
 
-- first pass: validate-only preflight
-- second pass: execute
+- 1回目: 検証のみを行う事前確認
+- 2回目: 実行
 
-This is intentional for hardening. It prevents malformed streams from partially
-mutating the display.
+これは堅牢性を高めるための意図的な設計です。不正な命令列によって表示内容が途中まで変更されることを防ぎます。
 
-If future performance work needs more speed, compare:
+将来、さらに速度が必要になった場合は、次を比較します。
 
-- strict preflight mode
-- single-pass fail-on-first-error mode
+- 厳格な事前確認方式
+- 最初のエラーで停止する1回読み取り方式
 
-Do not remove preflight only for style reasons. Measure first.
+見た目の簡潔さだけを理由に事前確認を削除せず、先に測定します。
 
-## Raw output excerpt
+## 生の出力
 
-The tables above were derived from the following successful run:
+上の表は、次の正常実行から作成しました。
 
 ```text
 protocol smoke ok
@@ -228,12 +199,12 @@ perf_smoke ok
 Return value: ok
 ```
 
-## Follow-up
+## 今後の作業
 
-- Run the same smoke on ESP32 DevKit.
-- Run the same smoke on XIAO ESP32C3, C5, and C6 if available.
-- Record `board=`, `branch=`, and `commit=` in each captured report.
-- Add an optional compile-time or runtime benchmark round count.
-- Investigate whether Elixir-side batch construction can allocate less.
-- Consider a native-only validation test for `lgfx_binary_batch_dispatch_validate`.
-- Keep `ProtocolSmoke` capability constants aligned with `protocol.h`.
+- ESP32 DevKit で同じ簡易検証を実行する
+- 利用できる場合は XIAO ESP32C3、C5、C6 でも同じ簡易検証を実行する
+- 各報告に `board=`、`branch=`、`commit=` を記録する
+- コンパイル時または実行時に指定できる性能測定の繰り返し回数を追加する
+- Elixir 側のバッチ構築で割り当てを減らせるか調査する
+- `lgfx_binary_batch_dispatch_validate` のネイティブ単体検証を検討する
+- `ProtocolSmoke` の機能定数を `protocol.h` と一致させ続ける
