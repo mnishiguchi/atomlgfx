@@ -12,8 +12,10 @@ SPDX-License-Identifier: Apache-2.0
 
 現在の v3 を理解する場合は、通常、次の有効な ADR から読み始めます。
 
+- [ADR 0017: AtomVM NIF による LovyanGFX 直接 API](0017-direct-atomvm-nif-api.md)
+  - LovyanGFX に近い `LGFX` API、薄い NIF 層、既存機器層とバイナリーバッチの再利用を定義
 - [ADR 0016: 描画を中心とする低メモリー API](0016-render-first-low-memory-api.md)
-  - 既存の BinaryBatch ポート経路を使用する `AtomLGFX.render/3` が、現在の公開 API 方針
+  - 既存ポート経路の `AtomLGFX.render/3` とバイナリーバッチ命令形式を定義
 - [ADR 0015: AtomLGFX v3 を低メモリーの LovyanGFX 形式プロトコルとして設計する](0015-v3-low-memory-protocol.md)
   - v3 の低メモリー呼び出しプロトコル、明示的なスプライト所有、保持型描画の削除を定義
 - [ADR 0004: 呼び出し方式の LovyanGFX ポートプロトコル](0004-call-based-lovyangfx-port-protocol.md)
