@@ -33,18 +33,18 @@ defmodule LGFX do
   alias AtomLGFX.Native
   alias AtomLGFX.RenderBatch
 
-  defdelegate init(), to: Native
-  defdelegate close(), to: Native
+  def init, do: Native.init()
+  def close, do: Native.close()
 
-  defdelegate width(), to: Native
-  defdelegate height(), to: Native
+  def width, do: Native.width()
+  def height, do: Native.height()
 
-  defdelegate start_write(), to: Native
-  defdelegate end_write(), to: Native
-  defdelegate display(), to: Native
+  def start_write, do: Native.start_write()
+  def end_write, do: Native.end_write()
+  def display, do: Native.display()
 
-  defdelegate set_rotation(rotation), to: Native
-  defdelegate set_brightness(brightness), to: Native
+  def set_rotation(rotation), do: Native.set_rotation(rotation)
+  def set_brightness(brightness), do: Native.set_brightness(brightness)
 
   def fill_screen(color) do
     with {:ok, color} <- Color.normalize_display(color) do
@@ -154,8 +154,8 @@ defmodule LGFX do
     end
   end
 
-  defdelegate set_cursor(x, y), to: Native
-  defdelegate set_text_size(scale), to: Native
+  def set_cursor(x, y), do: Native.set_cursor(x, y)
+  def set_text_size(scale), do: Native.set_text_size(scale)
 
   def set_text_datum(datum) do
     with {:ok, datum} <- Command.normalize_text_datum(datum) do
@@ -176,19 +176,19 @@ defmodule LGFX do
     end
   end
 
-  defdelegate draw_string(text, x, y), to: Native
-  defdelegate print(text), to: Native
-  defdelegate println(text), to: Native
-
+  def draw_string(text, x, y), do: Native.draw_string(text, x, y)
+  def print(text), do: Native.print(text)
+  def println(text), do: Native.println(text)
   def println, do: Native.println("")
 
-  defdelegate push_image(x, y, width, height, pixels), to: Native
+  def push_image(x, y, width, height, pixels) do
+    Native.push_image(x, y, width, height, pixels)
+  end
 
   @doc """
   LovyanGFX 形式の描画命令一覧を1回の NIF 呼び出しで実行します。
 
-  `AtomLGFX.RenderBatch` と同じ命令形式を使用します。`opts` には既存の
-  `:target` と `:display` を指定できます。
+  既存の描画命令形式を使用します。`opts` には `:target` と `:display` を指定できます。
   """
   def batch(commands, opts \\ []) do
     with {:ok, command_binary} <- RenderBatch.encode(commands, opts) do

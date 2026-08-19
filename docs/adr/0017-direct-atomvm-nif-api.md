@@ -19,7 +19,7 @@ AtomVM とネイティブコードの境界をより薄くしたい。
 
 ## 判断
 
-LovyanGFX に近い平坦な `LGFX` API と、薄い `AtomLGFX.Native` NIF 層を追加する。
+LovyanGFX に近い平坦な `LGFX` API と、薄い内部 NIF 層を追加する。
 
 ```text
 Elixir
@@ -70,7 +70,7 @@ LGFX.batch([
 ])
 ```
 
-一括描画は新しい命令形式を作らず、既存の `AtomLGFX.RenderBatch` 符号化と
+一括描画は新しい命令形式を作らず、既存の描画命令符号化と
 `lgfx_render_batch_dispatch_run` 実行系を再利用する。
 
 ### 最初の範囲
