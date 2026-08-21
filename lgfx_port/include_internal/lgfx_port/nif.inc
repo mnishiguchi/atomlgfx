@@ -23,6 +23,7 @@
 
 #include "context.h"
 #include "defaultatoms.h"
+#include "memory.h"
 #include "nifs.h"
 #include "portnifloader.h"
 #include "term.h"
@@ -36,6 +37,10 @@ static const lgfx_open_config_overrides_t lgfx_nif_default_open_config = { 0 };
 
 static term lgfx_nif_error(Context *ctx, term reason)
 {
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
     term tuple = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(tuple, 0, term_from_atom_index(ERROR_ATOM_INDEX));
     term_put_tuple_element(tuple, 1, reason);

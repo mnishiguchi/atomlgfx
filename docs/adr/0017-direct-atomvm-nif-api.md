@@ -73,6 +73,10 @@ LGFX.batch([
 一括描画は新しい命令形式を作らず、既存の描画命令符号化と
 `lgfx_render_batch_dispatch_run` 実行系を再利用する。
 
+同じ命令列を繰り返す高頻度経路では、`LGFX.encode_batch/2` で1回だけ符号化し、
+準備したバイナリーを `LGFX.submit_batch/1` で送信する。`LGFX.batch/2` は
+符号化と送信をまとめる1回限りの簡便な経路とする。
+
 ### 最初の範囲
 
 最初の NIF API では次を対象とする。

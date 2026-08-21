@@ -59,6 +59,7 @@ git submodule update --init --recursive
 例示アプリケーションを書き込む前に、新しく構築したネイティブファームウェアを書き込みます。少なくとも次を実行します。
 
 - `SAMPLE_APP_MODE=all`
+- `SAMPLE_APP_MODE=nif`
 - `SAMPLE_APP_MODE=moving_icons`
 
 記録する内容:

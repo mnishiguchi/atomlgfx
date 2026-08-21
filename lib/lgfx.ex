@@ -24,6 +24,16 @@ defmodule LGFX do
           {:draw_string, "Hello", 20, 20}
         ])
 
+  同じ命令列を繰り返す場合は、1回だけ符号化してから送信します。
+
+      {:ok, batch} =
+        LGFX.encode_batch([
+          {:fill_screen, :black},
+          {:fill_rect, 10, 10, 100, 40, :red}
+        ])
+
+      :ok = LGFX.submit_batch(batch)
+
   現時点の `init/0` は構築時の機器設定を使用します。実行時に詳細な機器設定を
   指定する既存の `AtomLGFX.open/1` ポート API は引き続き利用できます。
   """
@@ -191,8 +201,22 @@ defmodule LGFX do
   既存の描画命令形式を使用します。`opts` には `:target` と `:display` を指定できます。
   """
   def batch(commands, opts \\ []) do
-    with {:ok, command_binary} <- RenderBatch.encode(commands, opts) do
-      Native.batch(0, command_binary)
+    with {:ok, command_binary} <- encode_batch(commands, opts) do
+      submit_batch(command_binary)
     end
   end
+
+  @doc """
+  描画命令一覧を、繰り返し送信できるバイナリーバッチへ符号化します。
+  """
+  def encode_batch(commands, opts \\ []), do: RenderBatch.encode(commands, opts)
+
+  @doc """
+  `encode_batch/2` で準備したバイナリーバッチを1回の NIF 呼び出しで実行します。
+  """
+  def submit_batch(command_binary) when is_binary(command_binary) do
+    Native.batch(0, command_binary)
+  end
+
+  def submit_batch(command_binary), do: {:error, {:bad_render_batch, command_binary}}
 end

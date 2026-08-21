@@ -37,6 +37,7 @@ SPDX-License-Identifier: Apache-2.0
 - `boot`
 - `basic_shapes`
 - `text`
+- `nif`
 - `perf`
 - `face`
 - `japanese_text`
@@ -47,6 +48,8 @@ SPDX-License-Identifier: Apache-2.0
 - `all`
 
 既定の動作確認にスプライトプロトコル確認を加える場合は `all`、計時値を収集する場合だけ `perf` を使います。
+
+直接 NIF API の変更を確認する場合は `nif` を使います。このモードはポートを開かず、`LGFX.init/0` から機器を所有し、直接描画、画像転送、バイナリーバッチ、エラー結果の生成を確認します。また、同じ120個の矩形について、バッチの符号化、個別 NIF 呼び出し、事前に符号化したバッチの送信を別々に計測し、`NIF_PERF` 行を出力します。
 
 実機アニメーションの検証には `moving_icons` を使います。現在の例では次を確認します。
 

@@ -26,4 +26,18 @@ defmodule LGFXTest do
              {:draw_string, "Hello", 20, 20}
            ]) == :nif_not_loaded
   end
+
+  test "繰り返し送信するバッチを事前に符号化する" do
+    assert {:ok, command_binary} =
+             LGFX.encode_batch([
+               {:fill_rect, 10, 10, 100, 40, :red},
+               {:draw_string, "Hello", 20, 20}
+             ])
+
+    assert is_binary(command_binary)
+    assert LGFX.submit_batch(command_binary) == :nif_not_loaded
+
+    assert LGFX.submit_batch(:not_a_binary) ==
+             {:error, {:bad_render_batch, :not_a_binary}}
+  end
 end
