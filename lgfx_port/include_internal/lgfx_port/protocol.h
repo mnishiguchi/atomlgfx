@@ -6,7 +6,7 @@
 
 // lgfx_port/include_internal/lgfx_port/protocol.h
 /*
- * Protocol constants and wire-level limits.
+ * Shared native operation and binary-batch constants.
  */
 #pragma once
 
@@ -16,9 +16,6 @@
 
 // Build-time configuration generated from lgfx_port/cmake/lgfx_port_config.h.in.
 #include "lgfx_port/lgfx_port_config.h"
-
-// LGFX_FONT_PRESET_* and other shared wire constants
-#include "lgfx_port/lgfx_port.h"
 
 // -----------------------------------------------------------------------------
 // Optional debug string constants
@@ -34,26 +31,19 @@
 
 #if LGFX_PORT_PROTOCOL_DEBUG_STRINGS
 // Error atom strings.
-#define LGFX_ERR_BAD_PROTO "bad_proto"
-#define LGFX_ERR_BAD_OP "bad_op"
-#define LGFX_ERR_BAD_FLAGS "bad_flags"
 #define LGFX_ERR_BAD_ARGS "bad_args"
 #define LGFX_ERR_BAD_TARGET "bad_target"
 #define LGFX_ERR_NOT_INITIALIZED "not_initialized"
-#define LGFX_ERR_NOT_WRITING "not_writing"
 #define LGFX_ERR_NO_MEMORY "no_memory"
 #define LGFX_ERR_INTERNAL "internal"
 #define LGFX_ERR_UNSUPPORTED "unsupported"
+#define LGFX_ERR_RESOURCE_BUSY "resource_busy"
 
 #endif
 
 // -----------------------------------------------------------------------------
-// Protocol constants
+// Native constants
 // -----------------------------------------------------------------------------
-
-#ifndef LGFX_PORT_PROTO_VER
-#define LGFX_PORT_PROTO_VER 3u
-#endif
 
 #ifndef LGFX_PORT_MAX_BINARY_BYTES
 #define LGFX_PORT_MAX_BINARY_BYTES (256u * 1024u)
@@ -183,9 +173,7 @@ static inline bool lgfx_validate_rgb888(uint32_t rgb888)
     return rgb888 <= 0xFFFFFFu;
 }
 
-// LovyanGFX-like numeric wire values are decoded to C float in the handler layer.
-// Integer and float terms are both accepted on the wire for these positions.
-// Validation here operates on the normalized float value.
+// LovyanGFX-like numeric values are normalized to C float before validation.
 static inline bool lgfx_validate_f32(float value)
 {
     return isfinite((double) value);
@@ -197,7 +185,7 @@ static inline bool lgfx_validate_positive_f32(float value)
 }
 
 // -----------------------------------------------------------------------------
-// FeatureBits (wire)
+// Feature bits
 // -----------------------------------------------------------------------------
 
 #define LGFX_CAP_SPRITE (1u << 0)
@@ -216,15 +204,14 @@ static inline bool lgfx_validate_positive_f32(float value)
 // -----------------------------------------------------------------------------
 
 // Touch remains derived; the other current capability bits are always built in.
-//
-// LGFX_CAP_BATCH is the multi-target frame-script path used by animation workloads.
+// LGFX_CAP_BATCH is the multi-target batch path used by animation workloads.
 #define LGFX_BUILD_CAP_MASK                                                 \
     ((uint32_t) (LGFX_CAP_SPRITE | LGFX_CAP_PUSHIMAGE | LGFX_CAP_LAST_ERROR \
         | LGFX_CAP_PALETTE | LGFX_CAP_BATCH                                    \
         | (LGFX_PORT_SUPPORTS_TOUCH ? LGFX_CAP_TOUCH : 0u)))
 
 // -----------------------------------------------------------------------------
-// Op-specific request flags
+// Operation flags
 // -----------------------------------------------------------------------------
 
 #define LGFX_F_TEXT_HAS_BG (1u << 0) // setTextColor: background color is provided

@@ -11,170 +11,169 @@ defmodule AtomLGFX.Primitives do
 
   @max_f32 3.4028234663852886e38
 
-  def fill_screen(port, color, target \\ 0)
+  def fill_screen(handle, color, target \\ 0)
       when target_any(target) do
-    scalar_call(port, :fill_screen, target, [color])
+    scalar_call(handle, :fill_screen, target, [color])
   end
 
-  def clear(port, color, target \\ 0)
+  def clear(handle, color, target \\ 0)
       when target_any(target) do
-    scalar_call(port, :clear, target, [color])
+    scalar_call(handle, :clear, target, [color])
   end
 
-  def draw_pixel(port, x, y, color, target \\ 0)
+  def draw_pixel(handle, x, y, color, target \\ 0)
       when i16(x) and i16(y) and target_any(target) do
-    scalar_call(port, :draw_pixel, target, [x, y, color])
+    scalar_call(handle, :draw_pixel, target, [x, y, color])
   end
 
-  def draw_fast_vline(port, x, y, height, color, target \\ 0)
+  def draw_fast_vline(handle, x, y, height, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(height) and
              target_any(target) do
-    scalar_call(port, :draw_fast_vline, target, [x, y, height, color])
+    scalar_call(handle, :draw_fast_vline, target, [x, y, height, color])
   end
 
-  def draw_fast_hline(port, x, y, width, color, target \\ 0)
+  def draw_fast_hline(handle, x, y, width, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(width) and
              target_any(target) do
-    scalar_call(port, :draw_fast_hline, target, [x, y, width, color])
+    scalar_call(handle, :draw_fast_hline, target, [x, y, width, color])
   end
 
-  def draw_line(port, x0, y0, x1, y1, color, target \\ 0)
+  def draw_line(handle, x0, y0, x1, y1, color, target \\ 0)
       when i16(x0) and i16(y0) and i16(x1) and i16(y1) and
              target_any(target) do
-    scalar_call(port, :draw_line, target, [x0, y0, x1, y1, color])
+    scalar_call(handle, :draw_line, target, [x0, y0, x1, y1, color])
   end
 
-  def draw_rect(port, x, y, width, height, color, target \\ 0)
+  def draw_rect(handle, x, y, width, height, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(width) and
              u16(height) and
              target_any(target) do
-    scalar_call(port, :draw_rect, target, [x, y, width, height, color])
+    scalar_call(handle, :draw_rect, target, [x, y, width, height, color])
   end
 
-  def fill_rect(port, x, y, width, height, color, target \\ 0)
+  def fill_rect(handle, x, y, width, height, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(width) and
              u16(height) and
              target_any(target) do
-    scalar_call(port, :fill_rect, target, [x, y, width, height, color])
+    scalar_call(handle, :fill_rect, target, [x, y, width, height, color])
   end
 
-  def draw_round_rect(port, x, y, width, height, radius, color, target \\ 0)
-      when i16(x) and i16(y) and
-             u16(width) and
-             u16(height) and
-             u16(radius) and
-             target_any(target) do
-    scalar_call(port, :draw_round_rect, target, [x, y, width, height, radius, color])
-  end
-
-  def fill_round_rect(port, x, y, width, height, radius, color, target \\ 0)
+  def draw_round_rect(handle, x, y, width, height, radius, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(width) and
              u16(height) and
              u16(radius) and
              target_any(target) do
-    scalar_call(port, :fill_round_rect, target, [x, y, width, height, radius, color])
+    scalar_call(handle, :draw_round_rect, target, [x, y, width, height, radius, color])
   end
 
-  def draw_circle(port, x, y, radius, color, target \\ 0)
+  def fill_round_rect(handle, x, y, width, height, radius, color, target \\ 0)
+      when i16(x) and i16(y) and
+             u16(width) and
+             u16(height) and
+             u16(radius) and
+             target_any(target) do
+    scalar_call(handle, :fill_round_rect, target, [x, y, width, height, radius, color])
+  end
+
+  def draw_circle(handle, x, y, radius, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(radius) and
              target_any(target) do
-    scalar_call(port, :draw_circle, target, [x, y, radius, color])
+    scalar_call(handle, :draw_circle, target, [x, y, radius, color])
   end
 
-  def fill_circle(port, x, y, radius, color, target \\ 0)
+  def fill_circle(handle, x, y, radius, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(radius) and
              target_any(target) do
-    scalar_call(port, :fill_circle, target, [x, y, radius, color])
+    scalar_call(handle, :fill_circle, target, [x, y, radius, color])
   end
 
-  def draw_ellipse(port, x, y, radius_x, radius_y, color, target \\ 0)
+  def draw_ellipse(handle, x, y, radius_x, radius_y, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(radius_x) and
              u16(radius_y) and
              target_any(target) do
-    scalar_call(port, :draw_ellipse, target, [x, y, radius_x, radius_y, color])
+    scalar_call(handle, :draw_ellipse, target, [x, y, radius_x, radius_y, color])
   end
 
-  def fill_ellipse(port, x, y, radius_x, radius_y, color, target \\ 0)
+  def fill_ellipse(handle, x, y, radius_x, radius_y, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(radius_x) and
              u16(radius_y) and
              target_any(target) do
-    scalar_call(port, :fill_ellipse, target, [x, y, radius_x, radius_y, color])
+    scalar_call(handle, :fill_ellipse, target, [x, y, radius_x, radius_y, color])
   end
 
-  def draw_arc(port, x, y, radius0, radius1, angle0, angle1, color, target \\ 0)
+  def draw_arc(handle, x, y, radius0, radius1, angle0, angle1, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(radius0) and
              u16(radius1) and
              target_any(target) do
     with {:ok, angle0} <- normalize_angle(angle0),
          {:ok, angle1} <- normalize_angle(angle1) do
-      scalar_call(port, :draw_arc, target, [x, y, radius0, radius1, angle0, angle1, color])
+      scalar_call(handle, :draw_arc, target, [x, y, radius0, radius1, angle0, angle1, color])
     end
   end
 
-  def fill_arc(port, x, y, radius0, radius1, angle0, angle1, color, target \\ 0)
+  def fill_arc(handle, x, y, radius0, radius1, angle0, angle1, color, target \\ 0)
       when i16(x) and i16(y) and
              u16(radius0) and
              u16(radius1) and
              target_any(target) do
     with {:ok, angle0} <- normalize_angle(angle0),
          {:ok, angle1} <- normalize_angle(angle1) do
-      scalar_call(port, :fill_arc, target, [x, y, radius0, radius1, angle0, angle1, color])
+      scalar_call(handle, :fill_arc, target, [x, y, radius0, radius1, angle0, angle1, color])
     end
   end
 
-  def draw_bezier(port, x0, y0, x1, y1, x2, y2, color, target \\ 0)
+  def draw_bezier(handle, x0, y0, x1, y1, x2, y2, color, target \\ 0)
       when i16(x0) and i16(y0) and
              i16(x1) and i16(y1) and
              i16(x2) and i16(y2) and
              target_any(target) do
-    scalar_call(port, :draw_bezier, target, [x0, y0, x1, y1, x2, y2, color])
+    scalar_call(handle, :draw_bezier, target, [x0, y0, x1, y1, x2, y2, color])
   end
 
-  def draw_bezier(port, x0, y0, x1, y1, x2, y2, x3, y3, color, target \\ 0)
+  def draw_bezier(handle, x0, y0, x1, y1, x2, y2, x3, y3, color, target \\ 0)
       when i16(x0) and i16(y0) and
              i16(x1) and i16(y1) and
              i16(x2) and i16(y2) and
              i16(x3) and i16(y3) and
              target_any(target) do
-    scalar_call(port, :draw_bezier, target, [x0, y0, x1, y1, x2, y2, x3, y3, color])
+    scalar_call(handle, :draw_bezier, target, [x0, y0, x1, y1, x2, y2, x3, y3, color])
   end
 
-  def draw_triangle(port, x0, y0, x1, y1, x2, y2, color, target \\ 0)
+  def draw_triangle(handle, x0, y0, x1, y1, x2, y2, color, target \\ 0)
       when i16(x0) and i16(y0) and
              i16(x1) and i16(y1) and
              i16(x2) and i16(y2) and
              target_any(target) do
-    scalar_call(port, :draw_triangle, target, [x0, y0, x1, y1, x2, y2, color])
+    scalar_call(handle, :draw_triangle, target, [x0, y0, x1, y1, x2, y2, color])
   end
 
-  def fill_triangle(port, x0, y0, x1, y1, x2, y2, color, target \\ 0)
+  def fill_triangle(handle, x0, y0, x1, y1, x2, y2, color, target \\ 0)
       when i16(x0) and i16(y0) and
              i16(x1) and i16(y1) and
              i16(x2) and i16(y2) and
              target_any(target) do
-    scalar_call(port, :fill_triangle, target, [x0, y0, x1, y1, x2, y2, color])
+    scalar_call(handle, :fill_triangle, target, [x0, y0, x1, y1, x2, y2, color])
   end
 
-  defp scalar_call(port, op, target, args) do
+  defp scalar_call(handle, op, target, args) do
     with {:ok, prefix_args, color} <- split_args_and_color(args),
          {:ok, flags, wire_color} <- normalize_scalar_color_arg(color) do
       Protocol.call_ok(
-        port,
+        handle,
         op,
         target,
         flags,
-        prefix_args ++ [wire_color],
-        Protocol.long_timeout()
+        prefix_args ++ [wire_color]
       )
     end
   end

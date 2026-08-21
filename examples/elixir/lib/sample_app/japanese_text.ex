@@ -5,12 +5,12 @@
 defmodule SampleApp.JapaneseText do
   @moduledoc false
 
-  def run(port, width, height)
+  def run(handle, width, height)
       when is_integer(width) and width > 0 and is_integer(height) and height > 0 do
-    with :ok <- AtomLGFX.reset_text_state(port, 0),
+    with :ok <- AtomLGFX.reset_text_state(handle, 0),
          :ok <-
            AtomLGFX.render_lcd(
-             port,
+             handle,
              [
                {:fill_screen, :black},
                {:set_text_wrap, false},

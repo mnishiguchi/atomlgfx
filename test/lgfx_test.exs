@@ -5,6 +5,15 @@
 defmodule LGFXTest do
   use ExUnit.Case, async: true
 
+  test "実行時設定を正規化して NIF 初期化へ渡す" do
+    assert LGFX.init(panel_driver: :ili9488, width: 320, height: 480) == :nif_not_loaded
+
+    assert LGFX.init(panel_driver: :unknown) ==
+             {:error,
+              {:bad_open_option_value, :panel_driver, :unknown,
+               ":ili9488, :ili9341, :ili9341_2, :st7789, or :ili9342c"}}
+  end
+
   test "名前付き色を受け付ける" do
     assert LGFX.fill_screen(:red) == :nif_not_loaded
     assert LGFX.draw_rect(10, 20, 30, 40, :white) == :nif_not_loaded

@@ -54,7 +54,7 @@ defmodule SampleApp.Face do
   @external_gaze_hold_ms 200
   @frame_interval_ms 33
 
-  # Batch is the default because ordinary per-primitive port calls made touch
+  # Batch is the default because ordinary per-primitive handle calls made touch
   # response visibly slow. This batch is synchronous and draws into the sprite;
   # it is not retained native rendering.
   @renderer :batch
@@ -139,34 +139,34 @@ defmodule SampleApp.Face do
     }
   end
 
-  def run(port, display_width, display_height)
+  def run(handle, display_width, display_height)
       when is_integer(display_width) and display_width > 0 and is_integer(display_height) and
              display_height > 0 do
     face = new(display_width: display_width, display_height: display_height)
 
-    with {:ok, initialized_face} <- init(face, port) do
-      touch_enabled = touch_enabled?(port)
+    with {:ok, initialized_face} <- init(face, handle) do
+      touch_enabled = touch_enabled?(handle)
 
       try do
-        loop(port, initialized_face, touch_enabled)
+        loop(handle, initialized_face, touch_enabled)
       after
-        cleanup(port)
+        cleanup(handle)
       end
     end
   end
 
-  defp cleanup(port) do
-    _ = AtomLGFX.delete_sprite(port, @sprite_target)
+  defp cleanup(handle) do
+    _ = AtomLGFX.delete_sprite(handle, @sprite_target)
     :ok
   end
 
-  defp loop(port, face, touch_enabled) do
+  defp loop(handle, face, touch_enabled) do
     frame_started_ms = monotonic_ms()
 
     # Touch is sampled once per frame. Responsiveness mostly comes from keeping
     # draw latency low, not from repeatedly polling the resistive touch controller.
     #
-    {touched_face, touched?, touch_ms} = apply_touch_timed(face, port, touch_enabled)
+    {touched_face, touched?, touch_ms} = apply_touch_timed(face, handle, touch_enabled)
 
     next_face =
       touched_face
@@ -175,15 +175,15 @@ defmodule SampleApp.Face do
 
     draw_started_ms = monotonic_ms()
 
-    case draw(next_face, port) do
+    case draw(next_face, handle) do
       :ok ->
         draw_ms = max(monotonic_ms() - draw_started_ms, 0)
 
         counted_face = %{next_face | frame_count: next_face.frame_count + 1}
         maybe_log_frame_stats(counted_face, touch_ms, draw_ms, touched?)
 
-        delayed_face = wait_for_next_frame(port, counted_face, touch_enabled, frame_started_ms)
-        loop(port, delayed_face, touch_enabled)
+        delayed_face = wait_for_next_frame(handle, counted_face, touch_enabled, frame_started_ms)
+        loop(handle, delayed_face, touch_enabled)
 
       {:error, reason} = err ->
         IO.puts("face render failed: #{AtomLGFX.format_error(reason)}")
@@ -191,23 +191,23 @@ defmodule SampleApp.Face do
     end
   end
 
-  defp touch_enabled?(port) do
-    case AtomLGFX.supports_touch?(port) do
+  defp touch_enabled?(handle) do
+    case AtomLGFX.supports_touch?(handle) do
       {:ok, true} -> true
       _other -> false
     end
   end
 
-  defp apply_touch_timed(face, port, touch_enabled) do
+  defp apply_touch_timed(face, handle, touch_enabled) do
     touch_started_ms = monotonic_ms()
-    {updated_face, touched?} = apply_touch(face, port, touch_enabled)
+    {updated_face, touched?} = apply_touch(face, handle, touch_enabled)
     {updated_face, touched?, max(monotonic_ms() - touch_started_ms, 0)}
   end
 
-  defp apply_touch(face, _port, false), do: {set_mouth_open(face, 0.0), false}
+  defp apply_touch(face, _handle, false), do: {set_mouth_open(face, 0.0), false}
 
-  defp apply_touch(face, port, true) do
-    case read_touch(port) do
+  defp apply_touch(face, handle, true) do
+    case read_touch(handle) do
       {:ok, {:screen, touch_x, touch_y}} ->
         gaze_h = normalize_touch_axis(touch_x, face.display_width)
         gaze_v = normalize_touch_axis(touch_y, face.display_height)
@@ -227,10 +227,10 @@ defmodule SampleApp.Face do
     end
   end
 
-  defp read_touch(port), do: read_touch_screen(port)
+  defp read_touch(handle), do: read_touch_screen(handle)
 
-  defp read_touch_screen(port) do
-    case AtomLGFX.get_touch(port) do
+  defp read_touch_screen(handle) do
+    case AtomLGFX.get_touch(handle) do
       {:ok, {touch_x, touch_y, _size}} -> {:ok, {:screen, touch_x, touch_y}}
       {:ok, :none} -> {:ok, :none}
       {:error, reason} -> {:error, reason}
@@ -246,7 +246,7 @@ defmodule SampleApp.Face do
   # Keep a stable max frame rate and yield so networking/AtomVM tasks can run.
   # If drawing already exceeded the frame budget, this returns immediately.
   #
-  defp wait_for_next_frame(_port, face, _touch_enabled, frame_started_ms) do
+  defp wait_for_next_frame(_handle, face, _touch_enabled, frame_started_ms) do
     yield()
     sleep_until(frame_started_ms + @frame_interval_ms)
     face
@@ -277,23 +277,23 @@ defmodule SampleApp.Face do
     :ok
   end
 
-  def init(%__MODULE__{initialized: true} = face, _port), do: {:ok, face}
+  def init(%__MODULE__{initialized: true} = face, _handle), do: {:ok, face}
 
-  def init(%__MODULE__{} = face, port) do
+  def init(%__MODULE__{} = face, handle) do
     with :ok <-
            AtomLGFX.create_sprite(
-             port,
+             handle,
              @canvas_width,
              @canvas_height,
              @sprite_depth,
              @sprite_target
            ),
-         :ok <- AtomLGFX.create_palette(port, @sprite_target),
-         :ok <- AtomLGFX.set_palette_color(port, @sprite_target, @palette_bg, 0x00FFF4B8),
-         :ok <- AtomLGFX.set_palette_color(port, @sprite_target, @palette_fg, 0x00000000),
-         :ok <- AtomLGFX.set_palette_color(port, @sprite_target, @palette_sweat, 0x000040FF),
-         :ok <- AtomLGFX.set_palette_color(port, @sprite_target, @palette_heart, 0x00FF4080),
-         :ok <- AtomLGFX.fill_screen(port, @col_bg, @sprite_target) do
+         :ok <- AtomLGFX.create_palette(handle, @sprite_target),
+         :ok <- AtomLGFX.set_palette_color(handle, @sprite_target, @palette_bg, 0x00FFF4B8),
+         :ok <- AtomLGFX.set_palette_color(handle, @sprite_target, @palette_fg, 0x00000000),
+         :ok <- AtomLGFX.set_palette_color(handle, @sprite_target, @palette_sweat, 0x000040FF),
+         :ok <- AtomLGFX.set_palette_color(handle, @sprite_target, @palette_heart, 0x00FF4080),
+         :ok <- AtomLGFX.fill_screen(handle, @col_bg, @sprite_target) do
       IO.puts("face config sprite=#{@canvas_width}x#{@canvas_height} depth=#{@sprite_depth}")
       {:ok, %{face | initialized: true}}
     end
@@ -328,16 +328,16 @@ defmodule SampleApp.Face do
     |> update_saccade(now_ms)
   end
 
-  def draw(%__MODULE__{initialized: false} = face, port) do
-    with {:ok, initialized_face} <- init(face, port) do
-      draw(initialized_face, port)
+  def draw(%__MODULE__{initialized: false} = face, handle) do
+    with {:ok, initialized_face} <- init(face, handle) do
+      draw(initialized_face, handle)
     end
   end
 
-  def draw(%__MODULE__{} = face, port) do
+  def draw(%__MODULE__{} = face, handle) do
     case @renderer do
-      :batch -> draw_batch(face, port)
-      :sync -> draw_sync(face, port)
+      :batch -> draw_batch(face, handle)
+      :sync -> draw_sync(face, handle)
     end
   end
 
@@ -345,7 +345,7 @@ defmodule SampleApp.Face do
   # push the completed offscreen sprite once. This avoids visible flicker without
   # retained native renderer state.
   #
-  defp draw_batch(%__MODULE__{} = face, port) do
+  defp draw_batch(%__MODULE__{} = face, handle) do
     breath_offset = min(1.0, face.breath)
     by = trunc(breath_offset * 3)
 
@@ -360,8 +360,8 @@ defmodule SampleApp.Face do
       draw_effect_commands(face, breath_offset)
     ]
 
-    with :ok <- Batch.render(port, commands),
-         :ok <- AtomLGFX.push_sprite(port, @sprite_target, face.push_x, face.push_y) do
+    with :ok <- Batch.render(handle, commands),
+         :ok <- AtomLGFX.push_sprite(handle, @sprite_target, face.push_x, face.push_y) do
       :ok
     end
   end
@@ -631,17 +631,17 @@ defmodule SampleApp.Face do
   # Safe reference path: easiest to reason about, but slower because each
   # primitive crosses the AtomVM/native boundary separately.
   #
-  defp draw_sync(%__MODULE__{} = face, port) do
+  defp draw_sync(%__MODULE__{} = face, handle) do
     breath_offset = min(1.0, face.breath)
     by = trunc(breath_offset * 3)
 
-    with :ok <- AtomLGFX.fill_screen(port, @col_bg, @sprite_target),
-         :ok <- draw_mouth(port, face, @mouth_x, @mouth_y + by),
-         :ok <- draw_eye(port, face, @eye_r_x, @eye_r_y + by, face.eye_open_r, false),
-         :ok <- draw_eye(port, face, @eye_l_x, @eye_l_y + by, face.eye_open_l, true),
-         :ok <- maybe_draw_eyebrows(port, face, by),
-         :ok <- draw_effect(port, face, breath_offset),
-         :ok <- AtomLGFX.push_sprite(port, @sprite_target, face.push_x, face.push_y) do
+    with :ok <- AtomLGFX.fill_screen(handle, @col_bg, @sprite_target),
+         :ok <- draw_mouth(handle, face, @mouth_x, @mouth_y + by),
+         :ok <- draw_eye(handle, face, @eye_r_x, @eye_r_y + by, face.eye_open_r, false),
+         :ok <- draw_eye(handle, face, @eye_l_x, @eye_l_y + by, face.eye_open_l, true),
+         :ok <- maybe_draw_eyebrows(handle, face, by),
+         :ok <- draw_effect(handle, face, breath_offset),
+         :ok <- AtomLGFX.push_sprite(handle, @sprite_target, face.push_x, face.push_y) do
       :ok
     end
   end
@@ -660,21 +660,21 @@ defmodule SampleApp.Face do
 
   defp center_offset(_outer_size, _inner_size), do: 0
 
-  defp draw_eye(port, face, x, y, open_ratio, is_left) do
+  defp draw_eye(handle, face, x, y, open_ratio, is_left) do
     offset_x = trunc(face.gaze_h * 3)
     offset_y = trunc(face.gaze_v * 3)
     eye_x = x + offset_x
     eye_y = y + offset_y
 
     if open_ratio > 0.0 do
-      with :ok <- AtomLGFX.fill_circle(port, eye_x, eye_y, @eye_r, @col_pr, @sprite_target),
-           :ok <- maybe_apply_angry_sad_mask(port, face, eye_x, eye_y, is_left),
-           :ok <- maybe_apply_happy_sleepy_mask(port, face, eye_x, eye_y) do
+      with :ok <- AtomLGFX.fill_circle(handle, eye_x, eye_y, @eye_r, @col_pr, @sprite_target),
+           :ok <- maybe_apply_angry_sad_mask(handle, face, eye_x, eye_y, is_left),
+           :ok <- maybe_apply_happy_sleepy_mask(handle, face, eye_x, eye_y) do
         :ok
       end
     else
       AtomLGFX.fill_rect(
-        port,
+        handle,
         x - @eye_r + offset_x,
         y - 2 + offset_y,
         @eye_r * 2,
@@ -685,7 +685,7 @@ defmodule SampleApp.Face do
     end
   end
 
-  defp maybe_apply_angry_sad_mask(port, face, eye_x, eye_y, is_left) do
+  defp maybe_apply_angry_sad_mask(handle, face, eye_x, eye_y, is_left) do
     if face.expr in [:angry, :sad] do
       x0 = eye_x - @eye_r
       y0 = eye_y - @eye_r
@@ -694,23 +694,23 @@ defmodule SampleApp.Face do
       x2 = if(not is_left != not (face.expr == :sad), do: x0, else: x1)
       y2 = y0 + @eye_r
 
-      AtomLGFX.fill_triangle(port, x0, y0, x1, y1, x2, y2, @col_bg, @sprite_target)
+      AtomLGFX.fill_triangle(handle, x0, y0, x1, y1, x2, y2, @col_bg, @sprite_target)
     else
       :ok
     end
   end
 
-  defp maybe_apply_happy_sleepy_mask(port, face, eye_x, eye_y) do
+  defp maybe_apply_happy_sleepy_mask(handle, face, eye_x, eye_y) do
     if face.expr in [:happy, :sleepy] do
       rx = eye_x - @eye_r
       ry = eye_y - @eye_r
       rw = @eye_r * 2 + 4
       rh = @eye_r + 2
 
-      with :ok <- maybe_happy_eye_inner_circle(port, face.expr, eye_x, eye_y),
+      with :ok <- maybe_happy_eye_inner_circle(handle, face.expr, eye_x, eye_y),
            :ok <-
              AtomLGFX.fill_rect(
-               port,
+               handle,
                rx,
                if(face.expr == :happy, do: ry + @eye_r, else: ry),
                rw,
@@ -725,35 +725,35 @@ defmodule SampleApp.Face do
     end
   end
 
-  defp maybe_happy_eye_inner_circle(_port, expr, _eye_x, _eye_y) when expr != :happy,
+  defp maybe_happy_eye_inner_circle(_handle, expr, _eye_x, _eye_y) when expr != :happy,
     do: :ok
 
-  defp maybe_happy_eye_inner_circle(port, :happy, eye_x, eye_y) do
-    AtomLGFX.fill_circle(port, eye_x, eye_y, trunc(@eye_r / 1.5), @col_bg, @sprite_target)
+  defp maybe_happy_eye_inner_circle(handle, :happy, eye_x, eye_y) do
+    AtomLGFX.fill_circle(handle, eye_x, eye_y, trunc(@eye_r / 1.5), @col_bg, @sprite_target)
   end
 
-  defp draw_mouth(port, face, cx, cy) do
+  defp draw_mouth(handle, face, cx, cy) do
     open_ratio = face.mouth_open
     h = @mouth_min_h + trunc((@mouth_max_h - @mouth_min_h) * open_ratio)
     w = @mouth_min_w + trunc((@mouth_max_w - @mouth_min_w) * (1.0 - open_ratio))
     x = cx - div(w, 2)
     y = cy - div(h, 2) + trunc(face.breath * 2)
 
-    AtomLGFX.fill_rect(port, x, y, w, h, @col_pr, @sprite_target)
+    AtomLGFX.fill_rect(handle, x, y, w, h, @col_pr, @sprite_target)
   end
 
-  defp maybe_draw_eyebrows(port, face, by) do
+  defp maybe_draw_eyebrows(handle, face, by) do
     if @brow_h <= 0 do
       :ok
     else
-      with :ok <- draw_eyebrow(port, face, @brow_r_x, @brow_r_y + by, false),
-           :ok <- draw_eyebrow(port, face, @brow_l_x, @brow_l_y + by, true) do
+      with :ok <- draw_eyebrow(handle, face, @brow_r_x, @brow_r_y + by, false),
+           :ok <- draw_eyebrow(handle, face, @brow_l_x, @brow_l_y + by, true) do
         :ok
       end
     end
   end
 
-  defp draw_eyebrow(port, face, x, y, is_left) do
+  defp draw_eyebrow(handle, face, x, y, is_left) do
     if @brow_w == 0 or @brow_h == 0 do
       :ok
     else
@@ -771,9 +771,9 @@ defmodule SampleApp.Face do
         y4 = y + div(@brow_h, 2) + dy
 
         with :ok <-
-               AtomLGFX.fill_triangle(port, x1, y1, x2, y2, x3, y3, @col_pr, @sprite_target),
+               AtomLGFX.fill_triangle(handle, x1, y1, x2, y2, x3, y3, @col_pr, @sprite_target),
              :ok <-
-               AtomLGFX.fill_triangle(port, x2, y2, x3, y3, x4, y4, @col_pr, @sprite_target) do
+               AtomLGFX.fill_triangle(handle, x2, y2, x3, y3, x4, y4, @col_pr, @sprite_target) do
           :ok
         end
       else
@@ -781,7 +781,7 @@ defmodule SampleApp.Face do
         by = y - div(@brow_h, 2)
 
         AtomLGFX.fill_rect(
-          port,
+          handle,
           bx,
           if(face.expr == :happy, do: by - 5, else: by),
           @brow_w,
@@ -793,23 +793,23 @@ defmodule SampleApp.Face do
     end
   end
 
-  defp draw_effect(port, face, offset) do
+  defp draw_effect(handle, face, offset) do
     case face.expr do
       :doubt ->
-        draw_sweat_mark(port, 290, 110, 7, -offset)
+        draw_sweat_mark(handle, 290, 110, 7, -offset)
 
       :angry ->
-        draw_anger_mark(port, 280, 50, 12, offset)
+        draw_anger_mark(handle, 280, 50, 12, offset)
 
       :happy ->
-        draw_heart_mark(port, 280, 50, 12, offset)
+        draw_heart_mark(handle, 280, 50, 12, offset)
 
       :sad ->
-        draw_chill_mark(port, 270, 0, 30, offset)
+        draw_chill_mark(handle, 270, 0, 30, offset)
 
       :sleepy ->
-        with :ok <- draw_bubble_mark(port, 290, 40, 10, offset),
-             :ok <- draw_bubble_mark(port, 270, 52, 6, -offset) do
+        with :ok <- draw_bubble_mark(handle, 290, 40, 10, offset),
+             :ok <- draw_bubble_mark(handle, 270, 52, 6, -offset) do
           :ok
         end
 
@@ -818,7 +818,7 @@ defmodule SampleApp.Face do
     end
   end
 
-  defp draw_sweat_mark(port, x, y, r, offset) do
+  defp draw_sweat_mark(handle, x, y, r, offset) do
     y1 = y + trunc(5 * offset)
     r1 = r + trunc(r * 0.2 * offset)
 
@@ -827,10 +827,10 @@ defmodule SampleApp.Face do
     else
       a = trunc(:math.sqrt(3.0) * r1 / 2.0)
 
-      with :ok <- AtomLGFX.fill_circle(port, x, y1, r1, @col_sweat, @sprite_target),
+      with :ok <- AtomLGFX.fill_circle(handle, x, y1, r1, @col_sweat, @sprite_target),
            :ok <-
              AtomLGFX.fill_triangle(
-               port,
+               handle,
                x,
                y1 - r1 * 2,
                x - a,
@@ -845,12 +845,12 @@ defmodule SampleApp.Face do
     end
   end
 
-  defp draw_anger_mark(port, x, y, r, offset) do
+  defp draw_anger_mark(handle, x, y, r, offset) do
     r1 = r + abs(trunc(r * 0.4 * offset))
 
     with :ok <-
            AtomLGFX.fill_rect(
-             port,
+             handle,
              x - div(r1, 3),
              y - r1,
              div(r1 * 2, 3),
@@ -860,7 +860,7 @@ defmodule SampleApp.Face do
            ),
          :ok <-
            AtomLGFX.fill_rect(
-             port,
+             handle,
              x - r1,
              y - div(r1, 3),
              r1 * 2,
@@ -870,7 +870,7 @@ defmodule SampleApp.Face do
            ),
          :ok <-
            maybe_fill_rect(
-             port,
+             handle,
              x - div(r1, 3) + 2,
              y - r1,
              max(div(r1 * 2, 3) - 4, 0),
@@ -879,7 +879,7 @@ defmodule SampleApp.Face do
            ),
          :ok <-
            maybe_fill_rect(
-             port,
+             handle,
              x - r1,
              y - div(r1, 3) + 2,
              r1 * 2,
@@ -890,7 +890,7 @@ defmodule SampleApp.Face do
     end
   end
 
-  defp draw_heart_mark(port, x, y, r, offset) do
+  defp draw_heart_mark(handle, x, y, r, offset) do
     r1 = r + trunc(r * 0.4 * offset)
 
     if r1 < 2 do
@@ -900,12 +900,26 @@ defmodule SampleApp.Face do
       a_i = trunc(a)
 
       with :ok <-
-             AtomLGFX.fill_circle(port, x - div(r1, 2), y, div(r1, 2), @col_heart, @sprite_target),
+             AtomLGFX.fill_circle(
+               handle,
+               x - div(r1, 2),
+               y,
+               div(r1, 2),
+               @col_heart,
+               @sprite_target
+             ),
            :ok <-
-             AtomLGFX.fill_circle(port, x + div(r1, 2), y, div(r1, 2), @col_heart, @sprite_target),
+             AtomLGFX.fill_circle(
+               handle,
+               x + div(r1, 2),
+               y,
+               div(r1, 2),
+               @col_heart,
+               @sprite_target
+             ),
            :ok <-
              AtomLGFX.fill_triangle(
-               port,
+               handle,
                x,
                y,
                x - div(r1, 2) - a_i,
@@ -917,7 +931,7 @@ defmodule SampleApp.Face do
              ),
            :ok <-
              AtomLGFX.fill_triangle(
-               port,
+               handle,
                x,
                y + div(r1, 2) + trunc(2 * a),
                x - div(r1, 2) - a_i,
@@ -932,26 +946,27 @@ defmodule SampleApp.Face do
     end
   end
 
-  defp draw_chill_mark(port, x, y, r, offset) do
+  defp draw_chill_mark(handle, x, y, r, offset) do
     h = r + abs(trunc(r * 0.2 * offset))
 
-    with :ok <- AtomLGFX.fill_rect(port, x - div(r, 2), y, 3, div(h, 2), @col_pr, @sprite_target),
-         :ok <- AtomLGFX.fill_rect(port, x, y, 3, div(h * 3, 4), @col_pr, @sprite_target),
-         :ok <- AtomLGFX.fill_rect(port, x + div(r, 2), y, 3, h, @col_pr, @sprite_target) do
+    with :ok <-
+           AtomLGFX.fill_rect(handle, x - div(r, 2), y, 3, div(h, 2), @col_pr, @sprite_target),
+         :ok <- AtomLGFX.fill_rect(handle, x, y, 3, div(h * 3, 4), @col_pr, @sprite_target),
+         :ok <- AtomLGFX.fill_rect(handle, x + div(r, 2), y, 3, h, @col_pr, @sprite_target) do
       :ok
     end
   end
 
-  defp draw_bubble_mark(port, x, y, r, offset) do
+  defp draw_bubble_mark(handle, x, y, r, offset) do
     r1 = r + trunc(r * 0.2 * offset)
 
     if r1 < 1 do
       :ok
     else
-      with :ok <- AtomLGFX.draw_circle(port, x, y, r1, @col_pr, @sprite_target),
+      with :ok <- AtomLGFX.draw_circle(handle, x, y, r1, @col_pr, @sprite_target),
            :ok <-
              AtomLGFX.draw_circle(
-               port,
+               handle,
                x - div(r1, 4),
                y - div(r1, 4),
                div(r1, 4),
@@ -963,11 +978,11 @@ defmodule SampleApp.Face do
     end
   end
 
-  defp maybe_fill_rect(_port, _x, _y, width, _height, _color) when width < 1, do: :ok
-  defp maybe_fill_rect(_port, _x, _y, _width, height, _color) when height < 1, do: :ok
+  defp maybe_fill_rect(_handle, _x, _y, width, _height, _color) when width < 1, do: :ok
+  defp maybe_fill_rect(_handle, _x, _y, _width, height, _color) when height < 1, do: :ok
 
-  defp maybe_fill_rect(port, x, y, width, height, color) do
-    AtomLGFX.fill_rect(port, x, y, width, height, color, @sprite_target)
+  defp maybe_fill_rect(handle, x, y, width, height, color) do
+    AtomLGFX.fill_rect(handle, x, y, width, height, color, @sprite_target)
   end
 
   defp maybe_rotate_expression(%__MODULE__{} = face, now_ms) do

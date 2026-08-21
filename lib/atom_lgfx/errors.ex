@@ -167,13 +167,7 @@ defmodule AtomLGFX.Errors do
       "#{inspect(op_name)} received unsupported flags #{inspect(actual)}; allowed mask is #{inspect(allowed)}"
 
   def format_error({:unexpected_reply, value}),
-    do: "unexpected port reply #{inspect(value)}"
-
-  def format_error({:port_call_exit, reason}),
-    do: "port call exited with #{inspect(reason)}"
-
-  def format_error({:bad_caps_proto_ver, expected, actual}),
-    do: "bad caps protocol version: expected #{inspect(expected)}, got #{inspect(actual)}"
+    do: "unexpected NIF reply #{inspect(value)}"
 
   def format_error({:bad_caps_payload, value}),
     do: "bad caps payload #{inspect(value)}"

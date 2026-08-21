@@ -9,32 +9,6 @@ defmodule AtomLGFX.GeneratedTest do
   alias AtomLGFX.Protocol
   alias AtomLGFX.OpSchema
 
-  test "protocol version is v3" do
-    assert Protocol.proto_ver() == 3
-  end
-
-  test "encodes ordinary requests as v3 flat tuples" do
-    assert Protocol.__encode_v3_request__(:ping, 0, 0, []) == {:lgfx, 3, :ping}
-
-    assert Protocol.__encode_v3_request__(:fill_rect, 0, 0, [1, 2, 3, 4, 0xFFFF]) ==
-             {:lgfx, 3, :fill_rect, 0, 1, 2, 3, 4, 0xFFFF}
-
-    assert Protocol.__encode_v3_request__(:create_sprite, 1, 0, [320, 240, 4]) ==
-             {:lgfx, 3, :create_sprite, 1, 320, 240, 4}
-
-    assert Protocol.__encode_v3_request__(:fill_rect, 1, Protocol.color_index_flag(), [
-             1,
-             2,
-             3,
-             4,
-             5
-           ]) ==
-             {:lgfx, 3, :fill_rect, 1, Protocol.color_index_flag(), 1, 2, 3, 4, 5}
-
-    assert Protocol.__encode_v3_request__(:submit_binary_batch, 0, 0, [<<1, 2, 3>>]) ==
-             {:lgfx, 3, :submit_binary_batch, 0, 0, <<1, 2, 3>>}
-  end
-
   test "maps snake_case operation names to stable opcodes" do
     assert Generated.opcode(:fill_screen) == OpSchema.opcode(:fill_screen)
     assert Generated.opcode(:draw_line) == OpSchema.opcode(:draw_line)

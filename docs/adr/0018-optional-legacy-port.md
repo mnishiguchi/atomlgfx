@@ -7,7 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 
 ## 状態
 
-採用
+置換済み
+
+> [ADR 0019: AtomVM Port を削除して NIF へ統一する](0019-drop-legacy-port.md) により置き換えられました。
 
 ## 背景
 

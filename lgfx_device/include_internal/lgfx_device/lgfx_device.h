@@ -18,12 +18,16 @@
 // Build-time configuration (generated from lgfx_port/cmake/lgfx_port_config.h.in)
 #include "lgfx_port/lgfx_port_config.h"
 
-// Shared protocol-level constants (stable wire values, e.g. font preset IDs)
-#include "lgfx_port/lgfx_port.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Stable font preset IDs shared by Elixir, NIF batch decoding, and LovyanGFX.
+typedef enum
+{
+    LGFX_FONT_PRESET_ASCII = 0,
+    LGFX_FONT_PRESET_JP = 1,
+} lgfx_font_preset_t;
 
 // ----------------------------------------------------------------------------
 // Build options
@@ -50,7 +54,7 @@ extern "C" {
 // A valid target is only a domain check. Sprite allocation is validated by the
 // target-specific operations and missing sprites typically return ESP_ERR_NOT_FOUND.
 // Most operations return ESP_ERR_INVALID_STATE until init_with_open_config()
-// succeeds for the owning port.
+// succeeds for the NIF-owned device.
 #define LGFX_DEVICE_TARGET_LCD ((uint8_t) 0)
 #define LGFX_DEVICE_TARGET_MIN_SPRITE ((uint8_t) 1)
 #define LGFX_DEVICE_TARGET_MAX_SPRITE ((uint8_t) 254)
@@ -69,7 +73,7 @@ static inline bool lgfx_device_is_sprite_target(uint8_t target)
 // Scalar color ABI at the device boundary
 // ----------------------------------------------------------------------------
 //
-// Handlers own wire decode.
+// The NIF boundary owns term decoding.
 // The device layer receives already-decoded scalar color arguments.
 //
 // For primitive, text, and sprite-transparent scalar colors:
@@ -95,7 +99,7 @@ static inline bool lgfx_device_is_sprite_target(uint8_t target)
 // ----------------------------------------------------------------------------
 // Open-time panel driver override
 // ----------------------------------------------------------------------------
-// Parsed by the port layer; keep aligned with LGFXPort and lgfx_port.c.
+// Parsed at the NIF boundary and applied by the device layer.
 typedef enum lgfx_panel_driver_id_t
 {
     LGFX_PANEL_DRIVER_ID_ILI9488 = 1,
@@ -121,17 +125,12 @@ typedef enum lgfx_touch_driver_id_t
 // ----------------------------------------------------------------------------
 // Open-time runtime overrides
 // ----------------------------------------------------------------------------
-// Parsed by the port layer and persisted on the owning port context.
+// Parsed at the NIF boundary and applied when the singleton device is initialized.
 //
 // Current ownership model:
-// - config persistence is per port
 // - live device ownership is singleton-global
-// - only one port may own the live singleton at a time
-// - init() for a given port reuses that port's persisted snapshot
-//
-// Keep aligned with:
-// - examples/elixir/lib/lgfx_port.ex
-// - lgfx_port/lgfx_port.c
+// - only one native owner may own the live singleton at a time
+// - each init call receives an explicit configuration snapshot
 //
 // Omitted keys keep build defaults. Duplicate keys are allowed; last value wins.
 typedef struct lgfx_open_config_overrides_t
@@ -322,7 +321,7 @@ esp_err_t lgfx_device_clear_clip_rect(uint8_t target);
 // ----------------------------------------------------------------------------
 // Text config (LCD or sprite target)
 // ----------------------------------------------------------------------------
-// Font preset IDs are protocol-level constants defined in lgfx_port/lgfx_port.h.
+// Font preset IDs are stable values defined by this device boundary.
 //
 // setTextSize(scale):
 // - accepts positive LovyanGFX-style scale values at this boundary

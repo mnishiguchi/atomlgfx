@@ -7,7 +7,6 @@ defmodule SampleApp.ProtocolSmoke do
 
   import Bitwise
 
-  @t_short 5_000
   @bg 0x0000
   @fg 0xFFFF
   @muted 0x8410
@@ -34,22 +33,22 @@ defmodule SampleApp.ProtocolSmoke do
   @known_caps_mask @cap_sprite ||| @cap_pushimage ||| @cap_last_error ||| @cap_touch |||
                      @cap_palette ||| @cap_batch
 
-  def run(port), do: run(port, &AtomLGFX.raw_call/6)
+  def run(handle), do: run(handle, &AtomLGFX.raw_call/5)
 
-  def draw_summary(port, w, h) when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
+  def draw_summary(handle, w, h) when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
     panel_w = max(80, w - 16)
     panel_h = max(48, min(88, h - 24))
 
-    with :ok <- AtomLGFX.fill_screen(port, @bg),
-         :ok <- AtomLGFX.reset_text_state(port, 0),
-         :ok <- AtomLGFX.set_text_font_preset(port, :ascii, 0),
-         :ok <- AtomLGFX.set_text_wrap(port, false, 0),
-         :ok <- AtomLGFX.draw_rect(port, 8, 12, panel_w, panel_h, @accent, 0),
-         :ok <- AtomLGFX.draw_string_bg(port, 16, 22, @fg, @bg, 2, "PROTOCOL", 0),
-         :ok <- AtomLGFX.draw_string_bg(port, 18, 48, @ok, @bg, 1, "v3 handshake ok", 0),
+    with :ok <- AtomLGFX.fill_screen(handle, @bg),
+         :ok <- AtomLGFX.reset_text_state(handle, 0),
+         :ok <- AtomLGFX.set_text_font_preset(handle, :ascii, 0),
+         :ok <- AtomLGFX.set_text_wrap(handle, false, 0),
+         :ok <- AtomLGFX.draw_rect(handle, 8, 12, panel_w, panel_h, @accent, 0),
+         :ok <- AtomLGFX.draw_string_bg(handle, 16, 22, @fg, @bg, 2, "PROTOCOL", 0),
+         :ok <- AtomLGFX.draw_string_bg(handle, 18, 48, @ok, @bg, 1, "v3 handshake ok", 0),
          :ok <-
            AtomLGFX.draw_string_bg(
-             port,
+             handle,
              18,
              64,
              @muted,
@@ -62,11 +61,11 @@ defmodule SampleApp.ProtocolSmoke do
     end
   end
 
-  def run(port, raw_call) when is_function(raw_call, 6) do
+  def run(handle, raw_call) when is_function(raw_call, 5) do
     with :ok <- check_local_cap_constants(),
-         :ok <- check_write_session_requires_init(port, raw_call),
-         {:ok, feature_bits} <- check_get_caps_feature_bits_and_required_caps(port, raw_call),
-         :ok <- check_last_error_cap_matches_availability(port, raw_call, feature_bits) do
+         :ok <- check_write_session_requires_init(handle, raw_call),
+         {:ok, feature_bits} <- check_get_caps_feature_bits_and_required_caps(handle, raw_call),
+         :ok <- check_last_error_cap_matches_availability(handle, raw_call, feature_bits) do
       IO.puts("protocol smoke ok")
       :ok
     else
@@ -129,11 +128,14 @@ defmodule SampleApp.ProtocolSmoke do
   # -----------------------------------------------------------------------------
   # 1) Pre-init write-session ops must be rejected consistently
   # -----------------------------------------------------------------------------
-  defp check_write_session_requires_init(port, raw_call) do
+  defp check_write_session_requires_init(handle, raw_call) do
     with :ok <-
-           expect_not_initialized(raw_call.(port, :start_write, 0, 0, [], @t_short), :start_write),
+           expect_not_initialized(
+             raw_call.(handle, :start_write, 0, 0, []),
+             :start_write
+           ),
          :ok <-
-           expect_not_initialized(raw_call.(port, :end_write, 0, 0, [], @t_short), :end_write) do
+           expect_not_initialized(raw_call.(handle, :end_write, 0, 0, []), :end_write) do
       :ok
     end
   end
@@ -145,8 +147,8 @@ defmodule SampleApp.ProtocolSmoke do
   # -----------------------------------------------------------------------------
   # 2) get_caps feature-bit sanity + required capabilities must be advertised
   # -----------------------------------------------------------------------------
-  defp check_get_caps_feature_bits_and_required_caps(port, raw_call) do
-    case raw_call.(port, :get_caps, 0, 0, [], @t_short) do
+  defp check_get_caps_feature_bits_and_required_caps(handle, raw_call) do
+    case raw_call.(handle, :get_caps, 0, 0, []) do
       {:ok, feature_bits} when is_integer(feature_bits) and feature_bits >= 0 ->
         with :ok <- check_cap_pushimage(feature_bits),
              :ok <- check_cap_batch(feature_bits) do
@@ -192,10 +194,10 @@ defmodule SampleApp.ProtocolSmoke do
   # -----------------------------------------------------------------------------
   # 3) CAP_LAST_ERROR bit must match actual get_last_error availability
   # -----------------------------------------------------------------------------
-  defp check_last_error_cap_matches_availability(port, raw_call, feature_bits) do
+  defp check_last_error_cap_matches_availability(handle, raw_call, feature_bits) do
     cap_last_error? = cap_set?(feature_bits, @cap_last_error)
 
-    case raw_call.(port, :get_last_error, 0, 0, [], @t_short) do
+    case raw_call.(handle, :get_last_error, 0, 0, []) do
       {:ok, {:last_error, _last_op, _reason, _flags, _target, _esp_err}} ->
         if cap_last_error? do
           :ok

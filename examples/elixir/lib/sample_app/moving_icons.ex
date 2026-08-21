@@ -58,7 +58,7 @@ defmodule SampleApp.MovingIcons do
   @frame_interval_ms div(1000, @target_fps)
   @stats_interval_ms 1_000
 
-  def run(port, w, h) when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
+  def run(handle, w, h) when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
     icon_w = Assets.icon_w()
     icon_h = Assets.icon_h()
 
@@ -72,10 +72,10 @@ defmodule SampleApp.MovingIcons do
     log_icon_sizes(icons, icon_w, icon_h)
     log_render_config()
 
-    with {:ok, feature_bits} <- AtomLGFX.get_caps(port),
+    with {:ok, feature_bits} <- AtomLGFX.get_caps(handle),
          :ok <- ensure_required_caps(feature_bits),
-         :ok <- AtomLGFX.fill_screen(port, @bg),
-         {:ok, icon_handles} <- prepare_icon_sprites(port, icons, icon_w, icon_h) do
+         :ok <- AtomLGFX.fill_screen(handle, @bg),
+         {:ok, icon_handles} <- prepare_icon_sprites(handle, icons, icon_w, icon_h) do
       try do
         {_seed, objects} = init_objects(1, @obj_count, w, h, icon_handles)
 
@@ -88,9 +88,9 @@ defmodule SampleApp.MovingIcons do
             "frame=#{w}x#{h}"
         )
 
-        render_loop(port, w, h, [], objects, 0, monotonic_ms(), false)
+        render_loop(handle, w, h, [], objects, 0, monotonic_ms(), false)
       after
-        cleanup_icon_sprites(port)
+        cleanup_icon_sprites(handle)
       end
     else
       {:error, reason} ->
@@ -100,7 +100,7 @@ defmodule SampleApp.MovingIcons do
   end
 
   defp render_loop(
-         port,
+         handle,
          w,
          h,
          previous_objects,
@@ -113,7 +113,7 @@ defmodule SampleApp.MovingIcons do
 
     with :ok <-
            Renderer.render(
-             port,
+             handle,
              previous_objects,
              objects,
              @bg,
@@ -129,7 +129,7 @@ defmodule SampleApp.MovingIcons do
       yield()
 
       render_loop(
-        port,
+        handle,
         w,
         h,
         objects,
@@ -239,53 +239,54 @@ defmodule SampleApp.MovingIcons do
     end
   end
 
-  defp prepare_icon_sprites(port, icons, icon_w, icon_h) do
+  defp prepare_icon_sprites(handle, icons, icon_w, icon_h) do
     info_bin = elem(icons, 0)
     alert_bin = elem(icons, 1)
     close_bin = elem(icons, 2)
     piyopiyo_bin = elem(icons, 3)
 
-    with :ok <- create_and_load_icon_sprite(port, @sprite_info, icon_w, icon_h, info_bin),
-         :ok <- create_and_load_icon_sprite(port, @sprite_alert, icon_w, icon_h, alert_bin),
-         :ok <- create_and_load_icon_sprite(port, @sprite_close, icon_w, icon_h, close_bin),
-         :ok <- create_and_load_icon_sprite(port, @sprite_piyopiyo, icon_w, icon_h, piyopiyo_bin) do
+    with :ok <- create_and_load_icon_sprite(handle, @sprite_info, icon_w, icon_h, info_bin),
+         :ok <- create_and_load_icon_sprite(handle, @sprite_alert, icon_w, icon_h, alert_bin),
+         :ok <- create_and_load_icon_sprite(handle, @sprite_close, icon_w, icon_h, close_bin),
+         :ok <-
+           create_and_load_icon_sprite(handle, @sprite_piyopiyo, icon_w, icon_h, piyopiyo_bin) do
       {:ok, {@sprite_info, @sprite_alert, @sprite_close, @sprite_piyopiyo}}
     else
       {:error, _} = err ->
-        cleanup_icon_sprites(port)
+        cleanup_icon_sprites(handle)
         err
     end
   end
 
-  defp create_and_load_icon_sprite(port, sprite_target, icon_w, icon_h, pixels) do
+  defp create_and_load_icon_sprite(handle, sprite_target, icon_w, icon_h, pixels) do
     pivot_x = div(icon_w, 2)
     pivot_y = div(icon_h, 2)
 
-    with :ok <- AtomLGFX.create_sprite(port, icon_w, icon_h, sprite_target),
-         :ok <- AtomLGFX.clear(port, @transparent_key_color565, sprite_target),
-         :ok <- AtomLGFX.set_swap_bytes(port, true, sprite_target),
-         :ok <- AtomLGFX.push_image_rgb565(port, 0, 0, icon_w, icon_h, pixels, 0, sprite_target),
-         :ok <- AtomLGFX.set_swap_bytes(port, false, sprite_target),
-         :ok <- AtomLGFX.set_pivot(port, sprite_target, pivot_x, pivot_y) do
+    with :ok <- AtomLGFX.create_sprite(handle, icon_w, icon_h, sprite_target),
+         :ok <- AtomLGFX.clear(handle, @transparent_key_color565, sprite_target),
+         :ok <- AtomLGFX.set_swap_bytes(handle, true, sprite_target),
+         :ok <- AtomLGFX.push_image_rgb565(handle, 0, 0, icon_w, icon_h, pixels, 0, sprite_target),
+         :ok <- AtomLGFX.set_swap_bytes(handle, false, sprite_target),
+         :ok <- AtomLGFX.set_pivot(handle, sprite_target, pivot_x, pivot_y) do
       :ok
     else
       {:error, reason} ->
-        _ = AtomLGFX.set_swap_bytes(port, false, sprite_target)
-        _ = AtomLGFX.delete_sprite(port, sprite_target)
+        _ = AtomLGFX.set_swap_bytes(handle, false, sprite_target)
+        _ = AtomLGFX.delete_sprite(handle, sprite_target)
         {:error, {:sprite_setup_failed, sprite_target, reason}}
     end
   end
 
-  defp cleanup_icon_sprites(port) do
-    _ = safe_delete_sprite(port, @sprite_info)
-    _ = safe_delete_sprite(port, @sprite_alert)
-    _ = safe_delete_sprite(port, @sprite_close)
-    _ = safe_delete_sprite(port, @sprite_piyopiyo)
+  defp cleanup_icon_sprites(handle) do
+    _ = safe_delete_sprite(handle, @sprite_info)
+    _ = safe_delete_sprite(handle, @sprite_alert)
+    _ = safe_delete_sprite(handle, @sprite_close)
+    _ = safe_delete_sprite(handle, @sprite_piyopiyo)
     :ok
   end
 
-  defp safe_delete_sprite(port, sprite_target) do
-    case AtomLGFX.delete_sprite(port, sprite_target) do
+  defp safe_delete_sprite(handle, sprite_target) do
+    case AtomLGFX.delete_sprite(handle, sprite_target) do
       :ok -> :ok
       {:error, _} -> :ok
     end

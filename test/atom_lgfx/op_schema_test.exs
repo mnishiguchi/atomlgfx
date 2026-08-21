@@ -203,7 +203,7 @@ defmodule AtomLGFX.OpSchemaTest do
     end)
   end
 
-  test "validates wire arity and flags before crossing the port boundary" do
+  test "validates operation arguments and flags before crossing the NIF boundary" do
     assert OpSchema.validate_wire_call(:fill_rect, [1, 2, 3, 4, 0xFFFF], 0) == :ok
     assert OpSchema.validate_wire_call(:fill_rect, [1, 2, 3, 4, 0xFFFF], 2) == :ok
 
@@ -240,10 +240,7 @@ defmodule AtomLGFX.OpSchemaTest do
   end
 
   defp expected_arg_range(operation) do
-    min_arg_count = String.to_integer(operation.min_arity) - 5
-    max_arg_count = String.to_integer(operation.max_arity) - 5
-
-    min_arg_count..max_arg_count
+    String.to_integer(operation.min_args)..String.to_integer(operation.max_args)
   end
 
   defp expected_allowed_flags("0"), do: 0
@@ -304,10 +301,8 @@ defmodule AtomLGFX.OpSchemaTest do
             case arguments do
               [
                 operation_name,
-                _handler_function_name,
-                _atom_str_macro,
-                min_arity,
-                max_arity,
+                min_args,
+                max_args,
                 allowed_flags_mask,
                 target_policy,
                 state_policy,
@@ -320,8 +315,8 @@ defmodule AtomLGFX.OpSchemaTest do
                 {:ok,
                  %{
                    operation_name: String.trim(operation_name),
-                   min_arity: String.trim(min_arity),
-                   max_arity: String.trim(max_arity),
+                   min_args: String.trim(min_args),
+                   max_args: String.trim(max_args),
                    allowed_flags_mask: String.trim(allowed_flags_mask),
                    target_policy: String.trim(target_policy),
                    state_policy: String.trim(state_policy),

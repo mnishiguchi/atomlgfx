@@ -11,16 +11,16 @@ defmodule AtomLGFX.Images do
 
   @max_f32 3.4028234663852886e38
 
-  def draw_jpg(port, x, y, jpeg, target \\ 0)
+  def draw_jpg(handle, x, y, jpeg, target \\ 0)
       when i16(x) and i16(y) and is_binary(jpeg) and target_any(target) do
     with :ok <- validate_non_empty_jpeg(jpeg),
-         :ok <- validate_binary_size_within_limit(port, jpeg, :draw_jpg) do
-      Protocol.call_ok(port, :draw_jpg, target, 0, [x, y, jpeg], Protocol.long_timeout())
+         :ok <- validate_binary_size_within_limit(handle, jpeg, :draw_jpg) do
+      Protocol.call_ok(handle, :draw_jpg, target, 0, [x, y, jpeg])
     end
   end
 
   def draw_jpg(
-        port,
+        handle,
         x,
         y,
         max_width,
@@ -43,19 +43,18 @@ defmodule AtomLGFX.Images do
     with {:ok, normalized_scale_x} <- normalize_image_scale(scale_x),
          {:ok, normalized_scale_y} <- normalize_image_scale(scale_y),
          :ok <- validate_non_empty_jpeg(jpeg),
-         :ok <- validate_binary_size_within_limit(port, jpeg, :draw_jpg) do
+         :ok <- validate_binary_size_within_limit(handle, jpeg, :draw_jpg) do
       Protocol.call_ok(
-        port,
+        handle,
         :draw_jpg,
         target,
         0,
-        [x, y, max_width, max_height, off_x, off_y, normalized_scale_x, normalized_scale_y, jpeg],
-        Protocol.long_timeout()
+        [x, y, max_width, max_height, off_x, off_y, normalized_scale_x, normalized_scale_y, jpeg]
       )
     end
   end
 
-  def draw_jpg_scaled(port, x, y, max_width, max_height, off_x, off_y, scale, jpeg, target \\ 0)
+  def draw_jpg_scaled(handle, x, y, max_width, max_height, off_x, off_y, scale, jpeg, target \\ 0)
       when i16(x) and i16(y) and
              u16(max_width) and
              u16(max_height) and
@@ -63,11 +62,11 @@ defmodule AtomLGFX.Images do
              is_number(scale) and scale > 0 and
              is_binary(jpeg) and
              target_any(target) do
-    draw_jpg(port, x, y, max_width, max_height, off_x, off_y, scale, scale, jpeg, target)
+    draw_jpg(handle, x, y, max_width, max_height, off_x, off_y, scale, scale, jpeg, target)
   end
 
   def draw_jpg_scaled(
-        port,
+        handle,
         x,
         y,
         max_width,
@@ -87,7 +86,7 @@ defmodule AtomLGFX.Images do
              is_number(scale_y) and scale_y > 0 and
              is_binary(jpeg) and
              target_any(target) do
-    draw_jpg(port, x, y, max_width, max_height, off_x, off_y, scale_x, scale_y, jpeg, target)
+    draw_jpg(handle, x, y, max_width, max_height, off_x, off_y, scale_x, scale_y, jpeg, target)
   end
 
   # Raw pushImage contract:
@@ -95,7 +94,7 @@ defmodule AtomLGFX.Images do
   # - this wrapper forwards that payload as-is
   # - chunking preserves row byte order exactly
   # - target-specific byte swapping remains controlled by set_swap_bytes/3
-  def push_image_rgb565(port, x, y, width, height, pixels, stride_pixels \\ 0, target \\ 0)
+  def push_image_rgb565(handle, x, y, width, height, pixels, stride_pixels \\ 0, target \\ 0)
       when i16(x) and i16(y) and
              u16(width) and
              u16(height) and
@@ -107,7 +106,7 @@ defmodule AtomLGFX.Images do
          {:ok, stride} <- normalize_stride_pixels(width, stride_pixels),
          :ok <- validate_pixel_binary_size(pixels, stride, height) do
       push_image_rgb565_transfer(
-        port,
+        handle,
         x,
         y,
         width,
@@ -123,10 +122,10 @@ defmodule AtomLGFX.Images do
   defp validate_non_empty_jpeg(<<>>), do: {:error, :empty_jpeg}
   defp validate_non_empty_jpeg(_jpeg), do: :ok
 
-  defp validate_binary_size_within_limit(port, payload, op_name) when is_binary(payload) do
+  defp validate_binary_size_within_limit(handle, payload, op_name) when is_binary(payload) do
     payload_size = byte_size(payload)
 
-    case Protocol.max_binary_bytes(port) do
+    case Protocol.max_binary_bytes(handle) do
       {:ok, max_binary_bytes} when is_integer(max_binary_bytes) and max_binary_bytes > 0 ->
         if payload_size <= max_binary_bytes do
           :ok
@@ -170,7 +169,7 @@ defmodule AtomLGFX.Images do
   end
 
   defp push_image_rgb565_transfer(
-         port,
+         handle,
          x,
          y,
          width,
@@ -182,13 +181,13 @@ defmodule AtomLGFX.Images do
        ) do
     payload_size = byte_size(pixels)
 
-    case Protocol.max_binary_bytes(port) do
+    case Protocol.max_binary_bytes(handle) do
       {:ok, max_binary_bytes} when is_integer(max_binary_bytes) and max_binary_bytes > 0 ->
         if payload_size <= max_binary_bytes do
-          push_image_rgb565_raw(port, x, y, width, height, pixels, stride_pixels, target)
+          push_image_rgb565_raw(handle, x, y, width, height, pixels, stride_pixels, target)
         else
           push_image_rgb565_chunked(
-            port,
+            handle,
             x,
             y,
             width,
@@ -201,23 +200,22 @@ defmodule AtomLGFX.Images do
         end
 
       _ ->
-        push_image_rgb565_raw(port, x, y, width, height, pixels, stride_pixels, target)
+        push_image_rgb565_raw(handle, x, y, width, height, pixels, stride_pixels, target)
     end
   end
 
-  defp push_image_rgb565_raw(port, x, y, width, height, pixels, stride_pixels, target) do
+  defp push_image_rgb565_raw(handle, x, y, width, height, pixels, stride_pixels, target) do
     Protocol.call_ok(
-      port,
+      handle,
       :push_image,
       target,
       0,
-      [x, y, width, height, stride_pixels, pixels],
-      Protocol.long_timeout()
+      [x, y, width, height, stride_pixels, pixels]
     )
   end
 
   defp push_image_rgb565_chunked(
-         port,
+         handle,
          x,
          y,
          width,
@@ -234,12 +232,12 @@ defmodule AtomLGFX.Images do
       {:error, {:push_image_max_binary_too_small, max_binary_bytes, row_bytes}}
     else
       rows_per_chunk = max(1, div(max_binary_bytes, row_bytes))
-      do_push_chunks(port, x, y, width, height, pixels, stride_bytes, rows_per_chunk, target, 0)
+      do_push_chunks(handle, x, y, width, height, pixels, stride_bytes, rows_per_chunk, target, 0)
     end
   end
 
   defp do_push_chunks(
-         _port,
+         _handle,
          _x,
          _y,
          _width,
@@ -254,7 +252,7 @@ defmodule AtomLGFX.Images do
        do: :ok
 
   defp do_push_chunks(
-         port,
+         handle,
          x,
          y,
          width,
@@ -268,9 +266,9 @@ defmodule AtomLGFX.Images do
     chunk_height = min(height - row, rows_per_chunk)
     chunk = pack_rows(pixels, stride_bytes, width * 2, row, chunk_height)
 
-    with :ok <- push_image_rgb565_raw(port, x, y + row, width, chunk_height, chunk, 0, target) do
+    with :ok <- push_image_rgb565_raw(handle, x, y + row, width, chunk_height, chunk, 0, target) do
       do_push_chunks(
-        port,
+        handle,
         x,
         y,
         width,

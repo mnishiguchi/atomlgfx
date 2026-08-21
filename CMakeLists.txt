@@ -25,11 +25,6 @@ set(LGFX_PORT_ENABLE_JP_FONTS
     "Enable Japanese font data for the Japanese-capable text preset"
 )
 set(LGFX_PORT_ENABLE_TOUCH ON CACHE BOOL "Enable touch driver support")
-set(LGFX_PORT_ENABLE_LEGACY_PORT
-    ON
-    CACHE BOOL
-    "Build the legacy AtomVM port driver alongside the direct NIF API"
-)
 set(LGFX_PORT_ENABLE_PSRAM_SPRITES
     ON
     CACHE BOOL
@@ -65,8 +60,8 @@ set(LGFX_PORT_FORCE_LEGACY_I2C
 # - readable / invert / rgb_order / dlen_16bit
 #
 # Runtime note:
-# - open_port/open-time config may still override panel_driver and related fields later.
-# - This cache value remains useful as the default panel profile for builds and examples.
+# - LGFX.init/1 or AtomLGFX.init/1 may override panel and bus values.
+# - This cache value remains the default panel profile for builds and examples.
 #
 # Supported LovyanGFX panel names:
 # - ILI9488
@@ -475,6 +470,7 @@ lgfx_port_apply_tracked_default(
 set(LGFX_PORT_COMPONENT_SRCS
     # Direct NIF entrypoint and shared batch executor
     "lgfx_port/nif.c"
+    "lgfx_port/open_config.c"
     "lgfx_port/render_batch_dispatch.cpp"
 
     # Device adapter
@@ -488,22 +484,7 @@ set(LGFX_PORT_COMPONENT_SRCS
     "lgfx_device/sprites.cpp"
 )
 
-if(LGFX_PORT_ENABLE_LEGACY_PORT)
-    list(
-        APPEND
-        LGFX_PORT_COMPONENT_SRCS
-        # Legacy port entrypoint and protocol support
-        "lgfx_port/lgfx_port.c"
-        "lgfx_port/atoms.c"
-        "lgfx_port/open_config.c"
-        "lgfx_port/op_registry.c"
-        "lgfx_port/proto_term.c"
-        "lgfx_port/handlers.c"
-    )
-    message(STATUS "AtomLGFX legacy port API: enabled")
-else()
-    message(STATUS "AtomLGFX legacy port API: disabled (NIF-only build)")
-endif()
+message(STATUS "AtomLGFX native API: direct NIF")
 
 idf_component_register(
     SRCS
@@ -539,7 +520,7 @@ if(CMAKE_SCRIPT_MODE_FILE)
 endif()
 
 # -----------------------------------------------------------------------------
-# Protocol constants
+# Native constants
 # -----------------------------------------------------------------------------
 set(LGFX_PORT_MAX_SPRITES
     "8u"

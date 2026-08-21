@@ -17,7 +17,7 @@
 #include "driver/spi_common.h"
 #include "soc/soc_caps.h"
 
-#include "lgfx_port/lgfx_port_internal.h"
+#include "lgfx_port/open_config.h"
 
 #define LGFX_IS_ATOM(global, value, len_bytes, atom_text) \
     globalcontext_is_term_equal_to_atom_string((global), (value), ATOM_STR(len_bytes, atom_text))
@@ -299,7 +299,7 @@ static bool lgfx_parse_open_option_tuple(
     const char **error_detail)
 {
     if (!term_is_tuple(entry) || term_get_tuple_arity(entry) != 2) {
-        *error_detail = "each open_port option must be a {key, value} tuple";
+        *error_detail = "each NIF option must be a {key, value} tuple";
         return false;
     }
 
@@ -307,7 +307,7 @@ static bool lgfx_parse_open_option_tuple(
     term value = term_get_tuple_element(entry, 1);
 
     if (!term_is_atom(key)) {
-        *error_detail = "open_port option key must be an atom";
+        *error_detail = "NIF option key must be an atom";
         return false;
     }
 
@@ -653,7 +653,7 @@ static bool lgfx_parse_open_option_tuple(
         return true;
     }
 
-    *error_detail = "unknown open_port option key";
+    *error_detail = "unknown NIF option key";
     return false;
 }
 
@@ -673,7 +673,7 @@ bool lgfx_parse_open_config_opts(
     term cursor = opts;
     while (!term_is_nil(cursor)) {
         if (!term_is_list(cursor)) {
-            *error_detail = "open_port opts must be a proper list";
+            *error_detail = "NIF options must be a proper list";
             return false;
         }
 

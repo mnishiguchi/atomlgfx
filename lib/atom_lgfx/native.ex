@@ -7,8 +7,15 @@ defmodule AtomLGFX.Native do
 
   @nif_not_loaded :nif_not_loaded
 
+  # Keep the BEAM fallback opaque to Elixir's type inference. AtomVM replaces
+  # call/4 with the registered NIF, so this indirection is host-only.
+  @doc false
+  def nif_not_loaded, do: @nif_not_loaded
+
   def init, do: @nif_not_loaded
+  def init(_config), do: @nif_not_loaded
   def close, do: @nif_not_loaded
+  def call(_opcode, _target, _flags, _args), do: :erlang.apply(__MODULE__, :nif_not_loaded, [])
 
   def width, do: @nif_not_loaded
   def height, do: @nif_not_loaded

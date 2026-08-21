@@ -13,9 +13,12 @@
 // - call the existing lgfx_device_* C ABI
 // - encode a small result
 //
-// The port driver and this NIF collection therefore share the same LovyanGFX
-// device implementation instead of maintaining separate drawing paths.
+// Both the direct `LGFX` functions and the generic `AtomLGFX` dispatcher use
+// the same LovyanGFX device implementation.
 
+#include <float.h>
+#include <limits.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -29,10 +32,94 @@
 #include "term.h"
 
 #include "lgfx_device/lgfx_device.h"
-#include "lgfx_port/proto_term.h"
 #include "lgfx_port/render_batch_dispatch.h"
 
+
+static bool lgfx_term_to_u32(term value, uint32_t *out)
+{
+    if (!out || !term_is_integer(value)) {
+        return false;
+    }
+
+    avm_int_t decoded = term_to_int(value);
+    if (decoded < 0 || (uint64_t) decoded > UINT32_MAX) {
+        return false;
+    }
+
+    *out = (uint32_t) decoded;
+    return true;
+}
+
+static bool lgfx_term_to_i32(term value, int32_t *out)
+{
+    if (!out || !term_is_integer(value)) {
+        return false;
+    }
+
+    avm_int_t decoded = term_to_int(value);
+    if (decoded < (avm_int_t) INT32_MIN || decoded > (avm_int_t) INT32_MAX) {
+        return false;
+    }
+
+    *out = (int32_t) decoded;
+    return true;
+}
+
+static bool lgfx_term_to_i16(term value, int16_t *out)
+{
+    int32_t decoded = 0;
+    if (!out || !lgfx_term_to_i32(value, &decoded) || decoded < INT16_MIN || decoded > INT16_MAX) {
+        return false;
+    }
+
+    *out = (int16_t) decoded;
+    return true;
+}
+
+static bool lgfx_term_to_u16(term value, uint16_t *out)
+{
+    uint32_t decoded = 0;
+    if (!out || !lgfx_term_to_u32(value, &decoded) || decoded > UINT16_MAX) {
+        return false;
+    }
+
+    *out = (uint16_t) decoded;
+    return true;
+}
+
+static bool lgfx_term_to_f32(term value, float *out)
+{
+    if (!out) {
+        return false;
+    }
+
+    avm_float_t decoded = 0;
+
+    if (term_is_float(value)) {
+        decoded = term_to_float(value);
+    } else if (term_is_integer(value)) {
+        decoded = (avm_float_t) term_to_int(value);
+    } else {
+        return false;
+    }
+
+    if (!isfinite((double) decoded)
+        || decoded < -(avm_float_t) FLT_MAX
+        || decoded > (avm_float_t) FLT_MAX) {
+        return false;
+    }
+
+    *out = (float) decoded;
+    return true;
+}
+
+static bool lgfx_term_to_color565(term value, uint16_t *out)
+{
+    return lgfx_term_to_u16(value, out);
+}
+
 static uint8_t lgfx_nif_owner_token;
+static bool lgfx_nif_initialized = false;
 static const lgfx_open_config_overrides_t lgfx_nif_default_open_config = { 0 };
 
 static term lgfx_nif_error(Context *ctx, term reason)
@@ -92,11 +179,15 @@ static term lgfx_nif_init_0(Context *ctx, int argc, term argv[])
         return lgfx_nif_badarg(ctx);
     }
 
-    return lgfx_nif_esp_result(
-        ctx,
-        lgfx_device_init_with_open_config(
-            &lgfx_nif_default_open_config,
-            (const void *) &lgfx_nif_owner_token));
+    esp_err_t err = lgfx_device_init_with_open_config(
+        &lgfx_nif_default_open_config,
+        (const void *) &lgfx_nif_owner_token);
+
+    if (err == ESP_OK) {
+        lgfx_nif_initialized = true;
+    }
+
+    return lgfx_nif_esp_result(ctx, err);
 }
 
 static term lgfx_nif_close_0(Context *ctx, int argc, term argv[])
@@ -107,9 +198,14 @@ static term lgfx_nif_close_0(Context *ctx, int argc, term argv[])
         return lgfx_nif_badarg(ctx);
     }
 
-    return lgfx_nif_esp_result(
-        ctx,
-        lgfx_device_close_for_owner((const void *) &lgfx_nif_owner_token));
+    esp_err_t err =
+        lgfx_device_close_for_owner((const void *) &lgfx_nif_owner_token);
+
+    if (err == ESP_OK) {
+        lgfx_nif_initialized = false;
+    }
+
+    return lgfx_nif_esp_result(ctx, err);
 }
 
 static term lgfx_nif_width_0(Context *ctx, int argc, term argv[])
@@ -894,6 +990,8 @@ static term lgfx_nif_batch_2(Context *ctx, int argc, term argv[])
     return lgfx_nif_esp_result(ctx, err);
 }
 
+#include "lgfx_port/nif_dispatch.inc"
+
 #define LGFX_NIF_ENTRY(name, function_name)           \
     static const struct Nif name = {                  \
         .base.type = NIFFunctionType,                 \
@@ -901,6 +999,8 @@ static term lgfx_nif_batch_2(Context *ctx, int argc, term argv[])
     }
 
 LGFX_NIF_ENTRY(lgfx_nif_init_0_entry, lgfx_nif_init_0);
+LGFX_NIF_ENTRY(lgfx_nif_init_1_entry, lgfx_nif_init_1);
+LGFX_NIF_ENTRY(lgfx_nif_call_4_entry, lgfx_nif_call_4);
 LGFX_NIF_ENTRY(lgfx_nif_close_0_entry, lgfx_nif_close_0);
 LGFX_NIF_ENTRY(lgfx_nif_width_0_entry, lgfx_nif_width_0);
 LGFX_NIF_ENTRY(lgfx_nif_height_0_entry, lgfx_nif_height_0);
@@ -948,6 +1048,8 @@ LGFX_NIF_ENTRY(lgfx_nif_batch_2_entry, lgfx_nif_batch_2);
 const struct Nif *atom_lgfx_native_get_nif(const char *nifname)
 {
     LGFX_NIF_LOOKUP("Elixir.AtomLGFX.Native:init/0", lgfx_nif_init_0_entry);
+    LGFX_NIF_LOOKUP("Elixir.AtomLGFX.Native:init/1", lgfx_nif_init_1_entry);
+    LGFX_NIF_LOOKUP("Elixir.AtomLGFX.Native:call/4", lgfx_nif_call_4_entry);
     LGFX_NIF_LOOKUP("Elixir.AtomLGFX.Native:close/0", lgfx_nif_close_0_entry);
     LGFX_NIF_LOOKUP("Elixir.AtomLGFX.Native:width/0", lgfx_nif_width_0_entry);
     LGFX_NIF_LOOKUP("Elixir.AtomLGFX.Native:height/0", lgfx_nif_height_0_entry);

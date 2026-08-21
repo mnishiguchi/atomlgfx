@@ -15,7 +15,7 @@ defmodule SampleApp.PerfSmoke do
   @ok 0x07E0
   @warmup_color 0x2104
 
-  def run(port, w, h) when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
+  def run(handle, w, h) when is_integer(w) and w > 0 and is_integer(h) and h > 0 do
     rounds = rounds()
 
     IO.puts("perf_smoke start viewport=#{w}x#{h} rounds=#{rounds}")
@@ -40,24 +40,24 @@ defmodule SampleApp.PerfSmoke do
       draw_line_build_us
     )
 
-    with :ok <- warmup(port),
+    with :ok <- warmup(handle),
          :ok <-
            bench("direct_fill_rect", rounds, 0, fn ->
-             direct_fill_rect_loop(port, rounds, w, h)
+             direct_fill_rect_loop(handle, rounds, w, h)
            end),
          :ok <-
            bench("binary_batch_fill_rect", rounds, byte_size(fill_rect_batch), fn ->
-             AtomLGFX.submit_binary_batch(port, fill_rect_batch)
+             AtomLGFX.submit_binary_batch(handle, fill_rect_batch)
            end),
          :ok <-
            bench("direct_draw_line", rounds, 0, fn ->
-             direct_draw_line_loop(port, rounds, w, h)
+             direct_draw_line_loop(handle, rounds, w, h)
            end),
          :ok <-
            bench("binary_batch_draw_line", rounds, byte_size(draw_line_batch), fn ->
-             AtomLGFX.submit_binary_batch(port, draw_line_batch)
+             AtomLGFX.submit_binary_batch(handle, draw_line_batch)
            end),
-         :ok <- draw_done(port, w, h, rounds) do
+         :ok <- draw_done(handle, w, h, rounds) do
       IO.puts("perf_smoke done")
       :ok
     else
@@ -79,7 +79,7 @@ defmodule SampleApp.PerfSmoke do
     end
   end
 
-  defp warmup(port) do
+  defp warmup(handle) do
     warmup_batch =
       BinaryBatch.batch([
         BinaryBatch.target(0),
@@ -87,43 +87,43 @@ defmodule SampleApp.PerfSmoke do
         BinaryBatch.fill_rect(0, 0, 8, 8, @warmup_color)
       ])
 
-    with :ok <- run_step("warmup_direct_fill_screen", fn -> AtomLGFX.fill_screen(port, @bg) end),
+    with :ok <- run_step("warmup_direct_fill_screen", fn -> AtomLGFX.fill_screen(handle, @bg) end),
          :ok <-
            run_step("warmup_binary_batch", fn ->
-             AtomLGFX.submit_binary_batch(port, warmup_batch)
+             AtomLGFX.submit_binary_batch(handle, warmup_batch)
            end),
-         :ok <- run_step("warmup_display", fn -> AtomLGFX.display(port) end) do
+         :ok <- run_step("warmup_display", fn -> AtomLGFX.display(handle) end) do
       :ok
     end
   end
 
-  defp direct_fill_rect_loop(_port, 0, _w, _h), do: :ok
+  defp direct_fill_rect_loop(_handle, 0, _w, _h), do: :ok
 
-  defp direct_fill_rect_loop(port, remaining, w, h) do
+  defp direct_fill_rect_loop(handle, remaining, w, h) do
     index = remaining - 1
     {x, y, rect_w, rect_h, color} = fill_rect_command(index, w, h)
 
     with :ok <-
            normalize_result(
              "direct_fill_rect_command",
-             AtomLGFX.fill_rect(port, x, y, rect_w, rect_h, color)
+             AtomLGFX.fill_rect(handle, x, y, rect_w, rect_h, color)
            ) do
-      direct_fill_rect_loop(port, remaining - 1, w, h)
+      direct_fill_rect_loop(handle, remaining - 1, w, h)
     end
   end
 
-  defp direct_draw_line_loop(_port, 0, _w, _h), do: :ok
+  defp direct_draw_line_loop(_handle, 0, _w, _h), do: :ok
 
-  defp direct_draw_line_loop(port, remaining, w, h) do
+  defp direct_draw_line_loop(handle, remaining, w, h) do
     index = remaining - 1
     {x0, y0, x1, y1, color} = draw_line_command(index, w, h)
 
     with :ok <-
            normalize_result(
              "direct_draw_line_command",
-             AtomLGFX.draw_line(port, x0, y0, x1, y1, color)
+             AtomLGFX.draw_line(handle, x0, y0, x1, y1, color)
            ) do
-      direct_draw_line_loop(port, remaining - 1, w, h)
+      direct_draw_line_loop(handle, remaining - 1, w, h)
     end
   end
 
@@ -259,17 +259,17 @@ defmodule SampleApp.PerfSmoke do
     :ok
   end
 
-  defp draw_done(port, w, h, rounds) do
-    with :ok <- AtomLGFX.reset_text_state(port, 0),
-         :ok <- AtomLGFX.set_text_font_preset(port, :ascii, 0),
-         :ok <- AtomLGFX.set_text_wrap(port, false, 0),
-         :ok <- AtomLGFX.fill_rect(port, 0, 0, w, min_i(42, h), @bg, 0),
-         :ok <- AtomLGFX.draw_string_bg(port, 8, 6, @fg, @bg, 2, "PERF", 0),
+  defp draw_done(handle, w, h, rounds) do
+    with :ok <- AtomLGFX.reset_text_state(handle, 0),
+         :ok <- AtomLGFX.set_text_font_preset(handle, :ascii, 0),
+         :ok <- AtomLGFX.set_text_wrap(handle, false, 0),
+         :ok <- AtomLGFX.fill_rect(handle, 0, 0, w, min_i(42, h), @bg, 0),
+         :ok <- AtomLGFX.draw_string_bg(handle, 8, 6, @fg, @bg, 2, "PERF", 0),
          :ok <-
-           AtomLGFX.draw_string_bg(port, 8, 28, @ok, @bg, 1, "#{rounds} commands per path", 0),
+           AtomLGFX.draw_string_bg(handle, 8, 28, @ok, @bg, 1, "#{rounds} commands per path", 0),
          :ok <-
            AtomLGFX.draw_string_bg(
-             port,
+             handle,
              max_i(96, div(w, 2)),
              28,
              @muted,

@@ -5,7 +5,7 @@
 defmodule SampleApp.BasicShapes do
   @moduledoc false
 
-  def run(port, width, height)
+  def run(handle, width, height)
       when is_integer(width) and width > 0 and is_integer(height) and height > 0 do
     margin = 10
     center_x = div(width, 2)
@@ -15,7 +15,7 @@ defmodule SampleApp.BasicShapes do
     circle_radius = max(8, div(min(width, height), 8))
 
     AtomLGFX.render_lcd(
-      port,
+      handle,
       [
         {:fill_screen, :black},
         {:set_text_color, :white},
