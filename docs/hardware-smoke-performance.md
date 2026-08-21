@@ -12,6 +12,7 @@ SPDX-License-Identifier: Apache-2.0
 
 既存の報告:
 
+- [2026-08-21 NIF-only 実機検証報告](worklog/20260821-nif-only-hardware-validation-report.md)
 - [2026-08-04 v3 実機検証報告](worklog/20260804-v3-hardware-validation-report.md)
 - [2026-05-01 実機性能動作確認報告](worklog/20260501-hardware-performance-smoke-report.md)
 
