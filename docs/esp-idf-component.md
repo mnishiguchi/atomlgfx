@@ -6,7 +6,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # ESP-IDF 部品
 
-このリポジトリは、LovyanGFX を背後に持つ AtomVM のネイティブポートドライバーを提供する ESP-IDF 部品を含みます。
+このリポジトリは、LovyanGFX を背後に持つ AtomVM の直接 NIF と互換用ネイティブポート
+ドライバーを提供する ESP-IDF 部品を含みます。
 
 この部品は、現在の AtomLGFX v3 API に対応するワイヤープロトコル v3 を実装します。Hex パッケージには含めず、このリポジトリから配布します。`atomlgfx` の Elixir 依存と同じ Git コミットから構築してください。
 
@@ -14,7 +15,8 @@ SPDX-License-Identifier: Apache-2.0
 
 ## 提供するもの
 
-- ネイティブ `lgfx_port` AtomVM ポートドライバー
+- LovyanGFX 装置適合層を直接呼び出す `LGFX` AtomVM NIF
+- 任意構築の互換用 `lgfx_port` AtomVM ポートドライバー
 - 組プロトコルの要求解析と振り分け
 - LovyanGFX を使う表示操作
 - スプライト、パレット、画像、文字、タッチ対応
@@ -63,6 +65,34 @@ git submodule update --init --recursive
 ```
 
 対象と直列ポートは環境に合わせて変更してください。
+
+### NIF だけのファームウェア
+
+直接 `LGFX` NIF だけを使う場合は、互換用ポート入口、組プロトコル解析器、通常ハンドラーを
+構築から除外できます。
+
+```bash
+./scripts/atomvm_esp32.exs build --target esp32s3 --component . \
+  --cmake-define LGFX_PORT_ENABLE_LEGACY_PORT=OFF
+```
+
+`LGFX_PORT_ENABLE_LEGACY_PORT` の既定値は `ON` です。`OFF` でも次を構築します。
+
+- `LGFX` 直接 NIF
+- `lgfx_device` 装置適合層
+- NIF とポートが共有するバイナリーバッチ振り分け
+
+`OFF` では `AtomLGFX.open/1` を利用できません。現在の NIF は構築時の機器設定を使用し、
+次のポート専用機能をまだ完全には置き換えません。
+
+- 実行時の詳細なパネル・バス設定
+- スプライトの生成と解放、パレット
+- タッチと較正
+- JPEG
+- 高度な文字、切り抜き、機能・診断情報
+
+必要な機能に合わせて構成を選びます。NIF-only 構築の判断と実機測定は
+[ADR 0018](adr/0018-optional-legacy-port.md) を参照してください。
 
 ## 設定
 

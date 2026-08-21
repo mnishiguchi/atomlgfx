@@ -12,6 +12,8 @@ SPDX-License-Identifier: Apache-2.0
 
 現在の v3 を理解する場合は、通常、次の有効な ADR から読み始めます。
 
+- [ADR 0018: 互換用 AtomVM ポートを構築時に任意化する](0018-optional-legacy-port.md)
+  - NIF を常に構築し、既存の `AtomLGFX` ポート API を移行期間中だけ既定で含める方針を定義
 - [ADR 0017: AtomVM NIF による LovyanGFX 直接 API](0017-direct-atomvm-nif-api.md)
   - LovyanGFX に近い `LGFX` API、薄い NIF 層、既存機器層とバイナリーバッチの再利用を定義
 - [ADR 0016: 描画を中心とする低メモリー API](0016-render-first-low-memory-api.md)

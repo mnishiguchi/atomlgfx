@@ -7,9 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 # lgfx_port
 
 `lgfx_port/` は、AtomVM に面するネイティブ層です。
+直接 NIF と互換用ポートは同じ装置適合層とバイナリーバッチ振り分けを共有します。
 
 担当範囲:
 
+- 直接 NIF 引数の検証と応答への変換
 - 要求組の処理
 - 包絡とネイティブ状態の防御的検証
 - 通常操作のハンドラー振り分け
@@ -21,6 +23,9 @@ SPDX-License-Identifier: Apache-2.0
 
 ## ファイル構成
 
+- `nif.c`
+  - `LGFX` 直接 NIF の独立した入口
+  - NIF-only 構築でも常に含む
 - `lgfx_port.c`
   - ポートの入口
   - メールボックスの排出
@@ -57,6 +62,28 @@ SPDX-License-Identifier: Apache-2.0
   - バイナリーバッチ対応の内部実行分類
 
 ## 責務の分離
+
+### 直接 NIF
+
+直接 NIF は AtomVM の項を同期的に検証し、`lgfx_device_*` または共有バッチ実行系を
+呼び出します。メールボックスと組プロトコルは経由しません。
+
+```text
+LGFX
+  -> AtomLGFX.Native NIF
+  -> lgfx_device_* または render_batch_dispatch
+  -> LovyanGFX
+```
+
+互換用ポートを除外する場合は、CMake で次を指定します。
+
+```text
+LGFX_PORT_ENABLE_LEGACY_PORT=OFF
+```
+
+この構成でも `nif.c`、`render_batch_dispatch.cpp`、`lgfx_device/` は構築されます。
+`lgfx_port.c`、組プロトコル補助、通常ハンドラーは構築されません。
+機能差と移行方針は [ADR 0018](../docs/adr/0018-optional-legacy-port.md) を参照してください。
 
 ### ポートスレッド
 
