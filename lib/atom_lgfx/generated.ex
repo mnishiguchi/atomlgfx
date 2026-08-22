@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # このファイルは scripts/sync_lgfx_protocol_doc.exs により生成される。
-# 変更する場合は lgfx_port/include_internal/lgfx_port/ops.def を編集する。
+# 変更する場合は native/include/atom_lgfx/ops.def を編集する。
 
 defmodule AtomLGFX.Generated do
   @moduledoc false

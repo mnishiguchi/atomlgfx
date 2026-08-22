@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// lgfx_port/open_config.c
+// native/open_config.c
 
 #include <limits.h>
 #include <stdbool.h>
@@ -17,7 +17,7 @@
 #include "driver/spi_common.h"
 #include "soc/soc_caps.h"
 
-#include "lgfx_port/open_config.h"
+#include "atom_lgfx/open_config.h"
 
 #define LGFX_IS_ATOM(global, value, len_bytes, atom_text) \
     globalcontext_is_term_equal_to_atom_string((global), (value), ATOM_STR(len_bytes, atom_text))

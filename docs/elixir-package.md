@@ -101,8 +101,8 @@ NIF は AtomVM term の検証と `lgfx_device` 呼び出しを担当し、描画
 - [構成](architecture.md)
 - [ESP-IDF 部品](esp-idf-component.md)
 - [ネイティブ操作契約](protocol.md)
-- [NIF 層](../lgfx_port/README.md)
-- [装置適合層](../lgfx_device/README.md)
+- [ネイティブ実装](../native/README.md)
+- [装置適合層](../native/device/README.md)
 
 ## 互換性
 

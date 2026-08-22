@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// lgfx_device/include_internal/lgfx_device/state_runtime.hpp
+// native/device/state_runtime.hpp
 //
 // Internal-only runtime config + concrete LCD construction helpers.
 // This header is C++-only and must not be exposed as public API.
@@ -16,7 +16,7 @@
 
 #include <LovyanGFX.hpp>
 
-#include "lgfx_device/lgfx_device.h"
+#include "device.h"
 
 namespace lgfx_dev
 {

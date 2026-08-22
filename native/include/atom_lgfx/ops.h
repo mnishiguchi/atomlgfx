@@ -27,7 +27,7 @@ typedef enum
 typedef enum
 {
 #define X(op_name, ...) LGFX_OP_##op_name,
-#include "lgfx_port/ops.def"
+#include "atom_lgfx/ops.def"
 #undef X
 
     LGFX_OP_COUNT

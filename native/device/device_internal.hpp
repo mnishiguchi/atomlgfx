@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// lgfx_device/lgfx_device_internal.hpp
+// native/device/device_internal.hpp
 //
 // Internal-only shared contract for split lgfx_device implementation files.
 // Mutable singleton state is owned by src/lgfx_device_state.cpp.
@@ -21,7 +21,7 @@
 
 #include "esp_err.h"
 #include "sdkconfig.h"
-#include "lgfx_device/lgfx_device.h"
+#include "device.h"
 
 namespace lgfx_dev
 {

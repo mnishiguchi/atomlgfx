@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// lgfx_device/state.cpp
+// native/device/state.cpp
 
 #include <new>
 #include <stddef.h>
@@ -21,9 +21,9 @@
 #include "driver/i2c.h"
 #include "soc/soc_caps.h"
 
-#include "lgfx_device/lgfx_device.h"
-#include "lgfx_device/lgfx_device_internal.hpp"
-#include "lgfx_device/state_runtime.hpp"
+#include "device.h"
+#include "device_internal.hpp"
+#include "state_runtime.hpp"
 
 namespace
 {

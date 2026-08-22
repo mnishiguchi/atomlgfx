@@ -16,7 +16,7 @@ set(LGFX_ROOT
 set(LGFX_SRC_ROOT "${LGFX_ROOT}/src")
 
 set(LGFX_PORT_CONFIG_TEMPLATE
-    "${CMAKE_CURRENT_LIST_DIR}/lgfx_port/cmake/lgfx_port_config.h.in"
+    "${CMAKE_CURRENT_LIST_DIR}/native/cmake/lgfx_port_config.h.in"
 )
 
 set(LGFX_PORT_ENABLE_JP_FONTS
@@ -414,7 +414,7 @@ set(LGFX_PORT_TOUCH_BUS_SHARED ON CACHE BOOL "Touch bus_shared")
 # Wiring defaults
 # -----------------------------------------------------------------------------
 #
-# Keep these aligned with lgfx_device/state_runtime.cpp:
+# Keep these aligned with native/device/state_runtime.cpp:
 # - SPI:   SCLK=7 MOSI=9 MISO=8
 # - LCD:   CS=43 DC=3 RST=2
 # - Touch: CS=44 IRQ=-1
@@ -461,7 +461,7 @@ lgfx_port_apply_tracked_default(
     LGFX_PORT_JP_FONT_CPP
     STRING
     "Path to custom Japanese font subset .cpp (compiled when LGFX_PORT_ENABLE_JP_FONTS=ON)"
-    "${CMAKE_CURRENT_LIST_DIR}/lgfx_device/fonts/generated/ui_font_ja_16_min.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/native/device/fonts/generated/ui_font_ja_16_min.cpp"
 )
 
 # -----------------------------------------------------------------------------
@@ -469,18 +469,18 @@ lgfx_port_apply_tracked_default(
 # -----------------------------------------------------------------------------
 set(LGFX_PORT_COMPONENT_SRCS
     # Direct NIF entrypoint and shared batch executor
-    "lgfx_port/nif.c"
-    "lgfx_port/open_config.c"
-    "lgfx_port/render_batch_dispatch.cpp"
+    "native/nif.c"
+    "native/open_config.c"
+    "native/render_batch.cpp"
     # Device adapter
-    "lgfx_device/state.cpp"
-    "lgfx_device/state_runtime.cpp"
-    "lgfx_device/control.cpp"
-    "lgfx_device/primitives.cpp"
-    "lgfx_device/text.cpp"
-    "lgfx_device/images.cpp"
-    "lgfx_device/clip.cpp"
-    "lgfx_device/sprites.cpp"
+    "native/device/state.cpp"
+    "native/device/state_runtime.cpp"
+    "native/device/control.cpp"
+    "native/device/primitives.cpp"
+    "native/device/text.cpp"
+    "native/device/images.cpp"
+    "native/device/clip.cpp"
+    "native/device/sprites.cpp"
 )
 
 message(STATUS "AtomLGFX native API: direct NIF")
@@ -489,8 +489,8 @@ idf_component_register(
     SRCS
         ${LGFX_PORT_COMPONENT_SRCS}
     PRIV_INCLUDE_DIRS
-        "lgfx_port/include_internal"
-        "lgfx_device/include_internal"
+        "native/include"
+        "native/device"
         "${LGFX_SRC_ROOT}"
     REQUIRES
         efuse
@@ -597,11 +597,11 @@ endif()
 # Generate config header
 # -----------------------------------------------------------------------------
 set(LGFX_PORT_GEN_INC_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
-file(MAKE_DIRECTORY "${LGFX_PORT_GEN_INC_DIR}/lgfx_port")
+file(MAKE_DIRECTORY "${LGFX_PORT_GEN_INC_DIR}/atom_lgfx")
 
 configure_file(
     "${LGFX_PORT_CONFIG_TEMPLATE}"
-    "${LGFX_PORT_GEN_INC_DIR}/lgfx_port/lgfx_port_config.h"
+    "${LGFX_PORT_GEN_INC_DIR}/atom_lgfx/lgfx_port_config.h"
     @ONLY
 )
 
@@ -654,7 +654,7 @@ list(APPEND LGFX_SRCS "${LGFX_SRC_ROOT}/lgfx/utility/lgfx_tjpgd.c")
 #
 # Keep the LCD SPI path and the minimum I2C support required by FT5x06-family
 # touch controllers. Panel driver selection is handled in
-# lgfx_device/state_runtime.cpp. Exclude EPD and the broader touch-driver set
+# native/device/state_runtime.cpp. Exclude EPD and the broader touch-driver set
 # we are not using.
 #
 lgfx_port_filter_out(
@@ -745,7 +745,7 @@ if(LGFX_PORT_ENABLE_JP_FONTS)
             FATAL_ERROR
             "Custom Japanese font subset .cpp not found:\n  ${LGFX_PORT_JP_FONT_CPP}\n\n"
             "Set LGFX_PORT_JP_FONT_CPP to the path of your generated subset, e.g.:\n"
-            "  -DLGFX_PORT_JP_FONT_CPP=${CMAKE_CURRENT_LIST_DIR}/lgfx_device/fonts/generated/ui_font_ja_16_min.cpp\n"
+            "  -DLGFX_PORT_JP_FONT_CPP=${CMAKE_CURRENT_LIST_DIR}/native/device/fonts/generated/ui_font_ja_16_min.cpp\n"
         )
     endif()
 
@@ -753,7 +753,7 @@ if(LGFX_PORT_ENABLE_JP_FONTS)
 endif()
 
 # Build-default panel-driver selection macros come from the generated config header
-# (lgfx_port/lgfx_port_config.h).
+# (atom_lgfx/lgfx_port_config.h).
 target_compile_definitions(${COMPONENT_LIB} PRIVATE LGFX_USE_V1=1)
 
 target_compile_features(${COMPONENT_LIB} PRIVATE cxx_std_17)

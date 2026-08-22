@@ -15,7 +15,7 @@ AtomLGFX のネイティブ実行経路は AtomVM NIF のみです。
 
 主な定義元は次のとおりです。
 
-- `lgfx_port/include_internal/lgfx_port/ops.def`
+- `native/include/atom_lgfx/ops.def`
   - 安定した操作番号
   - 引数個数
   - 許可するフラグ
@@ -23,11 +23,11 @@ AtomLGFX のネイティブ実行経路は AtomVM NIF のみです。
   - 初期化状態規則
   - 機能ビット
   - バッチ対応情報
-- `lgfx_port/include_internal/lgfx_port/protocol.h`
+- `native/include/atom_lgfx/constants.h`
   - 色、機能、バイナリーバッチの定数と制限
-- `lgfx_port/include_internal/lgfx_port/nif_dispatch.inc`
+- `native/include/atom_lgfx/nif_dispatch.inc`
   - 内部 NIF 呼び出しの term 検証と操作実行
-- `lgfx_port/render_batch_dispatch.cpp`
+- `native/render_batch.cpp`
   - バイナリーバッチの解析と実行
 
 生成された操作一覧は [操作参照](protocol-reference.md) を参照してください。
@@ -80,7 +80,7 @@ Elixir 側では名前付き色や RGB 表現を受け付け、NIF へ渡す前�
 ## バイナリーバッチ
 
 多数の描画命令をまとめる場合は、Elixir 側で命令列をバイナリーへ符号化し、
-一度の NIF 呼び出しで `render_batch_dispatch` へ渡します。
+一度の NIF 呼び出しで `render_batch` へ渡します。
 
 ```text
 Elixir commands
@@ -95,7 +95,7 @@ binary
 NIF
      |
      v
-render_batch_dispatch
+render_batch
      |
      v
 lgfx_device_*

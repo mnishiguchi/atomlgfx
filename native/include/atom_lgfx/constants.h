@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// lgfx_port/include_internal/lgfx_port/protocol.h
+// native/include/atom_lgfx/constants.h
 /*
  * Shared native operation and binary-batch constants.
  */
@@ -14,8 +14,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// Build-time configuration generated from lgfx_port/cmake/lgfx_port_config.h.in.
-#include "lgfx_port/lgfx_port_config.h"
+// Build-time configuration generated from native/cmake/lgfx_port_config.h.in.
+#include "atom_lgfx/lgfx_port_config.h"
 
 // -----------------------------------------------------------------------------
 // Optional debug string constants

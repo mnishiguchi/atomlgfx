@@ -11,7 +11,7 @@ defmodule AtomLGFX.OpSchemaTest do
   alias AtomLGFX.OpSchema
   alias AtomLGFX.Protocol
 
-  @ops_def_path Path.expand("../../lgfx_port/include_internal/lgfx_port/ops.def", __DIR__)
+  @ops_def_path Path.expand("../../native/include/atom_lgfx/ops.def", __DIR__)
 
   @flag_values %{
     "LGFX_F_TEXT_HAS_BG" => 1 <<< 0,

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// lgfx_device/lgfx_device.h
+// native/device/device.h
 
 #ifndef __LGFX_DEVICE_H__
 #define __LGFX_DEVICE_H__
@@ -15,8 +15,8 @@
 
 #include "esp_err.h"
 
-// Build-time configuration (generated from lgfx_port/cmake/lgfx_port_config.h.in)
-#include "lgfx_port/lgfx_port_config.h"
+// Build-time configuration (generated from native/cmake/lgfx_port_config.h.in)
+#include "atom_lgfx/lgfx_port_config.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -13,7 +13,7 @@ defmodule SampleApp.ProtocolSmoke do
   @ok 0x07E0
   @accent 0x07FF
 
-  # Protocol FeatureBits (must stay aligned with lgfx_port/include_internal/lgfx_port/protocol.h)
+  # Protocol FeatureBits (must stay aligned with native/include/atom_lgfx/constants.h)
   @cap_sprite 1 <<< 0
   @cap_pushimage 1 <<< 1
   @cap_last_error 1 <<< 2

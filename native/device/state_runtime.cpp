@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// lgfx_device/state_runtime.cpp
+// native/device/state_runtime.cpp
 
 #include <new>
 #include <stddef.h>
@@ -13,7 +13,7 @@
 #include <LovyanGFX.hpp>
 
 // Generated build config
-#include "lgfx_port/lgfx_port_config.h"
+#include "atom_lgfx/lgfx_port_config.h"
 
 #if (LGFX_PORT_ENABLE_TOUCH == 1)
 #include <lgfx/v1/touch/Touch_FT5x06.hpp>
@@ -23,7 +23,7 @@
 #include "esp_log.h"
 #include "sdkconfig.h"
 
-#include "lgfx_device/state_runtime.hpp"
+#include "state_runtime.hpp"
 
 #ifndef LGFX_PORT_PANEL_DRIVER_ILI9341_2
 #error "LGFX_PORT_PANEL_DRIVER_ILI9341_2 must be defined by lgfx_port_config.h"

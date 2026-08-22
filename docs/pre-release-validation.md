@@ -47,7 +47,7 @@ git submodule update --init --recursive
 次を確認します。
 
 - ネイティブコンパイラー警告がない
-- `lgfx_port/nif.c` が構築される
+- `native/nif.c` が構築される
 - 旧 Port の入口や要求解析器が構築対象に存在しない
 - 画像が対象パーティションへ収まる
 - 生成設定が対象のパネル、バス、タッチ、PSRAM 設定と一致する

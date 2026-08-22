@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// lgfx_device/primitives.cpp
+// native/device/primitives.cpp
 
-#include "lgfx_device/lgfx_device.h"
-#include "lgfx_device/lgfx_device_internal.hpp"
+#include "device.h"
+#include "device_internal.hpp"
 
 #include <cmath>
 

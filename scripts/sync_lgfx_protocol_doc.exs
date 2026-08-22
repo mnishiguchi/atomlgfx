@@ -9,10 +9,10 @@ defmodule Main do
   C の情報ファイルから LGFX プロトコル参照表を生成し、文書へ反映します。
   """
 
-  @ops_def_path "lgfx_port/include_internal/lgfx_port/ops.def"
+  @ops_def_path "native/include/atom_lgfx/ops.def"
 
   # 機能ビットとエラー語彙は、このヘッダーで定義する。
-  @native_contract_h_path "lgfx_port/include_internal/lgfx_port/protocol.h"
+  @native_contract_h_path "native/include/atom_lgfx/constants.h"
 
   @protocol_reference_doc_path "docs/protocol-reference.md"
   @generated_ex_path "lib/atom_lgfx/generated.ex"

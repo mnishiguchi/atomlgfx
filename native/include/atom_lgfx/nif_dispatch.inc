@@ -12,9 +12,9 @@
 
 #include <math.h>
 
-#include "lgfx_port/open_config.h"
-#include "lgfx_port/ops.h"
-#include "lgfx_port/protocol.h"
+#include "atom_lgfx/open_config.h"
+#include "atom_lgfx/ops.h"
+#include "atom_lgfx/constants.h"
 
 #define LGFX_NIF_MAX_ARGS 9
 
@@ -54,7 +54,7 @@ typedef struct
 static const lgfx_nif_op_meta_t lgfx_nif_op_meta[LGFX_OP_COUNT] = {
 #define X(name, min_args, max_args, flags, target, state, cap, batchable, owned, sync, boundary) \
     [LGFX_OP_##name] = { (min_args), (max_args), (flags), (target), (state) },
-#include "lgfx_port/ops.def"
+#include "atom_lgfx/ops.def"
 #undef X
 };
 

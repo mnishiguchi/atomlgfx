@@ -11,7 +11,7 @@
 #include "globalcontext.h"
 #include "term.h"
 
-#include "lgfx_device/lgfx_device.h"
+#include "device.h"
 
 #ifdef __cplusplus
 extern "C" {

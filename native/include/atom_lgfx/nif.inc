@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// lgfx_port/include_internal/lgfx_port/nif.inc
+// native/include/atom_lgfx/nif.inc
 //
 // AtomVM NIF bridge for the direct LGFX Elixir API.
 //
@@ -31,8 +31,8 @@
 #include "portnifloader.h"
 #include "term.h"
 
-#include "lgfx_device/lgfx_device.h"
-#include "lgfx_port/render_batch_dispatch.h"
+#include "device.h"
+#include "atom_lgfx/render_batch.h"
 
 
 static bool lgfx_term_to_u32(term value, uint32_t *out)
@@ -990,7 +990,7 @@ static term lgfx_nif_batch_2(Context *ctx, int argc, term argv[])
     return lgfx_nif_esp_result(ctx, err);
 }
 
-#include "lgfx_port/nif_dispatch.inc"
+#include "atom_lgfx/nif_dispatch.inc"
 
 #define LGFX_NIF_ENTRY(name, function_name)           \
     static const struct Nif name = {                  \

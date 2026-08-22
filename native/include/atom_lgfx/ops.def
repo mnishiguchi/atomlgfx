@@ -1,4 +1,4 @@
-// lgfx_port/include_internal/lgfx_port/ops.def
+// native/include/atom_lgfx/ops.def
 //
 // Canonical operation list and native execution metadata.
 //

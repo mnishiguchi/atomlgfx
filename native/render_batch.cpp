@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// lgfx_port/render_batch_dispatch.cpp
+// native/render_batch.cpp
 
 #include <limits.h>
 #include <math.h>
@@ -16,15 +16,15 @@
 #include "esp_err.h"
 #include "esp_log.h"
 
-#include "lgfx_device/lgfx_device_internal.hpp"
-#include "lgfx_port/lgfx_port_config.h"
+#include "device_internal.hpp"
+#include "atom_lgfx/lgfx_port_config.h"
 
 #if LGFX_PORT_ENABLE_RENDER_BATCH_TRACE
 #include "esp_timer.h"
 #endif
-#include "lgfx_port/ops.h"
-#include "lgfx_port/protocol.h"
-#include "lgfx_port/render_batch_dispatch.h"
+#include "atom_lgfx/ops.h"
+#include "atom_lgfx/constants.h"
+#include "atom_lgfx/render_batch.h"
 
 #ifndef LGFX_PORT_RENDER_BATCH_PREVALIDATE
 #define LGFX_PORT_RENDER_BATCH_PREVALIDATE 0

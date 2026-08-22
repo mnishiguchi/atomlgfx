@@ -33,7 +33,7 @@ AtomVM NIF
   |
   +-- lgfx_device_*
   |
-  +-- render_batch_dispatch
+  +-- render_batch
           |
           v
        LovyanGFX
@@ -43,15 +43,15 @@ AtomVM NIF
 
 - `CMakeLists.txt`
   - ESP-IDF 部品の構築設定
-- `lgfx_port/nif.c`
+- `native/nif.c`
   - AtomVM NIF 登録
-- `lgfx_port/include_internal/lgfx_port/nif.inc`
+- `native/include/atom_lgfx/nif.inc`
   - 直接 `LGFX` NIF
-- `lgfx_port/include_internal/lgfx_port/nif_dispatch.inc`
+- `native/include/atom_lgfx/nif_dispatch.inc`
   - `AtomLGFX` の共通 NIF 呼び出し
-- `lgfx_port/render_batch_dispatch.cpp`
+- `native/render_batch.cpp`
   - バイナリーバッチ実行
-- `lgfx_device/`
+- `native/device/`
   - LovyanGFX に面する装置適合層
 - `third_party/LovyanGFX/`
   - 版を固定した LovyanGFX
@@ -99,7 +99,7 @@ LGFX.init(
 
 ## 操作契約
 
-`lgfx_port/include_internal/lgfx_port/ops.def` は、NIF の共通呼び出しとバイナリーバッチで共有する
+`native/include/atom_lgfx/ops.def` は、NIF の共通呼び出しとバイナリーバッチで共有する
 安定した操作番号と検証情報を定義します。
 
 契約の説明は [ネイティブ操作契約](protocol.md)、生成された一覧は
@@ -115,7 +115,7 @@ elixir scripts/sync_lgfx_protocol_doc.exs --check
 ## 関連文書
 
 - [構成](architecture.md)
-- [NIF 層](../lgfx_port/README.md)
-- [装置適合層](../lgfx_device/README.md)
+- [ネイティブ実装](../native/README.md)
+- [装置適合層](../native/device/README.md)
 - [ネイティブ操作契約](protocol.md)
 - [操作参照](protocol-reference.md)

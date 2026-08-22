@@ -27,7 +27,7 @@ Elixir
         |
         +-- 直接操作 ------> lgfx_device_*
         |
-        +-- バイナリーバッチ -> render_batch_dispatch
+        +-- バイナリーバッチ -> render_batch
                                   |
                                   v
                               lgfx_device_*
@@ -79,7 +79,7 @@ Elixir
 :ok = LGFX.submit_batch(batch)
 ```
 
-命令列は Elixir 側で一度符号化し、NIF 側の `render_batch_dispatch` が同じ `lgfx_device_*` 装置境界へ振り分けます。
+命令列は Elixir 側で一度符号化し、NIF 側の `render_batch` が同じ `lgfx_device_*` 装置境界へ振り分けます。
 描画処理そのものを別実装にしません。
 
 ## 操作情報
@@ -87,7 +87,7 @@ Elixir
 操作番号と検証情報の定義元は次です。
 
 ```text
-lgfx_port/include_internal/lgfx_port/ops.def
+native/include/atom_lgfx/ops.def
 ```
 
 ここには次だけを保持します。
@@ -106,7 +106,7 @@ lgfx_port/include_internal/lgfx_port/ops.def
 
 ### NIF 境界
 
-`lgfx_port/nif.c` と内部の NIF 実装は次を担当します。
+`native/nif.c` と内部の NIF 実装は次を担当します。
 
 - AtomVM 項の変換
 - 引数、対象、フラグ、初期化状態の検証
@@ -117,7 +117,7 @@ LovyanGFX の描画ロジックは持ちません。
 
 ### `lgfx_device`
 
-`lgfx_device/` は LovyanGFX に面する C ABI / C++ 適合層です。
+`native/device/` は LovyanGFX に面する C ABI / C++ 適合層です。
 
 - LCD とスプライトの対象解決
 - 機器初期化と実行時設定
@@ -151,8 +151,8 @@ AtomVM 項を解析しません。
 構築時の既定値は CMake 保存変数から生成設定ヘッダーへ反映します。
 
 ```text
-lgfx_port/cmake/lgfx_port_config.h.in
-  -> <build>/generated/lgfx_port/lgfx_port_config.h
+native/cmake/lgfx_port_config.h.in
+  -> <build>/generated/atom_lgfx/lgfx_port_config.h
 ```
 
 実行時に変更可能な値は `LGFX.init/1` または `AtomLGFX.open/1` + `AtomLGFX.init/1` で上書きできます。

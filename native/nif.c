@@ -7,4 +7,4 @@
 // AtomVM NIF entrypoint. The NIF, shared device adapter, and render-batch
 // executor form the only native runtime path.
 
-#include "lgfx_port/nif.inc"
+#include "atom_lgfx/nif.inc"

@@ -4,9 +4,9 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# lgfx_device
+# LovyanGFX 装置層
 
-`lgfx_device/` は、LovyanGFX に面するネイティブ適合層です。
+`native/device/` は、LovyanGFX に面するネイティブ適合層です。
 
 担当範囲:
 
@@ -17,13 +17,13 @@ SPDX-License-Identifier: Apache-2.0
 
 AtomVM の項は解析せず、NIF 応答も組み立てません。
 
-ネイティブ操作契約は [操作契約](../docs/protocol.md)、リポジトリ全体の構成は [構成](../docs/architecture.md) を参照してください。
+ネイティブ操作契約は [操作契約](../../docs/protocol.md)、リポジトリ全体の構成は [構成](../../docs/architecture.md) を参照してください。
 
 ## ファイル構成
 
-- `lgfx_device.h`
+- `device.h`
   - NIF 層が使う装置向け公開適合面
-- `lgfx_device_internal.hpp`
+- `device_internal.hpp`
   - 内部宣言と共有する適合処理
 - `state.cpp`
   - 装置状態、初期化、パネルとタッチの設定、対象解決、短冊表示状態、遅延確保
@@ -85,6 +85,6 @@ LovyanGFX 全体を写し取ることが目的ではありません。このリ�
 
 ## この層を変更する場合
 
-- NIF の項変換と操作検証は `lgfx_port/` と `../docs/protocol.md` に置く
+- NIF の項変換と操作検証は `native/` と `../../docs/protocol.md` に置く
 - この層は対象解決、所有権、装置意味へ集中させる
 - 外部から見える契約が変わる場合だけ、操作契約文書を更新する
