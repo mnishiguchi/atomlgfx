@@ -68,7 +68,7 @@ defmodule AtomLGFX.MixProject do
         "docs/adr/0015-v3-low-memory-protocol.md",
         "docs/adr/0016-render-first-low-memory-api.md",
         "docs/adr/0017-direct-atomvm-nif-api.md",
-        "docs/adr/0019-drop-legacy-port.md",
+        "docs/adr/0018-nif-only-native-architecture.md",
         "docs/boards/m5stack.md",
         "docs/elixir-package.md",
         "docs/esp-idf-component.md",

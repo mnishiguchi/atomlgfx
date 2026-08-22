@@ -163,4 +163,4 @@ native/cmake/lgfx_port_config.h.in
 - [Elixir パッケージ](elixir-package.md)
 - [内部操作契約](protocol.md)
 - [内部操作参照](protocol-reference.md)
-- [ADR 0019](adr/0019-drop-legacy-port.md)
+- [ADR 0018](adr/0018-nif-only-native-architecture.md)

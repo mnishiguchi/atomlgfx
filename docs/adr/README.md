@@ -12,8 +12,8 @@ SPDX-License-Identifier: Apache-2.0
 
 現在の実装を理解する場合は、次の有効な ADR から読み始めます。
 
-- [ADR 0019: AtomVM Port を削除して NIF へ統一する](0019-drop-legacy-port.md)
-  - ネイティブ実行経路を NIF のみに統一し、旧 Port transport を削除する判断
+- [ADR 0018: AtomVM Port を削除し、ネイティブ実行を NIF に統一する](0018-nif-only-native-architecture.md)
+  - 旧 Port を削除し、NIF-only の実行経路と `native/` 構成を定義
 - [ADR 0017: AtomVM NIF による LovyanGFX 直接 API](0017-direct-atomvm-nif-api.md)
   - LovyanGFX に近い `LGFX` API、薄い NIF 層、装置層とバイナリーバッチの再利用を定義
 - [ADR 0016: 描画を中心とする低メモリー API](0016-render-first-low-memory-api.md)
@@ -23,7 +23,7 @@ SPDX-License-Identifier: Apache-2.0
 - [ADR 0003: 制御器を中心としたパネル・タッチ対応](0003-controller-first-panel-and-touch-support.md)
   - ハードウェア構成の方向性
 
-ADR 0018 と、それ以前の AtomVM Port／v2 プロトコルに関する ADR は履歴として維持します。
+それ以前の AtomVM Port／v2 プロトコルに関する ADR は履歴として維持します。
 現在の実行経路として読まないでください。
 
 ### 基本規則
@@ -70,7 +70,7 @@ docs/worklog/YYYYMMDD-short-topic-work-log.md
 
 ADR がネイティブ操作契約から見える動作を変更する場合は、次の定義元と文書も同時に更新します。
 
-- `lgfx_port/include_internal/lgfx_port/ops.def`
+- `native/include/atom_lgfx/ops.def`
 - 必要に応じた処理関数または機器コード
 - `docs/protocol.md`
 - 同期生成するプロトコル表
