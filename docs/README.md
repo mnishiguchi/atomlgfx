@@ -29,12 +29,10 @@ ADR と作業記録には過去の構成や名称が残ることがあります�
 - [実機の動作確認と性能検証](hardware-smoke-performance.md)
 - [公開前検証の確認表](pre-release-validation.md)
 
-## 移行
+## 履歴資料
 
-- [v3 API への移行](migration-to-v3.md)
-  - 旧 v2 API から現在の描画優先 API への移行
 - [v1 から v2 への移行](migration-v1-to-v2.md)
-  - 置き換え済み API の履歴資料
+  - 置き換え済み API の移行記録
 
 ## 基板
 

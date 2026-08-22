@@ -72,7 +72,6 @@ defmodule AtomLGFX.MixProject do
         "docs/boards/m5stack.md",
         "docs/elixir-package.md",
         "docs/esp-idf-component.md",
-        "docs/migration-to-v3.md",
         "docs/protocol.md",
         "docs/protocol-reference.md",
         "docs/worklog/20260821-nif-only-hardware-validation-report.md",
