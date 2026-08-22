@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 `atomlgfx` の利用者に影響する主な変更を記録します。
 
-本計画は公開前です。各項目は公開済みパッケージ版ではなく、開発上の節目を表します。互換性を管理する版付き契約はワイヤープロトコル v3 です。
+本計画は公開前です。各項目は公開済みパッケージ版ではなく、開発上の節目を表します。Elixir パッケージとネイティブ部品は同じ Git リビジョンから取得してください。
 
 ## 未公開
 
@@ -16,7 +16,7 @@ SPDX-License-Identifier: Apache-2.0
 
 - LovyanGFX の一般的な関数を Elixir から直接呼び出す `LGFX` API と AtomVM NIF 経路を追加
 - 既存の描画命令符号化とネイティブ実行系を再利用する `LGFX.batch/2` を追加
-- 通常の LovyanGFX 操作用に、低メモリーの v3 呼び出しプロトコルを追加
+- 通常の LovyanGFX 操作用に、低メモリーの NIF 操作経路を追加
 - `ops.def` から生成する操作情報、プロトコル参照表、Elixir 検証情報を追加
 - `AtomLGFX.BinaryBatch` と `AtomLGFX.submit_binary_batch/2` による明示的なバイナリーバッチを追加
 - `AtomLGFX.render/3`、`AtomLGFX.render_lcd/3`、`AtomLGFX.render_to/4`、`AtomLGFX.render_sprite/4` の描画優先関数を追加
@@ -57,13 +57,13 @@ SPDX-License-Identifier: Apache-2.0
 
 ### 互換性
 
-- ワイヤープロトコル v3 は、v1 または v2 のネイティブドライバーと互換ではない
-- ネイティブドライバーと Elixir ラッパーは同じ Git リビジョンから取得する
-- 公開される低水準 Elixir 操作名は、正規の `snake_case` アトムを使う
-- LovyanGFX 風の `camelCase` アトムは、v3 の Elixir 向け API に含めない
+- NIF-only の現在の実装は、旧 AtomVM Port を直接利用するコードとは互換ではない
+- ネイティブ部品と Elixir パッケージは同じ Git リビジョンから取得する
+- 公開する低水準 Elixir 操作名には、正規の `snake_case` アトムを使う
+- LovyanGFX 風の `camelCase` 操作アトムは Elixir API に含めない
 
 ## v1 基準
 
 v1 は元の実装であり、現在は `v1` ブランチにあります。以前は `main` のコミット `67e487f` 前後に存在しました。
 
-例示アプリケーションや下流コードを v3 API へ移す場合は、現在の移行文書を参照してください。旧 v1 から v2 への移行文書は、経緯を残すため保持しています。
+現在の実装については `README.md` と `docs/architecture.md` を参照してください。旧 v1 から v2 への移行文書は、経緯を残すため履歴資料として保持しています。
