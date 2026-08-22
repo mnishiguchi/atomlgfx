@@ -148,7 +148,8 @@ defmodule SampleApp.Smoke do
          :ok <- AtomLGFX.draw_fast_hline(handle, 0, clip_y + div(clip_h, 2), w, 0xFE88, 0),
          :ok <- AtomLGFX.draw_fast_vline(handle, clip_x + div(clip_w, 2), 0, h, 0xFE88, 0),
          :ok <- AtomLGFX.clear_clip_rect(handle, 0),
-         :ok <- maybe_sprite_clip(handle, w, h) do
+         :ok <- maybe_sprite_clip(handle, w, h),
+         :ok <- safe_delete_sprite(handle, @sprite_target) do
       IO.puts("clip_rects ok")
       :ok
     end
