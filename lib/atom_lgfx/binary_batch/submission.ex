@@ -31,9 +31,9 @@ defmodule AtomLGFX.BinaryBatch.Submission do
 
   defp submit_binary(handle, command_binary) do
     case AtomLGFX.submit_binary_batch(handle, command_binary) do
-      {:ok, :ok} -> :ok
-      {:ok, other} -> {:error, {:unexpected_reply, other}}
+      :ok -> :ok
       {:error, reason} -> {:error, reason}
+      other -> {:error, {:unexpected_reply, other}}
     end
   end
 end

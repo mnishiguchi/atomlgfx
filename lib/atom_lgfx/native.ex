@@ -63,5 +63,6 @@ defmodule AtomLGFX.Native do
 
   def push_image(_x, _y, _width, _height, _pixels), do: @nif_not_loaded
 
-  def batch(_target, _command_binary), do: @nif_not_loaded
+  def batch(_target, _command_binary),
+    do: :erlang.apply(__MODULE__, :nif_not_loaded, [])
 end

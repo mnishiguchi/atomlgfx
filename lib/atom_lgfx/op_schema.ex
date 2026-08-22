@@ -52,7 +52,13 @@ defmodule AtomLGFX.OpSchema do
   end
 
   @spec opcode(atom()) :: {:ok, non_neg_integer()} | {:error, {:unknown_lgfx_op, atom()}}
-  def opcode(name) when is_atom(name), do: fetch_meta_value(name, :opcode)
+
+  for {name, meta} <- @ops do
+    opcode = Keyword.fetch!(meta, :opcode)
+    def opcode(unquote(name)), do: {:ok, unquote(opcode)}
+  end
+
+  def opcode(name) when is_atom(name), do: {:error, {:unknown_lgfx_op, name}}
 
   @spec opcode!(atom()) :: non_neg_integer()
   def opcode!(name) do

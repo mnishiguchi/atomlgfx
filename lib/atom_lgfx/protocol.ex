@@ -95,21 +95,36 @@ defmodule AtomLGFX.Protocol do
     end
   end
 
-  def call_ok(handle, op, target, flags, args) do
-    case call(handle, op, target, flags, args) do
-      {:ok, _result} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  def call(handle, op, target, flags, args)
+  def call_ok(_handle, op, target, flags, args)
       when is_atom(op) and
              is_integer(target) and
              is_integer(flags) and flags >= 0 and
              is_list(args) do
-    with :ok <- OpSchema.validate_wire_call(op, args, flags),
-         {:ok, op_name} <- normalize_op_name(op) do
-      call_named(handle, op_name, target, flags, args)
+    case OpSchema.opcode(op) do
+      {:ok, opcode} ->
+        case Native.call(opcode, target, flags, args) do
+          {:ok, _result} -> :ok
+          {:error, reason} -> {:error, reason}
+          other -> {:error, {:unexpected_reply, other}}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def call(_handle, op, target, flags, args)
+      when is_atom(op) and
+             is_integer(target) and
+             is_integer(flags) and flags >= 0 and
+             is_list(args) do
+    case OpSchema.opcode(op) do
+      {:ok, opcode} ->
+        Native.call(opcode, target, flags, args)
+        |> normalize_native_reply()
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -144,12 +159,20 @@ defmodule AtomLGFX.Protocol do
   def submit_binary_batch(handle, target, command_binary)
       when target_any(target) and is_binary(command_binary) do
     with :ok <- validate_command_binary_size(handle, command_binary, :submit_binary_batch) do
-      call(handle, :submit_binary_batch, target, 0, [command_binary])
+      submit_native_batch(target, command_binary)
     end
   end
 
   def submit_binary_batch(_handle, _target, command_binary) do
     {:error, {:bad_binary_batch, command_binary}}
+  end
+
+  defp submit_native_batch(target, command_binary) do
+    case Native.batch(target, command_binary) do
+      :ok -> :ok
+      {:error, reason} -> {:error, reason}
+      other -> {:error, {:unexpected_reply, other}}
+    end
   end
 
   defp normalize_op_name(op) when is_atom(op) do
