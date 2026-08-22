@@ -187,7 +187,7 @@ static term lgfx_nif_dispatch_bad_target(Context *ctx, uint32_t opcode, uint8_t 
 
 static bool lgfx_nif_copy_list(term list, term out[LGFX_NIF_MAX_ARGS], int *out_count)
 {
-    bool proper = false;
+    int proper = 0;
     int count = term_list_length(list, &proper);
     if (!proper || count < 0 || count > LGFX_NIF_MAX_ARGS || !out_count) {
         return false;

@@ -472,7 +472,6 @@ set(LGFX_PORT_COMPONENT_SRCS
     "lgfx_port/nif.c"
     "lgfx_port/open_config.c"
     "lgfx_port/render_batch_dispatch.cpp"
-
     # Device adapter
     "lgfx_device/state.cpp"
     "lgfx_device/state_runtime.cpp"
@@ -489,8 +488,6 @@ message(STATUS "AtomLGFX native API: direct NIF")
 idf_component_register(
     SRCS
         ${LGFX_PORT_COMPONENT_SRCS}
-    INCLUDE_DIRS
-        "include"
     PRIV_INCLUDE_DIRS
         "lgfx_port/include_internal"
         "lgfx_device/include_internal"
