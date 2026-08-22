@@ -14,6 +14,8 @@ SPDX-License-Identifier: Apache-2.0
 
 ### 追加
 
+- LovyanGFX の一般的な関数を Elixir から直接呼び出す `LGFX` API と AtomVM NIF 経路を追加
+- 既存の描画命令符号化とネイティブ実行系を再利用する `LGFX.batch/2` を追加
 - 通常の LovyanGFX 操作用に、低メモリーの v3 呼び出しプロトコルを追加
 - `ops.def` から生成する操作情報、プロトコル参照表、Elixir 検証情報を追加
 - `AtomLGFX.BinaryBatch` と `AtomLGFX.submit_binary_batch/2` による明示的なバイナリーバッチを追加

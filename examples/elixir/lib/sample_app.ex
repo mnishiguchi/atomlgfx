@@ -9,6 +9,7 @@ defmodule SampleApp do
   alias SampleApp.Face
   alias SampleApp.JapaneseText
   alias SampleApp.MovingIcons
+  alias SampleApp.NifSmoke
   alias SampleApp.PerfSmoke
   alias SampleApp.ProtocolSmoke
   alias SampleApp.Smoke
@@ -22,6 +23,7 @@ defmodule SampleApp do
     :boot,
     :basic_shapes,
     :text,
+    :nif,
     :perf,
     :face,
     :japanese_text,
@@ -66,6 +68,10 @@ defmodule SampleApp do
 
   def start(mode) when is_atom(mode) do
     start(mode, [])
+  end
+
+  def start(:nif, []) do
+    NifSmoke.run()
   end
 
   def start(mode, open_options) when is_atom(mode) and is_list(open_options) do

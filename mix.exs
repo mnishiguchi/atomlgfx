@@ -67,6 +67,7 @@ defmodule AtomLGFX.MixProject do
         "docs/architecture.md",
         "docs/adr/0015-v3-low-memory-protocol.md",
         "docs/adr/0016-render-first-low-memory-api.md",
+        "docs/adr/0017-direct-atomvm-nif-api.md",
         "docs/boards/m5stack.md",
         "docs/elixir-package.md",
         "docs/esp-idf-component.md",
