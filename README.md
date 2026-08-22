@@ -8,23 +8,38 @@ SPDX-License-Identifier: Apache-2.0
 
 `atomlgfx` は、ESP32 系基板で動く AtomVM から LovyanGFX を利用するためのライブラリです。
 
-単純で低負荷な直接 NIF API `LGFX` と、実行時設定や高度な機能を持つ互換用ポート API
-`AtomLGFX` を提供します。どちらも同じ LovyanGFX 装置適合層を利用します。
+用途に応じて、2つの Elixir API を提供します。
+
+- `LGFX`
+  - LovyanGFX に近い、日常的な描画向け API
+- `AtomLGFX`
+  - スプライト、パレット、タッチ、JPEG、切り抜き、実行時設定などを含む広い API
+
+どちらも AtomVM NIF を通じて同じ LovyanGFX 装置層を利用します。
+旧 AtomVM Port、メールボックス通信、要求／応答組の解析経路はありません。
 
 ## できること
 
 - 文字や基本図形の描画
-- JPEG や生画像の描画
-- スプライトの作成と転送
-- タッチ入力の取得
-- 複数の描画命令をまとめた効率的な送信
+- JPEG や RGB565 画像の描画
+- スプライトとパレットの利用
+- タッチ入力と較正
+- 実行時のパネル・バス設定
+- 複数の描画命令をまとめたバイナリーバッチ
+- 高頻度処理向けの事前符号化バッチ
 
-## 基本的な使い方
+## `LGFX`
 
-構築時のパネル設定で直接描画する場合は `LGFX` を使います。
+一般的な LCD 描画では `LGFX` を推奨します。
 
 ```elixir
-:ok = LGFX.init()
+:ok =
+  LGFX.init(
+    panel_driver: :ili9488,
+    width: 320,
+    height: 480
+  )
+
 :ok = LGFX.fill_screen(:black)
 :ok = LGFX.draw_string("Hello AtomLGFX", 16, 16)
 
@@ -35,20 +50,37 @@ SPDX-License-Identifier: Apache-2.0
   ])
 ```
 
-NIF はメールボックスと組プロトコルを経由せず、LovyanGFX 装置適合層を直接呼び出します。
-同じ命令列を繰り返す場合は `LGFX.encode_batch/2` で一度だけ符号化し、
-`LGFX.submit_batch/1` で再利用できます。
+構築時の既定設定だけを使う場合は `LGFX.init/0` も利用できます。
 
-実行時の詳細な機器設定、タッチ、スプライト、パレット、JPEG が必要な場合は、互換用の
-`AtomLGFX` ポート API を使います。
+同じ命令列を高頻度で繰り返す場合は、符号化を描画処理の外へ出します。
 
 ```elixir
-{:ok, port} = AtomLGFX.open(panel_driver: :ili9488, width: 320, height: 480)
+{:ok, batch} =
+  LGFX.encode_batch([
+    {:fill_rect, 10, 10, 100, 40, :red},
+    {:draw_string, "Hello", 20, 20}
+  ])
 
-:ok = AtomLGFX.init(port)
+:ok = LGFX.submit_batch(batch)
+:ok = LGFX.submit_batch(batch)
+```
+
+## `AtomLGFX`
+
+スプライト、パレット、タッチ、JPEG などの高度な機能には `AtomLGFX` を使います。
+
+```elixir
+{:ok, handle} =
+  AtomLGFX.open(
+    panel_driver: :ili9488,
+    width: 320,
+    height: 480
+  )
+
+:ok = AtomLGFX.init(handle)
 
 :ok =
-  AtomLGFX.render_lcd(port, [
+  AtomLGFX.render_lcd(handle, [
     {:fill_screen, :black},
     {:set_text_color, :white},
     {:draw_string, "Hello AtomLGFX", 16, 16},
@@ -57,45 +89,74 @@ NIF はメールボックスと組プロトコルを経由せず、LovyanGFX 装
   ])
 ```
 
-複数の描画命令をまとめることで、AtomVM とネイティブドライバー間の呼び出し回数を抑えられます。
+`AtomLGFX.open/1` は BEAM Port を開きません。
+実行時設定と Elixir 側の状態を識別するハンドルを作成します。
+
+ネイティブ側の LCD 装置は単一実体です。
 
 ## 全体像
 
 ```text
-Elixir アプリケーション
-        |
-        v
-  +-------------+             +------------------+
-  |    LGFX     |             |     AtomLGFX     |
-  | 直接 NIF API |             | 互換用ポート API  |
-  +------+------+             +---------+--------+
-         |                              |
-         +---------------+--------------+
-                         |
-                         v
-                  lgfx_device 適合層
-                         |
-                         v
-                     LovyanGFX
-        |
-        v
-  液晶画面・タッチ装置
+Elixir application
+       |
+       +-- LGFX
+       |
+       +-- AtomLGFX
+              |
+              v
+       AtomLGFX.Native
+              |
+              v
+          AtomVM NIF
+              |
+              +-- direct NIF calls
+              |
+              +-- binary batch
+                       |
+                       v
+                  render_batch
+                       |
+                       v
+                 native/device/
+                       |
+                       v
+                   LovyanGFX
+                       |
+                       v
+              LCD / touch device
 ```
 
-Elixir 側では扱いやすい API を提供し、ネイティブ側では AtomVM と LovyanGFX の橋渡しを行います。
+直接 NIF 呼び出しとバイナリーバッチで描画処理を二重実装せず、同じ LovyanGFX 装置層を利用します。
 
 ## 導入
 
-`atomlgfx` を利用するには、AtomLGFX の ESP-IDF 部品を組み込んだ AtomVM ファームウェアと、
-Elixir 側の `atomlgfx` 依存が必要です。両者は同じ Git コミットから取得してください。
-NIF だけを使うファームウェアでは、互換用ポートを構築から除外できます。
+`atomlgfx` を利用するには、次の2つを同じ Git コミットから取得します。
 
-- [Elixir パッケージの導入と使い方](docs/elixir-package.md)
-- [AtomVM ファームウェアへの組み込み](docs/esp-idf-component.md)
-- [M5Stack 向けの情報](docs/boards/m5stack.md)
+- AtomLGFX ESP-IDF 部品を組み込んだ AtomVM ファームウェア
+- Elixir 側の `atomlgfx` 依存
 
-## 詳しい文書
+Git 依存として利用する場合:
 
+```elixir
+defp deps do
+  [
+    {:atomlgfx,
+     git: "https://github.com/mnishiguchi/atomlgfx.git",
+     ref: "FULL_GIT_COMMIT_SHA"}
+  ]
+end
+```
+
+AtomVM ファームウェアへの組み込み方法は
+[ESP-IDF 部品](docs/esp-idf-component.md) を参照してください。
+
+## 文書
+
+- [文書案内](docs/README.md)
 - [構成](docs/architecture.md)
-- [プロトコル](docs/protocol.md)
+- [Elixir パッケージ](docs/elixir-package.md)
+- [ESP-IDF 部品](docs/esp-idf-component.md)
+- [ネイティブ操作契約](docs/protocol.md)
+- [M5Stack 基板](docs/boards/m5stack.md)
+- [構成設計判断記録](docs/adr/README.md)
 - [変更履歴](CHANGELOG.md)
