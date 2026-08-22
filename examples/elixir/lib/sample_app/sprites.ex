@@ -13,6 +13,7 @@ defmodule SampleApp.Sprites do
     try do
       with {:ok, true} <- AtomLGFX.supports_sprite?(handle),
            :ok <- draw_rgb565_sprite(handle, width, height),
+           :ok <- safe_delete_sprite(handle, @rgb565_sprite_target),
            :ok <- maybe_draw_palette_sprite(handle, width, height) do
         IO.puts("sprites ok")
         :ok
