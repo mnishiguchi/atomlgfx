@@ -4,7 +4,7 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-## 構成設計判断記録
+# 構成設計判断記録
 
 構成上の判断は、Markdown の ADR としてリポジトリへ残します。
 
@@ -13,17 +13,11 @@ SPDX-License-Identifier: Apache-2.0
 現在の実装を理解する場合は、次の有効な ADR から読み始めます。
 
 - [ADR 0018: AtomVM Port を削除し、ネイティブ実行を NIF に統一する](0018-nif-only-native-architecture.md)
-  - 旧 Port を削除し、NIF-only の実行経路と `native/` 構成を定義
-- [ADR 0017: AtomVM NIF による LovyanGFX 直接 API](0017-direct-atomvm-nif-api.md)
-  - LovyanGFX に近い `LGFX` API、薄い NIF 層、装置層とバイナリーバッチの再利用を定義
-- [ADR 0016: 描画を中心とする低メモリー API](0016-render-first-low-memory-api.md)
-  - 描画命令をまとめる低メモリーなバイナリーバッチ API を定義
-- [ADR 0015: AtomLGFX v3 を低メモリーの LovyanGFX 形式プロトコルとして設計する](0015-v3-low-memory-protocol.md)
-  - 明示的なスプライト所有と保持型描画の削除を定義
+  - NIF-only の実行経路、`LGFX` / `AtomLGFX`、バイナリーバッチ、`native/` 構成を定義
 - [ADR 0003: 制御器を中心としたパネル・タッチ対応](0003-controller-first-panel-and-touch-support.md)
   - ハードウェア構成の方向性
 
-それ以前の AtomVM Port／v2 プロトコルに関する ADR は履歴として維持します。
+ADR 0015〜0017 と、それ以前の AtomVM Port／v2 プロトコルに関する ADR は履歴として維持します。
 現在の実行経路として読まないでください。
 
 ### 基本規則
@@ -56,7 +50,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ### 性能測定と作業記録の目安
 
-ADR には長期的に有効な判断を記します。性能測定記録、一時的な測定値、作業確認項目は通常の `docs/` 配下の作業記録へ置き、関連する ADR から参照します。
+ADR には長期的に有効な判断を記します。性能測定記録、一時的な測定値、作業確認項目は `docs/worklog/` 配下へ置き、関連する ADR から参照します。
 
 作業記録の推奨名:
 

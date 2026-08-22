@@ -94,7 +94,7 @@ Elixir 側は次を担当します。
 - 色や文字基準位置などの扱いやすい表現
 - バイナリーバッチの符号化
 
-NIF は AtomVM term の検証と `lgfx_device` 呼び出しを担当し、描画そのものは LovyanGFX に任せます。
+NIF は AtomVM term の検証と `native/device/` 装置層の呼び出しを担当し、描画そのものは LovyanGFX に任せます。
 
 ## 関連文書
 

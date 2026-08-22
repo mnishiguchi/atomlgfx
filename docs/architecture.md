@@ -115,7 +115,7 @@ native/include/atom_lgfx/ops.def
 
 LovyanGFX の描画ロジックは持ちません。
 
-### `lgfx_device`
+### LovyanGFX 装置層
 
 `native/device/` は LovyanGFX に面する C ABI / C++ 適合層です。
 

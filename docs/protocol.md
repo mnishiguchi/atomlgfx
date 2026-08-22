@@ -52,7 +52,7 @@ NIF 境界では次を検証します。
 検証後は対応する `lgfx_device_*` 関数を直接呼び出します。
 
 `LGFX` の頻出操作は、さらに薄い専用 NIF を利用できます。どちらの経路も同じ
-`lgfx_device` 層へ到達します。
+`native/device/` の LovyanGFX 装置層へ到達します。
 
 ## 対象
 

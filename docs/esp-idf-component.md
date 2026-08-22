@@ -12,7 +12,7 @@ Elixir 側とネイティブ側は同じ Git コミットから取得してく�
 ## 提供するもの
 
 - `LGFX` と `AtomLGFX` が利用する AtomVM NIF
-- LovyanGFX を包む `lgfx_device` 装置適合層
+- LovyanGFX を包む `native/device/` 装置適合層
 - 基本図形、文字、画像、スプライト、パレット、タッチ操作
 - 実行時のパネル・バス設定
 - 高頻度描画向けのバイナリーバッチ実行
@@ -56,7 +56,7 @@ AtomVM NIF
 - `third_party/LovyanGFX/`
   - 版を固定した LovyanGFX
 
-`lgfx_port` は歴史的なディレクトリー名です。現在の実行経路は NIF のみです。
+一部の `LGFX_PORT_*` 構築設定名は互換性のため残していますが、現在の実行経路は NIF のみです。
 
 ## 構築準備
 

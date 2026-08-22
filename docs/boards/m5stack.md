@@ -72,7 +72,7 @@ LCD とタッチ制御器は共通ですが、基板単位の起動処理は同�
 実行時の初期回転:
 
 ```elixir
-AtomLGFX.set_rotation(port, 1)
+AtomLGFX.set_rotation(handle, 1)
 ```
 
 ## CoreS3 の基準設定
@@ -109,7 +109,7 @@ AtomLGFX.set_rotation(port, 1)
 実行時の初期回転:
 
 ```elixir
-AtomLGFX.set_rotation(port, 1)
+AtomLGFX.set_rotation(handle, 1)
 ```
 
 ## 注意事項

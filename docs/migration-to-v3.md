@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # v3 API への移行
 
-現在の公開前実装は、ワイヤープロトコル v3 を実装するため v3 と呼びます。独立したパッケージ版や API 版はありません。版付きで維持する境界は、Elixir ラッパーとネイティブドライバー間のワイヤー契約です。
+この文書では、旧 v2 API から現在の描画優先 API への移行を説明します。開発中にこの API 世代を v3 と呼んでいましたが、現在のネイティブ実行経路は AtomVM NIF のみで、BEAM Port のワイヤープロトコルは使用しません。
 
 ## 二つの成果物を同時に更新する
 
@@ -18,7 +18,7 @@ Elixir ラッパーとネイティブ ESP-IDF 部品は、同じ Git コミッ�
 
 ```elixir
 :ok =
-  AtomLGFX.render_lcd(port, [
+  AtomLGFX.render_lcd(handle, [
     {:fill_screen, :black},
     {:set_text_color, :white},
     {:set_text_datum, :top_left},

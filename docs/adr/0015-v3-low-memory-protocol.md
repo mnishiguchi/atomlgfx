@@ -8,7 +8,9 @@ SPDX-License-Identifier: Apache-2.0
 
 ## 状態
 
-採用
+置換済み
+
+> 低メモリー、明示的なスプライト所有、パレット、タッチ、同期バイナリーバッチという方針は現在も継承していますが、Port を前提とする実行経路は [ADR 0018](0018-nif-only-native-architecture.md) により置き換えられました。
 
 ## 背景
 

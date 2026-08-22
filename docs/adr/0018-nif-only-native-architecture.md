@@ -186,6 +186,8 @@ ESP32-S3 + ILI9488 + XPT2046 で確認した。
 
 ## 関連
 
-- [ADR 0017: AtomVM NIF による LovyanGFX 直接 API](0017-direct-atomvm-nif-api.md)
+- [ADR 0017: AtomVM NIF による LovyanGFX 直接 API](0017-direct-atomvm-nif-api.md)（置換済み）
+- [ADR 0016: 描画を中心とする低メモリー API](0016-render-first-low-memory-api.md)（置換済み）
+- [ADR 0015: AtomLGFX v3 を低メモリーの LovyanGFX 形式プロトコルとして設計する](0015-v3-low-memory-protocol.md)（置換済み）
 - [2026-08-21 NIF-only 実機検証報告](../worklog/20260821-nif-only-hardware-validation-report.md)
-- `docs/20260822-atomvm-nif-oom-worklog.md`
+- [2026-08-22 AtomVM NIF 呼び出し時の OOM 調査](../worklog/20260822-atomvm-nif-oom-worklog.md)

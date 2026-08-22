@@ -4,11 +4,11 @@
 
 ESP32-S3 上で `SAMPLE_APP_MODE=all` を実行すると、スプライト描画後に AtomVM が OOM で終了する問題を調査した。
 
-最終的に、LovyanGFX 側のスプライト解放ではなく、NIF 呼び出し前の Elixir 側処理によるメモリー消費が主因と判明した。
+不要な一時スプライトの保持を修正した後も OOM が残り、最終的に NIF 呼び出し前の Elixir 側処理によるメモリー消費が主因と判明した。
 
 ## 原因
 
-`Protocol.call/5` では NIF 呼び出し前に以下の処理を行っていた。
+`Protocol.call` の5引数版では、NIF 呼び出し前に以下の処理を行っていた。
 
 - `OpSchema.validate_wire_call/3`
 - `Map` を用いた操作名検索
@@ -22,7 +22,7 @@ ESP32-S3 上で `SAMPLE_APP_MODE=all` を実行すると、スプライト描画
 ## 対応
 
 - `OpSchema.opcode/1` を実行時の `Map` / `Keyword` 検索から、生成済み関数節による検索へ変更
-- `Protocol.call/5` と `call_ok/5` から重複する Elixir 側の検証を削減
+- `Protocol.call` と `call_ok` から重複する Elixir 側の検証を削減
 - binary batch は generic `call/5` を経由せず `Native.batch/2` を直接利用
 - 一時スプライトを不要になった時点で早めに解放
 
