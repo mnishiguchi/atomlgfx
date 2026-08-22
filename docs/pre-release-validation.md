@@ -48,6 +48,15 @@ git submodule update --init --recursive
 ./scripts/atomvm_esp32.exs build --target esp32s3 --component .
 ```
 
+直接 NIF または構築境界を変更した場合は、互換用ポートを除外した完全な画像も構築します。
+
+```bash
+./scripts/atomvm_esp32.exs build --target esp32s3 --component . \
+  --cmake-define LGFX_PORT_ENABLE_LEGACY_PORT=OFF
+```
+
+両方の構成で、意図した入口だけがリンクされ、画像が最小アプリ領域へ収まることを確認します。
+
 補助スクリプトの既定値は、移動するブランチ先頭ではなく、AtomVM `release-0.7` の特定コミットです。AtomVM リビジョンを変更する場合は意図的に固定値を更新し、ネイティブと実機の全確認を再実行してください。
 
 二核 Xtensa 対象では、ESP-IDF 5.5 環境でも AtomVM の SMP を有効に保つため、ESP-IDF のソフトウェア実装 `stdatomic` を選びます。部品の `sdkconfig.defaults` はスケジューラースタックを 8 KB へ増やします。確認済みの二核 ESP32-S3 では、ESP-IDF の既定値だとアプリケーション開始前に固定版 AtomVM がスタックを使い切ります。
@@ -61,6 +70,9 @@ git submodule update --init --recursive
 - `SAMPLE_APP_MODE=all`
 - `SAMPLE_APP_MODE=nif`
 - `SAMPLE_APP_MODE=moving_icons`
+
+NIF-only 構築では `SAMPLE_APP_MODE=nif` を必須とし、`LGFX.init/0`、個別 NIF 呼び出し、
+事前符号化バッチ、エラー経路、終了まで確認します。ポート専用モードは実行しません。
 
 記録する内容:
 

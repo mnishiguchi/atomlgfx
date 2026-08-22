@@ -25,6 +25,11 @@ set(LGFX_PORT_ENABLE_JP_FONTS
     "Enable Japanese font data for the Japanese-capable text preset"
 )
 set(LGFX_PORT_ENABLE_TOUCH ON CACHE BOOL "Enable touch driver support")
+set(LGFX_PORT_ENABLE_LEGACY_PORT
+    ON
+    CACHE BOOL
+    "Build the legacy AtomVM port driver alongside the direct NIF API"
+)
 set(LGFX_PORT_ENABLE_PSRAM_SPRITES
     ON
     CACHE BOOL
@@ -467,30 +472,42 @@ lgfx_port_apply_tracked_default(
 # -----------------------------------------------------------------------------
 # Register component
 # -----------------------------------------------------------------------------
-idf_component_register(
-    SRCS
-        # Port entrypoint
-        "lgfx_port/lgfx_port.c"
+set(LGFX_PORT_COMPONENT_SRCS
+    # Direct NIF entrypoint and shared batch executor
+    "lgfx_port/nif.c"
+    "lgfx_port/render_batch_dispatch.cpp"
 
-        # Port support
+    # Device adapter
+    "lgfx_device/state.cpp"
+    "lgfx_device/state_runtime.cpp"
+    "lgfx_device/control.cpp"
+    "lgfx_device/primitives.cpp"
+    "lgfx_device/text.cpp"
+    "lgfx_device/images.cpp"
+    "lgfx_device/clip.cpp"
+    "lgfx_device/sprites.cpp"
+)
+
+if(LGFX_PORT_ENABLE_LEGACY_PORT)
+    list(
+        APPEND
+        LGFX_PORT_COMPONENT_SRCS
+        # Legacy port entrypoint and protocol support
+        "lgfx_port/lgfx_port.c"
         "lgfx_port/atoms.c"
         "lgfx_port/open_config.c"
         "lgfx_port/op_registry.c"
         "lgfx_port/proto_term.c"
-        "lgfx_port/render_batch_dispatch.cpp"
-
-        # Port handlers
         "lgfx_port/handlers.c"
+    )
+    message(STATUS "AtomLGFX legacy port API: enabled")
+else()
+    message(STATUS "AtomLGFX legacy port API: disabled (NIF-only build)")
+endif()
 
-        # Device adapter
-        "lgfx_device/state.cpp"
-        "lgfx_device/state_runtime.cpp"
-        "lgfx_device/control.cpp"
-        "lgfx_device/primitives.cpp"
-        "lgfx_device/text.cpp"
-        "lgfx_device/images.cpp"
-        "lgfx_device/clip.cpp"
-        "lgfx_device/sprites.cpp"
+idf_component_register(
+    SRCS
+        ${LGFX_PORT_COMPONENT_SRCS}
     INCLUDE_DIRS
         "include"
     PRIV_INCLUDE_DIRS

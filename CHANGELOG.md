@@ -16,6 +16,7 @@ SPDX-License-Identifier: Apache-2.0
 
 - LovyanGFX の一般的な関数を Elixir から直接呼び出す `LGFX` API と AtomVM NIF 経路を追加
 - 既存の描画命令符号化とネイティブ実行系を再利用する `LGFX.batch/2` を追加
+- 互換用ポートを除外できる `LGFX_PORT_ENABLE_LEGACY_PORT` 構築設定を追加
 - 通常の LovyanGFX 操作用に、低メモリーの v3 呼び出しプロトコルを追加
 - `ops.def` から生成する操作情報、プロトコル参照表、Elixir 検証情報を追加
 - `AtomLGFX.BinaryBatch` と `AtomLGFX.submit_binary_batch/2` による明示的なバイナリーバッチを追加
@@ -45,6 +46,7 @@ SPDX-License-Identifier: Apache-2.0
 - 直接 API の `set_text_datum/3` でも、描画命令と同じ名前付き値と LovyanGFX 数値を受け入れるよう統一
 - 既定の AtomVM リリースリビジョンを固定し、ESP-IDF のソフトウェア原子操作と 8 KB のスケジューラースタックにより、二核 ESP32-S3 の構築を安定化
 - 壊れていた JPEG 動作確認資料を置き換え、直接描画と拡大縮小描画を機器検証の必須項目へ変更
+- 直接 NIF を独立した翻訳単位へ分離し、互換用ポートの有無にかかわらず同じ NIF と装置適合層を構築するよう変更
 
 ### 削除
 

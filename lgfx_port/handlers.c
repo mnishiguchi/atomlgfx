@@ -18,10 +18,6 @@
 // Batch-specific decoding and command execution must stay behind the dedicated
 // submitBinaryBatch handler and render_batch_dispatch.cpp.
 //
-// The direct AtomVM NIF bridge is included here as a second thin transport. It
-// bypasses the port protocol but calls the same lgfx_device_* adapter functions
-// and the same render-batch executor.
-
 #include "lgfx_port/handlers/control.inc"
 #include "lgfx_port/handlers/device.inc"
 #include "lgfx_port/handlers/primitives.inc"
@@ -30,4 +26,3 @@
 #include "lgfx_port/handlers/clip.inc"
 #include "lgfx_port/handlers/sprites.inc"
 #include "lgfx_port/handlers/touch.inc"
-#include "lgfx_port/nif.inc"
