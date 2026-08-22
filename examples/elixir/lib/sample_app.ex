@@ -76,12 +76,12 @@ defmodule SampleApp do
 
   def start(mode, open_options) when is_atom(mode) and is_list(open_options) do
     effective_open_options = default_open_options(mode) ++ open_options
-    {:ok, port} = AtomLGFX.open(effective_open_options)
+    {:ok, handle} = AtomLGFX.open(effective_open_options)
 
     log_info("AtomLGFX opened open_options=#{inspect(effective_open_options)}")
 
     try do
-      case run_mode(port, mode) do
+      case run_mode(handle, mode) do
         :ok ->
           :ok
 
@@ -90,7 +90,7 @@ defmodule SampleApp do
           err
       end
     after
-      safe_close_port(port)
+      safe_close(handle)
     end
   end
 
@@ -101,163 +101,163 @@ defmodule SampleApp do
   # caller when testing a different display.
   defp default_open_options(_mode), do: @sample_open_options
 
-  defp run_mode(port, :protocol) do
-    run_protocol_only(port)
+  defp run_mode(handle, :protocol) do
+    run_protocol_only(handle)
   end
 
-  defp run_mode(port, :boot) do
-    boot_for_display(port)
+  defp run_mode(handle, :boot) do
+    boot_for_display(handle)
   end
 
-  defp run_mode(port, :basic_shapes) do
-    with_boot_dims(port, fn w, h ->
-      step("basic_shapes", BasicShapes.run(port, w, h))
+  defp run_mode(handle, :basic_shapes) do
+    with_boot_dims(handle, fn w, h ->
+      step("basic_shapes", BasicShapes.run(handle, w, h))
     end)
   end
 
-  defp run_mode(port, :text) do
-    with_boot_dims(port, fn w, h ->
-      step("text", Text.run(port, w, h))
+  defp run_mode(handle, :text) do
+    with_boot_dims(handle, fn w, h ->
+      step("text", Text.run(handle, w, h))
     end)
   end
 
-  defp run_mode(port, :smoke) do
-    with_boot_dims(port, fn w, h ->
-      step("smoke", Smoke.run(port, w, h))
+  defp run_mode(handle, :smoke) do
+    with_boot_dims(handle, fn w, h ->
+      step("smoke", Smoke.run(handle, w, h))
     end)
   end
 
-  defp run_mode(port, :perf) do
-    with_boot_dims(port, fn w, h ->
-      step("perf_smoke", PerfSmoke.run(port, w, h))
+  defp run_mode(handle, :perf) do
+    with_boot_dims(handle, fn w, h ->
+      step("perf_smoke", PerfSmoke.run(handle, w, h))
     end)
   end
 
-  defp run_mode(port, :face) do
-    with_boot_dims(port, fn w, h ->
-      step("face", Face.run(port, w, h))
+  defp run_mode(handle, :face) do
+    with_boot_dims(handle, fn w, h ->
+      step("face", Face.run(handle, w, h))
     end)
   end
 
-  defp run_mode(port, :moving_icons) do
-    with_boot_dims(port, fn w, h ->
-      step("moving_icons", MovingIcons.run(port, w, h))
+  defp run_mode(handle, :moving_icons) do
+    with_boot_dims(handle, fn w, h ->
+      step("moving_icons", MovingIcons.run(handle, w, h))
     end)
   end
 
-  defp run_mode(port, :sprites) do
-    with_boot_dims(port, fn w, h ->
-      step("sprites", Sprites.run(port, w, h))
+  defp run_mode(handle, :sprites) do
+    with_boot_dims(handle, fn w, h ->
+      step("sprites", Sprites.run(handle, w, h))
     end)
   end
 
-  defp run_mode(port, :sprite_protocol) do
-    with_boot(port, fn ->
-      step("sprite_protocol_smoke", SpriteProtocolSmoke.run(port))
+  defp run_mode(handle, :sprite_protocol) do
+    with_boot(handle, fn ->
+      step("sprite_protocol_smoke", SpriteProtocolSmoke.run(handle))
     end)
   end
 
-  defp run_mode(port, :touch_calibrate) do
-    with_boot_dims(port, fn w, h ->
-      step("touch_calibrate", Smoke.calibrate_touch(port, w, h))
+  defp run_mode(handle, :touch_calibrate) do
+    with_boot_dims(handle, fn w, h ->
+      step("touch_calibrate", Smoke.calibrate_touch(handle, w, h))
     end)
   end
 
-  defp run_mode(port, :japanese_text) do
-    with_boot_dims(port, fn w, h ->
-      step("japanese_text", JapaneseText.run(port, w, h))
+  defp run_mode(handle, :japanese_text) do
+    with_boot_dims(handle, fn w, h ->
+      step("japanese_text", JapaneseText.run(handle, w, h))
     end)
   end
 
-  defp run_mode(port, :all) do
-    with_boot_dims(port, fn w, h ->
-      with :ok <- step("smoke", Smoke.run(port, w, h)),
-           :ok <- step("basic_shapes", BasicShapes.run(port, w, h)),
-           :ok <- step("text", Text.run(port, w, h)),
-           :ok <- step("sprites", Sprites.run(port, w, h)),
-           :ok <- step("sprite_protocol_smoke", SpriteProtocolSmoke.run(port)) do
+  defp run_mode(handle, :all) do
+    with_boot_dims(handle, fn w, h ->
+      with :ok <- step("smoke", Smoke.run(handle, w, h)),
+           :ok <- step("basic_shapes", BasicShapes.run(handle, w, h)),
+           :ok <- step("text", Text.run(handle, w, h)),
+           :ok <- step("sprites", Sprites.run(handle, w, h)),
+           :ok <- step("sprite_protocol_smoke", SpriteProtocolSmoke.run(handle)) do
         :ok
       end
     end)
   end
 
-  defp run_mode(_port, mode) do
+  defp run_mode(_handle, mode) do
     log_info("unknown mode=#{inspect(mode)}")
     log_info("valid modes: #{Enum.map_join(@valid_modes, ", ", &inspect/1)}")
     {:error, {:unknown_mode, mode}}
   end
 
-  defp run_protocol_only(port) do
-    with :ok <- step("ping", AtomLGFX.ping(port)),
-         :ok <- step("protocol_smoke", ProtocolSmoke.run(port)),
-         {:ok, w, h} <- init_display_after_protocol_with_dims(port),
-         :ok <- ProtocolSmoke.draw_summary(port, w, h) do
+  defp run_protocol_only(handle) do
+    with :ok <- step("ping", AtomLGFX.ping(handle)),
+         :ok <- step("protocol_smoke", ProtocolSmoke.run(handle)),
+         {:ok, w, h} <- init_display_after_protocol_with_dims(handle),
+         :ok <- ProtocolSmoke.draw_summary(handle, w, h) do
       :ok
     end
   end
 
-  defp init_display_after_protocol_with_dims(port) do
-    with :ok <- step("init", AtomLGFX.init(port)),
-         :ok <- step("display(init)", AtomLGFX.display(port)),
-         {:ok, w0, h0} <- get_wh(port),
+  defp init_display_after_protocol_with_dims(handle) do
+    with :ok <- step("init", AtomLGFX.init(handle)),
+         :ok <- step("display(init)", AtomLGFX.display(handle)),
+         {:ok, w0, h0} <- get_wh(handle),
          :ok <- log_before_rotation(w0, h0),
-         {:ok, rotation, w, h} <- configure_display_rotation(port, w0, h0) do
-      finalize_boot_state(port, rotation, w, h)
+         {:ok, rotation, w, h} <- configure_display_rotation(handle, w0, h0) do
+      finalize_boot_state(handle, rotation, w, h)
       {:ok, w, h}
     end
   end
 
-  defp with_boot(port, fun) when is_function(fun, 0) do
-    with :ok <- boot_for_display(port),
+  defp with_boot(handle, fun) when is_function(fun, 0) do
+    with :ok <- boot_for_display(handle),
          :ok <- fun.() do
       :ok
     end
   end
 
-  defp with_boot_dims(port, fun) when is_function(fun, 2) do
-    with {:ok, w, h} <- boot_for_display_with_dims(port),
+  defp with_boot_dims(handle, fun) when is_function(fun, 2) do
+    with {:ok, w, h} <- boot_for_display_with_dims(handle),
          :ok <- fun.(w, h) do
       :ok
     end
   end
 
-  defp boot_for_display(port) do
-    case boot_for_display_with_dims(port) do
+  defp boot_for_display(handle) do
+    case boot_for_display_with_dims(handle) do
       {:ok, _w, _h} -> :ok
       {:error, _reason} = err -> err
     end
   end
 
-  defp boot_for_display_with_dims(port) do
-    with :ok <- run_boot_handshake(port),
-         {:ok, w0, h0} <- get_wh(port),
+  defp boot_for_display_with_dims(handle) do
+    with :ok <- run_boot_handshake(handle),
+         {:ok, w0, h0} <- get_wh(handle),
          :ok <- log_before_rotation(w0, h0),
-         {:ok, rotation, w, h} <- configure_display_rotation(port, w0, h0) do
-      finalize_boot_state(port, rotation, w, h)
+         {:ok, rotation, w, h} <- configure_display_rotation(handle, w0, h0) do
+      finalize_boot_state(handle, rotation, w, h)
       {:ok, w, h}
     end
   end
 
-  defp run_boot_handshake(port) do
-    with :ok <- step("ping", AtomLGFX.ping(port)),
-         :ok <- step("protocol_smoke", ProtocolSmoke.run(port)),
-         :ok <- step("init", AtomLGFX.init(port)),
-         :ok <- step("write_session_smoke", Smoke.write_session(port)),
-         :ok <- step("display(init)", AtomLGFX.display(port)) do
+  defp run_boot_handshake(handle) do
+    with :ok <- step("ping", AtomLGFX.ping(handle)),
+         :ok <- step("protocol_smoke", ProtocolSmoke.run(handle)),
+         :ok <- step("init", AtomLGFX.init(handle)),
+         :ok <- step("write_session_smoke", Smoke.write_session(handle)),
+         :ok <- step("display(init)", AtomLGFX.display(handle)) do
       :ok
     end
   end
 
-  defp finalize_boot_state(port, rotation, w, h) do
-    :erlang.put({:sample_app_rotation, port}, rotation)
+  defp finalize_boot_state(handle, rotation, w, h) do
+    :erlang.put({:sample_app_rotation, handle}, rotation)
 
     log_info("selected rotation=#{rotation} viewport=#{w}x#{h}")
 
-    _ = AtomLGFX.fill_screen(port, @bg)
-    _ = AtomLGFX.reset_text_state(port, 0)
-    _ = AtomLGFX.set_text_wrap(port, false, 0)
-    _ = AtomLGFX.set_text_size(port, 2, 0)
-    _ = AtomLGFX.set_text_color(port, @fg, nil, 0)
+    _ = AtomLGFX.fill_screen(handle, @bg)
+    _ = AtomLGFX.reset_text_state(handle, 0)
+    _ = AtomLGFX.set_text_wrap(handle, false, 0)
+    _ = AtomLGFX.set_text_size(handle, 2, 0)
+    _ = AtomLGFX.set_text_color(handle, @fg, nil, 0)
 
     :ok
   end
@@ -267,7 +267,7 @@ defmodule SampleApp do
     :ok
   end
 
-  defp configure_display_rotation(port, w0, h0) do
+  defp configure_display_rotation(handle, w0, h0) do
     prefer_landscape = prefer_landscape?(w0, h0)
     candidates = rotation_candidates(w0, h0)
 
@@ -275,42 +275,42 @@ defmodule SampleApp do
       "rotation candidates=#{inspect(candidates)} preferred=#{orientation_name(prefer_landscape)}"
     )
 
-    try_rotation_candidates(port, candidates, prefer_landscape, nil)
+    try_rotation_candidates(handle, candidates, prefer_landscape, nil)
   end
 
-  defp try_rotation_candidates(_port, [], _prefer_landscape, {:ok, rotation, w, h}) do
+  defp try_rotation_candidates(_handle, [], _prefer_landscape, {:ok, rotation, w, h}) do
     {:ok, rotation, w, h}
   end
 
-  defp try_rotation_candidates(_port, [], _prefer_landscape, {:error, _reason} = err) do
+  defp try_rotation_candidates(_handle, [], _prefer_landscape, {:error, _reason} = err) do
     err
   end
 
-  defp try_rotation_candidates(_port, [], _prefer_landscape, nil) do
+  defp try_rotation_candidates(_handle, [], _prefer_landscape, nil) do
     {:error, :no_rotation_candidate}
   end
 
-  defp try_rotation_candidates(port, [rotation | rest], prefer_landscape, fallback) do
-    case apply_rotation(port, rotation) do
+  defp try_rotation_candidates(handle, [rotation | rest], prefer_landscape, fallback) do
+    case apply_rotation(handle, rotation) do
       {:ok, rotation, raw_w, raw_h, w, h} = ok ->
         log_info("rotation probe rot=#{rotation} raw=#{raw_w}x#{raw_h} normalized=#{w}x#{h}")
 
         if landscape?(w, h) == prefer_landscape do
           {:ok, rotation, w, h}
         else
-          try_rotation_candidates(port, rest, prefer_landscape, remember_fallback(fallback, ok))
+          try_rotation_candidates(handle, rest, prefer_landscape, remember_fallback(fallback, ok))
         end
 
       {:error, reason} = err ->
         log_failure("rotation probe rot=#{rotation} failed", reason)
-        try_rotation_candidates(port, rest, prefer_landscape, remember_fallback(fallback, err))
+        try_rotation_candidates(handle, rest, prefer_landscape, remember_fallback(fallback, err))
     end
   end
 
-  defp apply_rotation(port, rotation) do
-    with :ok <- AtomLGFX.set_rotation(port, rotation),
-         :ok <- AtomLGFX.display(port),
-         {:ok, raw_w, raw_h} <- get_wh(port) do
+  defp apply_rotation(handle, rotation) do
+    with :ok <- AtomLGFX.set_rotation(handle, rotation),
+         :ok <- AtomLGFX.display(handle),
+         {:ok, raw_w, raw_h} <- get_wh(handle) do
       {w, h} = normalize_dims_for_rotation(rotation, raw_w, raw_h)
       {:ok, rotation, raw_w, raw_h, w, h}
     end
@@ -364,15 +364,15 @@ defmodule SampleApp do
   defp orientation_name(true), do: "landscape"
   defp orientation_name(false), do: "portrait"
 
-  defp get_wh(port) do
-    with {:ok, w} <- AtomLGFX.width(port, 0),
-         {:ok, h} <- AtomLGFX.height(port, 0) do
+  defp get_wh(handle) do
+    with {:ok, w} <- AtomLGFX.width(handle, 0),
+         {:ok, h} <- AtomLGFX.height(handle, 0) do
       {:ok, w, h}
     end
   end
 
-  defp safe_close_port(port) do
-    case AtomLGFX.close(port) do
+  defp safe_close(handle) do
+    case AtomLGFX.close(handle) do
       :ok ->
         log_info("AtomLGFX closed")
         :ok

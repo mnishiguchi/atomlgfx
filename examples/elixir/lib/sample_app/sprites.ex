@@ -8,12 +8,13 @@ defmodule SampleApp.Sprites do
   @rgb565_sprite_target 30
   @palette_sprite_target 31
 
-  def run(port, width, height)
+  def run(handle, width, height)
       when is_integer(width) and width > 0 and is_integer(height) and height > 0 do
     try do
-      with {:ok, true} <- AtomLGFX.supports_sprite?(port),
-           :ok <- draw_rgb565_sprite(port, width, height),
-           :ok <- maybe_draw_palette_sprite(port, width, height) do
+      with {:ok, true} <- AtomLGFX.supports_sprite?(handle),
+           :ok <- draw_rgb565_sprite(handle, width, height),
+           :ok <- safe_delete_sprite(handle, @rgb565_sprite_target),
+           :ok <- maybe_draw_palette_sprite(handle, width, height) do
         IO.puts("sprites ok")
         :ok
       else
@@ -25,22 +26,22 @@ defmodule SampleApp.Sprites do
           err
       end
     after
-      cleanup(port)
+      cleanup(handle)
     end
   end
 
-  defp draw_rgb565_sprite(port, width, height) do
+  defp draw_rgb565_sprite(handle, width, height) do
     sprite_width = clamp_int(div(width, 2), 96, 160)
     sprite_height = clamp_int(div(height, 3), 56, 96)
     sprite_x = div(width - sprite_width, 2)
     sprite_y = max(36, div(height - sprite_height, 2))
 
-    with :ok <- safe_delete_sprite(port, @rgb565_sprite_target),
+    with :ok <- safe_delete_sprite(handle, @rgb565_sprite_target),
          :ok <-
-           AtomLGFX.create_sprite(port, sprite_width, sprite_height, 16, @rgb565_sprite_target),
+           AtomLGFX.create_sprite(handle, sprite_width, sprite_height, 16, @rgb565_sprite_target),
          :ok <-
            AtomLGFX.render_sprite(
-             port,
+             handle,
              @rgb565_sprite_target,
              [
                {:clear, :navy},
@@ -58,7 +59,7 @@ defmodule SampleApp.Sprites do
            ),
          :ok <-
            AtomLGFX.render_lcd(
-             port,
+             handle,
              [
                {:fill_screen, :black},
                {:set_text_font_preset, :ascii},
@@ -76,27 +77,27 @@ defmodule SampleApp.Sprites do
     end
   end
 
-  defp maybe_draw_palette_sprite(port, width, height) do
-    case AtomLGFX.supports_palette?(port) do
-      {:ok, true} -> draw_palette_sprite(port, width, height)
+  defp maybe_draw_palette_sprite(handle, width, height) do
+    case AtomLGFX.supports_palette?(handle) do
+      {:ok, true} -> draw_palette_sprite(handle, width, height)
       {:ok, false} -> :ok
       {:error, reason} -> {:error, reason}
     end
   end
 
-  defp draw_palette_sprite(port, width, height) do
+  defp draw_palette_sprite(handle, width, height) do
     sprite_width = clamp_int(div(width, 3), 72, 120)
     sprite_height = clamp_int(div(height, 4), 44, 72)
     sprite_x = max(8, width - sprite_width - 10)
     sprite_y = max(56, height - sprite_height - 10)
 
-    with :ok <- safe_delete_sprite(port, @palette_sprite_target),
+    with :ok <- safe_delete_sprite(handle, @palette_sprite_target),
          :ok <-
-           AtomLGFX.create_sprite(port, sprite_width, sprite_height, 4, @palette_sprite_target),
-         :ok <- AtomLGFX.create_palette(port, @palette_sprite_target),
+           AtomLGFX.create_sprite(handle, sprite_width, sprite_height, 4, @palette_sprite_target),
+         :ok <- AtomLGFX.create_palette(handle, @palette_sprite_target),
          :ok <-
            AtomLGFX.render_sprite(
-             port,
+             handle,
              @palette_sprite_target,
              [
                {:set_palette_color, 0, :black},
@@ -116,7 +117,7 @@ defmodule SampleApp.Sprites do
            ),
          :ok <-
            AtomLGFX.render_lcd(
-             port,
+             handle,
              [
                {:push_sprite, @palette_sprite_target, sprite_x, sprite_y, {:index, 0}},
                :display
@@ -127,14 +128,14 @@ defmodule SampleApp.Sprites do
     end
   end
 
-  defp cleanup(port) do
-    _ = AtomLGFX.delete_sprite(port, @rgb565_sprite_target)
-    _ = AtomLGFX.delete_sprite(port, @palette_sprite_target)
+  defp cleanup(handle) do
+    _ = AtomLGFX.delete_sprite(handle, @rgb565_sprite_target)
+    _ = AtomLGFX.delete_sprite(handle, @palette_sprite_target)
     :ok
   end
 
-  defp safe_delete_sprite(port, target) do
-    case AtomLGFX.delete_sprite(port, target) do
+  defp safe_delete_sprite(handle, target) do
+    case AtomLGFX.delete_sprite(handle, target) do
       :ok -> :ok
       {:error, _reason} -> :ok
     end

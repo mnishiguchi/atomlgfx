@@ -109,13 +109,13 @@ defmodule AtomLGFX.RenderBatchTest do
   end
 
   describe "submit/3" do
-    test "rejects invalid render options before port submission" do
-      assert RenderBatch.submit(:not_a_port, <<>>, :bad_opts) ==
+    test "rejects invalid render options before NIF submission" do
+      assert RenderBatch.submit(:not_a_handle, <<>>, :bad_opts) ==
                {:error, {:bad_render_options, :bad_opts}}
     end
 
-    test "rejects invalid validate option before port submission" do
-      assert RenderBatch.submit(:not_a_port, <<>>, validate: :yes) ==
+    test "rejects invalid validate option before NIF submission" do
+      assert RenderBatch.submit(:not_a_handle, <<>>, validate: :yes) ==
                {:error, {:bad_render_validate_option, :yes}}
     end
   end

@@ -7,7 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 
 ## 状態
 
-採用
+置換済み
+
+> `LGFX` の直接 NIF API は現在も採用していますが、NIF と旧 Port を併存させる移行構成は [ADR 0018](0018-nif-only-native-architecture.md) により置き換えられました。
 
 ## 背景
 

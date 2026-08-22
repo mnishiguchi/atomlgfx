@@ -11,29 +11,29 @@ defmodule AtomLGFX.BinaryBatch.Submission do
   @doc """
   バイナリーバッチ命令列を送信します。
   """
-  @spec render(port(), iodata()) :: :ok | {:error, term()}
-  def render(port, commands) do
+  @spec render(reference(), iodata()) :: :ok | {:error, term()}
+  def render(handle, commands) do
     command_binary = Codec.batch(commands)
-    submit_binary(port, command_binary)
+    submit_binary(handle, command_binary)
   end
 
   @doc """
   バイナリーバッチ命令列を検証してから送信します。
   """
-  @spec render_checked(port(), iodata()) :: :ok | {:error, term()}
-  def render_checked(port, commands) do
+  @spec render_checked(reference(), iodata()) :: :ok | {:error, term()}
+  def render_checked(handle, commands) do
     command_binary = Codec.batch(commands)
 
     with :ok <- Validation.validate(command_binary) do
-      submit_binary(port, command_binary)
+      submit_binary(handle, command_binary)
     end
   end
 
-  defp submit_binary(port, command_binary) do
-    case AtomLGFX.submit_binary_batch(port, command_binary) do
-      {:ok, :ok} -> :ok
-      {:ok, other} -> {:error, {:unexpected_reply, other}}
+  defp submit_binary(handle, command_binary) do
+    case AtomLGFX.submit_binary_batch(handle, command_binary) do
+      :ok -> :ok
       {:error, reason} -> {:error, reason}
+      other -> {:error, {:unexpected_reply, other}}
     end
   end
 end

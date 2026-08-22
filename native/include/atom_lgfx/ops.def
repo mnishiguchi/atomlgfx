@@ -1,0 +1,127 @@
+// native/include/atom_lgfx/ops.def
+//
+// Canonical operation list and native execution metadata.
+//
+// This file is the source of truth for:
+//
+// - stable numeric opcode order
+// - Elixir operation validation metadata
+// - direct NIF dispatch validation
+// - binary batch operation metadata
+// - generated operation reference tables
+//
+// Included multiple times with different X(...) definitions.
+// No include guards.
+//
+// Maintainer rule:
+//
+// - Add, remove, or reorder operations here first.
+// - Keep opcode ordering stable unless a deliberate breaking change is intended.
+// - Argument counts describe operation payload arguments only.
+// - After changing this file, regenerate/check derived files.
+//
+// X(op_name,
+//   min_args, max_args, allowed_flags_mask, target_policy, state_policy, feature_cap_bit,
+//   batchable, needs_owned_payload, sync_only, batch_boundary_sensitive)
+
+//
+// Control
+//
+X(ping, 0, 0, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, 0, 0, 0, 1, 0)
+X(getCaps, 0, 0, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, 0, 0, 0, 1, 0)
+X(getLastError, 0, 0, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, LGFX_CAP_LAST_ERROR, 0, 0, 1, 0)
+X(width, 0, 0, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 0, 0, 1, 0)
+X(height, 0, 0, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 0, 0, 1, 0)
+
+//
+// Setup
+//
+X(init, 0, 0, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, 0, 0, 0, 1, 0)
+X(close, 0, 0, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, 0, 0, 0, 1, 0)
+X(startWrite, 0, 0, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, 0, 0, 0, 1, 0)
+X(endWrite, 0, 0, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, 0, 0, 0, 1, 0)
+X(setRotation, 1, 1, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, 0, 0, 0, 1, 0)
+X(setBrightness, 1, 1, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, 0, 0, 0, 1, 0)
+X(setColorDepth, 1, 1, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 0, 0, 1, 0)
+X(setSwapBytes, 1, 1, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 0, 0, 1, 0)
+X(display, 0, 0, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 1)
+
+//
+// Primitives
+//
+X(fillScreen, 1, 1, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(clear, 1, 1, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(drawPixel, 3, 3, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(drawFastVLine, 4, 4, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(drawFastHLine, 4, 4, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(drawLine, 5, 5, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(drawRect, 5, 5, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(fillRect, 5, 5, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(drawRoundRect, 6, 6, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(fillRoundRect, 6, 6, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(drawCircle, 4, 4, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(fillCircle, 4, 4, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(drawEllipse, 5, 5, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(fillEllipse, 5, 5, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(drawArc, 7, 7, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(fillArc, 7, 7, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(drawBezier, 7, 9, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(drawTriangle, 7, 7, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(fillTriangle, 7, 7, LGFX_F_COLOR_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+
+//
+// Text
+//
+X(setTextSize, 1, 2, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(setTextDatum, 1, 1, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(setTextWrap, 1, 2, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(setTextFontPreset, 1, 1, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(setTextColor, 1, 2, (LGFX_F_TEXT_HAS_BG | LGFX_F_TEXT_FG_INDEX | LGFX_F_TEXT_BG_INDEX), LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(setCursor, 2, 2, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(getCursor, 0, 0, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 0, 0, 1, 0)
+X(drawString, 3, 3, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 1, 0, 0)
+X(print, 1, 1, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 1, 0, 0)
+X(println, 1, 1, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 1, 0, 0)
+
+//
+// Images
+//
+X(drawJpg, 3, 9, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 0, 1, 1, 0)
+X(pushImage, 6, 6, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_PUSHIMAGE, 0, 1, 1, 0)
+
+//
+// Clipping
+//
+X(setClipRect, 4, 4, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+X(clearClipRect, 0, 0, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)
+
+//
+// Sprites
+//
+X(createSprite, 2, 3, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE, 0, 0, 1, 0)
+X(deleteSprite, 0, 0, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE, 0, 0, 1, 0)
+X(createPalette, 0, 0, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_PALETTE, 0, 0, 1, 0)
+X(setPaletteColor, 2, 2, 0, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_PALETTE, 1, 0, 0, 0)
+X(setPivot, 2, 2, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE, 1, 0, 0, 0)
+
+// Header target is the source sprite; payload begins with destination target.
+X(pushSprite, 3, 4, LGFX_F_TRANSPARENT_INDEX, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE, 1, 0, 0, 0)
+
+// Header target is the source sprite; payload begins with destination target.
+X(pushRotateZoom, 6, 7, LGFX_F_TRANSPARENT_INDEX, LGFX_OP_TARGET_SPRITE_ONLY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE, 1, 0, 0, 0)
+
+//
+// Touch
+//
+// getTouch/getTouchRaw reply with {ok, none} or {ok, {X, Y, Size}}.
+X(getTouch, 0, 0, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_TOUCH, 0, 0, 1, 0)
+X(getTouchRaw, 0, 0, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_TOUCH, 0, 0, 1, 0)
+X(setTouchCalibrate, 8, 8, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_TOUCH, 0, 0, 1, 0)
+X(calibrateTouch, 0, 0, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_TOUCH, 0, 0, 1, 0)
+
+//
+// Binary hot-path ops
+//
+// Header target is the destination target; payload contains source sprite instances.
+X(pushRotateZoomList, 1, 1, LGFX_F_TRANSPARENT_INDEX, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_SPRITE, 1, 0, 0, 0)
+X(submitBinaryBatch, 1, 1, 0, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, LGFX_CAP_BATCH, 0, 0, 1, 0)

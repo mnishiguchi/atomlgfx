@@ -17,12 +17,12 @@ defmodule SampleApp.MovingIcons.Renderer do
   # current icon produces visible blank intervals. Isolated icons are erased and
   # redrawn immediately. Icons whose old/new bounds intersect are grouped so one
   # icon's erase cannot cut into another icon that was already redrawn.
-  def render(port, [], objects, _background, transparent) do
+  def render(handle, [], objects, _background, transparent) do
     instances = build_instances(objects, [])
-    render_commands(port, [transform_command(instances, transparent)])
+    render_commands(handle, [transform_command(instances, transparent)])
   end
 
-  def render(port, previous_objects, objects, background, transparent) do
+  def render(handle, previous_objects, objects, background, transparent) do
     entries = build_entries(previous_objects, objects, 0, [])
     {conflicting, isolated} = partition_entries(entries, entries, [], [])
 
@@ -31,11 +31,11 @@ defmodule SampleApp.MovingIcons.Renderer do
       build_isolated_commands(isolated, background, transparent, [])
     ]
 
-    render_commands(port, commands)
+    render_commands(handle, commands)
   end
 
-  defp render_commands(port, commands) do
-    BinaryBatch.render(port, [
+  defp render_commands(handle, commands) do
+    BinaryBatch.render(handle, [
       BinaryBatch.target(@lcd_target),
       commands,
       BinaryBatch.display()

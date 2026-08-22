@@ -15,104 +15,100 @@ defmodule AtomLGFX.Sprites do
   @przl_option_has_transparent 0x01
   @przl_option_approx_cull 0x02
 
-  def create_sprite(port, width, height, target)
+  def create_sprite(handle, width, height, target)
       when u16(width) and width >= 1 and
              u16(height) and height >= 1 and
              sprite_handle(target) do
-    Protocol.call_ok(port, :create_sprite, target, 0, [width, height], Protocol.long_timeout())
+    Protocol.call_ok(handle, :create_sprite, target, 0, [width, height])
   end
 
-  def create_sprite(port, width, height, color_depth, target)
+  def create_sprite(handle, width, height, color_depth, target)
       when u16(width) and width >= 1 and
              u16(height) and height >= 1 and
              is_integer(color_depth) and color_depth in @valid_color_depths and
              sprite_handle(target) do
     Protocol.call_ok(
-      port,
+      handle,
       :create_sprite,
       target,
       0,
-      [width, height, color_depth],
-      Protocol.long_timeout()
+      [width, height, color_depth]
     )
   end
 
-  def delete_sprite(port, target) when sprite_handle(target) do
-    Protocol.call_ok(port, :delete_sprite, target, 0, [], Protocol.long_timeout())
+  def delete_sprite(handle, target) when sprite_handle(target) do
+    Protocol.call_ok(handle, :delete_sprite, target, 0, [])
   end
 
-  def create_palette(port, target) when sprite_handle(target) do
-    Protocol.call_ok(port, :create_palette, target, 0, [], Protocol.long_timeout())
+  def create_palette(handle, target) when sprite_handle(target) do
+    Protocol.call_ok(handle, :create_palette, target, 0, [])
   end
 
-  def set_palette_color(port, target, palette_index, rgb888)
+  def set_palette_color(handle, target, palette_index, rgb888)
       when sprite_handle(target) and palette_index(palette_index) and color888(rgb888) do
     Protocol.call_ok(
-      port,
+      handle,
       :set_palette_color,
       target,
       0,
-      [palette_index, rgb888],
-      Protocol.long_timeout()
+      [palette_index, rgb888]
     )
   end
 
-  def set_pivot(port, target, x, y)
+  def set_pivot(handle, target, x, y)
       when target_any(target) and i16(x) and i16(y) do
-    Protocol.call_ok(port, :set_pivot, target, 0, [x, y], Protocol.long_timeout())
+    Protocol.call_ok(handle, :set_pivot, target, 0, [x, y])
   end
 
-  def push_sprite_to(port, src_target, dst_target, x, y)
+  def push_sprite_to(handle, src_target, dst_target, x, y)
       when sprite_handle(src_target) and
              target_any(dst_target) and
              i16(x) and i16(y) do
     Protocol.call_ok(
-      port,
+      handle,
       :push_sprite,
       src_target,
       0,
-      [dst_target, x, y],
-      Protocol.long_timeout()
+      [dst_target, x, y]
     )
   end
 
-  def push_sprite_to(port, src_target, dst_target, x, y, transparent)
+  def push_sprite_to(handle, src_target, dst_target, x, y, transparent)
       when sprite_handle(src_target) and
              target_any(dst_target) and
              i16(x) and i16(y) do
     with {:ok, flags, transparent_value} <- normalize_transparent_arg(transparent) do
       Protocol.call_ok(
-        port,
+        handle,
         :push_sprite,
         src_target,
         flags,
-        [dst_target, x, y, transparent_value],
-        Protocol.long_timeout()
+        [dst_target, x, y, transparent_value]
       )
     end
   end
 
-  def push_sprite(port, src_target, x, y)
+  def push_sprite(handle, src_target, x, y)
       when sprite_handle(src_target) and i16(x) and i16(y) do
-    push_sprite_to(port, src_target, 0, x, y)
+    push_sprite_to(handle, src_target, 0, x, y)
   end
 
-  def push_sprite(port, src_target, x, y, transparent)
+  def push_sprite(handle, src_target, x, y, transparent)
       when sprite_handle(src_target) and i16(x) and i16(y) do
-    push_sprite_to(port, src_target, 0, x, y, transparent)
+    push_sprite_to(handle, src_target, 0, x, y, transparent)
   end
 
-  def push_rotate_zoom_to(port, src_target, dst_target, x, y, angle_deg, zoom)
+  def push_rotate_zoom_to(handle, src_target, dst_target, x, y, angle_deg, zoom)
       when sprite_handle(src_target) and
              target_any(dst_target) and
              i16(x) and i16(y) and
              is_number(angle_deg) and
              is_number(zoom) and zoom > 0 do
-    push_rotate_zoom_to(port, src_target, dst_target, x, y, angle_deg, zoom, zoom)
+    push_rotate_zoom_to(handle, src_target, dst_target, x, y, angle_deg, zoom, zoom)
   end
 
   def push_rotate_zoom_to(
-        port,
+        handle,
         src_target,
         dst_target,
         x,
@@ -131,26 +127,24 @@ defmodule AtomLGFX.Sprites do
          {:ok, normalized_zoom_x} <- normalize_zoom(zoom_x),
          {:ok, normalized_zoom_y} <- normalize_zoom(zoom_y) do
       Protocol.call_ok(
-        port,
+        handle,
         :push_rotate_zoom,
         src_target,
         0,
-        [dst_target, x, y, normalized_angle_deg, normalized_zoom_x, normalized_zoom_y],
-        Protocol.long_timeout()
+        [dst_target, x, y, normalized_angle_deg, normalized_zoom_x, normalized_zoom_y]
       )
     end
   end
 
-  def push_rotate_zoom_list_to(port, dst_target, instances, opts \\ [])
+  def push_rotate_zoom_list_to(handle, dst_target, instances, opts \\ [])
       when target_any(dst_target) and is_list(instances) and is_list(opts) do
     with {:ok, flags, payload} <- encode_push_rotate_zoom_list_payload(instances, opts) do
       Protocol.call_ok(
-        port,
+        handle,
         :push_rotate_zoom_list,
         dst_target,
         flags,
-        [payload],
-        Protocol.long_timeout()
+        [payload]
       )
     end
   end
@@ -174,7 +168,7 @@ defmodule AtomLGFX.Sprites do
   end
 
   def push_rotate_zoom_to(
-        port,
+        handle,
         src_target,
         dst_target,
         x,
@@ -195,7 +189,7 @@ defmodule AtomLGFX.Sprites do
          {:ok, normalized_zoom_y} <- normalize_zoom(zoom_y),
          {:ok, flags, transparent_value} <- normalize_transparent_arg(transparent) do
       Protocol.call_ok(
-        port,
+        handle,
         :push_rotate_zoom,
         src_target,
         flags,
@@ -207,8 +201,7 @@ defmodule AtomLGFX.Sprites do
           normalized_zoom_x,
           normalized_zoom_y,
           transparent_value
-        ],
-        Protocol.long_timeout()
+        ]
       )
     end
   end

@@ -9,7 +9,7 @@ defmodule AtomLGFX.BinaryBatchSubmissionTest do
   alias AtomLGFX.BinaryBatch.Submission
 
   describe "render_checked/2" do
-    test "returns validation errors before crossing the port boundary" do
+    test "returns validation errors before crossing the NIF boundary" do
       assert Submission.render_checked(self(), <<>>) == {:error, :empty_batch}
       assert BinaryBatch.render_checked(self(), <<>>) == {:error, :empty_batch}
     end

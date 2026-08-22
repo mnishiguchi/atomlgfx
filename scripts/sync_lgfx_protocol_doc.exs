@@ -9,14 +9,13 @@ defmodule Main do
   C の情報ファイルから LGFX プロトコル参照表を生成し、文書へ反映します。
   """
 
-  @ops_def_path "lgfx_port/include_internal/lgfx_port/ops.def"
+  @ops_def_path "native/include/atom_lgfx/ops.def"
 
-  # 機能ビットとエラー語彙は、現在このヘッダーで定義する。
-  @port_h_path "lgfx_port/include_internal/lgfx_port/protocol.h"
+  # 機能ビットとエラー語彙は、このヘッダーで定義する。
+  @native_contract_h_path "native/include/atom_lgfx/constants.h"
 
   @protocol_reference_doc_path "docs/protocol-reference.md"
   @generated_ex_path "lib/atom_lgfx/generated.ex"
-  @protocol_tuple_arity 5
 
   @raw_operation_names [
     "startWrite",
@@ -88,8 +87,8 @@ defmodule Main do
 
     生成・反映する内容:
       - 操作一覧（#{@ops_def_path} から生成）
-      - 機能一覧（#{@port_h_path} から生成）
-      - エラー理由一覧（#{@port_h_path} から生成）
+      - 機能一覧（#{@native_contract_h_path} から生成）
+      - エラー理由一覧（#{@native_contract_h_path} から生成）
       - Elixir の生成済み操作定義（#{@ops_def_path} から生成）
 
     反映先:
@@ -102,13 +101,13 @@ defmodule Main do
     self_test!()
 
     ops_def_content = File.read!(@ops_def_path)
-    port_h_content = File.read!(@port_h_path)
+    native_contract_h_content = File.read!(@native_contract_h_path)
     protocol_reference_doc_content = File.read!(@protocol_reference_doc_path)
     generated_ex_content = File.read!(@generated_ex_path)
 
     operations = parse_operations(ops_def_content)
-    capabilities = parse_capabilities(port_h_content)
-    error_reasons = parse_error_reasons(port_h_content)
+    capabilities = parse_capabilities(native_contract_h_content)
+    error_reasons = parse_error_reasons(native_contract_h_content)
 
     protocol_feature_cap_bits =
       operations
@@ -188,28 +187,22 @@ defmodule Main do
   end
 
   defp self_test! do
-    # ATOM_STR(...) はカンマを含むため、最上位の分割でも13個の X(...) 項目を得られる必要がある。
     ping_args_blob =
-      ~s|ping, lgfx_handle_ping, ATOM_STR("\\x04", "ping"), 5, 5, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, 0, 0, 0, 1, 0|
+      "ping, 0, 0, 0, LGFX_OP_TARGET_BAD_TARGET, LGFX_OP_STATE_ANY, 0, 0, 0, 1, 0"
 
     ping_args = split_top_level_arguments(ping_args_blob)
 
-    assert!(length(ping_args) == 13, "split_top_level_arguments/1 は13項目を返す必要があります")
+    assert!(length(ping_args) == 11, "split_top_level_arguments/1 は11項目を返す必要があります")
     assert!(Enum.at(ping_args, 0) == "ping", "第1項目（操作）の解析に失敗しました")
 
-    assert!(
-      Enum.at(ping_args, 2) == ~s|ATOM_STR("\\x04", "ping")|,
-      "ATOM_STR(...) 項目は分割されずに維持される必要があります"
-    )
-
     set_text_color_line =
-      ~s|X(setTextColor, lgfx_handle_setTextColor, ATOM_STR("\\x0C", "setTextColor"), 6, 7, LGFX_F_TEXT_HAS_BG, LGFX_OP_TARGET_UNSUPPORTED, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)|
+      "X(setTextColor, 1, 2, LGFX_F_TEXT_HAS_BG, LGFX_OP_TARGET_ANY, LGFX_OP_STATE_REQUIRES_INIT, 0, 1, 0, 0, 0)"
 
     case parse_x_macro_line(set_text_color_line) do
       {:ok, op} ->
         assert!(op.operation_name == "setTextColor", "operation_name の解析に失敗しました")
-        assert!(op.min_arity == "6", "min_arity の解析に失敗しました")
-        assert!(op.max_arity == "7", "max_arity の解析に失敗しました")
+        assert!(op.min_args == "1", "min_args の解析に失敗しました")
+        assert!(op.max_args == "2", "max_args の解析に失敗しました")
         assert!(op.allowed_flags_mask == "LGFX_F_TEXT_HAS_BG", "flags の解析に失敗しました")
         assert!(op.batchable == "1", "batchable の解析に失敗しました")
         assert!(op.needs_owned_payload == "0", "needs_owned_payload の解析に失敗しました")
@@ -247,8 +240,8 @@ defmodule Main do
     assert!(Enum.at(parsed_caps, 1).shift == 9, "機能ビット位置の解析に失敗しました")
 
     errors_sample = """
-    // Optional: protocol-level error atom string constants (doc/debug)
-    #define LGFX_ERR_BAD_PROTO "bad_proto"
+    // Native error atom strings used for documentation/debugging
+    #define LGFX_ERR_BAD_ARGS "bad_args"
     #define LGFX_ERR_UNSUPPORTED "unsupported"
 
     // Optional detail tuple reason tags
@@ -295,10 +288,8 @@ defmodule Main do
             case arguments do
               [
                 operation_name,
-                _handler_function_name,
-                _atom_str_macro,
-                min_arity,
-                max_arity,
+                min_args,
+                max_args,
                 allowed_flags_mask,
                 target_policy,
                 state_policy,
@@ -311,8 +302,8 @@ defmodule Main do
                 {:ok,
                  %{
                    operation_name: String.trim(operation_name),
-                   min_arity: String.trim(min_arity),
-                   max_arity: String.trim(max_arity),
+                   min_args: String.trim(min_args),
+                   max_args: String.trim(max_args),
                    allowed_flags_mask: String.trim(allowed_flags_mask),
                    target_policy: String.trim(target_policy),
                    state_policy: String.trim(state_policy),
@@ -464,7 +455,7 @@ defmodule Main do
         operation_name = "`#{elixir_operation_name(operation.operation_name)}`"
         target_rule = "`#{target_rule_label(operation.target_policy)}`"
         flags_rule = "`#{flags_rule_label(operation.allowed_flags_mask)}`"
-        arity = "`#{args_count_label(operation.min_arity, operation.max_arity)}`"
+        arity = "`#{args_count_label(operation.min_args, operation.max_args)}`"
         state_rule = "`#{state_rule_label(operation.state_policy)}`"
         feature_cap_bit = capability_bit_label(operation.feature_cap_bit)
         batch_path = batch_path_label(operation)
@@ -484,10 +475,8 @@ defmodule Main do
   defp flags_rule_label("0"), do: "F0"
   defp flags_rule_label(other), do: "Fmask(#{other})"
 
-  defp args_count_label(min_arity, max_arity) do
-    min_args = String.to_integer(min_arity) - @protocol_tuple_arity
-    max_args = String.to_integer(max_arity) - @protocol_tuple_arity
-    arity_label(Integer.to_string(min_args), Integer.to_string(max_args))
+  defp args_count_label(min_args, max_args) do
+    arity_label(min_args, max_args)
   end
 
   defp arity_label(min_arity, max_arity) when min_arity == max_arity, do: min_arity
@@ -805,10 +794,7 @@ defmodule Main do
   end
 
   defp generated_arg_range(operation) do
-    min_arg_count = String.to_integer(operation.min_arity) - @protocol_tuple_arity
-    max_arg_count = String.to_integer(operation.max_arity) - @protocol_tuple_arity
-
-    "#{min_arg_count}..#{max_arg_count}"
+    "#{operation.min_args}..#{operation.max_args}"
   end
 
   defp generated_allowed_flags("0"), do: 0

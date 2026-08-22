@@ -4,38 +4,35 @@ SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# LovyanGFX AtomVM ポートプロトコル参照
+# AtomLGFX ネイティブ操作参照
 
-この文書は、ソース情報と同期して生成するプロトコル参照表を収録します。
+この文書は、ソース情報と同期して生成する NIF 操作契約の参照表を収録します。
 
-人が管理する契約本文は [プロトコル](protocol.md) を参照してください。
+人が管理する契約本文は [ネイティブ操作契約](protocol.md) を参照してください。
 
 ## 生成されたエラー理由
 
-正規のプロトコルエラーアトムと詳細タグです。
+NIF 境界で使用するエラー理由です。
 
 <!-- BEGIN:generated_error_reasons_table -->
 <!-- scripts/sync_lgfx_protocol_doc.exs により生成 -->
 
 | C マクロ | アトム | 種別 |
 | --- | --- | --- |
-| `LGFX_ERR_BAD_PROTO` | `bad_proto` | `正規` |
-| `LGFX_ERR_BAD_OP` | `bad_op` | `正規` |
-| `LGFX_ERR_BAD_FLAGS` | `bad_flags` | `正規` |
 | `LGFX_ERR_BAD_ARGS` | `bad_args` | `正規` |
 | `LGFX_ERR_BAD_TARGET` | `bad_target` | `正規` |
 | `LGFX_ERR_NOT_INITIALIZED` | `not_initialized` | `正規` |
-| `LGFX_ERR_NOT_WRITING` | `not_writing` | `正規` |
 | `LGFX_ERR_NO_MEMORY` | `no_memory` | `正規` |
 | `LGFX_ERR_INTERNAL` | `internal` | `正規` |
 | `LGFX_ERR_UNSUPPORTED` | `unsupported` | `正規` |
+| `LGFX_ERR_RESOURCE_BUSY` | `resource_busy` | `正規` |
 <!-- END:generated_error_reasons_table -->
 
 ## 実装済み操作表
 
-実装済みのプロトコル操作面を示します。
+実装済みの NIF 操作面を示します。
 
-実装上の正式な定義元は `ops.def` です。この表と構築済みドライバーが一致しない場合は、構築済みドライバーを正とします。
+実装上の正式な定義元は `ops.def` です。
 
 <!-- BEGIN:generated_ops_matrix -->
 <!-- scripts/sync_lgfx_protocol_doc.exs により生成 -->

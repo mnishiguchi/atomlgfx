@@ -7,7 +7,7 @@ defmodule AtomLGFX.BinaryBatchProtocolTest do
 
   alias AtomLGFX.BinaryBatch
 
-  @protocol_header Path.expand("../../lgfx_port/include_internal/lgfx_port/protocol.h", __DIR__)
+  @protocol_header Path.expand("../../native/include/atom_lgfx/constants.h", __DIR__)
 
   @expected_render_private_defines %{
     "LGFX_RENDER_OP_TARGET" => {:target, 0xF0},

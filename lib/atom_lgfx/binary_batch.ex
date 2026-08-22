@@ -35,14 +35,14 @@ defmodule AtomLGFX.BinaryBatch do
   @doc """
   バイナリーバッチ命令列を送信します。
   """
-  @spec render(port(), iodata()) :: :ok | {:error, term()}
-  defdelegate render(port, commands), to: Submission
+  @spec render(reference(), iodata()) :: :ok | {:error, term()}
+  defdelegate render(handle, commands), to: Submission
 
   @doc """
   バイナリーバッチ命令列を検証してから送信します。
   """
-  @spec render_checked(port(), iodata()) :: :ok | {:error, term()}
-  defdelegate render_checked(port, commands), to: Submission
+  @spec render_checked(reference(), iodata()) :: :ok | {:error, term()}
+  defdelegate render_checked(handle, commands), to: Submission
 
   @doc """
   バイナリーバッチ命令列を送信せずに検証します。

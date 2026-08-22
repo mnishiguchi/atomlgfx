@@ -1,0 +1,272 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+// native/device/images.cpp
+
+#include "device.h"
+#include "device_internal.hpp"
+
+#include <cmath>
+#include <limits.h>
+#include <new>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <lgfx/v1/misc/DataWrapper.hpp>
+
+namespace
+{
+
+static inline uint16_t le16_at(const uint8_t *p)
+{
+    return uint16_t(p[0]) | (uint16_t(p[1]) << 8);
+}
+
+static inline void rgb565_le_to_host_u16(const uint8_t *src_le, uint16_t *dst, size_t n_pixels)
+{
+    for (size_t i = 0; i < n_pixels; i++) {
+        dst[i] = le16_at(src_le + (i * 2u));
+    }
+}
+
+static inline bool lgfx_scale_is_valid(float scale)
+{
+    return std::isfinite(scale) && scale > 0.0f;
+}
+
+// Reuse a static row buffer for common widths; fall back to heap allocation for wider rows.
+static constexpr size_t MAX_LINE_PIXELS = 480;
+static uint16_t linebuf[MAX_LINE_PIXELS];
+
+static esp_err_t draw_jpg_locked_impl(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t max_w,
+    uint16_t max_h,
+    int16_t off_x,
+    int16_t off_y,
+    float scale_x,
+    float scale_y,
+    const uint8_t *jpeg_bytes,
+    size_t jpeg_len)
+{
+    if (!jpeg_bytes || jpeg_len == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!lgfx_scale_is_valid(scale_x) || !lgfx_scale_is_valid(scale_y)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (jpeg_len > (size_t) UINT32_MAX) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    lgfx::LGFXBase *gfx = lgfx_dev::resolve_render_target_locked(target);
+    if (!gfx) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    lgfx::v1::PointerWrapper data(jpeg_bytes, (uint32_t) jpeg_len);
+
+    const bool ok = gfx->drawJpg(
+        &data,
+        (int32_t) x,
+        (int32_t) y,
+        (int32_t) max_w,
+        (int32_t) max_h,
+        (int32_t) off_x,
+        (int32_t) off_y,
+        scale_x,
+        scale_y,
+        lgfx::v1::datum_t::top_left);
+
+    return ok ? ESP_OK : ESP_FAIL;
+}
+
+static esp_err_t push_image_rgb565_strided_locked_impl(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t stride_pixels,
+    const uint8_t *pixels_le,
+    size_t pixels_len)
+{
+    if (!pixels_le || w == 0 || h == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (stride_pixels == 0) {
+        stride_pixels = w;
+    }
+    if (stride_pixels < w) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if ((pixels_len & 1u) != 0u) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    const uint64_t needed64 = (uint64_t) stride_pixels * 2u * (uint64_t) h;
+    if (needed64 > (uint64_t) SIZE_MAX) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    const size_t needed = (size_t) needed64;
+
+    if (pixels_len < needed) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    lgfx::LGFXBase *gfx = lgfx_dev::resolve_render_target_locked(target);
+    if (!gfx) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    // Input rows are ordinary RGB565 16-bit words encoded little-endian with
+    // optional stride padding.
+    //
+    // This keeps the payload contract aligned with common LovyanGFX-style
+    // uint16_t RGB565 image buffers. Target-specific byte swapping remains
+    // controlled by setSwapBytes(target, enabled).
+    const size_t row_bytes = (size_t) stride_pixels * 2u;
+
+    uint16_t *rowbuf = nullptr;
+    const bool use_static = (w <= MAX_LINE_PIXELS);
+
+    if (use_static) {
+        rowbuf = linebuf;
+    } else {
+        rowbuf = new (std::nothrow) uint16_t[w];
+        if (!rowbuf) {
+            return ESP_ERR_NO_MEM;
+        }
+    }
+
+    for (uint16_t row = 0; row < h; row++) {
+        const uint8_t *src = pixels_le + ((size_t) row * row_bytes);
+        rgb565_le_to_host_u16(src, rowbuf, (size_t) w);
+        gfx->pushImage(x, (int16_t) (y + row), w, 1, rowbuf);
+    }
+
+    if (!use_static) {
+        delete[] rowbuf;
+    }
+
+    return ESP_OK;
+}
+
+} // namespace
+
+extern "C" esp_err_t lgfx_device_draw_jpg(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t max_w,
+    uint16_t max_h,
+    int16_t off_x,
+    int16_t off_y,
+    float scale_x,
+    float scale_y,
+    const uint8_t *jpeg_bytes,
+    size_t jpeg_len)
+{
+    lgfx_dev::ScopedLcdLock lock;
+    esp_err_t err = lgfx_dev::lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    return draw_jpg_locked_impl(
+        target,
+        x,
+        y,
+        max_w,
+        max_h,
+        off_x,
+        off_y,
+        scale_x,
+        scale_y,
+        jpeg_bytes,
+        jpeg_len);
+}
+
+esp_err_t lgfx_dev::draw_jpg_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t max_w,
+    uint16_t max_h,
+    int16_t off_x,
+    int16_t off_y,
+    float scale_x,
+    float scale_y,
+    const uint8_t *jpeg_bytes,
+    size_t jpeg_len)
+{
+    return draw_jpg_locked_impl(
+        target,
+        x,
+        y,
+        max_w,
+        max_h,
+        off_x,
+        off_y,
+        scale_x,
+        scale_y,
+        jpeg_bytes,
+        jpeg_len);
+}
+
+esp_err_t lgfx_dev::push_image_rgb565_strided_locked(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t stride_pixels,
+    const uint8_t *pixels_le,
+    size_t pixels_len)
+{
+    return push_image_rgb565_strided_locked_impl(
+        target,
+        x,
+        y,
+        w,
+        h,
+        stride_pixels,
+        pixels_le,
+        pixels_len);
+}
+
+extern "C" esp_err_t lgfx_device_push_image_rgb565_strided(
+    uint8_t target,
+    int16_t x,
+    int16_t y,
+    uint16_t w,
+    uint16_t h,
+    uint16_t stride_pixels,
+    const uint8_t *pixels_le,
+    size_t pixels_len)
+{
+    lgfx_dev::ScopedLcdLock lock;
+    esp_err_t err = lgfx_dev::lock_ready(lock);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    return push_image_rgb565_strided_locked_impl(
+        target,
+        x,
+        y,
+        w,
+        h,
+        stride_pixels,
+        pixels_le,
+        pixels_len);
+}

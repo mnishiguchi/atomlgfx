@@ -329,7 +329,7 @@ defmodule AtomLGFX.ProtocolFreezeTest do
 
   defp native_render_private_opcodes do
     protocol_h_path =
-      Path.expand("../../lgfx_port/include_internal/lgfx_port/protocol.h", __DIR__)
+      Path.expand("../../native/include/atom_lgfx/constants.h", __DIR__)
 
     ~r/#define LGFX_RENDER_OP_([A-Z0-9_]+)\s+\(\(uint8_t\)\s+0x([0-9A-Fa-f]+)u\)/
     |> Regex.scan(File.read!(protocol_h_path))
@@ -341,7 +341,7 @@ defmodule AtomLGFX.ProtocolFreezeTest do
 
   defp native_render_extended_opcodes do
     protocol_h_path =
-      Path.expand("../../lgfx_port/include_internal/lgfx_port/protocol.h", __DIR__)
+      Path.expand("../../native/include/atom_lgfx/constants.h", __DIR__)
 
     ~r/#define LGFX_RENDER_EXT_OP_([A-Z0-9_]+)\s+\(\(uint8_t\)\s+0x([0-9A-Fa-f]+)u\)/
     |> Regex.scan(File.read!(protocol_h_path))

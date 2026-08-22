@@ -34,16 +34,26 @@ defmodule LGFX do
 
       :ok = LGFX.submit_batch(batch)
 
-  現時点の `init/0` は構築時の機器設定を使用します。実行時に詳細な機器設定を
-  指定する既存の `AtomLGFX.open/1` ポート API は引き続き利用できます。
+  `init/0` は構築時の機器設定を使用します。実行時にパネルやバス設定を
+  上書きする場合は `init/1` に設定を渡します。
   """
 
   alias AtomLGFX.Color
   alias AtomLGFX.Command
   alias AtomLGFX.Native
+  alias AtomLGFX.OpenConfig
   alias AtomLGFX.RenderBatch
 
   def init, do: Native.init()
+
+  def init(options) when is_list(options) do
+    with {:ok, config} <- OpenConfig.normalize_open_config(options) do
+      Native.init(config)
+    end
+  end
+
+  def init(options), do: {:error, {:bad_open_options_shape, options}}
+
   def close, do: Native.close()
 
   def width, do: Native.width()

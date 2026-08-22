@@ -24,8 +24,7 @@ path = [
   "README.md",
   "docs/**",
   "include/**",
-  "lgfx_device/**",
-  "lgfx_port/**",
+  "native/**",
   "lib/**",
   "mix.exs",
   "scripts/*.exs",
@@ -56,7 +55,7 @@ SPDX-FileCopyrightText = "piyopiyo.ex contributors (https://github.com/piyopiyoe
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
-path = "lgfx_device/fonts/generated/ui_font_ja_16_min.cpp"
+path = "native/device/fonts/generated/ui_font_ja_16_min.cpp"
 precedence = "override"
 SPDX-FileCopyrightText = [
   "2026 Masatoshi Nishiguchi",

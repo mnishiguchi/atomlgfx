@@ -260,14 +260,14 @@ defmodule AtomLGFX.OpenConfig do
   end
 
   defp format_open_option_error({:bad_open_options_shape, options}) do
-    "AtomLGFX.open/1 expects a keyword list or proplist with atom keys, got: #{inspect(options)}"
+    "display configuration expects a keyword list or proplist with atom keys, got: #{inspect(options)}"
   end
 
   defp format_open_option_error({:unknown_open_option, key}) do
-    "unknown AtomLGFX.open/1 option #{inspect(key)}; supported keys: #{inspect(@supported_open_config_keys)}"
+    "unknown display configuration option #{inspect(key)}; supported keys: #{inspect(@supported_open_config_keys)}"
   end
 
   defp format_open_option_error({:bad_open_option_value, key, value, expected}) do
-    "bad AtomLGFX.open/1 value for #{inspect(key)}: #{inspect(value)} (expected #{expected})"
+    "bad display configuration value for #{inspect(key)}: #{inspect(value)} (expected #{expected})"
   end
 end
