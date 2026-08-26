@@ -136,7 +136,9 @@ AtomVM 項を解析しません。
 - `LGFX.init/0` は構築時の既定設定を使用する
 - `LGFX.init/1` は実行時設定を上書きする
 - `AtomLGFX.open/1` は Elixir 側の設定ハンドルを作る
+- 設定ハンドルと実行時キャッシュは作成したプロセスが所有する
 - `AtomLGFX.init/1` はその設定で同じ NIF 所有機器を初期化する
+- 不明なハンドルによる `AtomLGFX.init/1` は `{:error, :invalid_handle}` を返す
 - `close` はネイティブ機器とスプライトを終了する
 
 複数の独立した LCD 実体を仮想化しません。

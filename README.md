@@ -91,6 +91,9 @@ SPDX-License-Identifier: Apache-2.0
 
 `AtomLGFX.open/1` は BEAM Port を開きません。
 実行時設定と Elixir 側の状態を識別するハンドルを作成します。
+設定と実行時キャッシュはプロセス辞書に保持されるため、ハンドルは作成した
+プロセス内で使用してください。不明なハンドルでの初期化は
+`{:error, :invalid_handle}` を返します。
 
 ネイティブ側の LCD 装置は単一実体です。
 

@@ -45,6 +45,9 @@ LovyanGFX の一般的なコード例を移植する場合は `LGFX` を使い�
 
 スプライト、パレット、タッチ、JPEG など既存の広い機能面には `AtomLGFX` を使います。
 `AtomLGFX.open/1` が返す値は Elixir 側の設定を識別するハンドルであり、BEAM Port ではありません。
+設定と実行時キャッシュはプロセス辞書に保持されるため、`open/1` とそのハンドルを
+使う操作は同じプロセスで実行します。別のプロセスや不明な参照から `init/1` を
+呼ぶと `{:error, :invalid_handle}` を返します。
 
 ```elixir
 {:ok, handle} = AtomLGFX.open(panel_driver: :ili9488, width: 320, height: 480)

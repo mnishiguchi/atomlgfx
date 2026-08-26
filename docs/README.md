@@ -52,5 +52,6 @@ ADR と作業記録には過去の構成や名称が残ることがあります�
 
 - [2026-08-21 NIF-only 実機検証報告](worklog/20260821-nif-only-hardware-validation-report.md)
 - [2026-08-22 AtomVM NIF 呼び出し時の OOM 調査](worklog/20260822-atomvm-nif-oom-worklog.md)
+- [2026-08-26 日付タグ公開前検証報告](worklog/20260826-release-validation-report.md)
 
 作業記録は判断の根拠を残すための資料であり、現在の仕様そのものではありません。
