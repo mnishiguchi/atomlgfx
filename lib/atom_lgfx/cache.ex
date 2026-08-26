@@ -11,7 +11,7 @@ defmodule AtomLGFX.Cache do
   def get_open_config(handle) do
     case get(open_config_cache_key(handle)) do
       value when is_list(value) -> {:ok, value}
-      _ -> {:ok, []}
+      _ -> {:error, :invalid_handle}
     end
   end
 

@@ -75,7 +75,8 @@ defmodule AtomLGFX.MixProject do
         "docs/protocol.md",
         "docs/protocol-reference.md",
         "docs/worklog/20260821-nif-only-hardware-validation-report.md",
-        "docs/worklog/20260822-atomvm-nif-oom-worklog.md"
+        "docs/worklog/20260822-atomvm-nif-oom-worklog.md",
+        "docs/worklog/20260826-release-validation-report.md"
       ]
     ]
   end
