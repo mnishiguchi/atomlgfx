@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # AtomLGFX ネイティブ操作参照
 
 この文書は、ソース情報と同期して生成する NIF 操作契約の参照表を収録します。

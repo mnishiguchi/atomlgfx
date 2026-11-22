@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # ADR 0002: 滑らかな LCD アニメーションのため、ドライバー管理の帯バッファー合成を使用する
 
 ## 状態

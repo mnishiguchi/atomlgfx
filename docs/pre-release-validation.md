@@ -1,14 +1,10 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # 公開前検証の確認表
 
 AtomLGFX は公開前です。Elixir と ESP-IDF 部品は同じ Git コミットから取得して検証します。
 
 ## Elixir
+
+リポジトリのルートで実行します。`just check` でも、文書構築とパッケージ検査以外のホスト検査をまとめて実行できます。
 
 ```bash
 mix deps.get
@@ -22,13 +18,15 @@ mix hex.build
 例示アプリケーションも別に確認します。
 
 ```bash
-cd examples/elixir
-mix deps.get
-mix format --check-formatted
-mix compile --warnings-as-errors
+(
+  cd examples/elixir
+  mix deps.get
+  mix format --check-formatted
+  mix compile --warnings-as-errors
+)
 ```
 
-操作定義を変更した場合は生成物も確認します。
+以下はリポジトリのルートで実行します。操作定義を変更した場合は先に生成物を同期してください。
 
 ```bash
 elixir scripts/sync_lgfx_protocol_doc.exs --check
@@ -58,7 +56,7 @@ git submodule update --init --recursive
 
 - `SAMPLE_APP_MODE=nif`
 - `SAMPLE_APP_MODE=all`
-- `SAMPLE_APP_MODE=moving_icons`
+- `SAMPLE_APP_MODE=moving_icons`（対応基板で PSRAM を有効化）
 
 `nif` では次を必須とします。
 

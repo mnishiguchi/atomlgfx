@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # ADR 0013: 高頻度表示ループ向けに保持型ネイティブ描画場面を追加する
 
 ## 状態

@@ -1,8 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-SPDX-License-Identifier: Apache-2.0
--->
-
 # ADR 0018: AtomVM Port を削除し、ネイティブ実行を NIF に統一する
 
 ## 状態

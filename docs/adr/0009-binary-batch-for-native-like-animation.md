@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # ADR 0009: v2 の高頻度描画をバイナリー描画一括実行へ統一する
 
 ## 状態

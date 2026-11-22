@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # v1 から v2 への移行
 
 > 過去資料: この文書は、すでに置き換えられた v2 API を説明する履歴資料です。現在の実装については [構成](architecture.md) と [Elixir パッケージ](elixir-package.md) を参照してください。
