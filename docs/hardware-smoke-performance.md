@@ -84,6 +84,7 @@ moving_icons stats renderer=transformed_sprite_list obj_count=<n> fps=<n> target
 
 ## 検証記録
 
+- [2026-11-22 導入手順の実機検証](worklog/20261122-getting-started-hardware-validation.md)
 - [2026-08-26 公開前検証](worklog/20260826-release-validation-report.md)
 - [2026-08-21 NIF-only 実機検証](worklog/20260821-nif-only-hardware-validation-report.md)
 - [2026-08-04 v3 検証](worklog/20260804-v3-hardware-validation-report.md)

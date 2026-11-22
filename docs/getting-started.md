@@ -187,3 +187,5 @@ SDK 設定の変更にはファームウェアの再構築が必要です。
 | モード変更が反映されない | `mix clean` 後、同じコマンドに `SAMPLE_APP_MODE` を付けて再書き込み |
 | スプライト確保に失敗する | 基板の PSRAM と起動ログを確認。上記 SDK 設定で有効化 |
 | `monitor` が TTY エラー | スクリプト経由の EIM monitor は失敗する場合がある。`tio` または `just monitor` を使う |
+
+実機で確認した範囲と制約は [2026-11-22 検証報告](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/worklog/20261122-getting-started-hardware-validation.md) にあります。
