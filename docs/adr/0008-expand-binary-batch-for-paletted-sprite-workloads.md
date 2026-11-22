@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # ADR 0008: パレット式スプライト処理向けに BinaryBatch を拡張する
 
 ## 状態

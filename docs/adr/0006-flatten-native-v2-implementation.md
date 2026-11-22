@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # ADR 0006: v2 ネイティブ実装を平坦化する
 
 ## 状態

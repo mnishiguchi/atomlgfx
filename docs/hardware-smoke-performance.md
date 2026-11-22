@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # 実機の動作確認と性能検証
 
 この文書は、AtomLGFX の LovyanGFX AtomVM NIF に対して実機で行う最小限の確認手順を記録します。

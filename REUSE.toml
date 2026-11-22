@@ -21,7 +21,8 @@ SPDX-License-Identifier = "CC0-1.0"
 path = [
   ".github/workflows/*.yml",
   "CMakeLists.txt",
-  "README.md",
+  "*.md",
+  "examples/**/*.md",
   "docs/**",
   "include/**",
   "native/**",

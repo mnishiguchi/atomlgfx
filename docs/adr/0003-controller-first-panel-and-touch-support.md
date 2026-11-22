@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # ADR 0003: 表示器とタッチ制御器を制御器単位で対応する
 
 ## 状態

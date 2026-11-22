@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # 文書案内
 
 `docs/` には、現在の設計・利用方法と、設計判断や実機検証の履歴を置きます。

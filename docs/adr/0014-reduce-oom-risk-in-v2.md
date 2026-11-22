@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # ADR 0014: AtomLGFX v2 のメモリー不足危険を減らす
 
 ## 状態

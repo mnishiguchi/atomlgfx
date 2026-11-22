@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # ADR 0004: 呼び出し方式の LovyanGFX ポートプロトコル
 
 ## 状態

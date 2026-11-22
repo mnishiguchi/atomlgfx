@@ -1,8 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-SPDX-License-Identifier: Apache-2.0
--->
-
 # ADR 0017: AtomVM NIF による LovyanGFX 直接 API
 
 ## 状態

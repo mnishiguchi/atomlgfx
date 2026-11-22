@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # ADR 0015: AtomLGFX v3 を低メモリーの LovyanGFX 形式プロトコルとして設計する
 
 ## 状態

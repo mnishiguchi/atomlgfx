@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # 公開前検証の確認表
 
 AtomLGFX は公開前です。Elixir と ESP-IDF 部品は同じ Git コミットから取得して検証します。

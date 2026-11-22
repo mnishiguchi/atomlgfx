@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # 構成
 
 `atomlgfx` は、AtomVM NIF から LovyanGFX を呼び出す単一のネイティブ実行経路を持ちます。

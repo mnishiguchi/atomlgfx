@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # M5Stack 基板
 
 この文書は、現在 `atomlgfx` に関係する M5Stack 基板を記録します。

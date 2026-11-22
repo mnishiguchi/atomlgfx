@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # ESP-IDF 部品
 
 このリポジトリは、LovyanGFX を AtomVM から利用するための NIF を提供する ESP-IDF 部品を含みます。

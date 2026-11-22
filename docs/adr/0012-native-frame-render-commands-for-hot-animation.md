@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # ADR 0012: 高頻度アニメーションループ向けネイティブフレーム描画命令を許可する
 
 ## 状態

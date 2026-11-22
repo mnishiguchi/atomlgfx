@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # atomlgfx
 
 `atomlgfx` は、ESP32 系基板で動く AtomVM から LovyanGFX を利用するためのライブラリです。

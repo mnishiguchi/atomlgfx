@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 Masatoshi Nishiguchi
-
-SPDX-License-Identifier: Apache-2.0
--->
-
 # ADR 0005: アニメーションの高頻度処理向けバイナリー一括実行と個体列
 
 ## 状態
