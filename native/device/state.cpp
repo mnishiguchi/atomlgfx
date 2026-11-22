@@ -1199,6 +1199,7 @@ esp_err_t presentation_present_strip_locked()
     }
 
     current->pushSprite(lcd, 0, static_cast<int32_t>(g_presentation.current_strip_y));
+    lcd->waitDMA();
     g_presentation.current = nullptr;
     g_presentation.frame_active = false;
     return ESP_OK;
