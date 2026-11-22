@@ -14,9 +14,19 @@ ESP32 上の AtomVM から [LovyanGFX](https://github.com/lovyan03/LovyanGFX) �
 | カスタム AtomVM ファームウェア | `CMakeLists.txt`、`native/`、`third_party/LovyanGFX/` | LCD を動かす NIF |
 | Elixir アプリ（`.avm`） | `lib/`、自分のアプリまたは `examples/elixir/` | 描画する内容 |
 
-両方で同じ atomlgfx の Git コミットを使ってください。
 動作確認済みの入口は **ESP32-S3 + ILI9488、横向き480x320** です。
 配線、必要なツール、初回の書き込みは Getting Started にまとめています。
+
+## インストール
+
+アプリケーションの `mix.exs` に次の依存関係を追加します。
+
+```elixir
+{:atomlgfx, "~> 0.1.0"}
+```
+
+Hex は Elixir API を配布します。カスタムファームウェアは、対応する
+[Git タグ `v0.1.0`](https://github.com/mnishiguchi/atomlgfx/tree/v0.1.0) から構築してください。
 
 ## API を選ぶ
 
@@ -50,7 +60,7 @@ alias AtomLGFX.Simple
 - [Getting Started](docs/getting-started.md): ツール、配線、構築、書き込み、成功ログ
 - [Elixir パッケージ](docs/elixir-package.md): 自分のアプリへの組み込みと API の使い分け
 - [ESP-IDF 部品](docs/esp-idf-component.md): ファームウェアの設定と再構築
-- [文書案内](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/README.md): 基板別設定、内部仕様、検証記録
+- [互換性表](docs/compatibility.md): 動作環境と実機で確認済みの構成
+- [文書案内](https://github.com/mnishiguchi/atomlgfx/blob/v0.1.0/docs/README.md): 基板別設定、内部仕様、検証記録
 - [変更履歴](CHANGELOG.md)
-
-`mix.exs` の `0.1.0` は構築用の仮値です。現在は Git コミットを指定して利用します。
+- [リリース手順](https://github.com/mnishiguchi/atomlgfx/blob/v0.1.0/RELEASE.md): 公開担当者向けの手順

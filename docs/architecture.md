@@ -64,4 +64,3 @@ ESP-IDF の PSRAM・フラッシュ設定や組み込む機能はファームウ
 - [ESP-IDF 部品](esp-idf-component.md): 構築と設定
 - [操作契約](protocol.md) / [生成された操作参照](protocol-reference.md): 内部形式と検証規則
 - [ネイティブ実装](../native/README.md) / [装置層](../native/device/README.md): ファイルごとの担当
-- [ADR 0018](adr/0018-nif-only-native-architecture.md): NIF へ統一した判断

@@ -2,6 +2,7 @@
 
 `AtomLGFX.Simple` / `AtomLGFX` は AtomVM 上で使う API です。
 先に [Getting Started](getting-started.md) でカスタムファームウェアと例示アプリを確認してください。
+Hex の `atomlgfx` は Elixir API のみを配布します。ネイティブ NIF と LovyanGFX は対応する Git tag のソースから AtomVM 本体へ組み込みます。
 PC の通常の BEAM でコンパイルしても、LCD 用 NIF は入りません。
 
 ## 自分のアプリを作る
@@ -29,16 +30,15 @@ def application, do: [extra_applications: []]
 
 defp deps do
   [
-    {:atomlgfx,
-     git: "https://github.com/mnishiguchi/atomlgfx.git",
-     ref: "FULL_GIT_COMMIT_SHA"},
+    {:atomlgfx, "~> 0.1.0"},
     {:exatomvm, github: "atomvm/ExAtomVM"}
   ]
 end
 ```
 
-`FULL_GIT_COMMIT_SHA` は、ファームウェア構築に使った atomlgfx リポジトリで
-`git rev-parse HEAD` して得た値に置き換えます。取得後の `mix.lock` も管理してください。
+Hex の `0.1.0` に対応するファームウェアは、atomlgfx の Git tag `v0.1.0` を checkout して構築します。
+開発中に Git 依存を使用する場合は、ファームウェアと Elixir パッケージの両方を同じフルコミット SHA に固定してください。
+取得後の `mix.lock` も管理してください。
 `0x250000` はこのガイドの AtomVM パーティション構成でのアプリ領域です。
 
 `lib/my_lcd.ex` を次の内容にします。Getting Started の既定配線を使う例です。
@@ -136,7 +136,8 @@ alias AtomLGFX.Simple
 ## 次に読む
 
 - [ESP-IDF 部品](esp-idf-component.md): 構築時設定、実行時設定、再構築の範囲
-- [構成](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/architecture.md): 所有権と内部の責務
-- [例示アプリ](https://github.com/mnishiguchi/atomlgfx/blob/main/examples/elixir/README.md): 描画と実機確認の実例
+- [構成](https://github.com/mnishiguchi/atomlgfx/blob/v0.1.0/docs/architecture.md): 所有権と内部の責務
+- [例示アプリ](https://github.com/mnishiguchi/atomlgfx/blob/v0.1.0/examples/elixir/README.md): 描画と実機確認の実例
 
-現在は Git コミットを指定して利用します。atomlgfx の `0.1.0` は構築用の仮値です。
+バージョン付きの API とネイティブ NIF は同じ Git tag から作られます。
+公開・検証の手順は [RELEASE.md](https://github.com/mnishiguchi/atomlgfx/blob/v0.1.0/RELEASE.md) を参照してください。

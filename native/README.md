@@ -23,5 +23,5 @@ AtomVM NIF と LovyanGFX 装置層を置きます。利用者向けの構築手�
 - NIF 呼び出し終了後に AtomVM バイナリーへのポインターを保持しない。
 - 操作契約の変更は `ops.def` と [操作契約](../docs/protocol.md) に反映し、生成物を同期する。
 
-変更後の検査は [公開前検証](../docs/pre-release-validation.md) を参照してください。
+変更後の検査は [検証手順](../docs/testing.md) を参照してください。
 ネイティブ変更には、ホスト検査に加えて AtomVM / ESP-IDF の構築と実機確認が必要です。
