@@ -5,8 +5,8 @@
 defmodule AtomLGFX.MixProject do
   use Mix.Project
 
-  # AtomLGFX は未公開だが、Mix が SemVer 形式の値を要求するため仮の版を置く。
   @version "0.1.0"
+  @source_url "https://github.com/mnishiguchi/atomlgfx"
 
   def project do
     [
@@ -43,15 +43,20 @@ defmodule AtomLGFX.MixProject do
     [
       name: "atomlgfx",
       licenses: ["Apache-2.0"],
+      # Hex には Elixir API と利用ガイドを含め、NIF は同じタグから構築する。
       files: [
         "lib",
         "mix.exs",
         "README.md",
         "CHANGELOG.md",
+        "docs/getting-started.md",
+        "docs/elixir-package.md",
+        "docs/esp-idf-component.md",
+        "docs/compatibility.md",
         "LICENSES"
       ],
       links: %{
-        "GitHub" => "https://github.com/mnishiguchi/atomlgfx"
+        "GitHub" => @source_url
       }
     ]
   end
@@ -59,17 +64,18 @@ defmodule AtomLGFX.MixProject do
   defp docs do
     [
       main: "AtomLGFX.Simple",
-      source_ref: "main",
+      source_ref: "v#{@version}",
       source_url: source_url(),
       extras: [
         "README.md",
         "CHANGELOG.md",
         "docs/getting-started.md",
         "docs/elixir-package.md",
-        "docs/esp-idf-component.md"
+        "docs/esp-idf-component.md",
+        "docs/compatibility.md"
       ]
     ]
   end
 
-  defp source_url, do: "https://github.com/mnishiguchi/atomlgfx"
+  defp source_url, do: @source_url
 end
