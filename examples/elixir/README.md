@@ -24,6 +24,7 @@ SAMPLE_APP_MODE=nif mix atomvm.esp32.flash --port /dev/ttyACM0
 | `nif` | 最初の確認。直接 NIF、基本描画、エラー経路、バッチ |
 | `face` | 顔のデモ（環境変数を指定しない場合の既定値） |
 | `all` | 描画・画像・スプライトなどをまとめて確認 |
+| `dma` | PSRAM 転送後の再描画・破棄・再作成を、書き込み区間を閉じずに確認 |
 | `moving_icons` | PSRAM を使うアニメーション |
 
 全モードと期待するログは [実機確認](../../docs/hardware-smoke-performance.md) にあります。

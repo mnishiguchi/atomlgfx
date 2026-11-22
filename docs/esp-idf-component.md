@@ -3,6 +3,19 @@
 `native/` の NIF と LovyanGFX を AtomVM ファームウェアへ組み込むための参照文書です。
 初回は [Getting Started](getting-started.md) でツールと配線を準備してください。
 
+## 固定する依存版
+
+| 依存 | 版・コミット |
+| --- | --- |
+| LovyanGFX | 1.3.0、`dd228d15a03900ce658fd62e120dc7cc489915dd` |
+| AtomVM | release-0.7、`e2cacc998f455ad66b1aa9e6391f7b32928cc38d` |
+| ESP-IDF | EIM の v5.5.x |
+
+LovyanGFX の更新時は C++ のオブジェクト構造も変わるため、古いオブジェクトを混在させず、
+`build --fullclean` などで全ソースを再構築してください。
+1.3.0 の hub と旧 I2C の生成 overlay は `native/cmake/lovyangfx.cmake` で管理します。
+submodule のソースは直接編集しません。
+
 ## 構築と書き込み
 
 リポジトリのルートで実行します。`ATOMVM_DIR` には専用の AtomVM checkout を指定してください。
@@ -47,6 +60,9 @@ git submodule update --init --recursive
 追加の ESP-IDF 設定は `--sdkconfig /path/to/board.defaults` で渡せます。
 PSRAM の具体例は [Getting Started](getting-started.md#psram-を使う場合) を参照してください。
 設定名と既定値の定義元は `CMakeLists.txt` です。`LGFX_PORT_*` という名前は残っていますが、実行経路は NIF のみです。
+
+SPI 転送の切り分けには `--cmake-define LGFX_PORT_DISABLE_SPI_SCT=ON` を指定できます。
+既定は SCT 有効です。変更後はファームウェアを再構築・書き込みします。
 
 ## 再構築が必要な変更
 

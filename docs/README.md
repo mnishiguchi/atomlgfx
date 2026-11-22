@@ -26,6 +26,7 @@
 
 作業記録はその時点の構成と結果です。現在のセットアップには上記の手順を使ってください。
 
+- [2026-11-22 LovyanGFX 1.3.0 移行検証](worklog/20261122-lovyangfx-1.3.0-validation.md)
 - [2026-11-22 Getting Started の ESP32-S3 実機検証](worklog/20261122-getting-started-hardware-validation.md)
 - [2026-08-26 公開前検証](worklog/20260826-release-validation-report.md)
 - [2026-08-22 NIF 呼び出し時の OOM 調査](worklog/20260822-atomvm-nif-oom-worklog.md)
