@@ -6,6 +6,7 @@ defmodule SampleApp do
   @moduledoc false
 
   alias SampleApp.BasicShapes
+  alias SampleApp.DmaSmoke
   alias SampleApp.Face
   alias SampleApp.JapaneseText
   alias SampleApp.MovingIcons
@@ -24,6 +25,7 @@ defmodule SampleApp do
     :basic_shapes,
     :text,
     :nif,
+    :dma,
     :perf,
     :face,
     :japanese_text,
@@ -130,6 +132,12 @@ defmodule SampleApp do
   defp run_mode(handle, :perf) do
     with_boot_dims(handle, fn w, h ->
       step("perf_smoke", PerfSmoke.run(handle, w, h))
+    end)
+  end
+
+  defp run_mode(handle, :dma) do
+    with_boot_dims(handle, fn w, h ->
+      step("dma_smoke", DmaSmoke.run(handle, w, h))
     end)
   end
 

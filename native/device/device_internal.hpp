@@ -28,6 +28,20 @@ namespace lgfx_dev
 
 struct LgfxRuntimeConfig;
 
+// 外側の startWrite が継続中でも、転送元を呼び出し後に変更・解放できるようにする。
+// waitDMA は送信元スプライトではなく、転送先へ適用する。
+class ScopedDmaWait
+{
+public:
+    explicit ScopedDmaWait(lgfx::LGFXBase *destination) : destination_(destination) {}
+    ~ScopedDmaWait() { destination_->waitDMA(); }
+    ScopedDmaWait(const ScopedDmaWait &) = delete;
+    ScopedDmaWait &operator=(const ScopedDmaWait &) = delete;
+
+private:
+    lgfx::LGFXBase *destination_;
+};
+
 // -----------------------------------------------------------------------------
 // Shared constants / metadata (owned by lgfx_device_state.cpp)
 // -----------------------------------------------------------------------------

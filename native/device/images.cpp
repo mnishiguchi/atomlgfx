@@ -152,6 +152,8 @@ static esp_err_t push_image_rgb565_strided_locked_impl(
         const uint8_t *src = pixels_le + ((size_t) row * row_bytes);
         rgb565_le_to_host_u16(src, rowbuf, (size_t) w);
         gfx->pushImage(x, (int16_t) (y + row), w, 1, rowbuf);
+        // 次の行で同じバッファを書き換える前に転送を完了する。
+        gfx->waitDMA();
     }
 
     if (!use_static) {

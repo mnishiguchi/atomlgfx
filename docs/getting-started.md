@@ -4,6 +4,9 @@ ESP32-S3 + ILI9488 で、カスタム AtomVM ファームウェアを構築し�
 **ファームウェア → アプリの順に、別々に書き込みます。**
 `mix deps.get` だけでは LCD を動かす NIF は入りません。
 
+LovyanGFX 1.3.0、AtomVM release-0.7 の固定コミット、ESP-IDF v5.5.x を使います。
+依存版の詳細と更新時の再構築方法は [ESP-IDF 部品](esp-idf-component.md) を参照してください。
+
 ## 1. 用意するもの
 
 - ESP32-S3、ILI9488 SPI LCD、USB データケーブル

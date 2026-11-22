@@ -31,6 +31,7 @@ tio -b 115200 /dev/ttyACM0
 | モード | 確認すること |
 | --- | --- |
 | `nif` | 直接 NIF、基本描画、画像転送、不正引数、事前符号化バッチ、120矩形の性能比較 |
+| `dma` | 二重の書き込み区間を維持し、38,400 bytes のスプライトを直接・バッチで転送した直後に再描画・色深度変更・破棄・再作成を40回繰り返す |
 | `face` | 顔のアニメーション。環境変数を省いた場合の既定モード |
 | `all` | `smoke`、基本図形、文字、スプライト、sprite protocol |
 | `smoke` | 起動、バッチ、図形・文字、切り抜き、画像、色・パレット、タッチ probe |
@@ -46,6 +47,8 @@ tio -b 115200 /dev/ttyACM0
 最初は `nif`、通常のデモは `face`、広い機能確認は `all` を使います。
 `nif` は `LGFX.init/0` の構築時設定、他のモードは主に `SampleApp` の実行時設定を使います。
 PSRAM の有効化と別配線での設定は Getting Started にあります。
+`dma` は PSRAM 有効構成で実行し、`dma_smoke ok` と正常終了を確認します。
+API の完了と継続動作を調べるテストであり、画素の正しさは画面でも別途確認してください。
 
 ## ログの読み方
 
@@ -84,6 +87,7 @@ moving_icons stats renderer=transformed_sprite_list obj_count=<n> fps=<n> target
 
 ## 検証記録
 
+- [2026-11-22 LovyanGFX 1.3.0 移行検証](worklog/20261122-lovyangfx-1.3.0-validation.md)
 - [2026-11-22 導入手順の実機検証](worklog/20261122-getting-started-hardware-validation.md)
 - [2026-08-26 公開前検証](worklog/20260826-release-validation-report.md)
 - [2026-08-21 NIF-only 実機検証](worklog/20260821-nif-only-hardware-validation-report.md)

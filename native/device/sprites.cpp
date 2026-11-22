@@ -181,6 +181,8 @@ static esp_err_t lgfx_push_sprite_locked_impl(
             return ESP_ERR_INVALID_STATE;
         }
 
+        lgfx_dev::ScopedDmaWait transfer(render_surface);
+
         if (has_transparent) {
             src->pushSprite(render_surface, x, y, static_cast<uint32_t>(transparent_value));
         } else {
@@ -194,6 +196,8 @@ static esp_err_t lgfx_push_sprite_locked_impl(
     if (!dst_spr) {
         return ESP_ERR_NOT_FOUND;
     }
+
+    lgfx_dev::ScopedDmaWait transfer(dst_spr);
 
     if (has_transparent) {
         src->pushSprite(dst_spr, x, y, static_cast<uint32_t>(transparent_value));
@@ -247,6 +251,8 @@ static esp_err_t lgfx_push_sprite_resolved_locked_impl(
     if (!src || !dst) {
         return ESP_ERR_INVALID_ARG;
     }
+
+    lgfx_dev::ScopedDmaWait transfer(dst);
 
     const uint16_t *pixels = nullptr;
     uint16_t width = 0;
@@ -368,6 +374,8 @@ static esp_err_t lgfx_push_image_region_rows_locked(
     if (!dst || !src_pixels || src_w == 0 || src_h == 0 || src_stride_pixels < src_w) {
         return ESP_ERR_INVALID_ARG;
     }
+
+    lgfx_dev::ScopedDmaWait transfer(dst);
 
     // When the requested region is contiguous, push it as one image instead of
     // issuing one pushImage call per row. This is the common path for whole-sprite
@@ -555,6 +563,8 @@ static esp_err_t lgfx_push_rotate_zoom_resolved_locked_impl(
         return ESP_ERR_INVALID_ARG;
     }
 
+    lgfx_dev::ScopedDmaWait transfer(dst);
+
     if (approx_cull && !lgfx_approx_transform_may_touch(src, dst, x, y, zoom_x, zoom_y)) {
         if (out_was_culled) {
             *out_was_culled = true;
@@ -729,6 +739,8 @@ static esp_err_t lgfx_push_rotate_zoom_locked_impl(
             return ESP_ERR_INVALID_STATE;
         }
 
+        lgfx_dev::ScopedDmaWait transfer(render_surface);
+
         if (approx_cull && !lgfx_approx_transform_may_touch(src, render_surface, x, y, zoom_x, zoom_y)) {
             if (out_was_culled) {
                 *out_was_culled = true;
@@ -762,6 +774,8 @@ static esp_err_t lgfx_push_rotate_zoom_locked_impl(
     if (!dst_spr) {
         return ESP_ERR_NOT_FOUND;
     }
+
+    lgfx_dev::ScopedDmaWait transfer(dst_spr);
 
     if (approx_cull && !lgfx_approx_transform_may_touch(src, dst_spr, x, y, zoom_x, zoom_y)) {
         if (out_was_culled) {
