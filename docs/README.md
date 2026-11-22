@@ -1,51 +1,34 @@
 # 文書案内
 
-`docs/` には、現在の設計・利用方法と、設計判断や実機検証の履歴を置きます。
+初めて使う場合は **[Getting Started](getting-started.md)** から進めてください。
+ファームウェアを書き込み、Elixir の例示アプリで480x320の表示を確認するまでを説明しています。
 
-現在の実装を理解する場合は、まず「現在の設計」から読んでください。
-ADR と作業記録には過去の構成や名称が残ることがあります。
+## 使うための文書
 
-## 現在の設計
+| 目的 | 読む文書 |
+| --- | --- |
+| 最初の構築・配線・書き込み | [Getting Started](getting-started.md) |
+| 自分の Elixir アプリを作る、API を選ぶ | [Elixir パッケージ](elixir-package.md) |
+| サンプルを切り替える | [例示アプリ](../examples/elixir/README.md) |
+| パネル、GPIO、機能の構築時設定を変える | [ESP-IDF 部品](esp-idf-component.md) |
+| M5Stack の設定を調べる | [M5Stack 基板](boards/m5stack.md) |
+| 実機で機能・性能を確かめる | [実機確認](hardware-smoke-performance.md) |
 
-- [構成](architecture.md)
-  - Elixir API、NIF、バイナリーバッチ、LovyanGFX 装置層の全体像
-- [Elixir パッケージ](elixir-package.md)
-  - `LGFX` と `AtomLGFX` の利用方法
-- [ESP-IDF 部品](esp-idf-component.md)
-  - ネイティブ部品の構成と構築方法
-- [ネイティブ操作契約](protocol.md)
-  - Elixir と NIF が共有する内部操作契約
-- [ネイティブ操作参照](protocol-reference.md)
-  - ソースから生成する操作一覧
+## 開発・保守の文書
 
-## 検証
+- [構成](architecture.md): NIF と装置層、所有権、データの生存期間
+- [ネイティブ操作契約](protocol.md) / [生成された操作参照](protocol-reference.md)
+- [ネイティブ実装](../native/README.md) / [LovyanGFX 装置層](../native/device/README.md)
+- [公開前検証](pre-release-validation.md)
+- [ADR 案内](adr/README.md): 現在の判断と過去の設計経緯
 
-- [実機の動作確認と性能検証](hardware-smoke-performance.md)
-- [公開前検証の確認表](pre-release-validation.md)
+## 検証記録と過去資料
 
-## 履歴資料
+作業記録はその時点の構成と結果です。現在のセットアップには上記の手順を使ってください。
 
-- [v1 から v2 への移行](migration-v1-to-v2.md)
-  - 置き換え済み API の移行記録
+- [2026-08-26 公開前検証](worklog/20260826-release-validation-report.md)
+- [2026-08-22 NIF 呼び出し時の OOM 調査](worklog/20260822-atomvm-nif-oom-worklog.md)
+- [2026-08-21 NIF-only 実機検証](worklog/20260821-nif-only-hardware-validation-report.md)
+- [v1 → v2 移行](migration-v1-to-v2.md): 置き換え済み API の履歴
 
-## 基板
-
-- [M5Stack 基板](boards/m5stack.md)
-
-## 構成設計判断記録
-
-- [ADR 案内](adr/README.md)
-- 現在のネイティブ構成は [ADR 0018](adr/0018-nif-only-native-architecture.md) を参照
-
-古い ADR は判断の履歴として維持します。
-現在の実装仕様としてではなく、当時の背景を確認するために利用します。
-
-## 作業記録
-
-実機検証、性能測定、障害調査などの時点記録は `docs/worklog/` に置きます。
-
-- [2026-08-21 NIF-only 実機検証報告](worklog/20260821-nif-only-hardware-validation-report.md)
-- [2026-08-22 AtomVM NIF 呼び出し時の OOM 調査](worklog/20260822-atomvm-nif-oom-worklog.md)
-- [2026-08-26 日付タグ公開前検証報告](worklog/20260826-release-validation-report.md)
-
-作業記録は判断の根拠を残すための資料であり、現在の仕様そのものではありません。
+その他の測定・調査記録は `worklog/` にあります。

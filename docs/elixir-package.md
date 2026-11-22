@@ -1,58 +1,88 @@
 # Elixir パッケージ
 
-`atomlgfx` は AtomVM 上の Elixir から LovyanGFX を利用するための公開前パッケージです。
-ネイティブ実行経路は AtomVM NIF のみです。
+`LGFX` / `AtomLGFX` は AtomVM 上で使う API です。
+先に [Getting Started](getting-started.md) でカスタムファームウェアと例示アプリを確認してください。
+PC の通常の BEAM でコンパイルしても、LCD 用 NIF は入りません。
 
-## 必要条件
+## 自分のアプリを作る
 
-同じ Git コミットから構築した AtomLGFX ESP-IDF 部品を AtomVM ファームウェアへ含めます。
+```bash
+mix new my_lcd
+cd my_lcd
+```
 
-Git 依存として使う場合:
+`mix.exs` の `project/0` に AtomVM の開始モジュールと書き込み先を追加します。
+`application/0` の `extra_applications` は、この最小例では空にします。
 
 ```elixir
+def project do
+  [
+    app: :my_lcd,
+    version: "0.1.0",
+    elixir: "~> 1.17",
+    deps: deps(),
+    atomvm: [start: MyLcd, flash_offset: 0x250000]
+  ]
+end
+
+def application, do: [extra_applications: []]
+
 defp deps do
   [
     {:atomlgfx,
      git: "https://github.com/mnishiguchi/atomlgfx.git",
-     ref: "FULL_GIT_COMMIT_SHA"}
+     ref: "FULL_GIT_COMMIT_SHA"},
+    {:exatomvm, github: "atomvm/ExAtomVM"}
   ]
 end
 ```
 
-## 基本 API
+`FULL_GIT_COMMIT_SHA` は、ファームウェア構築に使った atomlgfx リポジトリで
+`git rev-parse HEAD` して得た値に置き換えます。取得後の `mix.lock` も管理してください。
+`0x250000` はこのガイドの AtomVM パーティション構成でのアプリ領域です。
 
-LovyanGFX の一般的なコード例を移植する場合は `LGFX` を使います。
+`lib/my_lcd.ex` を次の内容にします。Getting Started の既定配線を使う例です。
 
 ```elixir
-:ok = LGFX.init(panel_driver: :ili9488, width: 320, height: 480)
-
-:ok = LGFX.fill_screen(:black)
-:ok = LGFX.draw_rect(20, 20, 100, 60, :red)
-:ok = LGFX.fill_circle(160, 120, 30, :blue)
-:ok = LGFX.draw_string("Hello", 20, 100)
-:ok = LGFX.display()
+defmodule MyLcd do
+  def start do
+    :ok = LGFX.init()
+    :ok = LGFX.set_rotation(1)
+    :ok = LGFX.fill_screen(:black)
+    :ok = LGFX.set_text_color(:white)
+    :ok = LGFX.draw_string("Hello AtomLGFX", 16, 16)
+    :ok = LGFX.display()
+  end
+end
 ```
 
-構築時設定だけでよい場合は `LGFX.init/0` を使えます。
+```bash
+mix deps.get
+mix atomvm.esp32.flash --port /dev/ttyACM0
+```
 
-## 高度な API
+ファームウェアが同じ操作契約の NIF を含む限り、描画処理の変更はアプリの書き込みだけで試せます。
+実行時に配線などを変える場合は `LGFX.init/1` へ設定を渡します。
 
-スプライト、パレット、タッチ、JPEG など既存の広い機能面には `AtomLGFX` を使います。
-`AtomLGFX.open/1` が返す値は Elixir 側の設定を識別するハンドルであり、BEAM Port ではありません。
-設定と実行時キャッシュはプロセス辞書に保持されるため、`open/1` とそのハンドルを
-使う操作は同じプロセスで実行します。別のプロセスや不明な参照から `init/1` を
-呼ぶと `{:error, :invalid_handle}` を返します。
+## API を選ぶ
+
+| API | 使いどころ | 戻り値の例 |
+| --- | --- | --- |
+| `LGFX` | 画面に文字や図形を直接描く。最初の表示確認はこちらから | 描画は `:ok`、寸法は整数 |
+| `AtomLGFX` | メモリー上で画像を組み立てて表示する（スプライト）、タッチ位置を読む、JPEG を表示する | 描画は `:ok`、照会は `{:ok, value}` |
+
+どちらも失敗時は `{:error, reason}` を返します。詳細な関数一覧は各モジュールの API 文書を参照してください。
+
+`AtomLGFX` でスプライトを使う例:
 
 ```elixir
 {:ok, handle} = AtomLGFX.open(panel_driver: :ili9488, width: 320, height: 480)
 :ok = AtomLGFX.init(handle)
-
 :ok = AtomLGFX.create_sprite(handle, 120, 72, 16, 1)
 
 :ok =
   AtomLGFX.render_sprite(handle, 1, [
     {:clear, :navy},
-    {:draw_rect, 0, 0, 120, 72, :white},
     {:draw_string, "sprite", 8, 8}
   ])
 
@@ -62,12 +92,19 @@ LovyanGFX の一般的なコード例を移植する場合は `LGFX` を使い�
     {:push_sprite, 1, 24, 32},
     :display
   ])
+
+:ok = AtomLGFX.close(handle)
 ```
 
-## 描画バッチ
+`handle` は、`open/1` で指定した設定を後の操作へ引き継ぐための値です。
+設定とキャッシュは作成したプロセスが所有します。同じプロセスから使用してください。
+別プロセスや不明なハンドルでの `init/1` は `{:error, :invalid_handle}` を返します。
+ネイティブの LCD は単一実体なので、両 API で独立した LCD を同時に所有することはできません。
 
-複数命令を一度だけ実行する場合は `LGFX.batch/2` または `AtomLGFX.render/3` を使います。
-同じ命令列を高頻度で繰り返す場合は、符号化をホットループの外へ出します。
+## 描画をまとめる
+
+一度だけ使う命令列は `LGFX.batch/2` または `AtomLGFX.render/3` へ渡します。
+同じ命令列を繰り返す場合は、ループの外で符号化します。
 
 ```elixir
 {:ok, batch} =
@@ -77,31 +114,14 @@ LovyanGFX の一般的なコード例を移植する場合は `LGFX` を使い�
   ])
 
 :ok = LGFX.submit_batch(batch)
-:ok = LGFX.submit_batch(batch)
 ```
 
-低水準の命令列を明示的に組み立てる場合は `AtomLGFX.BinaryBatch` を利用できます。
+低水準の命令構築には `AtomLGFX.BinaryBatch` を使えます。
 
-## 責務
+## 次に読む
 
-Elixir 側は次を担当します。
+- [ESP-IDF 部品](esp-idf-component.md): 構築時設定、実行時設定、再構築の範囲
+- [構成](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/architecture.md): 所有権と内部の責務
+- [例示アプリ](https://github.com/mnishiguchi/atomlgfx/blob/main/examples/elixir/README.md): 描画と実機確認の実例
 
-- 公開 API
-- 入力の検証と正規化
-- 色や文字基準位置などの扱いやすい表現
-- バイナリーバッチの符号化
-
-NIF は AtomVM term の検証と `native/device/` 装置層の呼び出しを担当し、描画そのものは LovyanGFX に任せます。
-
-## 関連文書
-
-- [構成](architecture.md)
-- [ESP-IDF 部品](esp-idf-component.md)
-- [ネイティブ操作契約](protocol.md)
-- [ネイティブ実装](../native/README.md)
-- [装置適合層](../native/device/README.md)
-
-## 互換性
-
-Elixir とネイティブ部品は同じ Git コミットから取得してください。
-`mix.exs` の `0.1.0` は Mix が要求する仮の値であり、公開済み版ではありません。
+現在は Git コミットを指定して利用します。atomlgfx の `0.1.0` は構築用の仮値です。

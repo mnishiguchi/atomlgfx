@@ -1,6 +1,7 @@
 # M5Stack 基板
 
-この文書は、現在 `atomlgfx` に関係する M5Stack 基板を記録します。
+M5Stack 向けの実行時設定です。先に [Getting Started](../getting-started.md) のツール準備と
+カスタム AtomVM の書き込みを済ませ、使用する基板の設定を選んでください。
 
 `atomlgfx` は制御器を中心に設計しています。LCD とタッチ制御器の共通対応は汎用制御器層へ置き、基板固有の電源、リセット、バックライト処理は `board_preset` で重ねます。
 
@@ -34,7 +35,7 @@ LCD とタッチ制御器は共通ですが、基板単位の起動処理は同�
 次の開始設定は、Core2 の動作確認済み基準です。
 
 ```elixir
-[
+options = [
   board_preset: :m5stack_core2,
   panel_driver: :ili9342c,
   width: 320,
@@ -63,10 +64,12 @@ LCD とタッチ制御器は共通ですが、基板単位の起動処理は同�
 ]
 ```
 
-実行時の初期回転:
+設定を使って初期化します（同じプロセス内で実行）:
 
 ```elixir
-AtomLGFX.set_rotation(handle, 1)
+{:ok, handle} = AtomLGFX.open(options)
+:ok = AtomLGFX.init(handle)
+:ok = AtomLGFX.set_rotation(handle, 1)
 ```
 
 ## CoreS3 の基準設定
@@ -74,7 +77,7 @@ AtomLGFX.set_rotation(handle, 1)
 次の開始設定は、CoreS3 の初回検証基準です。
 
 ```elixir
-[
+options = [
   board_preset: :m5stack_cores3,
   panel_driver: :ili9342c,
   width: 320,
@@ -100,10 +103,12 @@ AtomLGFX.set_rotation(handle, 1)
 ]
 ```
 
-実行時の初期回転:
+設定を使って初期化します（同じプロセス内で実行）:
 
 ```elixir
-AtomLGFX.set_rotation(handle, 1)
+{:ok, handle} = AtomLGFX.open(options)
+:ok = AtomLGFX.init(handle)
+:ok = AtomLGFX.set_rotation(handle, 1)
 ```
 
 ## 注意事項

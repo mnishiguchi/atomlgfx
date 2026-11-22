@@ -64,19 +64,9 @@ defmodule AtomLGFX.MixProject do
       extras: [
         "README.md",
         "CHANGELOG.md",
-        "docs/architecture.md",
-        "docs/adr/0015-v3-low-memory-protocol.md",
-        "docs/adr/0016-render-first-low-memory-api.md",
-        "docs/adr/0017-direct-atomvm-nif-api.md",
-        "docs/adr/0018-nif-only-native-architecture.md",
-        "docs/boards/m5stack.md",
+        "docs/getting-started.md",
         "docs/elixir-package.md",
-        "docs/esp-idf-component.md",
-        "docs/protocol.md",
-        "docs/protocol-reference.md",
-        "docs/worklog/20260821-nif-only-hardware-validation-report.md",
-        "docs/worklog/20260822-atomvm-nif-oom-worklog.md",
-        "docs/worklog/20260826-release-validation-report.md"
+        "docs/esp-idf-component.md"
       ]
     ]
   end

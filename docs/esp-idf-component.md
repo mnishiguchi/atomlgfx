@@ -1,115 +1,75 @@
 # ESP-IDF 部品
 
-このリポジトリは、LovyanGFX を AtomVM から利用するための NIF を提供する ESP-IDF 部品を含みます。
-Elixir 側とネイティブ側は同じ Git コミットから取得してください。
+`native/` の NIF と LovyanGFX を AtomVM ファームウェアへ組み込むための参照文書です。
+初回は [Getting Started](getting-started.md) でツールと配線を準備してください。
 
-## 提供するもの
+## 構築と書き込み
 
-- `LGFX` と `AtomLGFX` が利用する AtomVM NIF
-- LovyanGFX を包む `native/device/` 装置適合層
-- 基本図形、文字、画像、スプライト、パレット、タッチ操作
-- 実行時のパネル・バス設定
-- 高頻度描画向けのバイナリーバッチ実行
-- 操作情報と診断情報
-
-旧 AtomVM Port、メールボックス通信、要求／応答組の解析器は構築しません。
-
-## 構成
-
-```text
-Elixir
-  |
-  v
-AtomLGFX.Native
-  |
-  v
-AtomVM NIF
-  |
-  +-- lgfx_device_*
-  |
-  +-- render_batch
-          |
-          v
-       LovyanGFX
-```
-
-主な領域:
-
-- `CMakeLists.txt`
-  - ESP-IDF 部品の構築設定
-- `native/nif.c`
-  - AtomVM NIF 登録
-- `native/include/atom_lgfx/nif.inc`
-  - 直接 `LGFX` NIF
-- `native/include/atom_lgfx/nif_dispatch.inc`
-  - `AtomLGFX` の共通 NIF 呼び出し
-- `native/render_batch.cpp`
-  - バイナリーバッチ実行
-- `native/device/`
-  - LovyanGFX に面する装置適合層
-- `third_party/LovyanGFX/`
-  - 版を固定した LovyanGFX
-
-一部の `LGFX_PORT_*` 構築設定名は互換性のため残していますが、現在の実行経路は NIF のみです。
-
-## 構築準備
-
-LovyanGFX の副リポジトリを初期化します。
+リポジトリのルートで実行します。`ATOMVM_DIR` には専用の AtomVM checkout を指定してください。
+構築補助スクリプトは EIM の ESP-IDF v5.5.x を使い、AtomVM を固定コミットへ合わせます。
 
 ```bash
-git submodule sync --recursive
+export ATOMVM_DIR="$HOME/atomvm/AtomVM-atomlgfx"
 git submodule update --init --recursive
-```
-
-## AtomVM ファームウェアの構築
-
-```bash
 ./scripts/atomvm_esp32.exs build --target esp32s3 --component .
 ```
 
-構築と書き込みを続けて行う場合:
+構築と書き込みをまとめる場合:
 
 ```bash
-./scripts/atomvm_esp32.exs install --target esp32s3 --port /dev/ttyACM0
+./scripts/atomvm_esp32.exs install --target esp32s3 --component . --port /dev/ttyACM0
 ```
 
-対象と直列ポートは環境に合わせて変更してください。
+`--component .` が NIF の組み込み指定です。既存のリンクに頼らず、毎回指定してください。
+`just build-firmware` / `just install-firmware` も同じ操作を行います。
 
-## 設定
+## 設定を変える
 
-構築時の既定値は CMake 設定から生成するネイティブ設定ヘッダーへ出力します。
-実行時に変更する必要がある値は `LGFX.init/1` または `AtomLGFX.open/1` と
-`AtomLGFX.init/1` から NIF へ渡せます。
+| 変えるもの | 方法 | 必要な作業 |
+| --- | --- | --- |
+| パネル、寸法、GPIO などの実行時設定 | `LGFX.init/1` または `AtomLGFX.open/1` → `init/1` | アプリを再構築・書き込み |
+| `init/0` が使う既定値、組み込む機能 | CMake の `LGFX_PORT_*` | ファームウェアを再構築・書き込み |
+| PSRAM、フラッシュ容量、ESP-IDF の設定 | 追加の SDK defaults ファイル | ファームウェアを再構築・書き込み |
+
+実行時設定の例（GPIO は現在の構築時設定を使用）:
 
 ```elixir
-LGFX.init(
-  panel_driver: :ili9488,
-  width: 320,
-  height: 480
-)
+:ok = LGFX.init(panel_driver: :ili9488, width: 320, height: 480)
 ```
 
-所有権と設定の流れは [構成](architecture.md) を参照してください。
+構築時の LCD CS を変更する例:
 
-## 操作契約
+```bash
+./scripts/atomvm_esp32.exs install --target esp32s3 --component . \
+  --cmake-define LGFX_PORT_LCD_CS_GPIO=10 --port /dev/ttyACM0
+```
 
-`native/include/atom_lgfx/ops.def` は、NIF の共通呼び出しとバイナリーバッチで共有する
-安定した操作番号と検証情報を定義します。
+追加の ESP-IDF 設定は `--sdkconfig /path/to/board.defaults` で渡せます。
+PSRAM の具体例は [Getting Started](getting-started.md#psram-を使う場合) を参照してください。
+設定名と既定値の定義元は `CMakeLists.txt` です。`LGFX_PORT_*` という名前は残っていますが、実行経路は NIF のみです。
 
-契約の説明は [ネイティブ操作契約](protocol.md)、生成された一覧は
-[操作参照](protocol-reference.md) を参照してください。
+## 再構築が必要な変更
 
-変更した場合は生成物を同期します。
+`native/`、`CMakeLists.txt`、LovyanGFX の版や SDK 設定を変更した場合は、ファームウェアを書き直します。
+Elixir の描画処理だけを変えた場合は、アプリの `.avm` だけを書き直せます。
+ネイティブと Elixir 側の操作契約を変更するときは、両者を同じコミットにそろえてください。
+
+配布用の単一 `.img` が必要な場合:
+
+```bash
+./scripts/atomvm_esp32.exs mkimage --target esp32s3 --component . --out-dir ./build/atomvm-images
+```
+
+## 内部実装を変更するとき
+
+NIF の登録は `native/nif.c`、描画は `native/device/`、バッチ実行は `native/render_batch.cpp` が担当します。
+`native/include/atom_lgfx/ops.def` を変更したら生成物も同期します。
 
 ```bash
 elixir scripts/sync_lgfx_protocol_doc.exs
 elixir scripts/sync_lgfx_protocol_doc.exs --check
 ```
 
-## 関連文書
-
-- [構成](architecture.md)
-- [ネイティブ実装](../native/README.md)
-- [装置適合層](../native/device/README.md)
-- [ネイティブ操作契約](protocol.md)
-- [操作参照](protocol-reference.md)
+詳細は [構成](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/architecture.md)、
+[操作契約](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/protocol.md)、
+[ネイティブ実装](https://github.com/mnishiguchi/atomlgfx/blob/main/native/README.md) を参照してください。
