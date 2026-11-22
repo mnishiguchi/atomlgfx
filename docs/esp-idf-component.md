@@ -86,6 +86,6 @@ elixir scripts/sync_lgfx_protocol_doc.exs
 elixir scripts/sync_lgfx_protocol_doc.exs --check
 ```
 
-詳細は [構成](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/architecture.md)、
-[操作契約](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/protocol.md)、
-[ネイティブ実装](https://github.com/mnishiguchi/atomlgfx/blob/main/native/README.md) を参照してください。
+詳細は [構成](https://github.com/mnishiguchi/atomlgfx/blob/v0.1.0/docs/architecture.md)、
+[操作契約](https://github.com/mnishiguchi/atomlgfx/blob/v0.1.0/docs/protocol.md)、
+[ネイティブ実装](https://github.com/mnishiguchi/atomlgfx/blob/v0.1.0/native/README.md) を参照してください。

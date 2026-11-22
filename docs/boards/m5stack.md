@@ -1,38 +1,19 @@
-# M5Stack 基板
+# M5Stack Core2 / CoreS3
 
-M5Stack 向けの実行時設定です。先に [Getting Started](../getting-started.md) のツール準備と
-カスタム AtomVM の書き込みを済ませ、使用する基板の設定を選んでください。
+両基板は ILI9342C（320x240）と FT6336U を使います。電源やリセットの処理は基板ごとに異なるため、
+対応する `board_preset` と GPIO 設定を使ってください。
 
-`atomlgfx` は制御器を中心に設計しています。LCD とタッチ制御器の共通対応は汎用制御器層へ置き、基板固有の電源、リセット、バックライト処理は `board_preset` で重ねます。
+先に [Getting Started](../getting-started.md) でツールを準備し、
+[ESP-IDF 部品](../esp-idf-component.md) の手順で使用基板向けのファームウェアを構築・書き込みします。
 
-## 共通する制御器群
+| 基板 | ファームウェアのターゲット | `board_preset` | 基板制御 |
+| --- | --- | --- | --- |
+| Core2 | `esp32` | `:m5stack_core2` | AXP192 |
+| CoreS3 | `esp32s3` | `:m5stack_cores3` | AXP2101 / AW9523B |
 
-現在、`ILI9342C` と `FT6336U` の組み合わせに関係する基板は次のとおりです。
-
-- M5Stack Core2
-- M5Stack Core2 for AWS
-- M5Stack CoreS3
-
-共通するハードウェア:
-
-- LCD: `ILI9342C`
-- タッチ: `FT6336U`
-- 表示寸法: `320x240`
-
-LCD とタッチ制御器は共通ですが、基板単位の起動処理は同一ではありません。
-
-## 対応する基板プリセット
-
-現在のコードは、次の `board_preset` に対応します。
-
-- `:m5stack_core2`
-- `:m5stack_cores3`
-
-これらは汎用制御器経路の上に重ねる設定です。
+以下は実機確認に使った実行時設定です。
 
 ## Core2 の基準設定
-
-次の開始設定は、Core2 の動作確認済み基準です。
 
 ```elixir
 options = [
@@ -64,17 +45,7 @@ options = [
 ]
 ```
 
-設定を使って初期化します（同じプロセス内で実行）:
-
-```elixir
-{:ok, handle} = AtomLGFX.open(options)
-:ok = AtomLGFX.init(handle)
-:ok = AtomLGFX.set_rotation(handle, 1)
-```
-
 ## CoreS3 の基準設定
-
-次の開始設定は、CoreS3 の最小実機確認に使った設定です。
 
 ```elixir
 options = [
@@ -103,20 +74,24 @@ options = [
 ]
 ```
 
-設定を使って初期化します（同じプロセス内で実行）:
+## 描画する
+
+上で選んだ `options` を使い、文字と図形を表示します。
 
 ```elixir
-{:ok, handle} = AtomLGFX.open(options)
-:ok = AtomLGFX.init(handle)
-:ok = AtomLGFX.set_rotation(handle, 1)
+alias AtomLGFX.Simple
+
+:ok = Simple.init(options)
+:ok = Simple.set_rotation(1)
+:ok = Simple.fill_screen(:black)
+:ok = Simple.set_text_color(:white)
+:ok = Simple.draw_string("Hello M5Stack", 16, 16)
+:ok = Simple.display()
 ```
 
-## 注意事項
+スプライトやタッチを使う場合は、同じ `options` を `AtomLGFX.open/1` へ渡し、
+作成したプロセスからハンドルを使います。手順は [Elixir パッケージ](../elixir-package.md) を参照してください。
 
-- Core2 の基板制御には `AXP192` を使う
-- CoreS3 の基板制御には `AXP2101` と `AW9523B` を使う
-- LCD とタッチ制御器が同じでも、基板起動処理が同じとは限らない
-- CoreS3 の LCD リセットやタッチ側の基板制御は、通常の ESP GPIO 配線ではなく基板プリセット層で扱う
-- LovyanGFX 1.3.0 で両基板の起動・320x240 の基本描画・小スプライトを確認済み。
-  CoreS3 はタッチ座標取得、Core2 はタッチ取得 API の正常応答まで確認。
-  いずれも PSRAM 無効の最小確認であり、詳細は [移行検証報告](../worklog/20261122-lovyangfx-1.3.0-validation.md) を参照
+両基板で初期化・基本描画・小スプライト・顔デモを確認済みです。
+PSRAM を無効にした構成での確認であり、タッチ精度や長時間動作は未検証です。
+詳細は [実機の確認結果](../validation.md) を参照してください。

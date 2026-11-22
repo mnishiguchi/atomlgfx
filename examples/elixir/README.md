@@ -26,8 +26,14 @@ SAMPLE_APP_MODE=nif mix atomvm.esp32.flash --port /dev/ttyACM0
 | `all` | 描画・画像・スプライトなどをまとめて確認 |
 | `dma` | PSRAM 転送後の再描画・破棄・再作成を、書き込み区間を閉じずに確認 |
 | `moving_icons` | PSRAM を使うアニメーション |
+| `boot` / `protocol` | 起動・回転・寸法、操作契約の概要 |
+| `smoke` | 図形・文字・画像・色・タッチなどの確認 |
+| `basic_shapes` / `text` / `japanese_text` | 図形、文字、日本語の表示 |
+| `sprites` / `sprite_protocol` | スプライトの描画・操作契約 |
+| `touch_calibrate` | タッチ較正（画面での操作が必要） |
+| `perf` | 通常呼び出しとバッチの計時 |
 
-全モードと期待するログは [実機確認](../../docs/hardware-smoke-performance.md) にあります。
+期待するログと検査項目は [検証手順](../../docs/testing.md) にあります。
 書き込み後は `tio -b 115200 /dev/ttyACM0`（ルートからは `just monitor`）でログを確認します。
 モニターを終了してから、次の書き込みを行ってください。
 
