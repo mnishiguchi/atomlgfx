@@ -45,7 +45,7 @@ tio -b 115200 /dev/ttyACM0
 | `perf` | 通常呼び出しとバッチの詳細な計時 |
 
 最初は `nif`、通常のデモは `face`、広い機能確認は `all` を使います。
-`nif` は `LGFX.init/0` の構築時設定、他のモードは主に `SampleApp` の実行時設定を使います。
+`nif` は `AtomLGFX.Simple.init/0` の構築時設定、他のモードは主に `SampleApp` の実行時設定を使います。
 PSRAM の有効化と別配線での設定は Getting Started にあります。
 `dma` は PSRAM 有効構成で実行し、`dma_smoke ok` と正常終了を確認します。
 API の完了と継続動作を調べるテストであり、画素の正しさは画面でも別途確認してください。

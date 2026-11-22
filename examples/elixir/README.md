@@ -21,7 +21,7 @@ SAMPLE_APP_MODE=nif mix atomvm.esp32.flash --port /dev/ttyACM0
 
 | モード | 用途 |
 | --- | --- |
-| `nif` | 最初の確認。直接 NIF、基本描画、エラー経路、バッチ |
+| `nif` | 最初の確認。`AtomLGFX.Simple` による基本描画、エラー経路、バッチ |
 | `face` | 顔のデモ（環境変数を指定しない場合の既定値） |
 | `all` | 描画・画像・スプライトなどをまとめて確認 |
 | `dma` | PSRAM 転送後の再描画・破棄・再作成を、書き込み区間を閉じずに確認 |
@@ -35,7 +35,7 @@ SAMPLE_APP_MODE=nif mix atomvm.esp32.flash --port /dev/ttyACM0
 
 既定は ESP32-S3 + ILI9488、回転1で480x320です。
 `lib/sample_app.ex` の `@sample_open_options` が `face` などの実行時 GPIO 設定を持ちます。
-`nif` は `LGFX.init/0` を呼び、ファームウェアの構築時設定を使うため、この変数の変更は反映されません。
+`nif` は `AtomLGFX.Simple.init/0` を呼び、ファームウェアの構築時設定を使うため、この変数の変更は反映されません。
 変更方法と PSRAM の有効化は [Getting Started](../../docs/getting-started.md)、
 M5Stack の例は [基板別設定](../../docs/boards/m5stack.md) を参照してください。
 

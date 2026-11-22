@@ -58,7 +58,7 @@ defmodule AtomLGFX.MixProject do
 
   defp docs do
     [
-      main: "AtomLGFX",
+      main: "AtomLGFX.Simple",
       source_ref: "main",
       source_url: source_url(),
       extras: [

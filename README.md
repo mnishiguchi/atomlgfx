@@ -22,24 +22,27 @@ ESP32 上の AtomVM から [LovyanGFX](https://github.com/lovyan03/LovyanGFX) �
 
 | API | こんなときに使う |
 | --- | --- |
-| `LGFX` | 画面に文字や図形を直接描きたい。少ない手順で表示を試せます |
+| `AtomLGFX.Simple` | 画面に文字や図形を直接描きたい。少ない手順で表示を試せます |
 | `AtomLGFX` | メモリー上で画像を組み立ててから表示したい（スプライト）、タッチ位置を読みたい、JPEG を表示したい |
 
-迷ったら `LGFX` で文字の表示から始めてください。
+迷ったら `AtomLGFX.Simple` で文字の表示から始めてください。
 スプライトやタッチなどが必要になったら、`AtomLGFX` の使用例を参照してください。
 
 上記のファームウェアと既定配線で動かす例:
 
 ```elixir
-:ok = LGFX.init()
-:ok = LGFX.set_rotation(1)
-:ok = LGFX.fill_screen(:black)
-:ok = LGFX.set_text_color(:white)
-:ok = LGFX.draw_string("Hello AtomLGFX", 16, 16)
-:ok = LGFX.display()
+alias AtomLGFX.Simple
+
+:ok = Simple.init()
+:ok = Simple.set_rotation(1)
+:ok = Simple.fill_screen(:black)
+:ok = Simple.set_text_color(:white)
+:ok = Simple.draw_string("Hello AtomLGFX", 16, 16)
+:ok = Simple.display()
 ```
 
 両 API は同じ AtomVM NIF と単一の表示機器を使います。
+`AtomLGFX.Simple` は既存の `LGFX` へ委譲します。`LGFX` は互換用として引き続き使えます。
 実行時設定、スプライト、バッチの例は [Elixir パッケージ](docs/elixir-package.md) を参照してください。
 
 ## 文書

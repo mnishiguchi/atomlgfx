@@ -148,8 +148,8 @@ just flash-app face
 ## 別のパネル・配線を使う場合
 
 - `face` など: `examples/elixir/lib/sample_app.ex` の `@sample_open_options` を変更し、アプリを再構築します。
-- `nif`: `LGFX.init/0` がファームウェアの既定値を使います。`@sample_open_options` は反映されません。
-  `nif_smoke.ex` を `LGFX.init/1` に変えるか、構築時設定を変えてファームウェアを書き直します。
+- `nif`: `AtomLGFX.Simple.init/0` がファームウェアの既定値を使います。`@sample_open_options` は反映されません。
+  `nif_smoke.ex` を `AtomLGFX.Simple.init/1` に変えるか、構築時設定を変えてファームウェアを書き直します。
 
 パネル種別、寸法、GPIO、SPI host を実機に合わせてください。
 詳しくは [ESP-IDF 部品](esp-idf-component.md)、M5Stack は [基板別設定](https://github.com/mnishiguchi/atomlgfx/blob/main/docs/boards/m5stack.md) を参照してください。
