@@ -6,7 +6,7 @@ defmodule AtomLGFX do
   @moduledoc """
   AtomVM NIF を通じて LovyanGFX の広い機能面を扱う Elixir API です。
 
-  日常的な LCD 描画には、LovyanGFX の例を移しやすい `LGFX` を推奨します。
+  日常的な LCD 描画には、ハンドル不要の `AtomLGFX.Simple` を推奨します。
   `AtomLGFX` はスプライト、タッチ、JPEG、切り抜き、パレットなど、
   より広い機能を同じ NIF 経路から提供します。
 
@@ -28,7 +28,7 @@ defmodule AtomLGFX do
   `init/1` に渡すと `{:error, :invalid_handle}` を返します。
 
   複数の描画命令をまとめる場合は `render/3` 系を使用します。高頻度に同じ命令列を
-  繰り返す場合は、`LGFX.encode_batch/2` と `LGFX.submit_batch/1` の事前符号化経路が
+  繰り返す場合は、`AtomLGFX.Simple.encode_batch/2` と `AtomLGFX.Simple.submit_batch/1` の事前符号化経路が
   最も低負荷です。
   """
 
