@@ -97,3 +97,8 @@ jobs:
 
       - name: Smoke-test native build helper
         run: elixir scripts/atomvm_esp32.exs --help
+
+      - name: Check LovyanGFX source selection and I2C overlay
+        run: |
+          cmake -S test/native/lovyangfx_build -B /tmp/lgfx-legacy -DLGFX_PORT_FORCE_LEGACY_I2C=ON -DLGFX_PORT_ENABLE_TOUCH=ON
+          cmake -S test/native/lovyangfx_build -B /tmp/lgfx-native -DLGFX_PORT_FORCE_LEGACY_I2C=OFF -DLGFX_PORT_ENABLE_TOUCH=OFF -DLGFX_PORT_DISABLE_SPI_SCT=ON

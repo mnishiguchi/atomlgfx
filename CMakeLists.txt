@@ -347,30 +347,6 @@ function(lgfx_port_validate_int_range var_name min_value max_value)
     endif()
 endfunction()
 
-# Collect sources from multiple glob patterns into a single output list.
-function(lgfx_port_collect_globbed out_var)
-    set(_collected)
-
-    foreach(_pattern ${ARGN})
-        file(GLOB_RECURSE _matches CONFIGURE_DEPENDS "${_pattern}")
-        list(APPEND _collected ${_matches})
-    endforeach()
-
-    list(REMOVE_DUPLICATES _collected)
-    list(SORT _collected)
-
-    set(${out_var} "${_collected}" PARENT_SCOPE)
-endfunction()
-
-# Filter a source list by excluding one or more regexes.
-function(lgfx_port_filter_out var_name)
-    set(_filtered "${${var_name}}")
-    foreach(_regex ${ARGN})
-        list(FILTER _filtered EXCLUDE REGEX "${_regex}")
-    endforeach()
-    set(${var_name} "${_filtered}" PARENT_SCOPE)
-endfunction()
-
 # -----------------------------------------------------------------------------
 # Build-default panel baseline defaults
 # -----------------------------------------------------------------------------
@@ -499,6 +475,9 @@ idf_component_register(
         avm_sys
         freertos
         esp_timer
+        esp_lcd
+        esp_mm
+        nvs_flash
         driver
         fatfs
         sdmmc
@@ -618,117 +597,7 @@ if(NOT EXISTS "${LGFX_SRC_ROOT}/LovyanGFX.hpp")
     )
 endif()
 
-# -----------------------------------------------------------------------------
-# Collect LovyanGFX sources
-# -----------------------------------------------------------------------------
-lgfx_port_collect_globbed(
-    LGFX_V1_COMMON_SRCS
-    "${LGFX_SRC_ROOT}/LovyanGFX*.cpp"
-    "${LGFX_SRC_ROOT}/lgfx/v1/*.c"
-    "${LGFX_SRC_ROOT}/lgfx/v1/*.cpp"
-    "${LGFX_SRC_ROOT}/lgfx/v1/**/*.c"
-    "${LGFX_SRC_ROOT}/lgfx/v1/**/*.cpp"
-)
-
-lgfx_port_filter_out(
-    LGFX_V1_COMMON_SRCS
-    ".*/lgfx/v1/platforms/.*"
-)
-
-lgfx_port_collect_globbed(
-    LGFX_V1_ESP32_SRCS
-    "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32/*.c"
-    "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32/*.cpp"
-    "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32/**/*.c"
-    "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32/**/*.cpp"
-)
-
-set(LGFX_SRCS ${LGFX_V1_COMMON_SRCS} ${LGFX_V1_ESP32_SRCS})
-
-# JPEG decoder support
-list(APPEND LGFX_SRCS "${LGFX_SRC_ROOT}/lgfx/utility/lgfx_tjpgd.c")
-
-# -----------------------------------------------------------------------------
-# Reduce LovyanGFX build surface area
-# -----------------------------------------------------------------------------
-#
-# Keep the LCD SPI path and the minimum I2C support required by FT5x06-family
-# touch controllers. Panel driver selection is handled in
-# native/device/state_runtime.cpp. Exclude EPD and the broader touch-driver set
-# we are not using.
-#
-lgfx_port_filter_out(
-    LGFX_SRCS
-    ".*/Bus_EPD\\.(c|cpp)$"
-    ".*/Panel_EPD\\.(c|cpp)$"
-    ".*/panel/Panel_EPD.*\\.(c|cpp)$"
-    ".*/panel/Panel_GDEW.*\\.(c|cpp)$"
-    ".*/touch/.*\\.(c|cpp)$"
-    ".*/Touch_.*\\.(c|cpp)$"
-)
-
-# -----------------------------------------------------------------------------
-# Touch: re-add only the selected drivers
-# -----------------------------------------------------------------------------
-if(LGFX_PORT_ENABLE_TOUCH)
-    list(
-        APPEND LGFX_SRCS
-        "${LGFX_SRC_ROOT}/lgfx/v1/touch/Touch_FT5x06.cpp"
-        "${LGFX_SRC_ROOT}/lgfx/v1/touch/Touch_XPT2046.cpp"
-    )
-endif()
-
-# AtomVM and board power-management code still use ESP-IDF's legacy I2C driver.
-# LovyanGFX auto-selects the newer driver on IDF 5.x, and IDF aborts when both
-# driver generations are initialized in one image.
-if(LGFX_PORT_FORCE_LEGACY_I2C)
-    set(LGFX_PORT_ORIGINAL_ESP32_COMMON_CPP
-        "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32/common.cpp"
-    )
-    set(LGFX_PORT_PATCHED_LOVYANGFX_DIR
-        "${CMAKE_CURRENT_BINARY_DIR}/generated/lovyangfx"
-    )
-    set(LGFX_PORT_PATCHED_ESP32_COMMON_CPP
-        "${LGFX_PORT_PATCHED_LOVYANGFX_DIR}/esp32_common.cpp"
-    )
-
-    file(MAKE_DIRECTORY "${LGFX_PORT_PATCHED_LOVYANGFX_DIR}")
-    file(
-        READ "${LGFX_PORT_ORIGINAL_ESP32_COMMON_CPP}"
-        LGFX_PORT_ESP32_COMMON_CPP_CONTENTS
-    )
-    string(
-        REPLACE "__has_include(<driver/i2c_master.h>)"
-        "0"
-        LGFX_PORT_PATCHED_ESP32_COMMON_CPP_CONTENTS
-        "${LGFX_PORT_ESP32_COMMON_CPP_CONTENTS}"
-    )
-
-    if(
-        LGFX_PORT_PATCHED_ESP32_COMMON_CPP_CONTENTS
-            STREQUAL
-            LGFX_PORT_ESP32_COMMON_CPP_CONTENTS
-    )
-        message(
-            FATAL_ERROR
-            "LGFX_PORT_FORCE_LEGACY_I2C is ON, but the LovyanGFX I2C patch marker "
-            "was not found in ${LGFX_PORT_ORIGINAL_ESP32_COMMON_CPP}. "
-            "Check the upstream LovyanGFX implementation."
-        )
-    endif()
-
-    file(
-        WRITE "${LGFX_PORT_PATCHED_ESP32_COMMON_CPP}"
-        "${LGFX_PORT_PATCHED_ESP32_COMMON_CPP_CONTENTS}"
-    )
-
-    list(REMOVE_ITEM LGFX_SRCS "${LGFX_PORT_ORIGINAL_ESP32_COMMON_CPP}")
-    list(APPEND LGFX_SRCS "${LGFX_PORT_PATCHED_ESP32_COMMON_CPP}")
-    target_include_directories(
-        ${COMPONENT_LIB}
-        PRIVATE "${LGFX_SRC_ROOT}/lgfx/v1/platforms/esp32"
-    )
-endif()
+include("${CMAKE_CURRENT_LIST_DIR}/native/cmake/lovyangfx.cmake")
 
 list(REMOVE_DUPLICATES LGFX_SRCS)
 list(SORT LGFX_SRCS)
