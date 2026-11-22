@@ -45,7 +45,7 @@ NIF 境界では次を検証します。
 
 検証後は対応する `lgfx_device_*` 関数を直接呼び出します。
 
-`LGFX` の頻出操作は、さらに薄い専用 NIF を利用できます。どちらの経路も同じ
+`AtomLGFX.Simple` は `LGFX` へ委譲します。`LGFX` の頻出操作は、さらに薄い専用 NIF を利用できます。どちらの経路も同じ
 `native/device/` の LovyanGFX 装置層へ到達します。
 
 ## 対象
@@ -95,8 +95,8 @@ render_batch
 lgfx_device_*
 ```
 
-一度だけ使う命令列には `LGFX.batch/2` が便利です。同じ命令列を繰り返す場合は
-`LGFX.encode_batch/2` で事前符号化し、`LGFX.submit_batch/1` をホットループ内で使います。
+一度だけ使う命令列には `AtomLGFX.Simple.batch/2` が便利です。同じ命令列を繰り返す場合は
+`AtomLGFX.Simple.encode_batch/2` で事前符号化し、`AtomLGFX.Simple.submit_batch/1` をホットループ内で使います。
 
 バッチ命令番号は既存の実機利用との互換性を保つため安定させます。
 

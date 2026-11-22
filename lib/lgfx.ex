@@ -4,7 +4,11 @@
 
 defmodule LGFX do
   @moduledoc """
-  AtomVM から LovyanGFX を直接呼び出すための軽量な API です。
+  ハンドル不要の描画 API を提供する互換モジュールです。
+
+  新しく使い始める場合は `AtomLGFX.Simple` を参照してください。
+  `AtomLGFX.Simple` はこのモジュールへ委譲し、全公開関数の引数・戻り値・エラーは同じです。
+  既存の `LGFX` コードはそのまま使えます。非推奨化はしていません。
 
   LovyanGFX の既存例を Elixir へ置き換えやすいよう、よく使う関数名を
   `snake_case` でほぼそのまま提供します。
