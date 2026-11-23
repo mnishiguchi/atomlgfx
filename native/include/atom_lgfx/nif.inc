@@ -32,6 +32,7 @@
 #include "term.h"
 
 #include "device.h"
+#include "atom_lgfx/moving_icons_demo.h"
 #include "atom_lgfx/render_batch.h"
 
 
@@ -171,6 +172,49 @@ static bool lgfx_nif_term_to_binary(term value, const uint8_t **out_bytes, size_
     return true;
 }
 
+static term lgfx_nif_moving_icons_start_4(Context *ctx, int argc, term argv[])
+{
+    const uint8_t *icon[3];
+    size_t length[3];
+    uint8_t count = 0;
+    if (argc != 4
+        || !lgfx_nif_term_to_binary(argv[0], &icon[0], &length[0])
+        || !lgfx_nif_term_to_binary(argv[1], &icon[1], &length[1])
+        || !lgfx_nif_term_to_binary(argv[2], &icon[2], &length[2])
+        || !lgfx_nif_term_to_u8(argv[3], &count)) {
+        return lgfx_nif_badarg(ctx);
+    }
+    return lgfx_nif_esp_result(ctx, lgfx_moving_icons_start(
+        icon[0], length[0], icon[1], length[1], icon[2], length[2], count));
+}
+
+static term lgfx_nif_moving_icons_stop_0(Context *ctx, int argc, term argv[])
+{
+    (void) argv;
+    if (argc != 0) return lgfx_nif_badarg(ctx);
+    return lgfx_nif_esp_result(ctx, lgfx_moving_icons_stop());
+}
+
+static term lgfx_nif_moving_icons_stats_0(Context *ctx, int argc, term argv[])
+{
+    (void) argv;
+    if (argc != 0) return lgfx_nif_badarg(ctx);
+    uint32_t frames = 0, elapsed_ms = 0, last_frame_us = 0;
+    esp_err_t err = lgfx_moving_icons_stats(&frames, &elapsed_ms, &last_frame_us);
+    if (err != ESP_OK) return lgfx_nif_esp_result(ctx, err);
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term values = term_alloc_tuple(3, &ctx->heap);
+    term_put_tuple_element(values, 0, term_from_int((avm_int_t) frames));
+    term_put_tuple_element(values, 1, term_from_int((avm_int_t) elapsed_ms));
+    term_put_tuple_element(values, 2, term_from_int((avm_int_t) last_frame_us));
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, term_from_atom_index(OK_ATOM_INDEX));
+    term_put_tuple_element(result, 1, values);
+    return result;
+}
+
 static term lgfx_nif_init_0(Context *ctx, int argc, term argv[])
 {
     (void) argv;
@@ -198,8 +242,9 @@ static term lgfx_nif_close_0(Context *ctx, int argc, term argv[])
         return lgfx_nif_badarg(ctx);
     }
 
-    esp_err_t err =
-        lgfx_device_close_for_owner((const void *) &lgfx_nif_owner_token);
+    esp_err_t err = lgfx_moving_icons_stop();
+    if (err != ESP_OK) return lgfx_nif_esp_result(ctx, err);
+    err = lgfx_device_close_for_owner((const void *) &lgfx_nif_owner_token);
 
     if (err == ESP_OK) {
         lgfx_nif_initialized = false;
@@ -1037,6 +1082,9 @@ LGFX_NIF_ENTRY(lgfx_nif_print_1_entry, lgfx_nif_print_1);
 LGFX_NIF_ENTRY(lgfx_nif_println_1_entry, lgfx_nif_println_1);
 LGFX_NIF_ENTRY(lgfx_nif_push_image_5_entry, lgfx_nif_push_image_5);
 LGFX_NIF_ENTRY(lgfx_nif_batch_2_entry, lgfx_nif_batch_2);
+LGFX_NIF_ENTRY(lgfx_nif_moving_icons_start_4_entry, lgfx_nif_moving_icons_start_4);
+LGFX_NIF_ENTRY(lgfx_nif_moving_icons_stop_0_entry, lgfx_nif_moving_icons_stop_0);
+LGFX_NIF_ENTRY(lgfx_nif_moving_icons_stats_0_entry, lgfx_nif_moving_icons_stats_0);
 
 #undef LGFX_NIF_ENTRY
 
@@ -1086,6 +1134,9 @@ const struct Nif *atom_lgfx_native_get_nif(const char *nifname)
     LGFX_NIF_LOOKUP("Elixir.AtomLGFX.Native:println/1", lgfx_nif_println_1_entry);
     LGFX_NIF_LOOKUP("Elixir.AtomLGFX.Native:push_image/5", lgfx_nif_push_image_5_entry);
     LGFX_NIF_LOOKUP("Elixir.AtomLGFX.Native:batch/2", lgfx_nif_batch_2_entry);
+    LGFX_NIF_LOOKUP("Elixir.AtomLGFX.Native:moving_icons_start/4", lgfx_nif_moving_icons_start_4_entry);
+    LGFX_NIF_LOOKUP("Elixir.AtomLGFX.Native:moving_icons_stop/0", lgfx_nif_moving_icons_stop_0_entry);
+    LGFX_NIF_LOOKUP("Elixir.AtomLGFX.Native:moving_icons_stats/0", lgfx_nif_moving_icons_stats_0_entry);
 
     return NULL;
 }

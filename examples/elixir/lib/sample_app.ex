@@ -10,6 +10,7 @@ defmodule SampleApp do
   alias SampleApp.Face
   alias SampleApp.JapaneseText
   alias SampleApp.MovingIcons
+  alias SampleApp.NativeMovingIcons
   alias SampleApp.NifSmoke
   alias SampleApp.PerfSmoke
   alias SampleApp.ProtocolSmoke
@@ -30,6 +31,7 @@ defmodule SampleApp do
     :face,
     :japanese_text,
     :moving_icons,
+    :moving_icons_native,
     :sprites,
     :sprite_protocol,
     :touch_calibrate,
@@ -150,6 +152,12 @@ defmodule SampleApp do
   defp run_mode(handle, :moving_icons) do
     with_boot_dims(handle, fn w, h ->
       step("moving_icons", MovingIcons.run(handle, w, h))
+    end)
+  end
+
+  defp run_mode(handle, :moving_icons_native) do
+    with_boot_dims(handle, fn w, h ->
+      step("moving_icons_native", NativeMovingIcons.run(handle, w, h))
     end)
   end
 

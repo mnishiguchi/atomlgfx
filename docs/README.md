@@ -20,4 +20,5 @@
 - [構成](architecture.md): NIF と装置層の責務、ハンドルとメモリーの扱い
 - [操作契約](protocol.md) / [操作参照](protocol-reference.md): ネイティブ境界の形式と検証規則
 - [検証手順](testing.md) / [実機の確認結果](validation.md): 変更後の検査と確認済みの範囲
+- [作業記録](worklog/README.md): 実装・検証の経緯と未確認事項
 - [リリース手順](../RELEASE.md): Hex と対応する Git タグの公開

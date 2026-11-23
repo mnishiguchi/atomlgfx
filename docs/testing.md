@@ -39,13 +39,17 @@ just monitor
 | `nif` | `AtomLGFX.LGFX` の基本描画、RGB565、バッチ、不正引数、初期化と終了 |
 | `all` | `AtomLGFX` の図形・文字、画像・JPEG、切り抜き、パレット、スプライト、タッチ取得 |
 | `dma` | PSRAM の転送元を再描画・色深度変更・破棄・再作成し、`dma_smoke ok` と正常終了を確認 |
-| `moving_icons` | PSRAM スプライトの継続描画と `moving_icons stats` の出力 |
+| `moving_icons` | Elixir 版の継続描画と `moving_icons stats` の出力 |
+| `moving_icons_native` | 50個のアイコンの継続描画と `moving_icons_native stats` の出力 |
 | `face` | 顔の描画と `face stats` の出力 |
 
 `dma` / `moving_icons` は PSRAM 有効構成で実行します。
 `nif` はファームウェアの構築時設定、他のモードは主に `SampleApp` の実行時設定を使います。
 追加モードは [例示アプリ](../examples/elixir/README.md) を参照してください。
 ログの成功に加えて、画面の欠け・ちらつきと物理タッチの応答も確認します。
+
+`moving_icons_native` は `just flash-app moving_icons_native` で実行します。NIF を追加・変更した場合は、ファームウェアも更新してください。
+実機結果は [作業記録](worklog/20261123-native-moving-icons-validation.md) を参照してください。
 
 ## 性能と結果を記録する
 

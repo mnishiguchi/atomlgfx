@@ -25,7 +25,8 @@ SAMPLE_APP_MODE=nif mix atomvm.esp32.flash --port /dev/ttyACM0
 | `face` | 顔のデモ（環境変数を指定しない場合の既定値） |
 | `all` | 描画・画像・スプライトなどをまとめて確認 |
 | `dma` | PSRAM 転送後の再描画・破棄・再作成を、書き込み区間を閉じずに確認 |
-| `moving_icons` | PSRAM を使うアニメーション |
+| `moving_icons` | Elixir でオブジェクトを更新する6個のアイコンのデモ（5 FPS 上限） |
+| `moving_icons_native` | C++ / FreeRTOS で50個のアイコンを時間制限なく描画するデモ |
 | `boot` / `protocol` | 起動・回転・寸法、操作契約の概要 |
 | `smoke` | 図形・文字・画像・色・タッチなどの確認 |
 | `basic_shapes` / `text` / `japanese_text` | 図形、文字、日本語の表示 |
