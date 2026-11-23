@@ -522,7 +522,10 @@ static term lgfx_nif_call_4(Context *ctx, int argc, term argv[])
             break;
         case LGFX_OP_close:
             LGFX_NIF_REQUIRE_COUNT(0);
-            err = lgfx_device_close_for_owner((const void *) &lgfx_nif_owner_token);
+            err = lgfx_moving_icons_stop();
+            if (err == ESP_OK) {
+                err = lgfx_device_close_for_owner((const void *) &lgfx_nif_owner_token);
+            }
             break;
         case LGFX_OP_startWrite:
             LGFX_NIF_REQUIRE_COUNT(0);

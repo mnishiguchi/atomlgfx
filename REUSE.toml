@@ -40,6 +40,15 @@ SPDX-FileCopyrightText = "2026 Masatoshi Nishiguchi"
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
+path = "native/device/moving_icons_demo.cpp"
+precedence = "override"
+SPDX-FileCopyrightText = [
+  "2020 lovyan03 (https://github.com/lovyan03)",
+  "2026 Masatoshi Nishiguchi",
+]
+SPDX-License-Identifier = "BSD-2-Clause"
+
+[[annotations]]
 path = [
   "examples/elixir/priv/assets/icons/alert.rgb565",
   "examples/elixir/priv/assets/icons/close.rgb565",
