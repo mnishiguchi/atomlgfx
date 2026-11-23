@@ -15,6 +15,12 @@ defmodule AtomLGFX.Native do
   def init, do: @nif_not_loaded
   def init(_config), do: @nif_not_loaded
   def close, do: @nif_not_loaded
+
+  def moving_icons_start(_info, _alert, _close, _object_count),
+    do: :erlang.apply(__MODULE__, :nif_not_loaded, [])
+
+  def moving_icons_stats, do: :erlang.apply(__MODULE__, :nif_not_loaded, [])
+  def moving_icons_stop, do: :erlang.apply(__MODULE__, :nif_not_loaded, [])
   def call(_opcode, _target, _flags, _args), do: :erlang.apply(__MODULE__, :nif_not_loaded, [])
 
   def width, do: @nif_not_loaded

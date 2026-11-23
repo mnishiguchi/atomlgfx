@@ -457,6 +457,7 @@ set(LGFX_PORT_COMPONENT_SRCS
     "native/device/images.cpp"
     "native/device/clip.cpp"
     "native/device/sprites.cpp"
+    "native/device/moving_icons_demo.cpp"
 )
 
 message(STATUS "AtomLGFX native API: direct NIF")
