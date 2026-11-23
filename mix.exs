@@ -63,7 +63,7 @@ defmodule AtomLGFX.MixProject do
 
   defp docs do
     [
-      main: "AtomLGFX.LGFX",
+      main: "readme",
       source_ref: "v#{@version}",
       source_url: source_url(),
       extras: [
