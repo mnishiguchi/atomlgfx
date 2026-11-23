@@ -87,6 +87,7 @@ USB 接続後にポートを確認します。Linux では `ls /dev/serial/by-id
 
 構築だけなら `install` の代わりに `build` を使い、`--port` を省きます。
 `component-status --component .` で部品のリンクも確認できます。
+内部の処理とファームウェア・アプリの関係は [ファームウェアの構築](firmware-build.md) を参照してください。
 
 ## 5. Elixir アプリを書き込む
 

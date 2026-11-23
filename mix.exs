@@ -50,6 +50,7 @@ defmodule AtomLGFX.MixProject do
         "README.md",
         "CHANGELOG.md",
         "docs/getting-started.md",
+        "docs/firmware-build.md",
         "docs/elixir-package.md",
         "docs/esp-idf-component.md",
         "docs/compatibility.md",
@@ -70,6 +71,7 @@ defmodule AtomLGFX.MixProject do
         "README.md",
         "CHANGELOG.md",
         "docs/getting-started.md",
+        "docs/firmware-build.md",
         "docs/elixir-package.md",
         "docs/esp-idf-component.md",
         "docs/compatibility.md"

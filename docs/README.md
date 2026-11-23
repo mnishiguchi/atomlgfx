@@ -11,6 +11,7 @@
 | 目的 | 文書 |
 | --- | --- |
 | サンプルを切り替える | [例示アプリ](../examples/elixir/README.md) |
+| カスタムファームウェアの構築処理を知る | [ファームウェアの構築](firmware-build.md) |
 | パネル・GPIO・PSRAM の設定を変える | [ESP-IDF 部品](esp-idf-component.md) |
 | Core2 / CoreS3 を使う | [M5Stack 基板](boards/m5stack.md) |
 
