@@ -24,11 +24,11 @@ ESP32 上の AtomVM から [LovyanGFX](https://github.com/lovyan03/LovyanGFX) �
 アプリケーションの `mix.exs` に次の依存関係を追加します。
 
 ```elixir
-{:atomlgfx, "~> 0.1.0"}
+{:atomlgfx, "~> 0.2.0"}
 ```
 
 Hex は Elixir API を配布します。カスタムファームウェアは、対応する
-[Git タグ `v0.1.0`](https://github.com/mnishiguchi/atomlgfx/tree/v0.1.0) から構築してください。
+[Git タグ `v0.2.0`](https://github.com/piyopiyoex/atomlgfx/tree/v0.2.0) から構築してください。
 
 ## API を選ぶ
 
@@ -57,6 +57,6 @@ Hex は Elixir API を配布します。カスタムファームウェアは、�
 - [Elixir パッケージ](docs/elixir-package.md): 自分のアプリへの組み込みと API の使い分け
 - [ESP-IDF 部品](docs/esp-idf-component.md): ファームウェアの設定と再構築
 - [互換性表](docs/compatibility.md): 動作環境と実機で確認済みの構成
-- [文書案内](https://github.com/mnishiguchi/atomlgfx/blob/v0.1.0/docs/README.md): 基板別設定、内部仕様、検証記録
+- [文書案内](https://github.com/piyopiyoex/atomlgfx/blob/v0.2.0/docs/README.md): 基板別設定、内部仕様、検証記録
 - [変更履歴](CHANGELOG.md)
-- [リリース手順](https://github.com/mnishiguchi/atomlgfx/blob/v0.1.0/RELEASE.md): 公開担当者向けの手順
+- [リリース手順](https://github.com/piyopiyoex/atomlgfx/blob/v0.2.0/RELEASE.md): 公開担当者向けの手順
