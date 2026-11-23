@@ -143,4 +143,4 @@ git submodule status third_party/LovyanGFX
 | `--cmake-define KEY=VALUE` | パネル・GPIO などの構築時設定を変更する |
 | `--fullclean` | ESP-IDF のビルドをクリーンにして再構築する |
 
-設定の詳細は [ESP-IDF 部品](esp-idf-component.md)、NIF の内部構造は [アーキテクチャ](https://github.com/mnishiguchi/atomlgfx/blob/v0.1.0/docs/architecture.md) を参照してください。
+設定の詳細は [ESP-IDF 部品](esp-idf-component.md)、NIF の内部構造は [アーキテクチャ](https://github.com/piyopiyoex/atomlgfx/blob/v0.2.0/docs/architecture.md) を参照してください。

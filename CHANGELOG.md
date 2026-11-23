@@ -4,6 +4,12 @@ Hex の Elixir API と、ファームウェアへ組み込む NIF は同じ Git 
 
 ## 未リリース
 
+## 0.2.0
+
+- MovingIcons を C++ / FreeRTOS で実装し、Elixir から NIF 経由で起動できるようにした
+- 50個のアイコンを継続描画する `moving_icons_native` サンプルを追加
+- ファームウェア構築の解説と GitHub Release 作成用コマンドを追加
+
 ## 0.1.0
 
 初回リリース。AtomVM から LovyanGFX を使うための Elixir API と ESP-IDF / NIF 部品を提供します。

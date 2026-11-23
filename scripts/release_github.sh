@@ -6,7 +6,7 @@
 # GitHub Release の作成補助。Hex への公開は別途手動で行う。
 set -eu
 
-repo="mnishiguchi/atomlgfx"
+repo="piyopiyoex/atomlgfx"
 mode=${1:-}
 version=${2:-}
 

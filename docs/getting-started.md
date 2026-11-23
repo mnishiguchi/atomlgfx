@@ -5,7 +5,7 @@ ESP32-S3 + ILI9488 で、カスタム AtomVM ファームウェアを構築し�
 `mix deps.get` だけでは LCD を動かす NIF は入りません。
 
 LovyanGFX 1.3.0、AtomVM release-0.7 の固定コミット、ESP-IDF v5.5.x を使います。
-**Hex `atomlgfx` 0.1.0 を使う場合、ネイティブ NIF のソースも Git tag `v0.1.0` に合わせてください。**
+**Hex `atomlgfx` 0.2.0 を使う場合、ネイティブ NIF のソースも Git tag `v0.2.0` に合わせてください。**
 依存版の詳細と更新時の再構築方法は [ESP-IDF 部品](esp-idf-component.md) を参照してください。
 
 ## 1. 用意するもの
@@ -24,10 +24,10 @@ LovyanGFX 1.3.0、AtomVM release-0.7 の固定コミット、ESP-IDF v5.5.x を�
 ## 2. ソースとツールを準備する
 
 ```bash
-git clone --recursive https://github.com/mnishiguchi/atomlgfx.git
+git clone --recursive https://github.com/piyopiyoex/atomlgfx.git
 cd atomlgfx
 # リリース版で構築する場合（タグ公開後）:
-git checkout v0.1.0
+git checkout v0.2.0
 git submodule update --init --recursive
 mix local.hex --force
 mix local.rebar --force
@@ -35,7 +35,7 @@ eim install -i v5.5
 eim select v5.5
 ```
 
-開発中の `main` を試す場合は `git checkout v0.1.0` を省きます。
+開発中の `main` を試す場合は `git checkout v0.2.0` を省きます。
 clone 済みの場合は、ルートで対象の Git tag / commit に切り替えてから `git submodule update --init --recursive` を実行してください。
 LovyanGFX は `third_party/LovyanGFX/` に入ります。
 
@@ -130,7 +130,7 @@ tio -b 115200 /dev/ttyACM0
 
 `selected rotation=1 viewport=480x320`、`face stats` と顔の描画を確認します。
 `SAMPLE_APP_MODE` はコンパイル時に読むので、**モード変更時には `mix clean` が必要**です。
-他のモードは [例示アプリ](https://github.com/mnishiguchi/atomlgfx/blob/v0.1.0/examples/elixir/README.md) を参照してください。
+他のモードは [例示アプリ](https://github.com/piyopiyoex/atomlgfx/blob/v0.2.0/examples/elixir/README.md) を参照してください。
 
 自分のアプリを作る準備ができたら、[Elixir パッケージ](elixir-package.md) へ進んでください。
 
@@ -158,7 +158,7 @@ just flash-app face
   `nif_smoke.ex` を `AtomLGFX.LGFX.init/1` に変えるか、構築時設定を変えてファームウェアを書き直します。
 
 パネル種別、寸法、GPIO、SPI host を実機に合わせてください。
-詳しくは [ESP-IDF 部品](esp-idf-component.md)、M5Stack は [基板別設定](https://github.com/mnishiguchi/atomlgfx/blob/v0.1.0/docs/boards/m5stack.md) を参照してください。
+詳しくは [ESP-IDF 部品](esp-idf-component.md)、M5Stack は [基板別設定](https://github.com/piyopiyoex/atomlgfx/blob/v0.2.0/docs/boards/m5stack.md) を参照してください。
 
 ## PSRAM を使う場合
 
@@ -197,4 +197,4 @@ SDK 設定の変更にはファームウェアの再構築が必要です。
 | スプライト確保に失敗する | 基板の PSRAM と起動ログを確認。上記 SDK 設定で有効化 |
 | `monitor` が TTY エラー | スクリプト経由の EIM monitor は失敗する場合がある。`tio` または `just monitor` を使う |
 
-実機で確認した範囲と制約は [実機の確認結果](https://github.com/mnishiguchi/atomlgfx/blob/v0.1.0/docs/validation.md) にあります。
+実機で確認した範囲と制約は [実機の確認結果](https://github.com/piyopiyoex/atomlgfx/blob/v0.2.0/docs/validation.md) にあります。
