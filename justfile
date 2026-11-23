@@ -66,3 +66,16 @@ port := env_var_or_default("ATOMLGFX_PORT", "/dev/ttyACM0")
     mix test
     elixir scripts/sync_lgfx_protocol_doc.exs --check
     cd examples/elixir && mix deps.get && mix format --check-formatted && mix compile --warnings-as-errors
+
+# CHANGELOG.md からリリースノートを表示する（タグや Release は変更しない）。
+@release-notes version:
+    sh scripts/release_github.sh notes "{{ version }}"
+
+# バージョン、作業ツリー、Git タグ、GitHub、Hex の状態を確認する。
+@release-check version:
+    sh scripts/release_github.sh check "{{ version }}"
+
+# 確認後、注釈付き Git タグを作成・push し、GitHub Release を公開する。
+# Hex への公開は別途手動で行う。
+@release-github version:
+    sh scripts/release_github.sh publish "{{ version }}"
