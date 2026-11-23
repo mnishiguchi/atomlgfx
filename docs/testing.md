@@ -36,7 +36,7 @@ just monitor
 
 | モード | 確認すること |
 | --- | --- |
-| `nif` | `AtomLGFX.Simple` の基本描画、RGB565、バッチ、不正引数、初期化と終了 |
+| `nif` | `AtomLGFX.LGFX` の基本描画、RGB565、バッチ、不正引数、初期化と終了 |
 | `all` | `AtomLGFX` の図形・文字、画像・JPEG、切り抜き、パレット、スプライト、タッチ取得 |
 | `dma` | PSRAM の転送元を再描画・色深度変更・破棄・再作成し、`dma_smoke ok` と正常終了を確認 |
 | `moving_icons` | PSRAM スプライトの継続描画と `moving_icons stats` の出力 |

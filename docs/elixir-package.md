@@ -1,6 +1,6 @@
 # Elixir パッケージ
 
-`AtomLGFX.Simple` / `AtomLGFX` は AtomVM 上で使う API です。
+`AtomLGFX.LGFX` / `AtomLGFX` は AtomVM 上で使う API です。
 先に [Getting Started](getting-started.md) でカスタムファームウェアと例示アプリを確認してください。
 Hex の `atomlgfx` は Elixir API のみを配布します。ネイティブ NIF と LovyanGFX は対応する Git tag のソースから AtomVM 本体へ組み込みます。
 PC の通常の BEAM でコンパイルしても、LCD 用 NIF は入りません。
@@ -45,15 +45,13 @@ Hex の `0.1.0` に対応するファームウェアは、atomlgfx の Git tag `
 
 ```elixir
 defmodule MyLcd do
-  alias AtomLGFX.Simple
-
   def start do
-    :ok = Simple.init()
-    :ok = Simple.set_rotation(1)
-    :ok = Simple.fill_screen(:black)
-    :ok = Simple.set_text_color(:white)
-    :ok = Simple.draw_string("Hello AtomLGFX", 16, 16)
-    :ok = Simple.display()
+    :ok = AtomLGFX.LGFX.init()
+    :ok = AtomLGFX.LGFX.set_rotation(1)
+    :ok = AtomLGFX.LGFX.fill_screen(:black)
+    :ok = AtomLGFX.LGFX.set_text_color(:white)
+    :ok = AtomLGFX.LGFX.draw_string("Hello AtomLGFX", 16, 16)
+    :ok = AtomLGFX.LGFX.display()
   end
 end
 ```
@@ -64,27 +62,19 @@ mix atomvm.esp32.flash --port /dev/ttyACM0
 ```
 
 ファームウェアが同じ操作契約の NIF を含む限り、描画処理の変更はアプリの書き込みだけで試せます。
-実行時に配線などを変える場合は `AtomLGFX.Simple.init/1` へ設定を渡します。
+実行時に配線などを変える場合は `AtomLGFX.LGFX.init/1` へ設定を渡します。
 
 ## API を選ぶ
 
 | API | 使いどころ | 戻り値の例 |
 | --- | --- | --- |
-| `AtomLGFX.Simple` | 画面に文字や図形を直接描く。最初の表示確認はこちらから | 描画は `:ok`、寸法は整数 |
+| `AtomLGFX.LGFX` | 画面に文字や図形を直接描く。最初の表示確認はこちらから | 描画は `:ok`、寸法は整数 |
 | `AtomLGFX` | メモリー上で画像を組み立てて表示する（スプライト）、タッチ位置を読む、JPEG を表示する | 描画は `:ok`、照会は `{:ok, value}` |
 
 入力エラーなどは `{:error, reason}` を返します。NIF の引数検査では例外になる場合もあります。
 PC の BEAM で NIF へ到達すると `:nif_not_loaded` になります。詳細は各モジュールの API 文書を参照してください。
 
-`LGFX` は互換用に残しており、非推奨化していません。新しい名前への対応は全関数で共通です。
-
-| 既存の呼び出し | 新しい呼び出し |
-| --- | --- |
-| `LGFX.init(options)` | `AtomLGFX.Simple.init(options)` |
-| `LGFX.draw_string(text, x, y)` | `AtomLGFX.Simple.draw_string(text, x, y)` |
-| その他の `LGFX` 公開関数 | モジュール名だけを `AtomLGFX.Simple` に変更（引数・既定値・戻り値・エラーは同じ） |
-
-`AtomLGFX.Simple` は `LGFX` への委譲だけを行います。内部の AtomLGFX.Native は NIF 境界で、通常は直接呼びません。
+内部の AtomLGFX.Native は NIF 境界で、通常は直接呼びません。
 
 `AtomLGFX` でスプライトを使う例:
 
@@ -116,19 +106,17 @@ PC の BEAM で NIF へ到達すると `:nif_not_loaded` になります。詳�
 
 ## 描画をまとめる
 
-一度だけ使う命令列は `AtomLGFX.Simple.batch/2` または `AtomLGFX.render/3` へ渡します。
+一度だけ使う命令列は `AtomLGFX.LGFX.batch/2` または `AtomLGFX.render/3` へ渡します。
 同じ命令列を繰り返す場合は、ループの外で符号化します。
 
 ```elixir
-alias AtomLGFX.Simple
-
 {:ok, batch} =
-  Simple.encode_batch([
+  AtomLGFX.LGFX.encode_batch([
     {:fill_rect, 10, 10, 100, 40, :red},
     {:draw_string, "Hello", 20, 20}
   ])
 
-:ok = Simple.submit_batch(batch)
+:ok = AtomLGFX.LGFX.submit_batch(batch)
 ```
 
 低水準の命令構築には `AtomLGFX.BinaryBatch` を使えます。

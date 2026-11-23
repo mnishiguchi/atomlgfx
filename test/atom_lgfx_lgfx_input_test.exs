@@ -2,16 +2,10 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule AtomLGFX.SimpleTest do
+defmodule AtomLGFX.LGFXInputTest do
   use ExUnit.Case, async: true
 
-  alias AtomLGFX.Simple
-
-  test "既定引数から生成される関数も含め、LGFX の全公開関数を提供する" do
-    assert Enum.sort(Simple.__info__(:functions)) == Enum.sort(LGFX.__info__(:functions))
-  end
-
-  test "初期化・描画・照会・終了はホスト上で同じ NIF 境界へ到達する" do
+  test "初期化・描画・照会・終了はホスト上で NIF 境界へ到達する" do
     calls = [
       {:init, []},
       {:init, [[panel_driver: :ili9488, width: 320, height: 480]]},
@@ -33,12 +27,11 @@ defmodule AtomLGFX.SimpleTest do
     ]
 
     for {name, args} <- calls do
-      assert apply(Simple, name, args) == apply(LGFX, name, args)
-      assert apply(Simple, name, args) == :nif_not_loaded
+      assert apply(AtomLGFX.LGFX, name, args) == :nif_not_loaded
     end
   end
 
-  test "既定値と target / display を含むバッチの符号化結果を維持する" do
+  test "既定値と target / display を含むバッチを符号化する" do
     commands = [
       {:fill_screen, :black},
       {:set_text_color, :white, :navy},
@@ -46,20 +39,21 @@ defmodule AtomLGFX.SimpleTest do
       {:draw_string, "Hello", 16, 16}
     ]
 
-    assert Simple.encode_batch(commands) == Simple.encode_batch(commands, [])
+    assert AtomLGFX.LGFX.encode_batch(commands) == AtomLGFX.LGFX.encode_batch(commands, [])
 
     for opts <- [[], [target: :lcd], [display: true], [target: 1, display: true]] do
-      assert {:ok, binary} = Simple.encode_batch(commands, opts)
-      assert {:ok, ^binary} = LGFX.encode_batch(commands, opts)
-      assert Simple.submit_batch(binary) == LGFX.submit_batch(binary)
-      assert Simple.batch(commands, opts) == LGFX.batch(commands, opts)
+      assert {:ok, binary} = AtomLGFX.LGFX.encode_batch(commands, opts)
+      assert AtomLGFX.LGFX.submit_batch(binary) == :nif_not_loaded
+      assert AtomLGFX.LGFX.batch(commands, opts) == :nif_not_loaded
     end
 
-    assert Simple.batch(commands) == Simple.batch(commands, [])
-    refute Simple.encode_batch(commands) == Simple.encode_batch(commands, display: true)
+    assert AtomLGFX.LGFX.batch(commands) == AtomLGFX.LGFX.batch(commands, [])
+
+    refute AtomLGFX.LGFX.encode_batch(commands) ==
+             AtomLGFX.LGFX.encode_batch(commands, display: true)
   end
 
-  test "設定・色・文字配置・バッチの入力エラーを変更しない" do
+  test "設定・色・文字配置・バッチの入力エラーを返す" do
     calls = [
       {:init, [:invalid]},
       {:init, [[panel_driver: :unknown]]},
@@ -78,8 +72,7 @@ defmodule AtomLGFX.SimpleTest do
     ]
 
     for {name, args} <- calls do
-      assert {:error, _reason} = result = apply(LGFX, name, args)
-      assert apply(Simple, name, args) == result
+      assert {:error, _reason} = apply(AtomLGFX.LGFX, name, args)
     end
   end
 end

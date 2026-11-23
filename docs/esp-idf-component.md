@@ -40,14 +40,14 @@ git submodule update --init --recursive
 
 | 変えるもの | 方法 | 必要な作業 |
 | --- | --- | --- |
-| パネル、寸法、GPIO などの実行時設定 | `AtomLGFX.Simple.init/1` または `AtomLGFX.open/1` → `init/1` | アプリを再構築・書き込み |
+| パネル、寸法、GPIO などの実行時設定 | `AtomLGFX.LGFX.init/1` または `AtomLGFX.open/1` → `init/1` | アプリを再構築・書き込み |
 | `init/0` が使う既定値、組み込む機能 | CMake の `LGFX_PORT_*` | ファームウェアを再構築・書き込み |
 | PSRAM、フラッシュ容量、ESP-IDF の設定 | 追加の SDK defaults ファイル | ファームウェアを再構築・書き込み |
 
 実行時設定の例（GPIO は現在の構築時設定を使用）:
 
 ```elixir
-:ok = AtomLGFX.Simple.init(panel_driver: :ili9488, width: 320, height: 480)
+:ok = AtomLGFX.LGFX.init(panel_driver: :ili9488, width: 320, height: 480)
 ```
 
 構築時の LCD CS を変更する例:

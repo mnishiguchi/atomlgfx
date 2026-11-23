@@ -60,7 +60,7 @@ set(LGFX_PORT_FORCE_LEGACY_I2C
 # - readable / invert / rgb_order / dlen_16bit
 #
 # Runtime note:
-# - LGFX.init/1 or AtomLGFX.init/1 may override panel and bus values.
+# - AtomLGFX.LGFX.init/1 or AtomLGFX.init/1 may override panel and bus values.
 # - This cache value remains the default panel profile for builds and examples.
 #
 # Supported LovyanGFX panel names:

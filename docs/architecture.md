@@ -7,8 +7,7 @@ API の選択と使用例は [Elixir パッケージ](elixir-package.md) を参�
 
 ```mermaid
 flowchart TD
-  Simple[AtomLGFX.Simple] --> LGFX
-  LGFX --> Native[AtomLGFX.Native]
+  LGFX[AtomLGFX.LGFX] --> Native[AtomLGFX.Native]
   API[AtomLGFX] --> Native
   Native --> NIF[AtomVM NIF]
   NIF --> Direct[直接操作]
@@ -29,14 +28,13 @@ flowchart TD
 | `native/render_batch.cpp` | バッチの解析と装置操作への振り分け | 別系統の描画実装 |
 | `native/device/` | 初期化、対象解決、図形・文字・画像・スプライト・タッチ | AtomVM 項の解析 |
 
-`AtomLGFX.Simple` は `LGFX` へ委譲し、追加の状態や NIF を持ちません。
-`LGFX` の頻出操作は専用 NIF、`AtomLGFX` は主に操作番号・対象・フラグ・引数を渡す共通 NIF を使います。
+`AtomLGFX.LGFX` の頻出操作は専用 NIF、`AtomLGFX` は主に操作番号・対象・フラグ・引数を渡す共通 NIF を使います。
 操作番号と検証情報の定義元は `native/include/atom_lgfx/ops.def` です。
 
 ## 所有権と生存期間
 
 - ネイティブの LCD 装置は単一実体です。
-- `AtomLGFX.Simple.init/0` は構築時設定、`AtomLGFX.Simple.init/1` は実行時設定を使います。
+- `AtomLGFX.LGFX.init/0` は構築時設定、`AtomLGFX.LGFX.init/1` は実行時設定を使います。
 - `AtomLGFX.open/1` は設定ハンドルを作ります。機器の初期化は `init/1` が行います。
 - ハンドルの設定と実行時キャッシュはプロセス辞書にあり、作成したプロセスから使います。
   不明または別プロセスのハンドルでの `init/1` は `{:error, :invalid_handle}` を返します。
@@ -56,7 +54,7 @@ CMake の LGFX_PORT_* 設定
   → 初期化の既定値
 ```
 
-実行時に変更できる値は `AtomLGFX.Simple.init/1` または `AtomLGFX.open/1` → `init/1` で上書きします。
+実行時に変更できる値は `AtomLGFX.LGFX.init/1` または `AtomLGFX.open/1` → `init/1` で上書きします。
 ESP-IDF の PSRAM・フラッシュ設定や組み込む機能はファームウェア構築時に決まります。
 
 ## 関連文書

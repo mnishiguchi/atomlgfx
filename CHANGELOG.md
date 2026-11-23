@@ -8,8 +8,7 @@ Hex の Elixir API と、ファームウェアへ組み込む NIF は同じ Git 
 
 初回リリース。AtomVM から LovyanGFX を使うための Elixir API と ESP-IDF / NIF 部品を提供します。
 
-- ハンドル不要の `AtomLGFX.Simple` と、スプライト・タッチ・JPEG などを扱う `AtomLGFX` を提供
-- 既存 `LGFX` API の互換性を維持
+- ハンドル不要の `AtomLGFX.LGFX` と、スプライト・タッチ・JPEG などを扱う `AtomLGFX` を提供
 - 直接描画とバイナリーバッチ、PSRAM スプライト、パレット、切り抜きに対応
 - LovyanGFX 1.3.0 を採用し、DMA 転送完了前のバッファ再利用・破棄を防止
 - ファームウェア構築スクリプト、Elixir サンプル、Getting Started を整備

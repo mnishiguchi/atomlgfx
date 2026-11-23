@@ -1,7 +1,7 @@
 # 実機の確認結果
 
 2026-11-22 に実施した [LovyanGFX 1.3.0 対応（PR #8）](https://github.com/mnishiguchi/atomlgfx/pull/8) と
-[AtomLGFX.Simple の導入（PR #9）](https://github.com/mnishiguchi/atomlgfx/pull/9) の検証記録をまとめています。
+[描画 API の検証（PR #9）](https://github.com/mnishiguchi/atomlgfx/pull/9) の検証記録をまとめています。
 この文書の整理に伴う再検証は行っていません。再現手順は [検証手順](testing.md) を参照してください。
 
 ## 構成
@@ -22,7 +22,7 @@
 | `smoke` / `all` / `sprites` | 図形・文字、クリップ、JPEG、画像、色・パレット、タッチ取得、スプライト、正常終了 |
 | `dma` | 二重の書き込み区間を維持し、38,400 bytes の転送元を40回再利用。直接呼び出し・バッチで再描画、色深度変更、破棄、再作成が成功 |
 | `moving_icons` | 45秒間、6オブジェクトで5 FPS の統計を継続出力 |
-| `AtomLGFX.Simple` | 更新した `nif` サンプルで `nif_api_smoke ok`、`nif_error_path ok`、`nif_smoke ok viewport=480x320`、`close=:ok`、正常終了 |
+| 描画 API | 更新した `nif` サンプルで `nif_api_smoke ok`、`nif_error_path ok`、`nif_smoke ok viewport=480x320`、`close=:ok`、正常終了 |
 | `face` | Simple API の確認後に書き戻し、480x320 で初期化とフレーム更新ログを確認 |
 
 採取中に panic、heap corruption、watchdog による再起動はありませんでした。

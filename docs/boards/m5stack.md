@@ -79,14 +79,12 @@ options = [
 上で選んだ `options` を使い、文字と図形を表示します。
 
 ```elixir
-alias AtomLGFX.Simple
-
-:ok = Simple.init(options)
-:ok = Simple.set_rotation(1)
-:ok = Simple.fill_screen(:black)
-:ok = Simple.set_text_color(:white)
-:ok = Simple.draw_string("Hello M5Stack", 16, 16)
-:ok = Simple.display()
+:ok = AtomLGFX.LGFX.init(options)
+:ok = AtomLGFX.LGFX.set_rotation(1)
+:ok = AtomLGFX.LGFX.fill_screen(:black)
+:ok = AtomLGFX.LGFX.set_text_color(:white)
+:ok = AtomLGFX.LGFX.draw_string("Hello M5Stack", 16, 16)
+:ok = AtomLGFX.LGFX.display()
 ```
 
 スプライトやタッチを使う場合は、同じ `options` を `AtomLGFX.open/1` へ渡し、
